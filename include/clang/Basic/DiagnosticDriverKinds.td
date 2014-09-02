@@ -30,6 +30,8 @@ def err_drv_unsupported_rtlib_for_platform : Error<
   "unsupported runtime library '%0' for platform '%1'">;
 def err_drv_invalid_stdlib_name : Error<
   "invalid library name in argument '%0'">;
+def err_drv_invalid_stdabilib_name : Error<
+  "invalid library name in argument: '%0'">;
 def err_drv_invalid_output_with_multiple_archs : Error<
   "cannot use '%0' output with multiple -arch options">;
 def err_drv_no_input_files : Error<"no input files">;

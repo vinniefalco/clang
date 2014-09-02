@@ -331,6 +331,25 @@ ToolChain::CXXStdlibType ToolChain::GetCXXStdlibType(const ArgList &Args) const{
   return ToolChain::CST_Libstdcxx;
 }
 
+ToolChain::CXXStdABIlibType ToolChain::GetCXXStdABIlibType(
+    const ArgList &Args) const {
+  if (Arg *A = Args.getLastArg(options::OPT_stdabilib_EQ)) {
+    StringRef Value = A->getValue();
+    if (Value == "libc++abi")
+      return ToolChain::CAT_Libcxxabi;
+    if (Value == "libcxxrt")
+      return ToolChain::CAT_Libcxxrt;
+    if (Value == "libstdc++")
+      return ToolChain::CAT_Libstdcxx;
+    if (Value == "libsupc++")
+      return ToolChain::CAT_Libsupcxx;
+    getDriver().Diag(diag::err_drv_invalid_stdabilib_name)
+      << A->getAsString(Args);
+  }
+
+  return ToolChain::CAT_None;
+}
+
 /// \brief Utility function to add a system include directory to CC1 arguments.
 /*static*/ void ToolChain::addSystemInclude(const ArgList &DriverArgs,
                                             ArgStringList &CC1Args,
@@ -397,6 +416,32 @@ void ToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
 
   case ToolChain::CST_Libstdcxx:
     CmdArgs.push_back("-lstdc++");
+    break;
+  }
+}
+
+void ToolChain::AddCXXStdABIlibLibArgs(const ArgList &Args,
+                                    ArgStringList &CmdArgs) const {
+  CXXStdABIlibType Type = GetCXXStdABIlibType(Args);
+
+  switch (Type) {
+  case ToolChain::CAT_Libcxxabi:
+    CmdArgs.push_back("-lc++abi");
+    break;
+
+  case ToolChain::CAT_Libcxxrt:
+    CmdArgs.push_back("-lcxxrt");
+    break;
+
+  case ToolChain::CAT_Libstdcxx:
+    CmdArgs.push_back("-lstdc++");
+    break;
+
+  case ToolChain::CAT_Libsupcxx:
+    CmdArgs.push_back("-lsupc++");
+    break;
+
+  case ToolChain::CAT_None:
     break;
   }
 }

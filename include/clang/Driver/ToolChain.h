@@ -48,6 +48,14 @@ public:
     CST_Libstdcxx
   };
 
+  enum CXXStdABIlibType {
+    CAT_None,
+    CAT_Libcxxabi,
+    CAT_Libcxxrt,
+    CAT_Libstdcxx,
+    CAT_Libsupcxx
+  };
+
   enum RuntimeLibType {
     RLT_CompilerRT,
     RLT_Libgcc
@@ -300,6 +308,11 @@ public:
   // given compilation arguments.
   virtual CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const;
 
+  // GetCXXStdABIlibType - Determine the C++ standard ABI library type to use
+  // with the given compilation arguments.
+  virtual CXXStdABIlibType GetCXXStdABIlibType(
+      const llvm::opt::ArgList &Args) const;
+
   /// AddClangCXXStdlibIncludeArgs - Add the clang -cc1 level arguments to set
   /// the include paths to use for the given C++ standard library type.
   virtual void
@@ -309,6 +322,11 @@ public:
   /// AddCXXStdlibLibArgs - Add the system specific linker arguments to use
   /// for the given C++ standard library type.
   virtual void AddCXXStdlibLibArgs(const llvm::opt::ArgList &Args,
+                                   llvm::opt::ArgStringList &CmdArgs) const;
+
+  /// AddCXXStdABIlibLibArgs - Add the system specific linker arguments to use
+  /// for the given C++ standard ABI library type.
+  virtual void AddCXXStdABIlibLibArgs(const llvm::opt::ArgList &Args,
                                    llvm::opt::ArgStringList &CmdArgs) const;
 
   /// AddCCKextLibArgs - Add the system specific linker arguments to use

@@ -46,6 +46,7 @@
 // CHECK-LD-X32: "-lc"
 // CHECK-LD-X32: "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed"
 //
+//
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
 // RUN:     --target=x86_64-unknown-linux \
 // RUN:     --sysroot=%S/Inputs/basic_linux_tree \
@@ -376,6 +377,59 @@
 // CHECK-BASIC-LIBCXX-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-BASIC-LIBCXX-INSTALL: "--sysroot=[[SYSROOT]]"
 // CHECK-BASIC-LIBCXX-INSTALL: "-L[[SYSROOT]]/usr/bin/../lib"
+//
+// RUN: %clangxx -no-canonical-prefixes -x c++ %s -### -o %t.o 2>&1 \
+// RUN:     -target x86_64-unknown-linux-gnu \
+// RUN:     -stdlib=libc++ \
+// RUN:     -ccc-install-dir %S/Inputs/basic_linux_tree/usr/bin \
+// RUN:     --sysroot=%S/Inputs/basic_linux_libcxx_tree \
+// RUN:     --stdabilib=libc++abi \
+// RUN:   | FileCheck --check-prefix=CHECK-LD-LIBCXXABI %s
+// CHECK-LD-LIBCXXABI-NOT: warning:
+// CHECK-LD-LIBCXXABI-NOT: "-lstdc++"
+// CHECK-LD-LIBCXXABI-NOT: "-lsupc++"
+// CHECK-LD-LIBCXXABI-NOT: "-lcxxrt"
+// CHECK-LD-LIBCXXABI: "-lc++"
+// CHECK-LD-LIBCXXABI: "-lc++abi"
+// RUN: %clangxx -no-canonical-prefixes -x c++ %s -### -o %t.o 2>&1 \
+// RUN:     -target x86_64-unknown-linux-gnu \
+// RUN:     -stdlib=libc++ \
+// RUN:     -ccc-install-dir %S/Inputs/basic_linux_tree/usr/bin \
+// RUN:     --sysroot=%S/Inputs/basic_linux_libcxx_tree \
+// RUN:     --stdabilib=libcxxrt \
+// RUN:   | FileCheck --check-prefix=CHECK-LD-LIBCXXRT %s
+// CHECK-LD-LIBCXXRT-NOT: warning:
+// CHECK-LD-LIBCXXRT-NOT: "-lstdc++"
+// CHECK-LD-LIBCXXRT-NOT: "-lsupc++"
+// CHECK-LD-LIBCXXRT-NOT: "-lc++abi"
+// CHECK-LD-LIBCXXRT: "-lc++"
+// CHECK-LD-LIBCXXRT: "-lcxxrt"
+// RUN: %clangxx -no-canonical-prefixes -x c++ %s -### -o %t.o 2>&1 \
+// RUN:     -target x86_64-unknown-linux-gnu \
+// RUN:     -stdlib=libc++ \
+// RUN:     -ccc-install-dir %S/Inputs/basic_linux_tree/usr/bin \
+// RUN:     --sysroot=%S/Inputs/basic_linux_libcxx_tree \
+// RUN:     --stdabilib=libstdc++ \
+// RUN:   | FileCheck --check-prefix=CHECK-LD-LIBSTDCXX %s
+// CHECK-LD-LIBSTDCXX-NOT: warning:
+// CHECK-LD-LIBSTDCXX-NOT: "-lc++abi"
+// CHECK-LD-LIBSTDCXX-NOT: "-lsupc++"
+// CHECK-LD-LIBSTDCXX-NOT: "-lcxxrt"
+// CHECK-LD-LIBSTDCXX: "-lc++"
+// CHECK-LD-LIBSTDCXX: "-lstdc++"
+// RUN: %clangxx -no-canonical-prefixes -x c++ %s -### -o %t.o 2>&1 \
+// RUN:     -target x86_64-unknown-linux-gnu \
+// RUN:     -stdlib=libc++ \
+// RUN:     -ccc-install-dir %S/Inputs/basic_linux_tree/usr/bin \
+// RUN:     --sysroot=%S/Inputs/basic_linux_libcxx_tree \
+// RUN:     --stdabilib=libsupc++ \
+// RUN:   | FileCheck --check-prefix=CHECK-LD-LIBSUPCXX %s
+// CHECK-LD-LIBSUPCXX-NOT: warning:
+// CHECK-LD-LIBSUPCXX-NOT: "-lc++abi"
+// CHECK-LD-LIBSUPCXX-NOT: "-lstdc++"
+// CHECK-LD-LIBSUPCXX-NOT: "-lcxxrt"
+// CHECK-LD-LIBSUPCXX: "-lc++"
+// CHECK-LD-LIBSUPCXX: "-lsupc++"
 //
 // Test a very broken version of multiarch that shipped in Ubuntu 11.04.
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
