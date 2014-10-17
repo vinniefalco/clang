@@ -1432,7 +1432,7 @@ def std_EQ : Joined<["-", "--"], "std=">, Flags<[CC1Option]>,
   Group<CompileOnly_Group>, HelpText<"Language standard to compile for">;
 def stdlib_EQ : Joined<["-", "--"], "stdlib=">, Flags<[CC1Option]>,
   HelpText<"C++ standard library to use">;
-def stdabilib_EQ : Joined<["-", "--"], "stdabilib=">, Flags<[CC1Option]>,
+def stdabilib_EQ : Joined<["-", "--"], "stdabilib=">, Flags<[CC1Option, NoArgumentUnused]>,
   HelpText<"C++ ABI library to use">;
 def sub__library : JoinedOrSeparate<["-"], "sub_library">;
 def sub__umbrella : JoinedOrSeparate<["-"], "sub_umbrella">;
