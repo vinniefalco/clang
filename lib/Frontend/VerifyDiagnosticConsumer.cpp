@@ -27,8 +27,8 @@ typedef VerifyDiagnosticConsumer::Directive Directive;
 typedef VerifyDiagnosticConsumer::DirectiveList DirectiveList;
 typedef VerifyDiagnosticConsumer::ExpectedData ExpectedData;
 
-VerifyDiagnosticConsumer::VerifyDiagnosticConsumer(DiagnosticsEngine &_Diags)
-  : Diags(_Diags),
+VerifyDiagnosticConsumer::VerifyDiagnosticConsumer(DiagnosticsEngine &Diags_)
+  : Diags(Diags_),
     PrimaryClient(Diags.getClient()), OwnsPrimaryClient(Diags.ownsClient()),
     Buffer(new TextDiagnosticBuffer()), CurrentPreprocessor(nullptr),
     LangOpts(nullptr), SrcManager(nullptr), ActiveSourceFiles(0),
@@ -84,8 +84,8 @@ void VerifyDiagnosticConsumer::BeginSourceFile(const LangOptions &LangOpts,
       const_cast<Preprocessor*>(PP)->addCommentHandler(this);
 #ifndef NDEBUG
       // Debug build tracks parsed files.
-      VerifyFileTracker *V = new VerifyFileTracker(*this, *SrcManager);
-      const_cast<Preprocessor*>(PP)->addPPCallbacks(V);
+      const_cast<Preprocessor*>(PP)->addPPCallbacks(
+                      llvm::make_unique<VerifyFileTracker>(*this, *SrcManager));
 #endif
     }
   }
