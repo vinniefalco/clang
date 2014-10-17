@@ -199,7 +199,6 @@ static void AddLinkerInputs(const ToolChain &TC,
     // Handle reserved library options.
     if (A.getOption().matches(options::OPT_Z_reserved_lib_stdcxx)) {
       TC.AddCXXStdlibLibArgs(Args, CmdArgs);
-      TC.AddCXXStdABIlibLibArgs(Args, CmdArgs);
     }
     else if (A.getOption().matches(options::OPT_Z_reserved_lib_cckext))
       TC.AddCCKextLibArgs(Args, CmdArgs);
@@ -7481,7 +7480,6 @@ void gnutools::Link::ConstructJob(Compilation &C, const JobAction &JA,
     if (OnlyLibstdcxxStatic)
       CmdArgs.push_back("-Bstatic");
     ToolChain.AddCXXStdlibLibArgs(Args, CmdArgs);
-    ToolChain.AddCXXStdABIlibLibArgs(Args, CmdArgs);
     if (OnlyLibstdcxxStatic)
       CmdArgs.push_back("-Bdynamic");
     CmdArgs.push_back("-lm");

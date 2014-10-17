@@ -333,10 +333,6 @@ public:
   virtual void AddCXXStdlibLibArgs(const llvm::opt::ArgList &Args,
                                    llvm::opt::ArgStringList &CmdArgs) const;
 
-  /// AddCXXStdABIlibLibArgs - Add the system specific linker arguments to use
-  /// for the given C++ standard ABI library type.
-  virtual void AddCXXStdABIlibLibArgs(const llvm::opt::ArgList &Args,
-                                   llvm::opt::ArgStringList &CmdArgs) const;
 
   /// AddCCKextLibArgs - Add the system specific linker arguments to use
   /// for kernel extensions (Darwin-specific).

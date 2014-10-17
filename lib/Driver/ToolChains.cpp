@@ -360,7 +360,6 @@ void DarwinClang::AddLinkRuntimeLibArgs(const ArgList &Args,
 
       // The Ubsan runtime library requires C++.
       AddCXXStdlibLibArgs(Args, CmdArgs);
-      AddCXXStdABIlibLibArgs(Args, CmdArgs);
     }
   }
 
@@ -376,7 +375,6 @@ void DarwinClang::AddLinkRuntimeLibArgs(const ArgList &Args,
           !Args.hasArg(options::OPT_bundle)) {
         // The ASAN runtime library requires C++.
         AddCXXStdlibLibArgs(Args, CmdArgs);
-        AddCXXStdABIlibLibArgs(Args, CmdArgs);
       }
       if (isTargetMacOS()) {
         AddLinkRuntimeLib(Args, CmdArgs,

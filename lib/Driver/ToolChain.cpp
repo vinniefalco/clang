@@ -436,13 +436,10 @@ void ToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
     CmdArgs.push_back("-lstdc++");
     break;
   }
-}
 
-void ToolChain::AddCXXStdABIlibLibArgs(const ArgList &Args,
-                                    ArgStringList &CmdArgs) const {
-  CXXStdABIlibType Type = GetCXXStdABIlibType(Args);
+  CXXStdABIlibType ABIType = GetCXXStdABIlibType(Args);
 
-  switch (Type) {
+  switch (ABIType) {
   case ToolChain::CAT_Libcxxabi:
     CmdArgs.push_back("-lc++abi");
     break;
@@ -463,6 +460,7 @@ void ToolChain::AddCXXStdABIlibLibArgs(const ArgList &Args,
     break;
   }
 }
+
 
 void ToolChain::AddCCKextLibArgs(const ArgList &Args,
                                  ArgStringList &CmdArgs) const {
