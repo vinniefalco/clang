@@ -752,11 +752,29 @@ bool clang::ParseDiagnosticArgs(DiagnosticOptions &Opts, ArgList &Args,
       << Args.getLastArg(OPT_fdiagnostics_format)->getAsString(Args)
       << Format;
   }
-  
+
   Opts.ShowSourceRanges = Args.hasArg(OPT_fdiagnostics_print_source_range_info);
   Opts.ShowParseableFixits = Args.hasArg(OPT_fdiagnostics_parseable_fixits);
   Opts.ShowPresumedLoc = !Args.hasArg(OPT_fno_diagnostics_use_presumed_location);
-  Opts.VerifyDiagnostics = Args.hasArg(OPT_verify);
+  Opts.VerifyDiagnostics = 0;
+  if (Args.hasArg(OPT_verify) || Args.hasArg(OPT_verify_EQ)) {
+    StringRef ShowLevel = Args.getLastArgValue(OPT_verify_EQ, "note");
+    if (ShowLevel == "note")
+        Opts.VerifyDiagnostics = DiagnosticsEngine::Note;
+    else if (ShowLevel == "remark")
+        Opts.VerifyDiagnostics = DiagnosticsEngine::Remark;
+    else if (ShowLevel == "warning")
+        Opts.VerifyDiagnostics = DiagnosticsEngine::Warning;
+    else if (ShowLevel == "error")
+        Opts.VerifyDiagnostics = DiagnosticsEngine::Error;
+    else {
+        Success = false;
+        if (Diags)
+            Diags->Report(diag::err_drv_invalid_value)
+            << Args.getLastArg(OPT_verify_EQ)->getAsString(Args)
+            << ShowLevel;
+    }
+  }
   Opts.ElideType = !Args.hasArg(OPT_fno_elide_type);
   Opts.ShowTemplateTree = Args.hasArg(OPT_fdiagnostics_show_template_tree);
   Opts.ErrorLimit = getLastArgIntValue(Args, OPT_ferror_limit, 0, Diags);

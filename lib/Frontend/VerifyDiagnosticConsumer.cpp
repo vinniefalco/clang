@@ -32,7 +32,7 @@ VerifyDiagnosticConsumer::VerifyDiagnosticConsumer(DiagnosticsEngine &Diags_)
     PrimaryClient(Diags.getClient()), PrimaryClientOwner(Diags.takeClient()),
     Buffer(new TextDiagnosticBuffer()), CurrentPreprocessor(nullptr),
     LangOpts(nullptr), SrcManager(nullptr), ActiveSourceFiles(0),
-    Status(HasNoDirectives)
+    Status(HasNoDirectives), MinDiagLevel(static_cast<DiagnosticsEngine::Level>(Diags.getDiagnosticOptions().VerifyDiagnostics))
 {
   if (Diags.hasSourceManager())
     setSourceManager(Diags.getSourceManager());
@@ -737,7 +737,8 @@ static unsigned CheckLists(DiagnosticsEngine &Diags, SourceManager &SourceMgr,
 ///
 static unsigned CheckResults(DiagnosticsEngine &Diags, SourceManager &SourceMgr,
                              const TextDiagnosticBuffer &Buffer,
-                             ExpectedData &ED) {
+                             ExpectedData &ED,
+                             DiagnosticsEngine::Level MinDiagLevel) {
   // We want to capture the delta between what was expected and what was
   // seen.
   //
@@ -749,14 +750,20 @@ static unsigned CheckResults(DiagnosticsEngine &Diags, SourceManager &SourceMgr,
   NumProblems += CheckLists(Diags, SourceMgr, "error", ED.Errors,
                             Buffer.err_begin(), Buffer.err_end());
 
+  if (MinDiagLevel > DiagnosticsEngine::Warning)
+      return NumProblems;
   // See if there are warning mismatches.
   NumProblems += CheckLists(Diags, SourceMgr, "warning", ED.Warnings,
                             Buffer.warn_begin(), Buffer.warn_end());
 
+  if (MinDiagLevel > DiagnosticsEngine::Remark)
+      return NumProblems;
   // See if there are remark mismatches.
   NumProblems += CheckLists(Diags, SourceMgr, "remark", ED.Remarks,
                             Buffer.remark_begin(), Buffer.remark_end());
 
+  if (MinDiagLevel > DiagnosticsEngine::Note)
+      return NumProblems;
   // See if there are note mismatches.
   NumProblems += CheckLists(Diags, SourceMgr, "note", ED.Notes,
                             Buffer.note_begin(), Buffer.note_end());
@@ -852,7 +859,7 @@ void VerifyDiagnosticConsumer::CheckDiagnostics() {
     }
 
     // Check that the expected diagnostics occurred.
-    NumErrors += CheckResults(Diags, *SrcManager, *Buffer, ED);
+    NumErrors += CheckResults(Diags, *SrcManager, *Buffer, ED, MinDiagLevel);
   } else {
     NumErrors += (PrintUnexpected(Diags, nullptr, Buffer->err_begin(),
                                   Buffer->err_end(), "error") +

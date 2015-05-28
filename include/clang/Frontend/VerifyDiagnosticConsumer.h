@@ -220,6 +220,7 @@ private:
   unsigned ActiveSourceFiles;
   DirectiveStatus Status;
   ExpectedData ED;
+  DiagnosticsEngine::Level MinDiagLevel;
 
   void CheckDiagnostics();
   void setSourceManager(SourceManager &SM) {

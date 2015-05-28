@@ -66,7 +66,7 @@ ENUM_DIAGOPT(Format, TextDiagnosticFormat, 2, Clang) /// Format for diagnostics:
 DIAGOPT(ShowColors, 1, 0)       /// Show diagnostics with ANSI color sequences.
 ENUM_DIAGOPT(ShowOverloads, OverloadsShown, 1,
              Ovl_All)    /// Overload candidates to show.
-DIAGOPT(VerifyDiagnostics, 1, 0) /// Check that diagnostics match the expected
+DIAGOPT(VerifyDiagnostics, 3, 0) /// Check that diagnostics match the expected
                                  /// diagnostics, indicated by markers in the
                                  /// input source file.
 
