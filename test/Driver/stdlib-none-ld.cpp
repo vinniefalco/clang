@@ -5,6 +5,7 @@
 //
 // CHECK-NOT: "-lc++"
 // CHECK-NOT: "-lstdc++"
+// CHECK-NOT: "-lc++abi"
 // CHECK: "-lgcc"
 // CHECK: "-lc"
 // CHECK: crtend

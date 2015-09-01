@@ -13,6 +13,9 @@
 // RUN: %clang -no-canonical-prefixes -### -target x86_64-darwin \
 // RUN:   -fsanitize=address -mios-simulator-version-min=7.0 %s -o %t.o 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-ASAN-IOSSIM %s
+// RUN: %clang -no-canonical-prefixes -### -target x86_64-darwin \
+// RUN:   -fsanitize=address -stdlib=none -mios-simulator-version-min=7.0 %s \
+// RUN:    -o %t.o -lc++ 2>&1 | FileCheck --check-prefix=CHECK-ASAN-IOSSIM %s
 
 // CHECK-ASAN-IOSSIM: "{{.*}}ld{{(.exe)?}}"
 // CHECK-ASAN-IOSSIM: lc++
@@ -57,6 +60,28 @@
 // CHECK-DYN-UBSAN: libclang_rt.ubsan_osx_dynamic.dylib"
 // CHECK-DYN-UBSAN: "-rpath" "@executable_path"
 // CHECK-DYN-UBSAN: "-rpath" "{{.*}}lib{{.*}}darwin"
+
+
+// RUN: %clangxx -no-canonical-prefixes -### -target x86_64-apple-darwin14 \
+// RUN:   -fPIC -shared -fsanitize=undefined %s -o %t.so 2>&1 &> %t.out
+// RUN: FileCheck --check-prefix=CHECK-DYN-UBSAN-CXX %s < %t.out
+// RUN: FileCheck --check-prefix=CHECK-DYN-UBSAN-CXX-CXXABI %s < %t.out
+// RUN: %clangxx -no-canonical-prefixes -### -target x86_64-apple-darwin14 \
+// RUN:   -fPIC -shared -fsanitize=undefined -stdlib=none -lc++ %s -o %t.so 2>&1  &> %t.out
+// RUN: FileCheck --check-prefix=CHECK-DYN-UBSAN-CXX %s < %t.out
+// Run: FileCheck --check-prefix=CHECK-DYN-UBSAN-CXX-CXXABI %s < %t.out
+// CHECK-DYN-UBSAN-CXX: "{{.*}}ld{{(.exe)?}}"
+// CHECK-DYN-UBSAN-CXX: "-dylib"
+// CHECK-DYN-UBSAN-CXX: "-lc++"
+// CHECK-DYN-UBSAN-CXX: libclang_rt.ubsan_osx_dynamic.dylib
+// CHECK-DYN-UBSAN-CXX: "-rpath" "@executable_path"
+// CHECK-DYN-UBSAN-CXX: "-rpath" "{{.*}}lib{{.*}}darwin"
+// CHECK-DYN-UBSAN-CXX: "-lSystem"
+//
+// CHECK-DYN-UBSAN-CXX-CXXABI: "-lc++"
+// CHECK-DYN-UBSAN-CXX-CXXABI: "-lc++abi"
+// CHECK-DYN-UBSAN-CXX-CXXABI: "-lSystem"
+
 
 // RUN: %clang -no-canonical-prefixes -### -target x86_64-darwin \
 // RUN:   -fsanitize=bounds -fsanitize-undefined-trap-on-error \
