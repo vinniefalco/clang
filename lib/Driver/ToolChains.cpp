@@ -568,6 +568,9 @@ void DarwinClang::AddCXXStdlibLibArgs(const ArgList &Args,
   CXXStdlibType Type = GetCXXStdlibType(Args);
 
   switch (Type) {
+  case ToolChain::CST_None:
+    break;
+
   case ToolChain::CST_Libcxx:
     CmdArgs.push_back("-lc++");
     break;
@@ -3641,7 +3644,8 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
 void Linux::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
                                          ArgStringList &CC1Args) const {
   if (DriverArgs.hasArg(options::OPT_nostdlibinc) ||
-      DriverArgs.hasArg(options::OPT_nostdincxx))
+      DriverArgs.hasArg(options::OPT_nostdincxx) ||
+      GetCXXStdlibType(DriverArgs) == ToolChain::CST_None)
     return;
 
   // Check if libc++ has been enabled and provide its include paths if so.
