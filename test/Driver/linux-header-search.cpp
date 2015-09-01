@@ -35,7 +35,7 @@
 // RUN:   | FileCheck --check-prefix=CHECK-BASIC-STDLIB-NONE %s
 // CHECK-BASIC-STDLIB-NONE: "{{[^"]*}}clang{{[^"]*}}" "-cc1"
 // CHECK-BASIC-STDLIB-NONE: "-isysroot" "[[SYSROOT:[^"]+]]"
-// CHECK-BASIC-STDLIB-NONE-NOT: "-internal-isystem" "[[SYSROOT]]/usr/bin/../include/c++/v1"
+// CHECK-BASIC-STDLIB-NONE-NOT: "/include/c++/v1"
 // CHECK-BASIC-STDLIB-NONE: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 //
 // Test a very broken version of multiarch that shipped in Ubuntu 11.04.

@@ -403,7 +403,8 @@
 // CHECK-BASIC-LIBCXX-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/include/c++/v1"
 // CHECK-BASIC-LIBCXX-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-BASIC-LIBCXX-SYSROOT: "--sysroot=[[SYSROOT]]"
-// RUN: %clang -no-canonical-prefixes -x c++ %s -### -o %t.o 2>&1 \
+// CHECK-BASIC-LIBCXX-SYSROOT: "-lc++"
+// RUN: %clangxx -no-canonical-prefixes -x c++ %s -### -o %t.o 2>&1 \
 // RUN:     -target x86_64-unknown-linux-gnu \
 // RUN:     -stdlib=libc++ \
 // RUN:     -ccc-install-dir %S/Inputs/basic_linux_libcxx_tree/usr/bin \
@@ -416,6 +417,12 @@
 // CHECK-BASIC-LIBCXX-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-BASIC-LIBCXX-INSTALL: "--sysroot=[[SYSROOT]]"
 // CHECK-BASIC-LIBCXX-INSTALL: "-L[[SYSROOT]]/usr/bin/../lib"
+// CHECK-BASIC-LIBCXX-INSTALL: "-lc++"
+// CHECK-BASIC-LIBCXX-INSTALL: "-lm"
+// CHECK-BASIC-LIBCXX-INSTALL: "-lc"
+// CHECK-BASIC-LIBCXX-INSTALL: "-lgcc_s"
+// CHECK-BASIC-LIBCXX-INSTALL: "-lgcc"
+
 //
 // Test that we can use -stdlib=libc++ in a build system even when it
 // occasionally links C code instead of C++ code.
@@ -433,8 +440,14 @@
 // CHECK-BASIC-LIBCXX-C-LINK: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-BASIC-LIBCXX-C-LINK: "--sysroot=[[SYSROOT]]"
 // CHECK-BASIC-LIBCXX-C-LINK: "-L[[SYSROOT]]/usr/bin/../lib"
+// CHECK-BASIC-LIBCXX-C-LINK-NOT: "-lc++"
+// CHECK-BASIC-LIBCXX-C-LINK-NOT: "-lm"
+// CHECK-BASIC-LIBCXX-C-LINK: "-lc"
+// CHECK-BASIC-LIBCXX-C-LINK-DIAG: "-lgcc"
+// CHECK-BASIC-LIBCXX-C-LINK-DIAG: "-lgcc_s"
+
 //
-// RUN: %clang -no-canonical-prefixes -x c++ %s -### -o %t.o 2>&1 \
+// RUN: %clangxx -no-canonical-prefixes -x c++ %s -### -o %t.o 2>&1 \
 // RUN:     -target x86_64-unknown-linux-gnu \
 // RUN:     -stdlib=none \
 // RUN:     -ccc-install-dir %S/Inputs/basic_linux_libcxx_tree/usr/bin \
@@ -447,6 +460,14 @@
 // CHECK-BASIC-STDLIB-NONE: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-BASIC-STDLIB-NONE: "--sysroot=[[SYSROOT]]"
 // CHECK-BASIC-STDLIB-NONE: "-L[[SYSROOT]]/usr/bin/../lib"
+// CHECK-BASIC-STDLIB-NONE-NOT: "-lc++"
+// CHECK-BASIC-STDLIB-NONE-NOT: "-lstdc++"
+// CHECK-BASIC-STDLIB-NONE: "-lm"
+// CHECK-BASIC-STDLIB-NONE: "-lc"
+// CHECK-BASIC-STDLIB-NONE-DIAG: "-lgcc_s"
+// CHECK-BASIC-STDLIB-NONE-DIAG: "-lgcc"
+// CHECK-BASIC-STDLIB-NONE-DIAG: "-lgcc-bla"
+
 //
 // Test a very broken version of multiarch that shipped in Ubuntu 11.04.
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \

@@ -2660,6 +2660,9 @@ void Bitrig::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
       DriverArgs.hasArg(options::OPT_nostdincxx))
     return;
 
+  // Hoisted from switch because llvm_unreachable might jump and bypass
+  // its initialization.
+  StringRef Triple;
   switch (GetCXXStdlibType(DriverArgs)) {
   case ToolChain::CST_Libcxx:
     addSystemInclude(DriverArgs, CC1Args,
@@ -2671,7 +2674,7 @@ void Bitrig::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
     addSystemInclude(DriverArgs, CC1Args,
                      getDriver().SysRoot + "/usr/include/c++/stdc++/backward");
 
-    StringRef Triple = getTriple().str();
+    Triple = getTriple().str();
     if (Triple.startswith("amd64"))
       addSystemInclude(DriverArgs, CC1Args,
                        getDriver().SysRoot + "/usr/include/c++/stdc++/x86_64" +
@@ -2681,6 +2684,8 @@ void Bitrig::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
                                                 "/usr/include/c++/stdc++/" +
                                                 Triple);
     break;
+  default:
+    llvm_unreachable("Unexpected CXXStdlib");
   }
 }
 
@@ -2695,6 +2700,8 @@ void Bitrig::AddCXXStdlibLibArgs(const ArgList &Args,
   case ToolChain::CST_Libstdcxx:
     CmdArgs.push_back("-lstdc++");
     break;
+  default:
+    llvm_unreachable("Unexpected CXXStdlib");
   }
 }
 
@@ -2746,6 +2753,8 @@ void FreeBSD::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
     addSystemInclude(DriverArgs, CC1Args,
                      getDriver().SysRoot + "/usr/include/c++/4.2/backward");
     break;
+  default:
+    llvm_unreachable("Unexpected CXXStdlib");
   }
 }
 
@@ -2901,6 +2910,8 @@ void NetBSD::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
     addSystemInclude(DriverArgs, CC1Args,
                      getDriver().SysRoot + "/usr/include/g++/backward");
     break;
+  default:
+    llvm_unreachable("Unexpected CXXStdlib");
   }
 }
 
@@ -3644,12 +3655,14 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
 void Linux::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
                                          ArgStringList &CC1Args) const {
   if (DriverArgs.hasArg(options::OPT_nostdlibinc) ||
-      DriverArgs.hasArg(options::OPT_nostdincxx) ||
-      GetCXXStdlibType(DriverArgs) == ToolChain::CST_None)
+      DriverArgs.hasArg(options::OPT_nostdincxx))
     return;
 
+  CXXStdlibType Type = GetCXXStdlibType(DriverArgs);
+  if (Type == ToolChain::CST_None)
+    return;
   // Check if libc++ has been enabled and provide its include paths if so.
-  if (GetCXXStdlibType(DriverArgs) == ToolChain::CST_Libcxx) {
+  if (Type == ToolChain::CST_Libcxx) {
     const std::string LibCXXIncludePathCandidates[] = {
         // The primary location is within the Clang installation.
         // FIXME: We shouldn't hard code 'v1' here to make Clang future proof to

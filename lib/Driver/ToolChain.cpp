@@ -445,8 +445,6 @@ void ToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
   // header search paths with it. Once all systems are overriding this
   // function, the CC1 flag and this line can be removed.
   CXXStdlibType Type = GetCXXStdlibType(DriverArgs);
-  if (Type == CST_None)
-    CC1Args.push_back("-nostdinc++");
   DriverArgs.AddAllArgs(CC1Args, options::OPT_stdlib_EQ);
 }
 
