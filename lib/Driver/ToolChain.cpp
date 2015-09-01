@@ -444,7 +444,6 @@ void ToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
   // '-stdlib=' flag down to CC1 so that it can in turn customize the C++
   // header search paths with it. Once all systems are overriding this
   // function, the CC1 flag and this line can be removed.
-  CXXStdlibType Type = GetCXXStdlibType(DriverArgs);
   DriverArgs.AddAllArgs(CC1Args, options::OPT_stdlib_EQ);
 }
 
