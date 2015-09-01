@@ -420,8 +420,8 @@
 // CHECK-BASIC-LIBCXX-INSTALL: "-lc++"
 // CHECK-BASIC-LIBCXX-INSTALL: "-lm"
 // CHECK-BASIC-LIBCXX-INSTALL: "-lc"
-// CHECK-BASIC-LIBCXX-INSTALL: "-lgcc_s"
-// CHECK-BASIC-LIBCXX-INSTALL: "-lgcc"
+// CHECK-BASIC-LIBCXX-INSTALL-DAG: "-lgcc_s"
+// CHECK-BASIC-LIBCXX-INSTALL-DAG: "-lgcc"
 
 //
 // Test that we can use -stdlib=libc++ in a build system even when it
@@ -443,8 +443,8 @@
 // CHECK-BASIC-LIBCXX-C-LINK-NOT: "-lc++"
 // CHECK-BASIC-LIBCXX-C-LINK-NOT: "-lm"
 // CHECK-BASIC-LIBCXX-C-LINK: "-lc"
-// CHECK-BASIC-LIBCXX-C-LINK-DIAG: "-lgcc"
-// CHECK-BASIC-LIBCXX-C-LINK-DIAG: "-lgcc_s"
+// CHECK-BASIC-LIBCXX-C-LINK-DAG: "-lgcc"
+// CHECK-BASIC-LIBCXX-C-LINK-DAG: "-lgcc_s"
 
 //
 // RUN: %clangxx -no-canonical-prefixes -x c++ %s -### -o %t.o 2>&1 \
@@ -464,10 +464,8 @@
 // CHECK-BASIC-STDLIB-NONE-NOT: "-lstdc++"
 // CHECK-BASIC-STDLIB-NONE: "-lm"
 // CHECK-BASIC-STDLIB-NONE: "-lc"
-// CHECK-BASIC-STDLIB-NONE-DIAG: "-lgcc_s"
-// CHECK-BASIC-STDLIB-NONE-DIAG: "-lgcc"
-// CHECK-BASIC-STDLIB-NONE-DIAG: "-lgcc-bla"
-
+// CHECK-BASIC-STDLIB-NONE-DAG: "-lgcc_s"
+// CHECK-BASIC-STDLIB-NONE-DAG: "-lgcc"
 //
 // Test a very broken version of multiarch that shipped in Ubuntu 11.04.
 // RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
