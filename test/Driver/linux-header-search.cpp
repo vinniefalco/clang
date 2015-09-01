@@ -26,6 +26,18 @@
 // CHECK-BASIC-LIBCXX-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/bin/../include/c++/v1"
 // CHECK-BASIC-LIBCXX-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 //
+// RUN: %clang -no-canonical-prefixes %s -### -fsyntax-only 2>&1 \
+// RUN:     -target x86_64-unknown-linux-gnu \
+// RUN:     -stdlib=none \
+// RUN:     -ccc-install-dir %S/Inputs/basic_linux_libcxx_tree/usr/bin \
+// RUN:     --sysroot=%S/Inputs/basic_linux_libcxx_tree \
+// RUN:     --gcc-toolchain="" \
+// RUN:   | FileCheck --check-prefix=CHECK-BASIC-STDLIB-NONE %s
+// CHECK-BASIC-STDLIB-NONE: "{{[^"]*}}clang{{[^"]*}}" "-cc1"
+// CHECK-BASIC-STDLIB-NONE: "-isysroot" "[[SYSROOT:[^"]+]]"
+// CHECK-BASIC-STDLIB-NONE: "-internal-isystem" "[[SYSROOT]]/usr/bin/../include/c++/v1"
+// CHECK-BASIC-STDLIB-NONE: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
+//
 // Test a very broken version of multiarch that shipped in Ubuntu 11.04.
 // RUN: %clang -no-canonical-prefixes %s -### -fsyntax-only 2>&1 \
 // RUN:     -target i386-unknown-linux \

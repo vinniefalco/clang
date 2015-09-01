@@ -444,7 +444,11 @@ void ToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
   // '-stdlib=' flag down to CC1 so that it can in turn customize the C++
   // header search paths with it. Once all systems are overriding this
   // function, the CC1 flag and this line can be removed.
-  DriverArgs.AddAllArgs(CC1Args, options::OPT_stdlib_EQ);
+  CXXStdlibType Type = GetCXXStdlibType(DriverArgs);
+  if (Type == CST_None)
+    CC1Args.push_back("-nostdinc++");
+  else
+    DriverArgs.AddAllArgs(CC1Args, options::OPT_stdlib_EQ);
 }
 
 void ToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
