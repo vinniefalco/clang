@@ -46,7 +46,8 @@ public:
 
   enum CXXStdlibType {
     CST_Libcxx,
-    CST_Libstdcxx
+    CST_Libstdcxx,
+    CST_None
   };
 
   enum RuntimeLibType {

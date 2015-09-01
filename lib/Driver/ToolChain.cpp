@@ -384,6 +384,8 @@ ToolChain::CXXStdlibType ToolChain::GetCXXStdlibType(const ArgList &Args) const{
       return ToolChain::CST_Libcxx;
     if (Value == "libstdc++")
       return ToolChain::CST_Libstdcxx;
+    if (Value == "none")
+      return ToolChain::CST_None;
     getDriver().Diag(diag::err_drv_invalid_stdlib_name)
       << A->getAsString(Args);
   }
@@ -456,6 +458,9 @@ void ToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
 
   case ToolChain::CST_Libstdcxx:
     CmdArgs.push_back("-lstdc++");
+    break;
+
+  case ToolChain::CST_None:
     break;
   }
 }
