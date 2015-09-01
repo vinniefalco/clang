@@ -447,8 +447,7 @@ void ToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
   CXXStdlibType Type = GetCXXStdlibType(DriverArgs);
   if (Type == CST_None)
     CC1Args.push_back("-nostdinc++");
-  else
-    DriverArgs.AddAllArgs(CC1Args, options::OPT_stdlib_EQ);
+  DriverArgs.AddAllArgs(CC1Args, options::OPT_stdlib_EQ);
 }
 
 void ToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
