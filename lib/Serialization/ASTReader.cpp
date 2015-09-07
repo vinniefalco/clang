@@ -1058,11 +1058,12 @@ bool ASTReader::ParseLineTable(ModuleFile &F,
 
   // Parse the file names
   std::map<int, int> FileIDs;
-  for (int I = 0, N = Record[Idx++]; I != N; ++I) {
+  for (unsigned I = 0; Record[Idx]; ++I) {
     // Extract the file name
     auto Filename = ReadPath(F, Record, Idx);
     FileIDs[I] = LineTable.getLineTableFilenameID(Filename);
   }
+  ++Idx;
 
   // Parse the line entries
   std::vector<LineEntry> Entries;
@@ -1074,7 +1075,7 @@ bool ASTReader::ParseLineTable(ModuleFile &F,
 
     // Extract the line entries
     unsigned NumEntries = Record[Idx++];
-    assert(NumEntries && "Numentries is 00000");
+    assert(NumEntries && "no line entries for file ID");
     Entries.clear();
     Entries.reserve(NumEntries);
     for (unsigned I = 0; I != NumEntries; ++I) {
@@ -3709,14 +3710,7 @@ ASTReader::ReadASTCore(StringRef FileName,
       break;
     }
 
-    // We only know the control subblock ID.
     switch (Entry.ID) {
-    case llvm::bitc::BLOCKINFO_BLOCK_ID:
-      if (Stream.ReadBlockInfoBlock()) {
-        Error("malformed BlockInfoBlock in AST file");
-        return Failure;
-      }
-      break;
     case CONTROL_BLOCK_ID:
       HaveReadControlBlock = true;
       switch (ReadControlBlock(F, Loaded, ImportedBy, ClientLoadCapabilities)) {
@@ -3743,6 +3737,7 @@ ASTReader::ReadASTCore(StringRef FileName,
       case HadErrors: return HadErrors;
       }
       break;
+
     case AST_BLOCK_ID:
       if (!HaveReadControlBlock) {
         if ((ClientLoadCapabilities & ARR_VersionMismatch) == 0)

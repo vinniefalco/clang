@@ -102,20 +102,27 @@ private:
 
   /// \brief Delete all our current on-disk tables.
   void clear() {
-    if (auto *M = getMergedTable())
-      delete M;
     for (auto *T : tables())
       delete T;
+    if (auto *M = getMergedTable())
+      delete M;
+    Tables.clear();
   }
 
   void removeOverriddenTables() {
     llvm::DenseSet<file_type> Files;
     Files.insert(PendingOverrides.begin(), PendingOverrides.end());
-    Tables.erase(
-        std::remove_if(tables().begin().getCurrent(), Tables.end(), [&](void *T) -> bool {
-          auto *ODT = Table::getFromOpaqueValue(T).template get<OnDiskTable*>();
-          return Files.count(ODT->File);
-        }), Tables.end());
+    // Explicitly capture Files to work around an MSVC 2015 rejects-valid bug.
+    auto ShouldRemove = [&Files](void *T) -> bool {
+      auto *ODT = Table::getFromOpaqueValue(T).template get<OnDiskTable *>();
+      bool Remove = Files.count(ODT->File);
+      if (Remove)
+        delete ODT;
+      return Remove;
+    };
+    Tables.erase(std::remove_if(tables().begin().getCurrent(), Tables.end(),
+                                ShouldRemove),
+                 Tables.end());
     PendingOverrides.clear();
   }
 
@@ -208,7 +215,7 @@ public:
     if (!PendingOverrides.empty())
       removeOverriddenTables();
 
-    if (Tables.size() > Info::MaxTables)
+    if (Tables.size() > static_cast<unsigned>(Info::MaxTables))
       condense();
 
     internal_key_type Key = Info::GetInternalKey(EKey);
