@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions %s
-
+// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++14 %s
 //
 // Tests for "expression traits" intrinsics such as __is_lvalue_expr.
 //
@@ -54,6 +54,12 @@
     static_assert(!__is_lvalue_expr((expr)),                            \
                   "the presence of parentheses should have"             \
                   " no effect on lvalueness (expr.prim/5)")
+
+#define ASSERT_CIT(expr)                                                      \
+    static_assert(__is_constant_initialized(expr), "should be constant")
+
+#define ASSERT_NOT_CIT(expr)                                                  \
+    static_assert(!__is_constant_initialized(expr), "should not be constant");
 
 enum Enum { Enumerator };
 
@@ -611,9 +617,44 @@ void check_temp_param_6()
     ASSERT_LVALUE(NonTypeReferenceParameter);
 }
 
+
+extern int AnExternInt;
 int AnInt = 0;
+int AnotherInt = AnExternInt;
+#if __cplusplus >= 201103L
+constexpr int ACEInt = 42;
+#endif
 
 void temp_param_6()
 {
     check_temp_param_6<3,AnInt>();
+}
+
+#if __cplusplus >= 201103L
+struct LitType {
+    constexpr LitType() : value(0) {}
+    constexpr LitType(int x) : value(x) {}
+    LitType(void*) : value(-1) {}
+    int value;
+};
+#endif
+#if __cplusplus >= 201402L
+struct NonLit {
+    constexpr NonLit() : value(0) {}
+    constexpr NonLit(int x ) : value(x) {}
+    NonLit(void*) : value(-1) {}
+    ~NonLit() {}
+    int value;
+};
+#endif
+void test_has_constant_initializer()
+{
+    ASSERT_NOT_CIT(AnExternInt);
+    ASSERT_NOT_CIT(AnInt);
+    ASSERT_NOT_CIT(AnotherInt);
+#if __cplusplus >= 201103L
+    constexpr int CE = 42;
+    ASSERT_CIT(CE);
+    ASSERT_CIT(ACEInt);
+#endif
 }

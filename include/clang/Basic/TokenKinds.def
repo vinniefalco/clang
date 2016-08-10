@@ -454,6 +454,9 @@ TYPE_TRAIT_1(__is_trivially_copyable, IsTriviallyCopyable, KEYCXX)
 TYPE_TRAIT_2(__is_trivially_assignable, IsTriviallyAssignable, KEYCXX)
 KEYWORD(__underlying_type           , KEYCXX)
 
+// Clang-only C++ Expression Traits
+KEYWORD(__is_constant_initialized  , KEYCXX)
+
 // Embarcadero Expression Traits
 KEYWORD(__is_lvalue_expr            , KEYCXX)
 KEYWORD(__is_rvalue_expr            , KEYCXX)

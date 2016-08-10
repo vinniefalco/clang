@@ -4749,10 +4749,31 @@ ExprResult Sema::ActOnExpressionTrait(ExpressionTrait ET,
   return Result;
 }
 
-static bool EvaluateExpressionTrait(ExpressionTrait ET, Expr *E) {
+static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
+                                    SourceLocation KWLoc, Expr *E,
+                                    SourceLocation RParen) {
   switch (ET) {
   case ET_IsLValueExpr: return E->isLValue();
   case ET_IsRValueExpr: return E->isRValue();
+  case ET_IsConstantInitialized: {
+    DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E->IgnoreImpCasts());
+    if (!DRE) {
+      Self.Diag(KWLoc, diag::err_has_constant_init_expression_trait_invalid_arg)
+        << E->getSourceRange();
+      return false;
+    }
+    if (VarDecl *VD = dyn_cast<VarDecl>(DRE->getDecl()->getCanonicalDecl())) {
+
+      if (VD->getTLSKind() != VarDecl::TLS_None)
+        return VD->getTLSKind() == VarDecl::TLS_Static;
+      else if (VD->hasGlobalStorage() && VD->hasInit()) {
+        QualType baseType = Self.Context.getBaseElementType(VD->getType());
+        return VD->getInit()->isConstantInitializer(Self.Context,
+                                                    baseType->isReferenceType());
+      }
+    }
+    return false;
+  }
   }
   llvm_unreachable("Expression trait not covered by switch");
 }
@@ -4769,7 +4790,7 @@ ExprResult Sema::BuildExpressionTrait(ExpressionTrait ET,
     return BuildExpressionTrait(ET, KWLoc, PE.get(), RParen);
   }
 
-  bool Value = EvaluateExpressionTrait(ET, Queried);
+  bool Value = EvaluateExpressionTrait(*this, ET, KWLoc, Queried, RParen);
 
   return new (Context)
       ExpressionTraitExpr(KWLoc, ET, Queried, Value, RParen, Context.BoolTy);
