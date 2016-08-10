@@ -56,10 +56,10 @@
                   " no effect on lvalueness (expr.prim/5)")
 
 #define ASSERT_CIT(expr)                                                      \
-    static_assert(__is_constant_initialized(expr), "should be constant")
+    static_assert(__has_constant_initializer(expr), "should be constant")
 
 #define ASSERT_NOT_CIT(expr)                                                  \
-    static_assert(!__is_constant_initialized(expr), "should not be constant");
+    static_assert(!__has_constant_initializer(expr), "should not be constant");
 
 enum Enum { Enumerator };
 
@@ -625,7 +625,7 @@ void temp_param_6()
 }
 
 //===========================================================================//
-// __is_constant_initialized
+// __has_constant_initializer
 //===========================================================================//
 struct PODType {
     int value;
@@ -675,9 +675,9 @@ const bool NonLitHasConstInit =
 // Test for diagnostics when the argument does reference a named identifier
 void check_is_constant_init_bogus()
 {
-    (void)__is_constant_initialized(42); // expected-error {{does not reference a named variable}}
-    (void)__is_constant_initialized(ReturnInt()); // expected-error {{does not reference a named variable}}
-    (void)__is_constant_initialized(42, 43); // expected-error {{does not reference a named variable}}
+    (void)__has_constant_initializer(42); // expected-error {{does not reference a named variable}}
+    (void)__has_constant_initializer(ReturnInt()); // expected-error {{does not reference a named variable}}
+    (void)__has_constant_initializer(42, 43); // expected-error {{does not reference a named variable}}
 }
 
 // [basic.start.static]p2.1
@@ -692,49 +692,49 @@ const int glvalue_int = 42;
 const int glvalue_int2 = ReturnInt();
 const int& glvalue_ref = glvalue_int;
 const int& glvalue_ref2 = glvalue_int2;
-static_assert(__is_constant_initialized(glvalue_ref), "");
-static_assert(__is_constant_initialized(glvalue_ref2), "");
+static_assert(__has_constant_initializer(glvalue_ref), "");
+static_assert(__has_constant_initializer(glvalue_ref2), "");
 
 __thread const int& glvalue_ref_tl = glvalue_int;
-static_assert(__is_constant_initialized(glvalue_ref_tl), "");
+static_assert(__has_constant_initializer(glvalue_ref_tl), "");
 
 void test_basic_start_static_2_1() {
     const int non_global = 42;
     const int& non_global_ref = non_global;
-    static_assert(!__is_constant_initialized(non_global), "automatic variables never have const init");
-    static_assert(!__is_constant_initialized(non_global_ref), "automatic variables never have const init");
+    static_assert(!__has_constant_initializer(non_global), "automatic variables never have const init");
+    static_assert(!__has_constant_initializer(non_global_ref), "automatic variables never have const init");
 
     static const int& local_init = non_global;
-    static_assert(!__is_constant_initialized(local_init), "init must be static glvalue");
+    static_assert(!__has_constant_initializer(local_init), "init must be static glvalue");
     static const int& global_init = glvalue_int;
-    static_assert(__is_constant_initialized(global_init), "");
+    static_assert(__has_constant_initializer(global_init), "");
     static const int& temp_init = 42;
-    static_assert(__is_constant_initialized(temp_init), "");
+    static_assert(__has_constant_initializer(temp_init), "");
 #if 0
     /// FIXME: Why is this failing?
     __thread const int& tl_init = 42;
-    static_assert(__is_constant_initialized(tl_init), "");
+    static_assert(__has_constant_initializer(tl_init), "");
 #endif
 }
 
 const int& temp_ref = 42;
 const int& temp_ref2 = ReturnInt();
-static_assert(__is_constant_initialized(temp_ref), "");
-static_assert(!__is_constant_initialized(temp_ref2), "");
+static_assert(__has_constant_initializer(temp_ref), "");
+static_assert(!__has_constant_initializer(temp_ref2), "");
 
 const NonLit& nl_temp_ref = 42;
-static_assert(!__is_constant_initialized(nl_temp_ref), "");
+static_assert(!__has_constant_initializer(nl_temp_ref), "");
 
 #if __cplusplus >= 201103L
 const LitType& lit_temp_ref = 42;
-static_assert(__is_constant_initialized(lit_temp_ref), "");
+static_assert(__has_constant_initializer(lit_temp_ref), "");
 
 const int& subobj_ref = LitType{}.value;
-static_assert(__is_constant_initialized(subobj_ref), "");
+static_assert(__has_constant_initializer(subobj_ref), "");
 #endif
 
 const int& nl_subobj_ref = NonLit().value;
-static_assert(!__is_constant_initialized(nl_subobj_ref), "");
+static_assert(!__has_constant_initializer(nl_subobj_ref), "");
 
 // [basic.start.static]p2.2
 // if an object with static or thread storage duration is initialized by a
@@ -744,20 +744,20 @@ static_assert(!__is_constant_initialized(nl_subobj_ref), "");
 void test_basic_start_static_2_2()
 {
     constexpr LitType l;
-    static_assert(!__is_constant_initialized(l), "non-static objects don't have const init");
+    static_assert(!__has_constant_initializer(l), "non-static objects don't have const init");
 
     static LitType static_lit = l;
-    static_assert(__is_constant_initialized(static_lit), "");
+    static_assert(__has_constant_initializer(static_lit), "");
 
     static LitType static_lit2 = (void*)0;
-    static_assert(!__is_constant_initialized(static_lit2), "constructor not constexpr");
+    static_assert(!__has_constant_initializer(static_lit2), "constructor not constexpr");
 
     static LitType static_lit3 = ReturnInt();
-    static_assert(!__is_constant_initialized(static_lit3), "initializer not constexpr");
+    static_assert(!__has_constant_initializer(static_lit3), "initializer not constexpr");
 
 #if __cplusplus >= 201103L
     thread_local LitType tls = 42;
-    static_assert(__is_constant_initialized(tls), "");
+    static_assert(__has_constant_initializer(tls), "");
 #endif
 }
 
@@ -765,29 +765,29 @@ LitType lit_ctor;
 LitType lit_ctor2{};
 LitType lit_ctor3 = {};
 __thread LitType lit_ctor_tl = {};
-static_assert(__is_constant_initialized(lit_ctor), "");
-static_assert(__is_constant_initialized(lit_ctor2), "");
-static_assert(__is_constant_initialized(lit_ctor3), "");
-static_assert(__is_constant_initialized(lit_ctor_tl), "");
+static_assert(__has_constant_initializer(lit_ctor), "");
+static_assert(__has_constant_initializer(lit_ctor2), "");
+static_assert(__has_constant_initializer(lit_ctor3), "");
+static_assert(__has_constant_initializer(lit_ctor_tl), "");
 
 NonLit nl_ctor;
 NonLit nl_ctor2{};
 NonLit nl_ctor3 = {};
-thread_local NonLit nl_ctor_tl = {};
-static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor), "");
-static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor2), "");
-static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor3), "");
-static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor_tl), "");
+thread_locaare NonLit nl_ctor_tl = {};
+static_assert(NonLitHasConstInit == __has_constant_initializer(nl_ctor), "");
+static_assert(NonLitHasConstInit == __has_constant_initializer(nl_ctor2), "");
+static_assert(NonLitHasConstInit == __has_constant_initializer(nl_ctor3), "");
+static_assert(NonLitHasConstInit == __has_constant_initializer(nl_ctor_tl), "");
 
 StoresNonLit snl;
-static_assert(NonLitHasConstInit == __is_constant_initialized(snl), "");
+static_assert(NonLitHasConstInit == __has_constant_initializer(snl), "");
 
 // Non-literal types cannot appear in the initializer of a non-literal type.
 int nl_in_init = NonLit{42}.value;
-static_assert(!__is_constant_initialized(nl_in_init), "");
+static_assert(!__has_constant_initializer(nl_in_init), "");
 
 int lit_in_init = LitType{42}.value;
-static_assert(__is_constant_initialized(lit_in_init), "");
+static_assert(__has_constant_initializer(lit_in_init), "");
 #endif
 
 // [basic.start.static]p2.3
@@ -797,45 +797,45 @@ static_assert(__is_constant_initialized(lit_in_init), "");
 void test_basic_start_static_2_3()
 {
     const int local = 42;
-    static_assert(!__is_constant_initialized(local), "automatic variable does not have const init");
+    static_assert(!__has_constant_initializer(local), "automatic variable does not have const init");
 
     static int static_local = 42;
-    static_assert(__is_constant_initialized(static_local), "");
+    static_assert(__has_constant_initializer(static_local), "");
 
     static int static_local2;
-    static_assert(!__is_constant_initialized(static_local2), "no init");
+    static_assert(!__has_constant_initializer(static_local2), "no init");
 
 #if __cplusplus >= 201103L
     thread_local int tl_local = 42;
-    static_assert(__is_constant_initialized(tl_local), "");
+    static_assert(__has_constant_initializer(tl_local), "");
 #endif
 }
 
 int no_init;
-static_assert(!__is_constant_initialized(no_init), "");
+static_assert(!__has_constant_initializer(no_init), "");
 
 int arg_init = 42;
-static_assert(__is_constant_initialized(arg_init), "");
+static_assert(__has_constant_initializer(arg_init), "");
 
 PODType pod_init = {};
-static_assert(__is_constant_initialized(pod_init), "");
+static_assert(__has_constant_initializer(pod_init), "");
 
 PODType pod_missing_init = {42 /* should have second arg */};
-static_assert(__is_constant_initialized(pod_missing_init), "");
+static_assert(__has_constant_initializer(pod_missing_init), "");
 
 PODType pod_full_init = {1, 2};
-static_assert(__is_constant_initialized(pod_full_init), "");
+static_assert(__has_constant_initializer(pod_full_init), "");
 
 PODType pod_non_constexpr_init = {1, ReturnInt()};
-static_assert(!__is_constant_initialized(pod_non_constexpr_init), "");
+static_assert(!__has_constant_initializer(pod_non_constexpr_init), "");
 
 #if __cplusplus >= 201103L
 int val_init{};
-static_assert(__is_constant_initialized(val_init), "");
+static_assert(__has_constant_initializer(val_init), "");
 
 int brace_init = {};
-static_assert(__is_constant_initialized(brace_init), "");
+static_assert(__has_constant_initializer(brace_init), "");
 #endif
 
 __thread int tl_init = 0;
-static_assert(__is_constant_initialized(tl_init), "");
+static_assert(__has_constant_initializer(tl_init), "");

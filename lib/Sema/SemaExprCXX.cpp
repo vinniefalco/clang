@@ -4755,7 +4755,7 @@ static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
   switch (ET) {
   case ET_IsLValueExpr: return E->isLValue();
   case ET_IsRValueExpr: return E->isRValue();
-  case ET_IsConstantInitialized: {
+  case ET_HasConstantInitializer: {
     DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E->IgnoreImpCasts());
     if (!DRE) {
       // It is a usage error to specify and expression that does not reference

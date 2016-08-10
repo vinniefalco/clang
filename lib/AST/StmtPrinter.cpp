@@ -2323,7 +2323,7 @@ static const char *getExpressionTraitName(ExpressionTrait ET) {
   switch (ET) {
   case ET_IsLValueExpr:           return "__is_lvalue_expr";
   case ET_IsRValueExpr:           return "__is_rvalue_expr";
-  case ET_IsConstantInitialized:  return "__is_constant_initialized";
+  case ET_HasConstantInitializer:  return "__has_constant_initializer";
   }
   llvm_unreachable("Expression type trait not covered by switch");
 }

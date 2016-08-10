@@ -20,7 +20,7 @@ namespace clang {
   enum ExpressionTrait {
     ET_IsLValueExpr,
     ET_IsRValueExpr,
-    ET_IsConstantInitialized
+    ET_HasConstantInitializer
   };
 }
 

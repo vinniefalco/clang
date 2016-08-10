@@ -1273,7 +1273,7 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
       Tok.isNot(tok::identifier) &&
       !Tok.isAnnotation() &&
       Tok.getIdentifierInfo() &&
-      Tok.isOneOf(tok::kw___is_constant_initialized,
+      Tok.isOneOf(tok::kw___has_constant_initializer,
                   tok::kw___is_abstract,
                   tok::kw___is_arithmetic,
                   tok::kw___is_array,

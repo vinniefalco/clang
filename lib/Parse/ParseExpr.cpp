@@ -683,7 +683,7 @@ class CastExpressionIdValidator : public CorrectionCandidateCallback {
 ///                   '__is_same'
 ///
 /// [Clang] expression-trait:
-///                   '__is_constant_initialized'
+///                   '__has_constant_initializer'
 ///
 /// [Embarcadero] array-type-trait:
 ///                   '__array_rank'
@@ -800,7 +800,7 @@ ExprResult Parser::ParseCastExpression(bool isUnaryExpression,
           RevertibleTypeTraits[PP.getIdentifierInfo(#Name)] \
             = RTT_JOIN(tok::kw_,Name)
 
-          REVERTIBLE_TYPE_TRAIT(__is_constant_initialized);
+          REVERTIBLE_TYPE_TRAIT(__has_constant_initializer);
           REVERTIBLE_TYPE_TRAIT(__is_abstract);
           REVERTIBLE_TYPE_TRAIT(__is_arithmetic);
           REVERTIBLE_TYPE_TRAIT(__is_array);
@@ -1325,7 +1325,7 @@ ExprResult Parser::ParseCastExpression(bool isUnaryExpression,
   case tok::kw___array_extent:
     return ParseArrayTypeTrait();
 
-  case tok::kw___is_constant_initialized:
+  case tok::kw___has_constant_initializer:
   case tok::kw___is_lvalue_expr:
   case tok::kw___is_rvalue_expr:
     return ParseExpressionTrait();
