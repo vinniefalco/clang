@@ -4762,8 +4762,8 @@ static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
         << E->getSourceRange();
       return false;
     }
-    if (VarDecl *VD = dyn_cast<VarDecl>(DRE->getDecl()->getCanonicalDecl())) {
-
+    if (VarDecl *VD = dyn_cast<VarDecl>(DRE->getDecl())) {
+      // An object with TLS duration has constant initialized
       if (VD->getTLSKind() != VarDecl::TLS_None)
         return VD->getTLSKind() == VarDecl::TLS_Static;
       else if (VD->hasGlobalStorage() && VD->hasInit()) {

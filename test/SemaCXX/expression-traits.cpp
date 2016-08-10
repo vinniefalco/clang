@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions %s
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++14 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++1z %s
 //
 // Tests for "expression traits" intrinsics such as __is_lvalue_expr.
 //
@@ -647,14 +647,95 @@ struct NonLit {
     int value;
 };
 #endif
+
+// [basic.start.static]p2.1
+// if each full-expression (including implicit conversions) that appears in
+// the initializer of a reference with static or thread storage duration is
+// a constant expression (5.20) and the reference is bound to a glvalue
+// designating an object with static storage duration, to a temporary object
+// (see 12.2) or subobject thereof, or to a function;
+const int& xref = 42;
+const int& yref = ReturnInt();
+#if __cplusplus >= 201103L
+static thread_local const int& xtlref = 42;
+thread_local const int& ytlref = ReturnInt();
+
+const LitType& lref = LitType{42};
+const int& lmref = LitType{42}.value;
+const int& lncref = LitType{(void*)0}.value;
+#endif
+#if __cplusplus >= 201402L
+const NonLit& nlref = NonLit{42};
+const int& nlmref = NonLit{42}.value;
+const int& nlncref = NonLit{(void*)0}.value;
+#endif
+
+void check_basic_start_static_2_1() {
+
+    static_assert(__is_constant_initialized(xref), "");
+    static_assert(!__is_constant_initialized(yref), "");
+#if __cplusplus >= 201103L
+    static_assert(__is_constant_initialized(lref), "");
+    static_assert(__is_constant_initialized(lmref), "");
+    static_assert(!__is_constant_initialized(lncref), "");
+    //static_assert(__is_constant_initialized(xtlref), "");
+    //static_assert(!__is_constant_initialized(ytlref), "");
+#endif
+#if __cplusplus >= 201402L
+    static_assert(__is_constant_initialized(nlref), "");
+    static_assert(__is_constant_initialized(nlmref), "");
+    static_assert(!__is_constant_initialized(nlncref), "");
+#endif
+}
+
+
+// [basic.start.static]p2.1
+// if an object with static or thread storage duration is initialized by a
+// constructor call, and if the initialization full-expression is a constant
+// initializer for the object;
+const int xobj = 42;
+const int yobj = ReturnInt();
+#if __cplusplus >= 201103L
+static thread_local const int xtlobj = 42;
+thread_local const int ytlobj = ReturnInt();
+
+const LitType lobj = LitType{42};
+const int lmobj = LitType{42}.value;
+const int lncobj = LitType{(void*)0}.value;
+#endif
+#if __cplusplus >= 201402L
+const NonLit nlobj = NonLit{42};
+const int nlmobj = NonLit{42}.value;
+const int nlncobj = NonLit{(void*)0}.value;
+#endif
+
+void check_basic_start_static_2_2() {
+
+    static_assert(__is_constant_initialized(xobj), "");
+    static_assert(!__is_constant_initialized(yobj), "");
+#if __cplusplus >= 201103L
+    static_assert(__is_constant_initialized(lobj), "");
+    static_assert(__is_constant_initialized(lmobj), "");
+    static_assert(!__is_constant_initialized(lncobj), "");
+    //static_assert(__is_constant_initialized(xtlobj), "");
+    //static_assert(!__is_constant_initialized(ytlobj), "");
+#endif
+#if __cplusplus >= 201402L
+    static_assert(__is_constant_initialized(nlobj), "");
+    static_assert(__is_constant_initialized(nlmobj), "");
+    static_assert(!__is_constant_initialized(nlncobj), "");
+#endif
+}
+
+
 void test_has_constant_initializer()
 {
     ASSERT_NOT_CIT(AnExternInt);
-    ASSERT_NOT_CIT(AnInt);
+    ASSERT_CIT(AnInt);
     ASSERT_NOT_CIT(AnotherInt);
 #if __cplusplus >= 201103L
     constexpr int CE = 42;
-    ASSERT_CIT(CE);
+    ASSERT_NOT_CIT(CE);
     ASSERT_CIT(ACEInt);
 #endif
 }
