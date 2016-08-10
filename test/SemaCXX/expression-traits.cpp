@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions %s
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++1z %s
+// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++14 %s
 //
 // Tests for "expression traits" intrinsics such as __is_lvalue_expr.
 //
@@ -702,6 +702,10 @@ void check_basic_start_static_2_1() {
 // initializer for the object;
 const int xobj = 42;
 const int yobj = ReturnInt();
+static_assert(__is_constant_initialized(xobj), "");
+static_assert(!__is_constant_initialized(yobj), "");
+
+
 #if __cplusplus >= 201103L
 static thread_local const int xtlobj = 42;
 thread_local const int ytlobj = ReturnInt();
@@ -711,8 +715,13 @@ const int lmobj = LitType{42}.value;
 const int lncobj = LitType{(void*)0}.value;
 #endif
 #if __cplusplus >= 201402L
-NonLit nlobjd;
-const NonLit nlobj(42);
+NonLit nlobj_default_init;
+NonLit nlobj_list_init = {};
+const NonLit nlobj_direct_init(42);
+static_assert(__is_constant_initialized(nlobj_default_init), "");
+static_assert(__is_constant_initialized(nlobj_list_init), "");
+static_assert(__is_constant_initialized(nlobj_direct_init), "");
+
 #endif
 
 void check_basic_start_static_2_2() {
@@ -725,22 +734,5 @@ void check_basic_start_static_2_2() {
     static_assert(!__is_constant_initialized(lncobj), "");
     //static_assert(__is_constant_initialized(xtlobj), "");
     //static_assert(!__is_constant_initialized(ytlobj), "");
-#endif
-#if __cplusplus >= 201402L
-    static_assert(__is_constant_initialized(nlobjd), "");
-    static_assert(__is_constant_initialized(nlobj), "");
-#endif
-}
-
-
-void test_has_constant_initializer()
-{
-    ASSERT_NOT_CIT(AnExternInt);
-    ASSERT_CIT(AnInt);
-    ASSERT_NOT_CIT(AnotherInt);
-#if __cplusplus >= 201103L
-    constexpr int CE = 42;
-    ASSERT_NOT_CIT(CE);
-    ASSERT_CIT(ACEInt);
 #endif
 }

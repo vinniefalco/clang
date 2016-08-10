@@ -3085,6 +3085,7 @@ ExprResult Parser::ParseExpressionTrait() {
   if (T.expectAndConsume())
     return ExprError();
 
+  EnterExpressionEvaluationContext Unevaluated(Actions, Sema::Unevaluated);
   ExprResult Expr = ParseExpression();
 
   T.consumeClose();

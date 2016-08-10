@@ -4769,7 +4769,8 @@ static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
       else if (VD->hasGlobalStorage() && VD->hasInit()) {
         QualType baseType = Self.Context.getBaseElementType(VD->getType());
         return VD->getInit()->isConstantInitializer(Self.Context,
-                                                    baseType->isReferenceType());
+                                                    baseType->isReferenceType(),
+                                                    nullptr, !baseType->isReferenceType());
       }
     }
     return false;

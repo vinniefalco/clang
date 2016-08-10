@@ -2612,7 +2612,8 @@ bool Expr::hasAnyTypeDependentArguments(ArrayRef<Expr *> Exprs) {
 }
 
 bool Expr::isConstantInitializer(ASTContext &Ctx, bool IsForRef,
-                                 const Expr **Culprit) const {
+                                 const Expr **Culprit,
+                                 bool AllowNonLiteral) const {
   // This function is attempting whether an expression is an initializer
   // which can be evaluated at compile-time. It very closely parallels
   // ConstExprEmitter in CGExprConstant.cpp; if they don't match, it
@@ -2649,7 +2650,17 @@ bool Expr::isConstantInitializer(ASTContext &Ctx, bool IsForRef,
       assert(CE->getNumArgs() == 1 && "trivial ctor with > 1 argument");
       return CE->getArg(0)->isConstantInitializer(Ctx, false, Culprit);
     }
-
+    if (CE->getConstructor()->isConstexpr() &&
+        (CE->getConstructor()->getParent()->hasTrivialDestructor() ||
+            AllowNonLiteral)) {
+        if (!CE->getNumArgs()) return true;
+        unsigned numArgs = CE->getNumArgs();
+        for (unsigned i = 0; i < numArgs; i++) {
+          if (!CE->getArg(i)->isConstantInitializer(Ctx, false, Culprit))
+            return false;
+        }
+        return true;
+    }
     break;
   }
   case CompoundLiteralExprClass: {
