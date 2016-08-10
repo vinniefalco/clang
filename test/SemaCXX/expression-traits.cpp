@@ -630,6 +630,10 @@ void temp_param_6()
     check_temp_param_6<3,AnInt>();
 }
 
+struct PODType {
+    int value;
+    int value2;
+};
 #if __cplusplus >= 201103L
 struct LitType {
     constexpr LitType() : value(0) {}
@@ -638,14 +642,37 @@ struct LitType {
     int value;
 };
 #endif
-#if __cplusplus >= 201402L
+
 struct NonLit {
+#if __cplusplus >= 201402L
     constexpr NonLit() : value(0) {}
     constexpr NonLit(int x ) : value(x) {}
+#else
+    NonLit() : value(0) {}
+    NonLit(int x ) : value(x) {}
+#endif
     NonLit(void*) : value(-1) {}
     ~NonLit() {}
     int value;
 };
+
+struct StoresNonLit {
+#if __cplusplus >= 201402L
+    constexpr StoresNonLit() : obj() {}
+    constexpr StoresNonLit(int x) : obj(x) {}
+#else
+    StoresNonLit() : obj() {}
+    StoresNonLit(int x) : obj(x) {}
+#endif
+    StoresNonLit(void* p) : obj(p) {}
+    NonLit obj;
+};
+
+const bool NonLitHasConstInit =
+#if __cplusplus >= 201402L
+    true;
+#else
+    false;
 #endif
 
 void check_is_constant_init_bogus()
@@ -661,78 +688,107 @@ void check_is_constant_init_bogus()
 // a constant expression (5.20) and the reference is bound to a glvalue
 // designating an object with static storage duration, to a temporary object
 // (see 12.2) or subobject thereof, or to a function;
-const int& xref = 42;
-const int& yref = ReturnInt();
+
+// Test binding to a static glvalue
+const int glvalue_int = 42;
+const int glvalue_int2 = ReturnInt();
+const int& glvalue_ref = glvalue_int;
+const int& glvalue_ref2 = glvalue_int2;
+static_assert(__is_constant_initialized(glvalue_ref), "");
+static_assert(__is_constant_initialized(glvalue_ref2), "");
+
 #if __cplusplus >= 201103L
-static thread_local const int& xtlref = 42;
-thread_local const int& ytlref = ReturnInt();
-
-const LitType& lref = LitType{42};
-const int& lmref = LitType{42}.value;
-const int& lncref = LitType{(void*)0}.value;
-#endif
-#if __cplusplus >= 201402L
-const NonLit& nlref = {42};
-const int& nlmref = NonLit{42}.value;
-const int& nlncref = NonLit{(void*)0}.value;
+thread_local const int& glvalue_ref_tl = glvalue_int;
+static_assert(__is_constant_initialized(glvalue_ref_tl), "");
 #endif
 
-void check_basic_start_static_2_1() {
+void test_basic_start_static_2_1() {
+    const int non_global = 42;
+    const int& non_global_ref = non_global;
+    static_assert(!__is_constant_initialized(non_global), "automatic variables never have const init");
+    static_assert(!__is_constant_initialized(non_global_ref), "automatic variables never have const init");
 
-    static_assert(__is_constant_initialized(xref), "");
-    static_assert(!__is_constant_initialized(yref), "");
+    static const int& local_init = non_global;
+    static_assert(!__is_constant_initialized(local_init), "init must be static glvalue");
+    static const int& global_init = glvalue_int;
+    static_assert(__is_constant_initialized(global_init), "");
+    static const int& temp_init = 42;
+    static_assert(__is_constant_initialized(temp_init), "");
 #if __cplusplus >= 201103L
-    static_assert(__is_constant_initialized(lref), "");
-    static_assert(__is_constant_initialized(lmref), "");
-    static_assert(!__is_constant_initialized(lncref), "");
-    //static_assert(__is_constant_initialized(xtlref), "");
-    //static_assert(!__is_constant_initialized(ytlref), "");
-#endif
-#if __cplusplus >= 201402L
-    static_assert(!__is_constant_initialized(nlref), "");
-    static_assert(!__is_constant_initialized(nlmref), "");
-    static_assert(!__is_constant_initialized(nlncref), "");
+    static thread_local const int& tl_init = 42;
+    static_assert(__is_constant_initialized(tl_init), "");
 #endif
 }
 
+const int& temp_ref = 42;
+const int& temp_ref2 = ReturnInt();
+static_assert(__is_constant_initialized(temp_ref), "");
+static_assert(!__is_constant_initialized(temp_ref2), "");
 
-// [basic.start.static]p2.1
+const NonLit& nl_temp_ref = 42;
+static_assert(!__is_constant_initialized(nl_temp_ref), "");
+
+#if __cplusplus >= 201103L
+const LitType& lit_temp_ref = 42;
+static_assert(__is_constant_initialized(lit_temp_ref), "");
+
+const int& subobj_ref = LitType{}.value;
+static_assert(__is_constant_initialized(subobj_ref), "");
+#endif
+
+const int& nl_subobj_ref = NonLit().value;
+static_assert(!__is_constant_initialized(nl_subobj_ref), "");
+
+// [basic.static.start]p2.2
 // if an object with static or thread storage duration is initialized by a
 // constructor call, and if the initialization full-expression is a constant
 // initializer for the object;
-const int xobj = 42;
-const int yobj = ReturnInt();
-static_assert(__is_constant_initialized(xobj), "");
-static_assert(!__is_constant_initialized(yobj), "");
+#if __cplusplus >= 201103L
+LitType lit_ctor;
+LitType lit_ctor2{};
+LitType lit_ctor3 = {};
+static_assert(__is_constant_initialized(lit_ctor), "");
+static_assert(__is_constant_initialized(lit_ctor2), "");
+static_assert(__is_constant_initialized(lit_ctor3), "");
 
+NonLit nl_ctor;
+NonLit nl_ctor2{};
+NonLit nl_ctor3 = {};
+static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor), "");
+static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor2), "");
+static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor3), "");
+
+StoresNonLit snl;
+static_assert(NonLitHasConstInit == __is_constant_initialized(snl), "");
+
+// Non-literal types cannot appear in the initializer of a non-literal type.
+int nl_in_init = NonLit{42}.value;
+static_assert(!__is_constant_initialized(nl_in_init), "");
+
+int lit_in_init = LitType{42}.value;
+static_assert(__is_constant_initialized(lit_in_init), "");
+#endif
+
+// [basic.start.static]p2.3
+// if an object with static or thread storage duration is not initialized by a
+// constructor call and if either the object is value-initialized or every
+// full-expression that appears in its initializer is a constant expression.
+
+int no_init;
+static_assert(!__is_constant_initialized(no_init), "");
 
 #if __cplusplus >= 201103L
-static thread_local const int xtlobj = 42;
-thread_local const int ytlobj = ReturnInt();
-
-const LitType lobj = LitType{42};
-const int lmobj = LitType{42}.value;
-const int lncobj = LitType{(void*)0}.value;
-#endif
-#if __cplusplus >= 201402L
-NonLit nlobj_default_init;
-NonLit nlobj_list_init = {};
-const NonLit nlobj_direct_init(42);
-static_assert(__is_constant_initialized(nlobj_default_init), "");
-static_assert(__is_constant_initialized(nlobj_list_init), "");
-static_assert(__is_constant_initialized(nlobj_direct_init), "");
-
+int brace_init = {};
+static_assert(__is_constant_initialized(brace_init), "");
 #endif
 
-void check_basic_start_static_2_2() {
+PODType pod_init = {};
+static_assert(__is_constant_initialized(pod_init), "");
 
-    static_assert(__is_constant_initialized(xobj), "");
-    static_assert(!__is_constant_initialized(yobj), "");
-#if __cplusplus >= 201103L
-    static_assert(__is_constant_initialized(lobj), "");
-    static_assert(__is_constant_initialized(lmobj), "");
-    static_assert(!__is_constant_initialized(lncobj), "");
-    //static_assert(__is_constant_initialized(xtlobj), "");
-    //static_assert(!__is_constant_initialized(ytlobj), "");
-#endif
-}
+PODType pod_missing_init = {42 /* should have second arg */};
+static_assert(__is_constant_initialized(pod_missing_init), "");
+
+PODType pod_full_init = {1, 2};
+static_assert(__is_constant_initialized(pod_full_init), "");
+
+PODType pod_non_constexpr_init = {1, ReturnInt()};

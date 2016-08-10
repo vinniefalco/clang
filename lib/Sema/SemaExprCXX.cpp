@@ -4758,19 +4758,22 @@ static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
   case ET_IsConstantInitialized: {
     DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E->IgnoreImpCasts());
     if (!DRE) {
+      // It is a usage error to specify and expression that does not reference
+      // a named variable.
       Self.Diag(KWLoc, diag::err_has_constant_init_expression_trait_invalid_arg)
         << E->getSourceRange();
       return false;
     }
     if (VarDecl *VD = dyn_cast<VarDecl>(DRE->getDecl())) {
-      // An object with TLS duration has constant initialized
-      if (VD->getTLSKind() != VarDecl::TLS_None)
-        return VD->getTLSKind() == VarDecl::TLS_Static;
-      else if (VD->hasGlobalStorage() && VD->hasInit()) {
+      // Thread local objects have TSL_Static if they have a constant
+      // initializer
+      if (VD->getTLSKind() == VarDecl::TLS_Static)
+        return true;
+      else if ((VD->hasGlobalStorage() ||
+          VD->getTLSKind() != VarDecl::TLS_None) && VD->hasInit()) {
         QualType baseType = Self.Context.getBaseElementType(VD->getType());
         return VD->getInit()->isConstantInitializer(Self.Context,
-                                                    baseType->isReferenceType(),
-                                                    nullptr, !baseType->isReferenceType());
+            baseType->isReferenceType(), nullptr, /*AllowNonLiteral=*/true);
       }
     }
     return false;
