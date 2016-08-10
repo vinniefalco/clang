@@ -665,7 +665,9 @@ const int& lmref = LitType{42}.value;
 const int& lncref = LitType{(void*)0}.value;
 #endif
 #if __cplusplus >= 201402L
-const NonLit& nlref = 42;
+const NonLit& nlref = {42};
+const int& nlmref = NonLit{42}.value;
+const int& nlncref = NonLit{(void*)0}.value;
 #endif
 
 void check_basic_start_static_2_1() {
@@ -680,7 +682,9 @@ void check_basic_start_static_2_1() {
     //static_assert(!__is_constant_initialized(ytlref), "");
 #endif
 #if __cplusplus >= 201402L
-    static_assert(__is_constant_initialized(nlref), "");
+    static_assert(!__is_constant_initialized(nlref), "");
+    static_assert(!__is_constant_initialized(nlmref), "");
+    static_assert(!__is_constant_initialized(nlncref), "");
 #endif
 }
 
@@ -701,8 +705,6 @@ const int lncobj = LitType{(void*)0}.value;
 #endif
 #if __cplusplus >= 201402L
 const NonLit nlobj = 42;
-const int nlmobj = LitType{42}.value;
-const int nlncobj = LitType{(void*)0}.value;
 #endif
 
 void check_basic_start_static_2_2() {
@@ -718,8 +720,6 @@ void check_basic_start_static_2_2() {
 #endif
 #if __cplusplus >= 201402L
     static_assert(__is_constant_initialized(nlobj), "");
-    static_assert(__is_constant_initialized(nlmobj), "");
-    static_assert(!__is_constant_initialized(nlncobj), "");
 #endif
 }
 
