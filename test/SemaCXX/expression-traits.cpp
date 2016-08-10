@@ -648,6 +648,13 @@ struct NonLit {
 };
 #endif
 
+void check_is_constant_init_bogus()
+{
+    (void)__is_constant_initialized(42); // expected-error {{does not reference a named variable}}
+    (void)__is_constant_initialized(ReturnInt()); // expected-error {{does not reference a named variable}}
+    (void)__is_constant_initialized(42, 43); // expected-error {{does not reference a named variable}}
+}
+
 // [basic.start.static]p2.1
 // if each full-expression (including implicit conversions) that appears in
 // the initializer of a reference with static or thread storage duration is
@@ -704,7 +711,8 @@ const int lmobj = LitType{42}.value;
 const int lncobj = LitType{(void*)0}.value;
 #endif
 #if __cplusplus >= 201402L
-const NonLit nlobj = 42;
+NonLit nlobjd;
+const NonLit nlobj(42);
 #endif
 
 void check_basic_start_static_2_2() {
@@ -719,6 +727,7 @@ void check_basic_start_static_2_2() {
     //static_assert(!__is_constant_initialized(ytlobj), "");
 #endif
 #if __cplusplus >= 201402L
+    static_assert(__is_constant_initialized(nlobjd), "");
     static_assert(__is_constant_initialized(nlobj), "");
 #endif
 }
