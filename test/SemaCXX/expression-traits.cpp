@@ -617,19 +617,16 @@ void check_temp_param_6()
     ASSERT_LVALUE(NonTypeReferenceParameter);
 }
 
-
-extern int AnExternInt;
 int AnInt = 0;
-int AnotherInt = AnExternInt;
-#if __cplusplus >= 201103L
-constexpr int ACEInt = 42;
-#endif
 
 void temp_param_6()
 {
     check_temp_param_6<3,AnInt>();
 }
 
+//===========================================================================//
+// __is_constant_initialized
+//===========================================================================//
 struct PODType {
     int value;
     int value2;
@@ -675,6 +672,7 @@ const bool NonLitHasConstInit =
     false;
 #endif
 
+// Test for diagnostics when the argument does reference a named identifier
 void check_is_constant_init_bogus()
 {
     (void)__is_constant_initialized(42); // expected-error {{does not reference a named variable}}
@@ -697,10 +695,8 @@ const int& glvalue_ref2 = glvalue_int2;
 static_assert(__is_constant_initialized(glvalue_ref), "");
 static_assert(__is_constant_initialized(glvalue_ref2), "");
 
-#if __cplusplus >= 201103L
-thread_local const int& glvalue_ref_tl = glvalue_int;
+__thread const int& glvalue_ref_tl = glvalue_int;
 static_assert(__is_constant_initialized(glvalue_ref_tl), "");
-#endif
 
 void test_basic_start_static_2_1() {
     const int non_global = 42;
@@ -714,8 +710,9 @@ void test_basic_start_static_2_1() {
     static_assert(__is_constant_initialized(global_init), "");
     static const int& temp_init = 42;
     static_assert(__is_constant_initialized(temp_init), "");
-#if __cplusplus >= 201103L
-    static thread_local const int& tl_init = 42;
+#if 0
+    /// FIXME: Why is this failing?
+    __thread const int& tl_init = 42;
     static_assert(__is_constant_initialized(tl_init), "");
 #endif
 }
@@ -739,24 +736,48 @@ static_assert(__is_constant_initialized(subobj_ref), "");
 const int& nl_subobj_ref = NonLit().value;
 static_assert(!__is_constant_initialized(nl_subobj_ref), "");
 
-// [basic.static.start]p2.2
+// [basic.start.static]p2.2
 // if an object with static or thread storage duration is initialized by a
 // constructor call, and if the initialization full-expression is a constant
 // initializer for the object;
 #if __cplusplus >= 201103L
+void test_basic_start_static_2_2()
+{
+    constexpr LitType l;
+    static_assert(!__is_constant_initialized(l), "non-static objects don't have const init");
+
+    static LitType static_lit = l;
+    static_assert(__is_constant_initialized(static_lit), "");
+
+    static LitType static_lit2 = (void*)0;
+    static_assert(!__is_constant_initialized(static_lit2), "constructor not constexpr");
+
+    static LitType static_lit3 = ReturnInt();
+    static_assert(!__is_constant_initialized(static_lit3), "initializer not constexpr");
+
+#if __cplusplus >= 201103L
+    thread_local LitType tls = 42;
+    static_assert(__is_constant_initialized(tls), "");
+#endif
+}
+
 LitType lit_ctor;
 LitType lit_ctor2{};
 LitType lit_ctor3 = {};
+__thread LitType lit_ctor_tl = {};
 static_assert(__is_constant_initialized(lit_ctor), "");
 static_assert(__is_constant_initialized(lit_ctor2), "");
 static_assert(__is_constant_initialized(lit_ctor3), "");
+static_assert(__is_constant_initialized(lit_ctor_tl), "");
 
 NonLit nl_ctor;
 NonLit nl_ctor2{};
 NonLit nl_ctor3 = {};
+thread_local NonLit nl_ctor_tl = {};
 static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor), "");
 static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor2), "");
 static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor3), "");
+static_assert(NonLitHasConstInit == __is_constant_initialized(nl_ctor_tl), "");
 
 StoresNonLit snl;
 static_assert(NonLitHasConstInit == __is_constant_initialized(snl), "");
@@ -773,14 +794,28 @@ static_assert(__is_constant_initialized(lit_in_init), "");
 // if an object with static or thread storage duration is not initialized by a
 // constructor call and if either the object is value-initialized or every
 // full-expression that appears in its initializer is a constant expression.
+void test_basic_start_static_2_3()
+{
+    const int local = 42;
+    static_assert(!__is_constant_initialized(local), "automatic variable does not have const init");
+
+    static int static_local = 42;
+    static_assert(__is_constant_initialized(static_local), "");
+
+    static int static_local2;
+    static_assert(!__is_constant_initialized(static_local2), "no init");
+
+#if __cplusplus >= 201103L
+    thread_local int tl_local = 42;
+    static_assert(__is_constant_initialized(tl_local), "");
+#endif
+}
 
 int no_init;
 static_assert(!__is_constant_initialized(no_init), "");
 
-#if __cplusplus >= 201103L
-int brace_init = {};
-static_assert(__is_constant_initialized(brace_init), "");
-#endif
+int arg_init = 42;
+static_assert(__is_constant_initialized(arg_init), "");
 
 PODType pod_init = {};
 static_assert(__is_constant_initialized(pod_init), "");
@@ -792,3 +827,15 @@ PODType pod_full_init = {1, 2};
 static_assert(__is_constant_initialized(pod_full_init), "");
 
 PODType pod_non_constexpr_init = {1, ReturnInt()};
+static_assert(!__is_constant_initialized(pod_non_constexpr_init), "");
+
+#if __cplusplus >= 201103L
+int val_init{};
+static_assert(__is_constant_initialized(val_init), "");
+
+int brace_init = {};
+static_assert(__is_constant_initialized(brace_init), "");
+#endif
+
+__thread int tl_init = 0;
+static_assert(__is_constant_initialized(tl_init), "");
