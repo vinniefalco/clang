@@ -666,7 +666,7 @@ const bool NonLitHasConstInit =
     false;
 #endif
 
-// Test for diagnostics when the argument does reference a named identifier
+// Test diagnostics when the argument does not refer to a named identifier
 void check_is_constant_init_bogus()
 {
     (void)__has_constant_initializer(42); // expected-error {{does not reference a named variable}}
