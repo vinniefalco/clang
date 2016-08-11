@@ -4767,9 +4767,10 @@ static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
     if (VarDecl *VD = dyn_cast<VarDecl>(DRE->getDecl())) {
       // Thread local objects have TSL_Static if they have a constant
       // initializer
-      if (VD->getTLSKind() != VarDecl::TLS_None)
-        return VD->getTLSKind() == VarDecl::TLS_Static;
-      else if (VD->hasGlobalStorage() && VD->hasInit()) {
+      if (VD->getTLSKind() == VarDecl::TLS_Static)
+        return true;
+      else if ((VD->hasGlobalStorage() ||
+          VD->getTLSKind() != VarDecl::TLS_None) && VD->hasInit()) {
         QualType baseType = Self.Context.getBaseElementType(VD->getType());
         return VD->getInit()->isConstantInitializer(Self.Context,
             baseType->isReferenceType(), nullptr, /*AllowNonLiteral=*/true);

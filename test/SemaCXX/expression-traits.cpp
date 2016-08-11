@@ -55,12 +55,6 @@
                   "the presence of parentheses should have"             \
                   " no effect on lvalueness (expr.prim/5)")
 
-#define ASSERT_CIT(expr)                                                      \
-    static_assert(__has_constant_initializer(expr), "should be constant")
-
-#define ASSERT_NOT_CIT(expr)                                                  \
-    static_assert(!__has_constant_initializer(expr), "should not be constant");
-
 enum Enum { Enumerator };
 
 int ReturnInt();
@@ -773,7 +767,7 @@ static_assert(__has_constant_initializer(lit_ctor_tl), "");
 NonLit nl_ctor;
 NonLit nl_ctor2{};
 NonLit nl_ctor3 = {};
-thread_locaare NonLit nl_ctor_tl = {};
+thread_local NonLit nl_ctor_tl = {};
 static_assert(NonLitHasConstInit == __has_constant_initializer(nl_ctor), "");
 static_assert(NonLitHasConstInit == __has_constant_initializer(nl_ctor2), "");
 static_assert(NonLitHasConstInit == __has_constant_initializer(nl_ctor3), "");
