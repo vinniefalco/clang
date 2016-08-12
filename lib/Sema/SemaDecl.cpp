@@ -10385,6 +10385,7 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
       Diag(var->getLocation(), diag::warn_missing_variable_declarations) << var;
   }
 
+  // Cache the result of checking for constant initialization.
   Optional<bool> HasConstInit;
 
   if (var->getTLSKind() == VarDecl::TLS_Static) {
@@ -10481,7 +10482,7 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
   QualType baseType = Context.getBaseElementType(type);
 
   if (var->hasAttr<RequireConstantInitAttr>() && !Init)
-     Diag(var->getLocation(), diag::err_require_const_init_failed);
+     Diag(var->getLocation(), diag::err_require_constant_init_failed);
 
   if (!var->getDeclContext()->isDependentContext() &&
       Init && !Init->isValueDependent()) {
@@ -10536,7 +10537,7 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
         ShouldDiagnose = !*HasConstInit;
       }
       if (ShouldDiagnose)
-        Diag(var->getLocation(), diag::err_var_requires_constant_init)
+        Diag(var->getLocation(), diag::err_require_constant_init_failed)
           << Init->getSourceRange();
     }
   }
