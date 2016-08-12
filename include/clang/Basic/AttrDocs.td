@@ -905,7 +905,7 @@ potentially-evaluated discarded-value expression that is not explicitly cast to
 .. code-block: c++
   struct [[nodiscard]] error_info { /*...*/ };
   error_info enable_missile_safety_mode();
-  
+
   void launch_missiles();
   void test_missiles() {
     enable_missile_safety_mode(); // diagnoses

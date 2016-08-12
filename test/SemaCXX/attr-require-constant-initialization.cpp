@@ -210,10 +210,6 @@ ATTR __thread int tl_init = 0;
 
 #if __cplusplus >= 201103L
 
-struct T {
-    constexpr T(int)
-};
-
 // Test that the validity of the selected constructor is checked, not just the
 // initializer
 struct NotC { constexpr NotC(void*) {} NotC(int) {} };
