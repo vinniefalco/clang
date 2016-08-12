@@ -2649,6 +2649,7 @@ bool Expr::isConstantInitializer(ASTContext &Ctx, bool IsForRef,
       assert(CE->getNumArgs() == 1 && "trivial ctor with > 1 argument");
       return CE->getArg(0)->isConstantInitializer(Ctx, false, Culprit);
     }
+
     break;
   }
   case CompoundLiteralExprClass: {
