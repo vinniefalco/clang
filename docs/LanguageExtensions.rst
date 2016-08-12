@@ -1043,15 +1043,15 @@ for information.
 The following expression trait primitives are supported by Clang:
 
 * ``__has_constant_initializer(expr)``:
-    Determines whether `expr` names
-    a object that will be initialized during
-    `*constant initialization* <http://en.cppreference.com/w/cpp/language/constant_initialization>`_
-    according to the rules of [basic.start.static]. If ``expr`` does not name
-    an object, or if the object it names doesn't have static or thread-local
-    storage duration the result is false. This trait can be used determine if it's
-    safe to use a global variable during program startup. For example:
+  Determines whether `expr` names
+  a object that will be initialized during
+  `constant initialization <http://en.cppreference.com/w/cpp/language/constant_initialization>`_
+  according to the rules of [basic.start.static]. If ``expr`` does not name
+  an object, or if the object it names doesn't have static or thread-local
+  storage duration the result is false. This trait can be used determine if it's
+  safe to use a global variable during program startup. For example:
 
-.. code-block:: c++
+  .. code-block:: c++
 
     static MyType global_obj;
     #if __has_extension(has_constant_initializer)
