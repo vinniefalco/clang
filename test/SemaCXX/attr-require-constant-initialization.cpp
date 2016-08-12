@@ -14,10 +14,8 @@
   typedef int CONCAT_(sa_, __LINE__)[b_ ? 1 : -1]
 #endif
 
+int ReturnInt();
 
-//===========================================================================//
-// __has_constant_initializer
-//===========================================================================//
 #define ATTR __attribute__((require_constant_initialization))
 struct PODType {
     int value;
@@ -64,13 +62,6 @@ const bool NonLitHasConstInit =
     false;
 #endif
 
-// Test diagnostics when the argument does not refer to a named identifier
-void check_is_constant_init_bogus()
-{
-    (void)__has_constant_initializer(42); // expected-error {{expression must be a named variable}}
-    (void)__has_constant_initializer(ReturnInt()); // expected-error {{expression must be a named variable}}
-    (void)__has_constant_initializer(42, 43); // expected-error {{expression must be a named variable}}
-}
 
 // [basic.start.static]p2.1
 // if each full-expression (including implicit conversions) that appears in
