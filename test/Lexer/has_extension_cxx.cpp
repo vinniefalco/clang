@@ -66,3 +66,8 @@ int has_variable_templates();
 #if __has_extension(cxx_init_captures)
 int has_init_captures();
 #endif
+
+// CHECK: has_constant_initializer
+#if __has_extension(has_constant_initializer)
+int has_constant_initializer();
+#endif
