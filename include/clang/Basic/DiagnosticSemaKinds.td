@@ -6838,9 +6838,6 @@ def note_inequality_comparison_to_or_assign : Note<
 def err_incomplete_type_used_in_type_trait_expr : Error<
   "incomplete type %0 used in type trait expression">;
 
-def err_has_constant_init_expression_not_named_var : Error<
-  "expression must be a named variable">;
-
 def err_require_constant_init_var_not_static_tls : Error<
   "'require_constant_initialization' attribute can only be applied to variables "
   "static or thread-local storage duration">;
