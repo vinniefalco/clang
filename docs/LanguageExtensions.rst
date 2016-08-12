@@ -1049,6 +1049,7 @@ The following expression trait primitives are supported by Clang:
     an object, or if the object it names doesn't have static or thread-local
     storage duration the result is false. This trait can be used determine if it's
     safe to use a global variable during program startup. For example:
+
 .. code-block:: c++
 
     static MyType global_obj;
