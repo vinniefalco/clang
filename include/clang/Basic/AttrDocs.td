@@ -844,14 +844,13 @@ Static objects with constant initializers avoid hard-to-find bugs caused by
 the indeterminate order of dynamic initialization. They can also be safely
 used by other static constructors across translation units.
 
-Unfortunately it's almost impossible to test that constant initialization is
-actually taking place. If
-
 This attribute acts an a compile time assertion that the requirements
-of constant initialization have been met, and that dynamic initialization
-isn't taking place.
+for constant initialization have been met. Since these requirements change
+between dialects and have subtle pitfalls it's important to fail fast instead
+of silently falling back on dynamic initialization.
 
 .. code-block:: c++
+  // -std=c++14
   #define SAFE_STATIC __attribute__((require_constant_initialization)) static
   struct T {
     constexpr T(int) {}
@@ -859,6 +858,7 @@ isn't taking place.
   };
   SAFE_STATIC T x = {42}; // OK.
   SAFE_STATIC T y = 42; // error: variable does not have a constant initializer
+  // copy initialization is not a constant expression on a non-literal type.
 
 This attribute can only be applied to objects with static or thread-local storage
 duration.
