@@ -4749,43 +4749,10 @@ ExprResult Sema::ActOnExpressionTrait(ExpressionTrait ET,
   return Result;
 }
 
-static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
-                                    SourceLocation KWLoc, Expr *E,
-                                    SourceLocation RParen) {
+static bool EvaluateExpressionTrait(ExpressionTrait ET, Expr *E) {
   switch (ET) {
   case ET_IsLValueExpr: return E->isLValue();
   case ET_IsRValueExpr: return E->isRValue();
-  case ET_HasConstantInitializer: {
-    // Check for 'constant initialization' according to [basic.start.static].
-    DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E->IgnoreImpCasts());
-    if (!DRE) {
-      // It is a usage error to specify an expression that does not reference
-      // a named variable.
-      Self.Diag(KWLoc, diag::err_has_constant_init_expression_not_named_var)
-        << E->getSourceRange();
-      return false;
-    }
-    if (VarDecl *VD = dyn_cast<VarDecl>(DRE->getDecl())) {
-      // Thread local objects specified as TSL_Static have a constant
-      // initializer. TLS_Dynamic objects still need to be checked below.
-      if (VD->getTLSKind() == VarDecl::TLS_Static)
-        return true;
-      // Check the initializer of objects with static or thread-local storage
-      // duration. AObjects with automatic or dynamic lifetime never have
-      // a 'constant initializer'.
-      if ((VD->hasGlobalStorage() ||
-          VD->getTLSKind() != VarDecl::TLS_None) && VD->hasInit()) {
-        Expr *Init = VD->getInit();
-        auto *CE = dyn_cast<CXXConstructExpr>(Init);
-        if (CE && CE->getConstructor()->isConstexpr())
-          return VD->checkInitIsICE();
-        QualType baseType = Self.Context.getBaseElementType(VD->getType());
-        return Init->isConstantInitializer(Self.Context,
-                                           baseType->isReferenceType(), nullptr);
-      }
-    }
-    return false;
-  }
   }
   llvm_unreachable("Expression trait not covered by switch");
 }
@@ -4802,7 +4769,7 @@ ExprResult Sema::BuildExpressionTrait(ExpressionTrait ET,
     return BuildExpressionTrait(ET, KWLoc, PE.get(), RParen);
   }
 
-  bool Value = EvaluateExpressionTrait(*this, ET, KWLoc, Queried, RParen);
+  bool Value = EvaluateExpressionTrait(ET, Queried);
 
   return new (Context)
       ExpressionTraitExpr(KWLoc, ET, Queried, Value, RParen, Context.BoolTy);
