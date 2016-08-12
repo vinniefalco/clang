@@ -1042,7 +1042,8 @@ for information.
 
 The following expression trait primitives are supported by Clang:
 
-* ``__has_constant_initializer(expr)``: Determines whether `expr` names
+* ``__has_constant_initializer(expr)``:
+    Determines whether `expr` names
     a object that will be initialized during
     `*constant initialization* <http://en.cppreference.com/w/cpp/language/constant_initialization>`
     according to the rules of [basic.start.static]. If ``expr`` does not name
