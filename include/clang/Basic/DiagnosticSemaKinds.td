@@ -6838,8 +6838,8 @@ def note_inequality_comparison_to_or_assign : Note<
 def err_incomplete_type_used_in_type_trait_expr : Error<
   "incomplete type %0 used in type trait expression">;
 
-def err_has_constant_init_expression_trait_invalid_arg : Error<
-  "expression does not reference a named variable">;
+def err_has_constant_init_expression_not_named_var : Error<
+  "expression must be a named variable">;
 
 def err_dimension_expr_not_constant_integer : Error<
   "dimension expression does not evaluate to a constant unsigned int">;

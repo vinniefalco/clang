@@ -4756,11 +4756,12 @@ static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
   case ET_IsLValueExpr: return E->isLValue();
   case ET_IsRValueExpr: return E->isRValue();
   case ET_HasConstantInitializer: {
+    // Check for 'constant initialization' according to [basic.start.static].
     DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E->IgnoreImpCasts());
     if (!DRE) {
       // It is a usage error to specify an expression that does not reference
       // a named variable.
-      Self.Diag(KWLoc, diag::err_has_constant_init_expression_trait_invalid_arg)
+      Self.Diag(KWLoc, diag::err_has_constant_init_expression_not_named_var)
         << E->getSourceRange();
       return false;
     }
