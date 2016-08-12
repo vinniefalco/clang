@@ -2949,7 +2949,6 @@ static ArrayTypeTrait ArrayTypeTraitFromTokKind(tok::TokenKind kind) {
 static ExpressionTrait ExpressionTraitFromTokKind(tok::TokenKind kind) {
   switch(kind) {
   default: llvm_unreachable("Not a known unary expression trait.");
-  case tok::kw___has_constant_initializer:   return ET_HasConstantInitializer;
   case tok::kw___is_lvalue_expr:             return ET_IsLValueExpr;
   case tok::kw___is_rvalue_expr:             return ET_IsRValueExpr;
   }
@@ -3084,7 +3083,6 @@ ExprResult Parser::ParseExpressionTrait() {
   if (T.expectAndConsume())
     return ExprError();
 
-  EnterExpressionEvaluationContext Unevaluated(Actions, Sema::Unevaluated);
   ExprResult Expr = ParseExpression();
 
   T.consumeClose();

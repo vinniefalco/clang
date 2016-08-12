@@ -677,13 +677,10 @@ class CastExpressionIdValidator : public CorrectionCandidateCallback {
 ///                   '__trivially_copyable'
 ///
 ///       binary-type-trait:
-/// [GNU]             '__is_base_of'
+/// [GNU]             '__is_base_of'       
 /// [MS]              '__is_convertible_to'
 ///                   '__is_convertible'
 ///                   '__is_same'
-///
-/// [Clang] expression-trait:
-///                   '__has_constant_initializer'
 ///
 /// [Embarcadero] array-type-trait:
 ///                   '__array_rank'
@@ -800,7 +797,6 @@ ExprResult Parser::ParseCastExpression(bool isUnaryExpression,
           RevertibleTypeTraits[PP.getIdentifierInfo(#Name)] \
             = RTT_JOIN(tok::kw_,Name)
 
-          REVERTIBLE_TYPE_TRAIT(__has_constant_initializer);
           REVERTIBLE_TYPE_TRAIT(__is_abstract);
           REVERTIBLE_TYPE_TRAIT(__is_arithmetic);
           REVERTIBLE_TYPE_TRAIT(__is_array);
@@ -1325,11 +1321,10 @@ ExprResult Parser::ParseCastExpression(bool isUnaryExpression,
   case tok::kw___array_extent:
     return ParseArrayTypeTrait();
 
-  case tok::kw___has_constant_initializer:
   case tok::kw___is_lvalue_expr:
   case tok::kw___is_rvalue_expr:
     return ParseExpressionTrait();
-
+      
   case tok::at: {
     SourceLocation AtLoc = ConsumeToken();
     return ParseObjCAtExpression(AtLoc);

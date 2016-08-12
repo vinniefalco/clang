@@ -1267,10 +1267,6 @@ static bool HasExtension(const Preprocessor &PP, StringRef Extension) {
            .Case("cxx_binary_literals", true)
            .Case("cxx_init_captures", LangOpts.CPlusPlus11)
            .Case("cxx_variable_templates", LangOpts.CPlusPlus)
-           // Expression traits
-           .Case("has_constant_initializer", LangOpts.CPlusPlus)
-           .Case("is_lvalue_expr", LangOpts.CPlusPlus)
-           .Case("is_rvalue_expr", LangOpts.CPlusPlus)
            .Default(false);
 }
 
