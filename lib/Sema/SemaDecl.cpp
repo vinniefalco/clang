@@ -10386,10 +10386,16 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
   }
 
   // Cache the result of checking for constant initialization.
-  Optional<bool> HasConstInit;
+  Optional<bool> CacheHasConstInit;
+  const Expr *CacheCulprit;
+  auto checkConstInit = [&]() mutable {
+    if (!CacheHasConstInit)
+      CacheHasConstInit = var->getInit()->isConstantInitializer(
+            Context, var->getType()->isReferenceType(), &CacheCulprit);
+    return *CacheHasConstInit;
+  };
 
   if (var->getTLSKind() == VarDecl::TLS_Static) {
-    const Expr *Culprit;
     if (var->getType().isDestructedType()) {
       // GNU C++98 edits for __thread, [basic.start.term]p3:
       //   The type of an object with thread storage duration shall not
@@ -10398,15 +10404,13 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
       if (getLangOpts().CPlusPlus11)
         Diag(var->getLocation(), diag::note_use_thread_local);
     } else if (getLangOpts().CPlusPlus && var->hasInit()) {
-      HasConstInit = var->getInit()->isConstantInitializer(
-                   Context, var->getType()->isReferenceType(), &Culprit);
-      if (!*HasConstInit) {
+      if (!checkConstInit()) {
         // GNU C++98 edits for __thread, [basic.start.init]p4:
         //   An object of thread storage duration shall not require dynamic
         //   initialization.
         // FIXME: Need strict checking here.
-        Diag(Culprit->getExprLoc(), diag::err_thread_dynamic_init)
-          << Culprit->getSourceRange();
+        Diag(CacheCulprit->getExprLoc(), diag::err_thread_dynamic_init)
+          << CacheCulprit->getSourceRange();
         if (getLangOpts().CPlusPlus11)
           Diag(var->getLocation(), diag::note_use_thread_local);
       }
@@ -10481,26 +10485,8 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
   bool IsGlobal = GlobalStorage && !var->isStaticLocal();
   QualType baseType = Context.getBaseElementType(type);
 
-  if (var->hasAttr<RequireConstantInitAttr>() && !Init)
-     Diag(var->getLocation(), diag::err_require_constant_init_failed);
-
   if (!var->getDeclContext()->isDependentContext() &&
       Init && !Init->isValueDependent()) {
-    if (IsGlobal && !var->isConstexpr() &&
-        !getDiagnostics().isIgnored(diag::warn_global_constructor,
-                                    var->getLocation())) {
-      // Warn about globals which don't have a constant initializer.  Don't
-      // warn about globals with a non-trivial destructor because we already
-      // warned about them.
-      CXXRecordDecl *RD = baseType->getAsCXXRecordDecl();
-      if (!(RD && !RD->hasTrivialDestructor())) {
-        if (!HasConstInit)
-          HasConstInit = Init->isConstantInitializer(Context, baseType->isReferenceType());
-        if (!*HasConstInit)
-          Diag(var->getLocation(), diag::warn_global_constructor)
-            << Init->getSourceRange();
-      }
-    }
 
     if (var->isConstexpr()) {
       SmallVector<PartialDiagnosticAt, 8> Notes;
@@ -10525,19 +10511,29 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
       var->checkInitIsICE();
     }
 
+    bool DiagnoseAsErr = false;
     if (GlobalStorage && var->hasAttr<RequireConstantInitAttr>()) {
-      bool ShouldDiagnose = false;
       auto *CE = dyn_cast<CXXConstructExpr>(Init);
-      if (var->isInitKnownICE() || (CE && CE->getConstructor()->isConstexpr())) {
-        ShouldDiagnose = !var->checkInitIsICE();
-      } else {
-          HasConstInit = HasConstInit ? *HasConstInit
-            :  Init->isConstantInitializer(Context, baseType->isReferenceType());
-        ShouldDiagnose = !*HasConstInit;
-      }
-      if (ShouldDiagnose)
+      if (var->isInitKnownICE() || (CE && CE->getConstructor()->isConstexpr()))
+        DiagnoseAsErr = !var->checkInitIsICE();
+      else
+        DiagnoseAsErr = !checkConstInit();
+      if (DiagnoseAsErr)
         Diag(var->getLocation(), diag::err_require_constant_init_failed)
           << Init->getSourceRange();
+    }
+    if (!DiagnoseAsErr && IsGlobal && !var->isConstexpr() &&
+        !getDiagnostics().isIgnored(diag::warn_global_constructor,
+                                    var->getLocation())) {
+      // Warn about globals which don't have a constant initializer.  Don't
+      // warn about globals with a non-trivial destructor because we already
+      // warned about them.
+      CXXRecordDecl *RD = baseType->getAsCXXRecordDecl();
+      if (!(RD && !RD->hasTrivialDestructor())) {
+        if (!checkConstInit())
+          Diag(var->getLocation(), diag::warn_global_constructor)
+            << Init->getSourceRange();
+      }
     }
   }
 

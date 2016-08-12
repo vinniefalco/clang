@@ -194,13 +194,13 @@ ATTR int lit_in_init = LitType{42}.value;
 void test_basic_start_static_2_3()
 {
     ATTR static int static_local = 42;
-    ATTR static int static_local2; // expected-error {{variable does not have a constant initializer}}
+    ATTR static int static_local2; // zero-initialization takes place
 #if __cplusplus >= 201103L
     ATTR thread_local int tl_local = 42;
 #endif
 }
 
-ATTR int no_init; // expected-error {{variable does not have a constant initializer}}
+ATTR int no_init; // zero initialization takes place
 ATTR int arg_init = 42;
 ATTR PODType pod_init = {};
 ATTR PODType pod_missing_init = {42 /* should have second arg */};
