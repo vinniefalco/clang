@@ -4772,7 +4772,7 @@ static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
       // Check the initializer of objects with static or thread-local storage
       // duration. AObjects with automatic or dynamic lifetime never have
       // a 'constant initializer'.
-      else if ((VD->hasGlobalStorage() ||
+      if ((VD->hasGlobalStorage() ||
           VD->getTLSKind() != VarDecl::TLS_None) && VD->hasInit()) {
         QualType baseType = Self.Context.getBaseElementType(VD->getType());
         return VD->getInit()->isConstantInitializer(Self.Context,

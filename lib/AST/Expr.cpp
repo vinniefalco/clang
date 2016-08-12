@@ -2653,10 +2653,8 @@ bool Expr::isConstantInitializer(ASTContext &Ctx, bool IsForRef,
     if (CE->getConstructor()->isConstexpr() &&
         (CE->getConstructor()->getParent()->hasTrivialDestructor() ||
             AllowNonLiteral)) {
-        if (!CE->getNumArgs()) return true;
-        unsigned numArgs = CE->getNumArgs();
-        for (unsigned i = 0; i < numArgs; i++) {
-          if (!CE->getArg(i)->isConstantInitializer(Ctx, false, Culprit))
+        for (auto *Arg : CE->arguments()) {
+          if (!Arg->isConstantInitializer(Ctx, false, Culprit))
             return false;
         }
         return true;

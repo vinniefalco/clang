@@ -640,7 +640,7 @@ struct NonLit {
     constexpr NonLit(int x ) : value(x) {}
 #else
     NonLit() : value(0) {}
-    NonLit(int x ) : value(x) {}
+    NonLit(int x) : value(x) {}
 #endif
     NonLit(void*) : value(-1) {}
     ~NonLit() {}
@@ -730,13 +730,42 @@ static_assert(__has_constant_initializer(subobj_ref), "");
 const int& nl_subobj_ref = NonLit().value;
 static_assert(!__has_constant_initializer(nl_subobj_ref), "");
 
+struct TT1 {
+  static const int& no_init;
+  static const int& glvalue_init;
+  static const int& temp_init;
+  static const int& subobj_init;
+#if __cplusplus >= 201103L
+  static thread_local const int& tl_glvalue_init;
+  static thread_local const int& tl_temp_init;
+#endif
+};
+const int& TT1::glvalue_init = glvalue_int;
+const int& TT1::temp_init = 42;
+const int& TT1::subobj_init = PODType().value;
+
+static_assert(!__has_constant_initializer(TT1::no_init), "");
+static_assert(__has_constant_initializer(TT1::glvalue_init), "");
+static_assert(__has_constant_initializer(TT1::temp_init), "");
+static_assert(__has_constant_initializer(TT1::subobj_init), "");
+#if __cplusplus >= 201103L
+thread_local const int& TT1::tl_glvalue_init = glvalue_int;
+thread_local const int& TT1::tl_temp_init = 42;
+static_assert(__has_constant_initializer(TT1::tl_glvalue_init), "");
+static_assert(!__has_constant_initializer(TT1::tl_temp_init), "");
+#endif
+
 // [basic.start.static]p2.2
 // if an object with static or thread storage duration is initialized by a
 // constructor call, and if the initialization full-expression is a constant
 // initializer for the object;
-#if __cplusplus >= 201103L
+
 void test_basic_start_static_2_2()
 {
+    static PODType pod;
+    static_assert(__has_constant_initializer(pod), "");
+
+#if __cplusplus >= 201103L
     constexpr LitType l;
     static_assert(!__has_constant_initializer(l), "non-static objects don't have const init");
 
@@ -749,12 +778,33 @@ void test_basic_start_static_2_2()
     static LitType static_lit3 = ReturnInt();
     static_assert(!__has_constant_initializer(static_lit3), "initializer not constexpr");
 
-#if __cplusplus >= 201103L
     thread_local LitType tls = 42;
     static_assert(__has_constant_initializer(tls), "");
 #endif
 }
 
+struct TT2 {
+  static PODType pod_noinit;
+  static PODType pod_copy_init;
+#if __cplusplus >= 201103L
+  static constexpr LitType lit = {};
+  static const NonLit non_lit;
+  static const NonLit non_lit_copy_init;
+#endif
+};
+PODType TT2::pod_noinit;
+PODType TT2::pod_copy_init(TT2::pod_noinit);
+static_assert(__has_constant_initializer(TT2::pod_noinit), "");
+static_assert(!__has_constant_initializer(TT2::pod_copy_init), "");
+#if __cplusplus >= 201103L
+const NonLit TT2::non_lit(42);
+const NonLit TT2::non_lit_copy_init = 42;
+static_assert(__has_constant_initializer(TT2::lit), "");
+static_assert(__has_constant_initializer(TT2::non_lit) == NonLitHasConstInit, "");
+static_assert(!__has_constant_initializer(TT2::non_lit_copy_init), "");
+#endif
+
+#if __cplusplus >= 201103L
 LitType lit_ctor;
 LitType lit_ctor2{};
 LitType lit_ctor3 = {};
@@ -833,3 +883,9 @@ static_assert(__has_constant_initializer(brace_init), "");
 
 __thread int tl_init = 0;
 static_assert(__has_constant_initializer(tl_init), "");
+
+void foo1(int p = 42) {
+  // ParmVarDecl's with an initializer do not have static or thread local
+  // storage duration.
+  static_assert(!__has_constant_initializer(p), "");
+}
