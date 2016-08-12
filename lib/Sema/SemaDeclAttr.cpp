@@ -2819,17 +2819,6 @@ static FormatAttrKind getFormatAttrKind(StringRef Format) {
     .Default(InvalidFormat);
 }
 
-static void handleRequireConstantInitAttr(Sema &S, Decl *D,
-                                          const AttributeList &Attr) {
-  if (!cast<VarDecl>(D)->hasGlobalStorage()) {
-    S.Diag(Attr.getLoc(), diag::err_require_constant_init_var_not_static_tls)
-     << D->getSourceRange();
-    return;
-  }
-  D->addAttr(::new (S.Context) RequireConstantInitAttr(
-      Attr.getRange(), S.Context, Attr.getAttributeSpellingListIndex()));
-}
-
 /// Handle __attribute__((init_priority(priority))) attributes based on
 /// http://gcc.gnu.org/onlinedocs/gcc/C_002b_002b-Attributes.html
 static void handleInitPriorityAttr(Sema &S, Decl *D,
@@ -5641,7 +5630,7 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     handleVecTypeHint(S, D, Attr);
     break;
   case AttributeList::AT_RequireConstantInit:
-    handleRequireConstantInitAttr(S, D, Attr);
+    handleSimpleAttribute<RequireConstantInitAttr>(S, D, Attr);
     break;
   case AttributeList::AT_InitPriority:
     handleInitPriorityAttr(S, D, Attr);

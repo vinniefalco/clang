@@ -2572,7 +2572,7 @@ def warn_attribute_wrong_decl_type : Warning<
   "Objective-C instance methods|init methods of interface or class extension declarations|"
   "variables, functions and classes|"
   "functions, variables, classes, and Objective-C interfaces|"
-  "Objective-C protocols|"
+  "Objective-C protocols|variables with static or thread-local storage duration|"
   "functions and global variables|structs, unions, and typedefs|structs and typedefs|"
   "interface or protocol declarations|kernel functions|non-K&R-style functions|"
   "variables, enums, fields and typedefs|functions, methods, enums, and classes|"
@@ -6838,9 +6838,6 @@ def note_inequality_comparison_to_or_assign : Note<
 def err_incomplete_type_used_in_type_trait_expr : Error<
   "incomplete type %0 used in type trait expression">;
 
-def err_require_constant_init_var_not_static_tls : Error<
-  "'require_constant_initialization' attribute can only be applied to variables "
-  "static or thread-local storage duration">;
 def err_require_constant_init_failed : Error<
   "variable does not have a constant initializer">;
 

@@ -1,9 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++03 %s
 // RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++11 %s
 // RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++14 %s
-//
-// Tests for "expression traits" intrinsics such as __is_lvalue_expr.
-//
 
 #if !__has_feature(cxx_static_assert)
 # define CONCAT_(X_, Y_) CONCAT1_(X_, Y_)
@@ -15,9 +12,19 @@
   typedef int CONCAT_(sa_, __LINE__)[b_ ? 1 : -1]
 #endif
 
+#define ATTR __attribute__((require_constant_initialization))
+
+// Test diagnostics when attribute is applied to non-static declarations.
+void test_func_local(ATTR int param) { // expected-error {{only applies to variables with static or thread-local}}
+    ATTR int x = 42; // expected-error {{only applies to variables with static or thread-local}}
+    ATTR extern int y;
+}
+struct ATTR class_mem { // expected-error {{only applies to variables with static or thread-local}}
+  ATTR int x; // expected-error {{only applies to variables with static or thread-local}}
+};
+
 int ReturnInt();
 
-#define ATTR __attribute__((require_constant_initialization))
 struct PODType {
     int value;
     int value2;

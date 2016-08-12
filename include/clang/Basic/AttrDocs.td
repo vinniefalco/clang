@@ -832,7 +832,6 @@ When one method overrides another, the overriding method can be more widely avai
 
 def RequireConstantInitDocs : Documentation {
   let Category = DocCatVariable;
-  let Heading = "require_constant_initialization";
   let Content = [{
 This attribute specifies expectations about the initialization of static and
 thread local variables. Specifically that the variable has a
@@ -844,7 +843,7 @@ Static objects with constant initializers avoid hard-to-find bugs caused by
 the indeterminate order of dynamic initialization. They can also be safely
 used by other static constructors across translation units.
 
-This attribute acts an a compile time assertion that the requirements
+This attribute acts as a compile time assertion that the requirements
 for constant initialization have been met. Since these requirements change
 between dialects and have subtle pitfalls it's important to fail fast instead
 of silently falling back on dynamic initialization.
