@@ -10385,6 +10385,8 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
       Diag(var->getLocation(), diag::warn_missing_variable_declarations) << var;
   }
 
+  Optional<bool> HasConstInit;
+
   if (var->getTLSKind() == VarDecl::TLS_Static) {
     const Expr *Culprit;
     if (var->getType().isDestructedType()) {
@@ -10394,17 +10396,19 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
       Diag(var->getLocation(), diag::err_thread_nontrivial_dtor);
       if (getLangOpts().CPlusPlus11)
         Diag(var->getLocation(), diag::note_use_thread_local);
-    } else if (getLangOpts().CPlusPlus && var->hasInit() &&
-               !var->getInit()->isConstantInitializer(
-                   Context, var->getType()->isReferenceType(), &Culprit)) {
-      // GNU C++98 edits for __thread, [basic.start.init]p4:
-      //   An object of thread storage duration shall not require dynamic
-      //   initialization.
-      // FIXME: Need strict checking here.
-      Diag(Culprit->getExprLoc(), diag::err_thread_dynamic_init)
-        << Culprit->getSourceRange();
-      if (getLangOpts().CPlusPlus11)
-        Diag(var->getLocation(), diag::note_use_thread_local);
+    } else if (getLangOpts().CPlusPlus && var->hasInit()) {
+      HasConstInit = var->getInit()->isConstantInitializer(
+                   Context, var->getType()->isReferenceType(), &Culprit);
+      if (!*HasConstInit) {
+        // GNU C++98 edits for __thread, [basic.start.init]p4:
+        //   An object of thread storage duration shall not require dynamic
+        //   initialization.
+        // FIXME: Need strict checking here.
+        Diag(Culprit->getExprLoc(), diag::err_thread_dynamic_init)
+          << Culprit->getSourceRange();
+        if (getLangOpts().CPlusPlus11)
+          Diag(var->getLocation(), diag::note_use_thread_local);
+      }
     }
   }
 
@@ -10476,6 +10480,9 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
   bool IsGlobal = GlobalStorage && !var->isStaticLocal();
   QualType baseType = Context.getBaseElementType(type);
 
+  if (var->hasAttr<RequireConstantInitAttr>() && !Init)
+     Diag(var->getLocation(), diag::err_require_const_init_failed);
+
   if (!var->getDeclContext()->isDependentContext() &&
       Init && !Init->isValueDependent()) {
     if (IsGlobal && !var->isConstexpr() &&
@@ -10485,10 +10492,13 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
       // warn about globals with a non-trivial destructor because we already
       // warned about them.
       CXXRecordDecl *RD = baseType->getAsCXXRecordDecl();
-      if (!(RD && !RD->hasTrivialDestructor()) &&
-          !Init->isConstantInitializer(Context, baseType->isReferenceType()))
-        Diag(var->getLocation(), diag::warn_global_constructor)
-          << Init->getSourceRange();
+      if (!(RD && !RD->hasTrivialDestructor())) {
+        if (!HasConstInit)
+          HasConstInit = Init->isConstantInitializer(Context, baseType->isReferenceType());
+        if (!*HasConstInit)
+          Diag(var->getLocation(), diag::warn_global_constructor)
+            << Init->getSourceRange();
+      }
     }
 
     if (var->isConstexpr()) {
@@ -10512,6 +10522,22 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
       // enumeration type is an ICE now, since we can't tell whether it was
       // initialized by a constant expression if we check later.
       var->checkInitIsICE();
+    }
+
+    if (GlobalStorage && var->hasAttr<RequireConstantInitAttr>()) {
+      bool ShouldDiagnose = false;
+      auto *CE = dyn_cast<CXXConstructExpr>(Init);
+      if (CE && CE->getConstructor()->isConstexpr()) {
+        ShouldDiagnose = !var->checkInitIsICE();
+      } else {
+        if (!HasConstInit)
+          HasConstInit = Init->isConstantInitializer(Context,
+                                           baseType->isReferenceType());
+        ShouldDiagnose = !*HasConstInit;
+      }
+      if (ShouldDiagnose)
+        Diag(var->getLocation(), diag::err_var_requires_constant_init)
+          << Init->getSourceRange();
     }
   }
 

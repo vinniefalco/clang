@@ -621,6 +621,7 @@ void temp_param_6()
 //===========================================================================//
 // __has_constant_initializer
 //===========================================================================//
+#define ATTR __attribute__((require_constant_initialization))
 struct PODType {
     int value;
     int value2;
@@ -684,13 +685,10 @@ void check_is_constant_init_bogus()
 // Test binding to a static glvalue
 const int glvalue_int = 42;
 const int glvalue_int2 = ReturnInt();
-const int& glvalue_ref = glvalue_int;
-const int& glvalue_ref2 = glvalue_int2;
-static_assert(__has_constant_initializer(glvalue_ref), "");
-static_assert(__has_constant_initializer(glvalue_ref2), "");
+const int& glvalue_ref ATTR = glvalue_int;
+const int& glvalue_ref2 ATTR = glvalue_int2;
 
-__thread const int& glvalue_ref_tl = glvalue_int;
-static_assert(__has_constant_initializer(glvalue_ref_tl), "");
+__thread const int& glvalue_ref_tl ATTR = glvalue_int;
 
 void test_basic_start_static_2_1() {
     const int non_global = 42;
@@ -762,8 +760,9 @@ static_assert(!__has_constant_initializer(TT1::tl_temp_init), "");
 
 void test_basic_start_static_2_2()
 {
-    static PODType pod;
-    static_assert(__has_constant_initializer(pod), "");
+    static PODType pod ATTR;
+    static PODType pot2 ATTR = {ReturnInt()}; // expected-error {{variable does not have a constant initializer}}
+
 
 #if __cplusplus >= 201103L
     constexpr LitType l;
@@ -899,6 +898,5 @@ struct TestCtor {
   T value;
 };
 
-TestCtor<NotC> t(42);
-static_assert(!__has_constant_initializer(t), "");
+TestCtor<NotC> t(42) ATTR; // expected-error {{variable does not have a constant initializer}}
 #endif

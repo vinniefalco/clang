@@ -6841,6 +6841,12 @@ def err_incomplete_type_used_in_type_trait_expr : Error<
 def err_has_constant_init_expression_not_named_var : Error<
   "expression must be a named variable">;
 
+def err_require_constant_init_var_not_static_tls : Error<
+  "'require_constant_initialization' attribute can only be applied to variables "
+  "static or thread-local storage duration">;
+def err_require_constant_init_failed : Error<
+  "variable does not have a constant initializer">;
+
 def err_dimension_expr_not_constant_integer : Error<
   "dimension expression does not evaluate to a constant unsigned int">;
 

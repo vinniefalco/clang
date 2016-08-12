@@ -27,6 +27,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "clang/Frontend/CodeGenOptions.h"
+#include "clang/Sema/SemaDiagnostic.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Intrinsics.h"
@@ -375,6 +376,10 @@ void CodeGenFunction::EmitStaticVarDecl(const VarDecl &D,
 
   llvm::GlobalVariable *var =
     cast<llvm::GlobalVariable>(addr->stripPointerCasts());
+
+  if (!D.getInit() && D.hasAttr<RequireConstantInitAttr>()) {
+    CGM.getDiags().Report(D.getLocation(), diag::err_var_requires_constant_init);
+  }
 
   // CUDA's local and local static __shared__ variables should not
   // have any non-empty initializers. This is ensured by Sema.

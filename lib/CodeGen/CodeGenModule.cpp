@@ -2441,6 +2441,10 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
     }
   }
 
+  if (NeedsGlobalCtor && D->hasAttr<RequireConstantInitAttr>())
+    getDiags().Report(D->getLocation(),
+                      diag::err_require_constant_init_failed);
+
   llvm::Type* InitType = Init->getType();
   llvm::Constant *Entry =
       GetAddrOfGlobalVar(D, InitType, /*IsForDefinition=*/!IsTentative);
