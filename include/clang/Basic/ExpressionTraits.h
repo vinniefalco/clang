@@ -19,8 +19,7 @@ namespace clang {
 
   enum ExpressionTrait {
     ET_IsLValueExpr,
-    ET_IsRValueExpr,
-    ET_HasConstantInitializer
+    ET_IsRValueExpr
   };
 }
 
