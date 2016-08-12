@@ -669,9 +669,9 @@ const bool NonLitHasConstInit =
 // Test diagnostics when the argument does not refer to a named identifier
 void check_is_constant_init_bogus()
 {
-    (void)__has_constant_initializer(42); // expected-error {{does not reference a named variable}}
-    (void)__has_constant_initializer(ReturnInt()); // expected-error {{does not reference a named variable}}
-    (void)__has_constant_initializer(42, 43); // expected-error {{does not reference a named variable}}
+    (void)__has_constant_initializer(42); // expected-error {{expression must be a named variable}}
+    (void)__has_constant_initializer(ReturnInt()); // expected-error {{expression must be a named variable}}
+    (void)__has_constant_initializer(42, 43); // expected-error {{expression must be a named variable}}
 }
 
 // [basic.start.static]p2.1
@@ -889,3 +889,16 @@ void foo1(int p = 42) {
   // storage duration.
   static_assert(!__has_constant_initializer(p), "");
 }
+
+#if __cplusplus >= 201103L
+
+struct NotC { constexpr NotC(void*) {} NotC(int) {} };
+template <class T>
+struct TestCtor {
+  constexpr TestCtor(int x) : value(x) {}
+  T value;
+};
+
+TestCtor<NotC> t(42);
+static_assert(!__has_constant_initializer(t), "");
+#endif

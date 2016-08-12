@@ -526,8 +526,7 @@ public:
   /// If this expression is not constant and Culprit is non-null,
   /// it is used to store the address of first non constant expr.
   bool isConstantInitializer(ASTContext &Ctx, bool ForRef,
-                             const Expr **Culprit = nullptr,
-                             bool AllowNonLiteral = false) const;
+                             const Expr **Culprit = nullptr) const;
 
   /// EvalStatus is a struct with detailed info about an evaluation in progress.
   struct EvalStatus {

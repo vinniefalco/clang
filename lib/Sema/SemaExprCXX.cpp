@@ -4775,9 +4775,13 @@ static bool EvaluateExpressionTrait(Sema &Self, ExpressionTrait ET,
       // a 'constant initializer'.
       if ((VD->hasGlobalStorage() ||
           VD->getTLSKind() != VarDecl::TLS_None) && VD->hasInit()) {
+        Expr *Init = VD->getInit();
+        auto *CE = dyn_cast<CXXConstructExpr>(Init);
+        if (CE && CE->getConstructor()->isConstexpr())
+          return VD->checkInitIsICE();
         QualType baseType = Self.Context.getBaseElementType(VD->getType());
-        return VD->getInit()->isConstantInitializer(Self.Context,
-            baseType->isReferenceType(), nullptr, /*AllowNonLiteral=*/true);
+        return Init->isConstantInitializer(Self.Context,
+                                           baseType->isReferenceType(), nullptr);
       }
     }
     return false;
