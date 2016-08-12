@@ -943,9 +943,6 @@ For example, compiling code with ``-fmodules`` enables the use of Modules.
 
 More information could be found `here <http://clang.llvm.org/docs/Modules.html>`_.
 
-
-.. _langext-traits_feature_detection:
-
 Checks for Type Trait Primitives
 ================================
 
@@ -1026,41 +1023,6 @@ The following type trait primitives are supported by Clang:
 * ``__is_constructible`` (MSVC 2013, clang)
 * ``__is_nothrow_constructible`` (MSVC 2013, clang)
 * ``__is_assignable`` (MSVC 2015, clang)
-
-
-Expression Traits
-=================
-
-Expression traits are special builtin constant expressions much like type traits
-except that they act on expressions not types. They allow the determination of
-various characteristics of an expression. The supplied expression is treated
-as an unevaluated operand.
-
-Feature detection for expression traits is the same as for type traits.
-See :ref:`Checks for Type Trait Primatives <langext-traits_feature_detection>`
-for information.
-
-The following expression trait primitives are supported by Clang:
-
-* ``__has_constant_initializer(expr)``:
-  Determines whether `expr` names
-  a object that will be initialized during
-  `constant initialization <http://en.cppreference.com/w/cpp/language/constant_initialization>`_
-  according to the rules of [basic.start.static]. If ``expr`` does not name
-  an object, or if the object it names doesn't have static or thread-local
-  storage duration the result is false. This trait can be used determine if it's
-  safe to use a global variable during program startup. For example:
-
-  .. code-block:: c++
-
-    static MyType global_obj;
-    #if __has_extension(has_constant_initializer)
-    static_assert(__has_constant_initializer(global_obj),
-                  "global_obj may be unsafely used before it is initialized");
-    #endif
-
-* ``__is_lvalue_expr(expr)``
-* ``__is_rvalue_expr(expr)``
 
 Blocks
 ======

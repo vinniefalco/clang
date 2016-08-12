@@ -2821,7 +2821,7 @@ static FormatAttrKind getFormatAttrKind(StringRef Format) {
 
 static void handleRequireConstantInitAttr(Sema &S, Decl *D,
                                           const AttributeList &Attr) {
-  if (cast<VarDecl>(D)->hasGlobalStorage()) {
+  if (!cast<VarDecl>(D)->hasGlobalStorage()) {
     S.Diag(Attr.getLoc(), diag::err_require_constant_init_var_not_static_tls)
      << D->getSourceRange();
     return;

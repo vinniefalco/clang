@@ -829,6 +829,42 @@ When one method overrides another, the overriding method can be more widely avai
   }];
 }
 
+
+def RequireConstantInitDocs : Documentation {
+  let Category = DocCatVariable;
+  let Heading = "require_constant_initialization";
+  let Content = [{
+This attribute specifies expectations about the initialization of static and
+thread local variables. Specifically that the variable has a
+`constant initializer <http://en.cppreference.com/w/cpp/language/constant_initialization>`_
+according to the rules of [basic.start.static]. Failure to meet this expectation
+will result in an error.
+
+Static objects with constant initializers avoid hard-to-find bugs caused by
+the indeterminate order of dynamic initialization. They can also be safely
+used by other static constructors across translation units.
+
+Unfortunately it's almost impossible to test that constant initialization is
+actually taking place. If
+
+This attribute acts an a compile time assertion that the requirements
+of constant initialization have been met, and that dynamic initialization
+isn't taking place.
+
+.. code-block:: c++
+  #define SAFE_STATIC __attribute__((require_constant_initialization)) static
+  struct T {
+    constexpr T(int) {}
+    ~T();
+  };
+  SAFE_STATIC T x = {42}; // OK.
+  SAFE_STATIC T y = 42; // error: variable does not have a constant initializer
+
+This attribute can only be applied to objects with static or thread-local storage
+duration.
+  }];
+}
+
 def WarnMaybeUnusedDocs : Documentation {
   let Category = DocCatVariable;
   let Heading = "maybe_unused, unused, gnu::unused";

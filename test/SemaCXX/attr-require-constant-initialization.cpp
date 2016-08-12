@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions %s
+// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++03 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++11 %s
 // RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++14 %s
 //
 // Tests for "expression traits" intrinsics such as __is_lvalue_expr.
@@ -143,25 +144,23 @@ struct TT2 {
 #if __cplusplus >= 201103L
   ATTR static constexpr LitType lit = {};
   ATTR static const NonLit non_lit;
+  ATTR static const NonLit non_lit_list_init;
   ATTR static const NonLit non_lit_copy_init;
 #endif
 };
 PODType TT2::pod_noinit;
 PODType TT2::pod_copy_init(TT2::pod_noinit); // expected-error {{variable does not have a constant initializer}}
-#if __cplusplus >= 201103L
+#if __cplusplus >= 201402L
 const NonLit TT2::non_lit(42);
+const NonLit TT2::non_lit_list_init = {42};
 const NonLit TT2::non_lit_copy_init = 42; // expected-error {{variable does not have a constant initializer}}
 #endif
 
 #if __cplusplus >= 201103L
-LitType lit_ctor;
-LitType lit_ctor2{};
-LitType lit_ctor3 = {};
-__thread LitType lit_ctor_tl = {};
-static_assert(__has_constant_initializer(lit_ctor), "");
-static_assert(__has_constant_initializer(lit_ctor2), "");
-static_assert(__has_constant_initializer(lit_ctor3), "");
-static_assert(__has_constant_initializer(lit_ctor_tl), "");
+ATTR LitType lit_ctor;
+ATTR LitType lit_ctor2{};
+ATTR LitType lit_ctor3 = {};
+ATTR __thread LitType lit_ctor_tl = {};
 
 #if __cplusplus >= 201402L
 ATTR NonLit nl_ctor;
@@ -211,12 +210,17 @@ ATTR __thread int tl_init = 0;
 
 #if __cplusplus >= 201103L
 
+struct T {
+    constexpr T(int)
+};
+
+// Test that the validity of the selected constructor is checked, not just the
+// initializer
 struct NotC { constexpr NotC(void*) {} NotC(int) {} };
 template <class T>
 struct TestCtor {
   constexpr TestCtor(int x) : value(x) {}
   T value;
 };
-
 ATTR TestCtor<NotC> t(42); // expected-error {{variable does not have a constant initializer}}
 #endif

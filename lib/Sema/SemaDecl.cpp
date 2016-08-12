@@ -10528,12 +10528,11 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
     if (GlobalStorage && var->hasAttr<RequireConstantInitAttr>()) {
       bool ShouldDiagnose = false;
       auto *CE = dyn_cast<CXXConstructExpr>(Init);
-      if (CE && CE->getConstructor()->isConstexpr()) {
+      if (var->isInitKnownICE() || (CE && CE->getConstructor()->isConstexpr())) {
         ShouldDiagnose = !var->checkInitIsICE();
       } else {
-        if (!HasConstInit)
-          HasConstInit = Init->isConstantInitializer(Context,
-                                           baseType->isReferenceType());
+          HasConstInit = HasConstInit ? *HasConstInit
+            :  Init->isConstantInitializer(Context, baseType->isReferenceType());
         ShouldDiagnose = !*HasConstInit;
       }
       if (ShouldDiagnose)
