@@ -63,7 +63,6 @@ const bool NonLitHasConstInit =
     false;
 #endif
 
-
 // [basic.start.static]p2.1
 // if each full-expression (including implicit conversions) that appears in
 // the initializer of a reference with static or thread storage duration is
@@ -102,7 +101,7 @@ ATTR const int& subobj_ref = LitType{}.value;
 ATTR const int& nl_subobj_ref = NonLit().value;  // expected-error {{variable does not have a constant initializer}}
 
 struct TT1 {
-  ATTR static const int& no_init; 
+  ATTR static const int& no_init;
   ATTR static const int& glvalue_init;
   ATTR static const int& temp_init;
   ATTR static const int& subobj_init;
