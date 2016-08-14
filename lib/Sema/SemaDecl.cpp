@@ -10511,19 +10511,19 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
       var->checkInitIsICE();
     }
 
-    bool DiagnoseAsErr = false;
-    if (GlobalStorage && var->hasAttr<RequireConstantInitAttr>()) {
+    // Don't emit further diagnostics about constexpr globals since they
+    // were just diagnosed.
+    if (!var->isConstexpr() && GlobalStorage &&
+            var->hasAttr<RequireConstantInitAttr>()) {
       auto *CE = dyn_cast<CXXConstructExpr>(Init);
-      if (var->isInitKnownICE() || (CE && CE->getConstructor()->isConstexpr()))
-        DiagnoseAsErr = !var->checkInitIsICE();
-      else
-        DiagnoseAsErr = !checkConstInit();
-      if (DiagnoseAsErr)
+      bool DiagErr = (var->isInitKnownICE() || (CE && CE->getConstructor()->isConstexpr()))
+          ? !var->checkInitIsICE() : !checkConstInit();
+      if (DiagErr)
         Diag(var->getLocation(), diag::err_require_constant_init_failed)
           << Init->getSourceRange();
     }
-    if (!DiagnoseAsErr && IsGlobal && !var->isConstexpr() &&
-        !getDiagnostics().isIgnored(diag::warn_global_constructor,
+    else if (!var->isConstexpr() && IsGlobal &&
+             !getDiagnostics().isIgnored(diag::warn_global_constructor,
                                     var->getLocation())) {
       // Warn about globals which don't have a constant initializer.  Don't
       // warn about globals with a non-trivial destructor because we already

@@ -1,6 +1,8 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++03 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++11 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -std=c++14 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -DTEST_ONE -std=c++03 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -DTEST_ONE -std=c++11 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -DTEST_ONE -std=c++14 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -DTEST_TWO \
+// RUN: -Wglobal-constructors -std=c++14 %s
 
 #if !__has_feature(cxx_static_assert)
 # define CONCAT_(X_, Y_) CONCAT1_(X_, Y_)
@@ -69,6 +71,8 @@ const bool NonLitHasConstInit =
 #else
     false;
 #endif
+
+#if defined(TEST_ONE) // Test semantics of attribute
 
 // [basic.start.static]p2.1
 // if each full-expression (including implicit conversions) that appears in
@@ -226,3 +230,25 @@ struct TestCtor {
 };
 ATTR TestCtor<NotC> t(42); // expected-error {{variable does not have a constant initializer}}
 #endif
+
+#elif defined(TEST_TWO) // Test for duplicate warnings
+struct NotC {
+  constexpr NotC(void*) {}
+  NotC(int) {} // expected-note 2 {{declared here}}
+};
+template <class T>
+struct TestCtor {
+  constexpr TestCtor(int x) : value(x) {} // expected-note 2 {{non-constexpr constructor}}
+  T value;
+};
+
+ATTR NonLit non_const( (void*)0); // expected-error {{variable does not have a constant initializer}}
+NonLit const_init{42}; // expected-warning {{declaration requires a global destructor}}
+constexpr TestCtor<NotC> inval_constexpr(42); // expected-error {{must be initialized by a constant expression}}
+// expected-note@-1 {{in call to 'TestCtor(42)'}}
+ATTR constexpr TestCtor<NotC> inval_constexpr2(42); // expected-error {{must be initialized by a constant expression}}
+// expected-note@-1 {{in call to 'TestCtor(42)'}}
+
+#else
+#error No test case specified
+#endif // defined(TEST_N)
