@@ -218,6 +218,8 @@ ATTR int brace_init = {};
 
 ATTR __thread int tl_init = 0;
 
+typedef const char* StrType;
+
 #if __cplusplus >= 201103L
 
 // Test that the validity of the selected constructor is checked, not just the
@@ -231,6 +233,10 @@ struct TestCtor {
 ATTR TestCtor<NotC> t(42); // expected-error {{variable does not have a constant initializer}}
 #endif
 
+// Test various array types
+ATTR const char* foo[] = { "abc", "def" };
+ATTR PODType bar[] = {{}, {123, 456}};
+
 #elif defined(TEST_TWO) // Test for duplicate warnings
 struct NotC {
   constexpr NotC(void*) {}
@@ -242,11 +248,10 @@ struct TestCtor {
   T value;
 };
 
-
 ATTR LitType non_const_lit(nullptr); // expected-error {{variable does not have a constant initializer}}
 ATTR NonLit non_const(nullptr); // expected-error {{variable does not have a constant initializer}}
 // expected-warning@-1 {{declaration requires a global destructor}}
-LitType const_init_lit(nullptr) // expected-warning {{declaration requires a global constructor}}
+LitType const_init_lit(nullptr); // expected-warning {{declaration requires a global constructor}}
 NonLit const_init{42}; // expected-warning {{declaration requires a global destructor}}
 constexpr TestCtor<NotC> inval_constexpr(42); // expected-error {{must be initialized by a constant expression}}
 // expected-note@-1 {{in call to 'TestCtor(42)'}}
