@@ -1381,7 +1381,7 @@ def ReqdWorkGroupSize : InheritableAttr {
 }
 
 def RequireConstantInit : InheritableAttr {
-  let Spellings = [GCC<"require_constant_initialization">,
+  let Spellings = [GNU<"require_constant_initialization">,
                    CXX11<"clang", "require_constant_initialization">];
   let Subjects = SubjectList<[GlobalVar], ErrorDiag,
                               "ExpectedStaticOrTLSVar">;

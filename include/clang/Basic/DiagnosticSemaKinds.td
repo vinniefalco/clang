@@ -2572,7 +2572,7 @@ def warn_attribute_wrong_decl_type : Warning<
   "Objective-C instance methods|init methods of interface or class extension declarations|"
   "variables, functions and classes|"
   "functions, variables, classes, and Objective-C interfaces|"
-  "Objective-C protocols|variables with static or thread-local storage duration|"
+  "Objective-C protocols|variables with static or thread storage duration|"
   "functions and global variables|structs, unions, and typedefs|structs and typedefs|"
   "interface or protocol declarations|kernel functions|non-K&R-style functions|"
   "variables, enums, fields and typedefs|functions, methods, enums, and classes|"
@@ -6840,7 +6840,8 @@ def err_incomplete_type_used_in_type_trait_expr : Error<
   "incomplete type %0 used in type trait expression">;
 
 def err_require_constant_init_failed : Error<
-  "variable does not have a constant initializer">;
+  "variable does not have a constant initializer as required by the "
+  "'require_constant_initializer' attribute">;
 
 def err_dimension_expr_not_constant_integer : Error<
   "dimension expression does not evaluate to a constant unsigned int">;

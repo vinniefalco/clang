@@ -833,15 +833,15 @@ When one method overrides another, the overriding method can be more widely avai
 def RequireConstantInitDocs : Documentation {
   let Category = DocCatVariable;
   let Content = [{
-This attribute specifies expectations about the initialization of static and
-thread local variables. Specifically that the variable has a
-`constant initializer <http://en.cppreference.com/w/cpp/language/constant_initialization>`_
-according to the rules of [basic.start.static]. Failure to meet this expectation
-will result in an error.
+This attribute specifies that the variable to which it is attached is intended
+to have a `constant initializer <http://en.cppreference.com/w/cpp/language/constant_initialization>`_
+according to the rules of [basic.start.static]. The variable is required to
+have static or thread storage duration. If the initialization of the variable
+is not a constant initializer, an error will be produced.
 
-Static objects with constant initializers avoid hard-to-find bugs caused by
-the indeterminate order of dynamic initialization. They can also be safely
-used by other static constructors across translation units.
+Static storage duration variables with constant initializers avoid hard-to-find
+bugs caused by the indeterminate order of dynamic initialization. They can also
+be safely used during dynamic initialization across translation units.
 
 This attribute acts as a compile time assertion that the requirements
 for constant initialization have been met. Since these requirements change
@@ -858,9 +858,6 @@ of silently falling back on dynamic initialization.
   SAFE_STATIC T x = {42}; // OK.
   SAFE_STATIC T y = 42; // error: variable does not have a constant initializer
   // copy initialization is not a constant expression on a non-literal type.
-
-This attribute can only be applied to objects with static or thread-local storage
-duration.
   }];
 }
 

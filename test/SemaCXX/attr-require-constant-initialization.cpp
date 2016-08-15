@@ -5,13 +5,7 @@
 // RUN: -Wglobal-constructors -std=c++14 %s
 
 #if !__has_feature(cxx_static_assert)
-# define CONCAT_(X_, Y_) CONCAT1_(X_, Y_)
-# define CONCAT1_(X_, Y_) X_ ## Y_
-
-// This emulation can be used multiple times on one line (and thus in
-// a macro), except at class scope
-# define static_assert(b_, m_) \
-  typedef int CONCAT_(sa_, __LINE__)[b_ ? 1 : -1]
+#define static_assert(b_, m_) _Static_assert(b_, m_)
 #endif
 
 #define ATTR __attribute__((require_constant_initialization))
@@ -93,11 +87,6 @@ void test_basic_start_static_2_1() {
     ATTR static const int& local_init = non_global; // expected-error {{variable does not have a constant initializer}}
     ATTR static const int& global_init = glvalue_int;
     ATTR static const int& temp_init = 42;
-#if 0
-    /// FIXME: Why is this failing?
-    __thread const int& tl_init = 42;
-    static_assert(__has_constant_initializer(tl_init), "");
-#endif
 }
 
 ATTR const int& temp_ref = 42;
