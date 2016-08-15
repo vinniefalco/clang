@@ -2317,6 +2317,19 @@ BindingDecl *BindingDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
   return new (C, ID) BindingDecl(nullptr, SourceLocation(), nullptr);
 }
 
+VarDecl *BindingDecl::getHoldingVar() const {
+  Expr *B = getBinding();
+  if (!B)
+    return nullptr;
+  auto *DRE = dyn_cast<DeclRefExpr>(B->IgnoreImplicit());
+  if (!DRE)
+    return nullptr;
+
+  auto *VD = dyn_cast<VarDecl>(DRE->getDecl());
+  assert(VD->isImplicit() && "holding var for binding decl not implicit");
+  return VD;
+}
+
 void DecompositionDecl::anchor() {}
 
 DecompositionDecl *DecompositionDecl::Create(ASTContext &C, DeclContext *DC,
@@ -2334,8 +2347,9 @@ DecompositionDecl *DecompositionDecl::CreateDeserialized(ASTContext &C,
                                                          unsigned ID,
                                                          unsigned NumBindings) {
   size_t Extra = additionalSizeToAlloc<BindingDecl *>(NumBindings);
-  auto *Result = new (C, ID, Extra) DecompositionDecl(
-      C, nullptr, SourceLocation(), SourceLocation(), QualType(), nullptr, StorageClass(), None);
+  auto *Result = new (C, ID, Extra)
+      DecompositionDecl(C, nullptr, SourceLocation(), SourceLocation(),
+                        QualType(), nullptr, StorageClass(), None);
   // Set up and clean out the bindings array.
   Result->NumBindings = NumBindings;
   auto *Trail = Result->getTrailingObjects<BindingDecl *>();

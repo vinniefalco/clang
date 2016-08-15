@@ -3404,6 +3404,10 @@ public:
   /// decomposition declaration, and when the initializer is type-dependent.
   Expr *getBinding() const { return Binding; }
 
+  /// Get the variable (if any) that holds the value of evaluating the binding.
+  /// Only present for user-defined bindings for tuple-like types.
+  VarDecl *getHoldingVar() const;
+
   /// Set the binding for this BindingDecl, along with its declared type (which
   /// should be a possibly-cv-qualified form of the type of the binding, or a
   /// reference to such a type).
@@ -3414,6 +3418,8 @@ public:
 
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == Decl::Binding; }
+
+  friend class ASTDeclReader;
 };
 
 /// A decomposition declaration. For instance, given:
@@ -3463,6 +3469,7 @@ public:
   static bool classofKind(Kind K) { return K == Decomposition; }
 
   friend TrailingObjects;
+  friend class ASTDeclReader;
 };
 
 /// An instance of this class represents the declaration of a property
