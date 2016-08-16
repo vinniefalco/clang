@@ -839,8 +839,9 @@ according to the rules of [basic.start.static]. The variable is required to
 have static or thread storage duration. If the initialization of the variable
 is not a constant initializer, an error will be produced.
 
-In C++03 strict constant expression checking is not provided. Instead the
-
+Note that in C++03 strict constant expression checking is not done. Instead
+the attribute reports if Clang can emit the the variable as a constant, even
+if it's not technically a 'constant initializer'. This behavior is non-portable.
 
 Static storage duration variables with constant initializers avoid hard-to-find
 bugs caused by the indeterminate order of dynamic initialization. They can also
@@ -856,9 +857,9 @@ of silently falling back on dynamic initialization.
   #define SAFE_STATIC __attribute__((require_constant_initialization)) static
   struct T {
     constexpr T(int) {}
-    ~T();
+    ~T(); // non-trivial
   };
-  SAFE_STATIC T x = {42}; // OK.
+  SAFE_STATIC T x = {42}; // Initialization OK. Doesn't check destructor.
   SAFE_STATIC T y = 42; // error: variable does not have a constant initializer
   // copy initialization is not a constant expression on a non-literal type.
   }];
