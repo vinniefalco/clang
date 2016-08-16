@@ -839,6 +839,9 @@ according to the rules of [basic.start.static]. The variable is required to
 have static or thread storage duration. If the initialization of the variable
 is not a constant initializer, an error will be produced.
 
+In C++03 strict constant expression checking is not provided. Instead the
+
+
 Static storage duration variables with constant initializers avoid hard-to-find
 bugs caused by the indeterminate order of dynamic initialization. They can also
 be safely used during dynamic initialization across translation units.

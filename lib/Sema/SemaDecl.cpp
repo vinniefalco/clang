@@ -10515,12 +10515,16 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
     // were just diagnosed.
     if (!var->isConstexpr() && GlobalStorage &&
             var->hasAttr<RequireConstantInitAttr>()) {
-      auto *CE = dyn_cast<CXXConstructExpr>(Init);
-      bool DiagErr = (var->isInitKnownICE() || (CE && CE->getConstructor()->isConstexpr()))
+      // FIXME: Need strict checking in C++03 here.
+      bool DiagErr = getLangOpts().CPlusPlus11
           ? !var->checkInitIsICE() : !checkConstInit();
-      if (DiagErr)
+      if (DiagErr) {
+        auto attr = var->getAttr<RequireConstantInitAttr>();
         Diag(var->getLocation(), diag::err_require_constant_init_failed)
           << Init->getSourceRange();
+        Diag(attr->getLocation(), diag::note_declared_required_constant_init_here)
+          << attr->getRange();
+      }
     }
     else if (!var->isConstexpr() && IsGlobal &&
              !getDiagnostics().isIgnored(diag::warn_global_constructor,
