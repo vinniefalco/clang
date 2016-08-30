@@ -1,19 +1,11 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -DTEST_ONE -std=c++03 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -DTEST_ONE -std=c++11 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -DTEST_ONE -std=c++14 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -DTEST_TWO \
+// RUN: %clang_cc1 -fsyntax-only -verify -DTEST_ONE -std=c++03 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -DTEST_ONE -std=c++11 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -DTEST_ONE -std=c++14 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -DTEST_TWO \
 // RUN: -Wglobal-constructors -std=c++14 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -DTEST_THREE -xc %s
 
 #define ATTR __attribute__((require_constant_initialization)) // expected-note 0+ {{expanded from macro}}
-
-// Test diagnostics when attribute is applied to non-static declarations.
-void test_func_local(ATTR int param) { // expected-error {{only applies to variables with static or thread}}
-  ATTR int x = 42;                     // expected-error {{only applies to variables with static or thread}}
-  ATTR extern int y;
-}
-struct ATTR class_mem { // expected-error {{only applies to variables with static or thread}}
-  ATTR int x;           // expected-error {{only applies to variables with static or thread}}
-};
 
 int ReturnInt();
 
@@ -21,6 +13,9 @@ struct PODType {
   int value;
   int value2;
 };
+
+#if defined(__cplusplus)
+
 #if __cplusplus >= 201103L
 struct LitType {
   constexpr LitType() : value(0) {}
@@ -55,14 +50,19 @@ struct StoresNonLit {
   NonLit obj;
 };
 
-const bool NonLitHasConstInit =
-#if __cplusplus >= 201402L
-    true;
-#else
-    false;
-#endif
+#endif // __cplusplus
+
 
 #if defined(TEST_ONE) // Test semantics of attribute
+
+// Test diagnostics when attribute is applied to non-static declarations.
+void test_func_local(ATTR int param) { // expected-error {{only applies to variables with static or thread}}
+  ATTR int x = 42;                     // expected-error {{only applies to variables with static or thread}}
+  ATTR extern int y;
+}
+struct ATTR class_mem { // expected-error {{only applies to variables with static or thread}}
+  ATTR int x;           // expected-error {{only applies to variables with static or thread}}
+};
 
 // [basic.start.static]p2.1
 // if each full-expression (including implicit conversions) that appears in
@@ -271,6 +271,12 @@ constexpr TestCtor<NotC> inval_constexpr(42); // expected-error {{must be initia
 ATTR constexpr TestCtor<NotC> inval_constexpr2(42); // expected-error {{must be initialized by a constant expression}}
 // expected-note@-1 {{in call to 'TestCtor(42)'}}
 
+#elif defined(TEST_THREE)
+#if defined(__cplusplus)
+#error This test requires C
+#endif
+// Test that using the attribute in C results in a diagnostic
+ATTR int x = 0; // expected-warning {{attribute ignored}}
 #else
 #error No test case specified
 #endif // defined(TEST_N)
