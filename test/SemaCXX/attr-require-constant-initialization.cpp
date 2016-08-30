@@ -4,10 +4,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -fcxx-exceptions -DTEST_TWO \
 // RUN: -Wglobal-constructors -std=c++14 %s
 
-#if !__has_feature(cxx_static_assert)
-#define static_assert(b_, m_) _Static_assert(b_, m_)
-#endif
-
 #define ATTR __attribute__((require_constant_initialization)) // expected-note 0+ {{expanded from macro}}
 
 // Test diagnostics when attribute is applied to non-static declarations.
