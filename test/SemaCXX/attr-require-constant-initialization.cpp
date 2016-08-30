@@ -8,51 +8,51 @@
 
 // Test diagnostics when attribute is applied to non-static declarations.
 void test_func_local(ATTR int param) { // expected-error {{only applies to variables with static or thread}}
-    ATTR int x = 42; // expected-error {{only applies to variables with static or thread}}
-    ATTR extern int y;
+  ATTR int x = 42;                     // expected-error {{only applies to variables with static or thread}}
+  ATTR extern int y;
 }
 struct ATTR class_mem { // expected-error {{only applies to variables with static or thread}}
-  ATTR int x; // expected-error {{only applies to variables with static or thread}}
+  ATTR int x;           // expected-error {{only applies to variables with static or thread}}
 };
 
 int ReturnInt();
 
 struct PODType {
-    int value;
-    int value2;
+  int value;
+  int value2;
 };
 #if __cplusplus >= 201103L
 struct LitType {
-    constexpr LitType() : value(0) {}
-    constexpr LitType(int x) : value(x) {}
-    LitType(void*) : value(-1) {}
-    int value;
+  constexpr LitType() : value(0) {}
+  constexpr LitType(int x) : value(x) {}
+  LitType(void *) : value(-1) {}
+  int value;
 };
 #endif
 
 struct NonLit {
 #if __cplusplus >= 201402L
-    constexpr NonLit() : value(0) {}
-    constexpr NonLit(int x ) : value(x) {}
+  constexpr NonLit() : value(0) {}
+  constexpr NonLit(int x) : value(x) {}
 #else
-    NonLit() : value(0) {}
-    NonLit(int x) : value(x) {}
+  NonLit() : value(0) {}
+  NonLit(int x) : value(x) {}
 #endif
-    NonLit(void*) : value(-1) {}
-    ~NonLit() {}
-    int value;
+  NonLit(void *) : value(-1) {}
+  ~NonLit() {}
+  int value;
 };
 
 struct StoresNonLit {
 #if __cplusplus >= 201402L
-    constexpr StoresNonLit() : obj() {}
-    constexpr StoresNonLit(int x) : obj(x) {}
+  constexpr StoresNonLit() : obj() {}
+  constexpr StoresNonLit(int x) : obj(x) {}
 #else
-    StoresNonLit() : obj() {}
-    StoresNonLit(int x) : obj(x) {}
+  StoresNonLit() : obj() {}
+  StoresNonLit(int x) : obj(x) {}
 #endif
-    StoresNonLit(void* p) : obj(p) {}
-    NonLit obj;
+  StoresNonLit(void *p) : obj(p) {}
+  NonLit obj;
 };
 
 const bool NonLitHasConstInit =
@@ -74,48 +74,48 @@ const bool NonLitHasConstInit =
 // Test binding to a static glvalue
 const int glvalue_int = 42;
 const int glvalue_int2 = ReturnInt();
-ATTR const int& glvalue_ref ATTR = glvalue_int;
-ATTR const int& glvalue_ref2 ATTR = glvalue_int2;
-ATTR __thread const int& glvalue_ref_tl = glvalue_int;
+ATTR const int &glvalue_ref ATTR = glvalue_int;
+ATTR const int &glvalue_ref2 ATTR = glvalue_int2;
+ATTR __thread const int &glvalue_ref_tl = glvalue_int;
 
 void test_basic_start_static_2_1() {
-    const int non_global = 42;
-    ATTR static const int& local_init = non_global; // expected-error {{variable does not have a constant initializer}}
-    // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
-    ATTR static const int& global_init = glvalue_int;
-    ATTR static const int& temp_init = 42;
+  const int non_global = 42;
+  ATTR static const int &local_init = non_global; // expected-error {{variable does not have a constant initializer}}
+  // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
+  ATTR static const int &global_init = glvalue_int;
+  ATTR static const int &temp_init = 42;
 }
 
-ATTR const int& temp_ref = 42;
-ATTR const int& temp_ref2 = ReturnInt(); // expected-error {{variable does not have a constant initializer}}
+ATTR const int &temp_ref = 42;
+ATTR const int &temp_ref2 = ReturnInt(); // expected-error {{variable does not have a constant initializer}}
 // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
-ATTR const NonLit& nl_temp_ref = 42; // expected-error {{variable does not have a constant initializer}}
+ATTR const NonLit &nl_temp_ref = 42; // expected-error {{variable does not have a constant initializer}}
 // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
 
 #if __cplusplus >= 201103L
-ATTR const LitType& lit_temp_ref = 42;
-ATTR const int& subobj_ref = LitType{}.value;
+ATTR const LitType &lit_temp_ref = 42;
+ATTR const int &subobj_ref = LitType{}.value;
 #endif
 
-ATTR const int& nl_subobj_ref = NonLit().value;  // expected-error {{variable does not have a constant initializer}}
+ATTR const int &nl_subobj_ref = NonLit().value; // expected-error {{variable does not have a constant initializer}}
 // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
 
 struct TT1 {
-  ATTR static const int& no_init;
-  ATTR static const int& glvalue_init;
-  ATTR static const int& temp_init;
-  ATTR static const int& subobj_init;
+  ATTR static const int &no_init;
+  ATTR static const int &glvalue_init;
+  ATTR static const int &temp_init;
+  ATTR static const int &subobj_init;
 #if __cplusplus >= 201103L
-  ATTR static thread_local const int& tl_glvalue_init;
-  ATTR static thread_local const int& tl_temp_init; // expected-note {{required by 'require_constant_initializer' attribute here}}
+  ATTR static thread_local const int &tl_glvalue_init;
+  ATTR static thread_local const int &tl_temp_init; // expected-note {{required by 'require_constant_initializer' attribute here}}
 #endif
 };
-const int& TT1::glvalue_init = glvalue_int;
-const int& TT1::temp_init = 42;
-const int& TT1::subobj_init = PODType().value;
+const int &TT1::glvalue_init = glvalue_int;
+const int &TT1::temp_init = 42;
+const int &TT1::subobj_init = PODType().value;
 #if __cplusplus >= 201103L
-thread_local const int& TT1::tl_glvalue_init = glvalue_int;
-thread_local const int& TT1::tl_temp_init = 42; // expected-error {{variable does not have a constant initializer}}
+thread_local const int &TT1::tl_glvalue_init = glvalue_int;
+thread_local const int &TT1::tl_temp_init = 42; // expected-error {{variable does not have a constant initializer}}
 #endif
 
 // [basic.start.static]p2.2
@@ -123,32 +123,31 @@ thread_local const int& TT1::tl_temp_init = 42; // expected-error {{variable doe
 // constructor call, and if the initialization full-expression is a constant
 // initializer for the object;
 
-void test_basic_start_static_2_2()
-{
+void test_basic_start_static_2_2() {
 #if __cplusplus < 201103L
-    ATTR static PODType pod;
+  ATTR static PODType pod;
 #else
-    ATTR static PODType pod; // expected-error {{variable does not have a constant initializer}}
-    // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
+  ATTR static PODType pod; // expected-error {{variable does not have a constant initializer}}
+// expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
 #endif
-    ATTR static PODType pot2 = {ReturnInt()}; // expected-error {{variable does not have a constant initializer}}
-    // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
+  ATTR static PODType pot2 = {ReturnInt()}; // expected-error {{variable does not have a constant initializer}}
+                                            // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
 
 #if __cplusplus >= 201103L
-    constexpr LitType l;
-    ATTR static LitType static_lit = l;
-    ATTR static LitType static_lit2 = (void*)0; // expected-error {{variable does not have a constant initializer}}
-    // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
-    ATTR static LitType static_lit3 = ReturnInt(); // expected-error {{variable does not have a constant initializer}}
-    // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
-    ATTR thread_local LitType tls = 42;
+  constexpr LitType l;
+  ATTR static LitType static_lit = l;
+  ATTR static LitType static_lit2 = (void *)0; // expected-error {{variable does not have a constant initializer}}
+  // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
+  ATTR static LitType static_lit3 = ReturnInt(); // expected-error {{variable does not have a constant initializer}}
+  // expected-note@-1 {{required by 'require_constant_initializer' attribute here}}
+  ATTR thread_local LitType tls = 42;
 #endif
 }
 
 struct TT2 {
   ATTR static PODType pod_noinit;
 #if __cplusplus >= 201103L
-    // expected-note@-2 {{required by 'require_constant_initializer' attribute here}}
+// expected-note@-2 {{required by 'require_constant_initializer' attribute here}}
 #endif
   ATTR static PODType pod_copy_init; // expected-note {{required by 'require_constant_initializer' attribute here}}
 #if __cplusplus >= 201402L
@@ -157,11 +156,10 @@ struct TT2 {
   ATTR static const NonLit non_lit_list_init;
   ATTR static const NonLit non_lit_copy_init; // expected-note {{required by 'require_constant_initializer' attribute here}}
 #endif
-
 };
 PODType TT2::pod_noinit;
 #if __cplusplus >= 201103L
- // expected-error@-2 {{variable does not have a constant initializer}}
+// expected-error@-2 {{variable does not have a constant initializer}}
 #endif
 PODType TT2::pod_copy_init(TT2::pod_noinit); // expected-error {{variable does not have a constant initializer}}
 #if __cplusplus >= 201402L
@@ -205,12 +203,11 @@ ATTR int lit_in_init = LitType{42}.value;
 // if an object with static or thread storage duration is not initialized by a
 // constructor call and if either the object is value-initialized or every
 // full-expression that appears in its initializer is a constant expression.
-void test_basic_start_static_2_3()
-{
-    ATTR static int static_local = 42;
-    ATTR static int static_local2; // zero-initialization takes place
+void test_basic_start_static_2_3() {
+  ATTR static int static_local = 42;
+  ATTR static int static_local2; // zero-initialization takes place
 #if __cplusplus >= 201103L
-    ATTR thread_local int tl_local = 42;
+  ATTR thread_local int tl_local = 42;
 #endif
 }
 
@@ -228,13 +225,16 @@ ATTR int brace_init = {};
 #endif
 
 ATTR __thread int tl_init = 0;
-typedef const char* StrType;
+typedef const char *StrType;
 
 #if __cplusplus >= 201103L
 
 // Test that the validity of the selected constructor is checked, not just the
 // initializer
-struct NotC { constexpr NotC(void*) {} NotC(int) {} };
+struct NotC {
+  constexpr NotC(void *) {}
+  NotC(int) {}
+};
 template <class T>
 struct TestCtor {
   constexpr TestCtor(int x) : value(x) {}
@@ -245,12 +245,12 @@ ATTR TestCtor<NotC> t(42); // expected-error {{variable does not have a constant
 #endif
 
 // Test various array types
-ATTR const char* foo[] = { "abc", "def" };
+ATTR const char *foo[] = {"abc", "def"};
 ATTR PODType bar[] = {{}, {123, 456}};
 
 #elif defined(TEST_TWO) // Test for duplicate warnings
 struct NotC {
-  constexpr NotC(void*) {}
+  constexpr NotC(void *) {}
   NotC(int) {} // expected-note 2 {{declared here}}
 };
 template <class T>
@@ -264,8 +264,8 @@ ATTR LitType non_const_lit(nullptr); // expected-error {{variable does not have 
 ATTR NonLit non_const(nullptr); // expected-error {{variable does not have a constant initializer}}
 // expected-warning@-1 {{declaration requires a global destructor}}
 // expected-note@-2 {{required by 'require_constant_initializer' attribute here}}
-LitType const_init_lit(nullptr); // expected-warning {{declaration requires a global constructor}}
-NonLit const_init{42}; // expected-warning {{declaration requires a global destructor}}
+LitType const_init_lit(nullptr);              // expected-warning {{declaration requires a global constructor}}
+NonLit const_init{42};                        // expected-warning {{declaration requires a global destructor}}
 constexpr TestCtor<NotC> inval_constexpr(42); // expected-error {{must be initialized by a constant expression}}
 // expected-note@-1 {{in call to 'TestCtor(42)'}}
 ATTR constexpr TestCtor<NotC> inval_constexpr2(42); // expected-error {{must be initialized by a constant expression}}
