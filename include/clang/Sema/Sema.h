@@ -1884,6 +1884,7 @@ public:
   /// \brief The parser has processed a module import translated from a
   /// #include or similar preprocessing directive.
   void ActOnModuleInclude(SourceLocation DirectiveLoc, Module *Mod);
+  void BuildModuleInclude(SourceLocation DirectiveLoc, Module *Mod);
 
   /// \brief The parsed has entered a submodule.
   void ActOnModuleBegin(SourceLocation DirectiveLoc, Module *Mod);
@@ -8711,8 +8712,8 @@ public:
     /// are not compatible, but we accept them as an extension.
     IncompatiblePointer,
 
-    /// IncompatiblePointer - The assignment is between two pointers types which
-    /// point to integers which have a different sign, but are otherwise
+    /// IncompatiblePointerSign - The assignment is between two pointers types
+    /// which point to integers which have a different sign, but are otherwise
     /// identical. This is a subset of the above, but broken out because it's by
     /// far the most common case of incompatible pointers.
     IncompatiblePointerSign,

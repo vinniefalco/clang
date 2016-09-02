@@ -3367,11 +3367,11 @@ void Sema::MergeVarDeclTypes(VarDecl *New, VarDecl *Old,
       // We are merging a variable declaration New into Old. If it has an array
       // bound, and that bound differs from Old's bound, we should diagnose the
       // mismatch.
-      if (!NewArray->isIncompleteArrayType()) {
+      if (!NewArray->isIncompleteArrayType() && !NewArray->isDependentType()) {
         for (VarDecl *PrevVD = Old->getMostRecentDecl(); PrevVD;
              PrevVD = PrevVD->getPreviousDecl()) {
           const ArrayType *PrevVDTy = Context.getAsArrayType(PrevVD->getType());
-          if (PrevVDTy->isIncompleteArrayType())
+          if (PrevVDTy->isIncompleteArrayType() || PrevVDTy->isDependentType())
             continue;
 
           if (!Context.hasSameType(NewArray, PrevVDTy))
@@ -15338,7 +15338,10 @@ DeclResult Sema::ActOnModuleImport(SourceLocation StartLoc,
 
 void Sema::ActOnModuleInclude(SourceLocation DirectiveLoc, Module *Mod) {
   checkModuleImportContext(*this, Mod, DirectiveLoc, CurContext, true);
+  BuildModuleInclude(DirectiveLoc, Mod);
+}
 
+void Sema::BuildModuleInclude(SourceLocation DirectiveLoc, Module *Mod) {
   // Determine whether we're in the #include buffer for a module. The #includes
   // in that buffer do not qualify as module imports; they're just an
   // implementation detail of us building the module.
@@ -15378,20 +15381,27 @@ void Sema::ActOnModuleBegin(SourceLocation DirectiveLoc, Module *Mod) {
   VisibleModules.setVisible(Mod, DirectiveLoc);
 }
 
-void Sema::ActOnModuleEnd(SourceLocation DirectiveLoc, Module *Mod) {
-  checkModuleImportContext(*this, Mod, DirectiveLoc, CurContext);
+void Sema::ActOnModuleEnd(SourceLocation EofLoc, Module *Mod) {
+  checkModuleImportContext(*this, Mod, EofLoc, CurContext);
 
   if (getLangOpts().ModulesLocalVisibility) {
-    assert(!ModuleScopes.empty() && ModuleScopes.back().Module == Mod &&
-           "left the wrong module scope");
     VisibleModules = std::move(ModuleScopes.back().OuterVisibleModules);
-    ModuleScopes.pop_back();
-
-    VisibleModules.setVisible(Mod, DirectiveLoc);
     // Leaving a module hides namespace names, so our visible namespace cache
     // is now out of date.
     VisibleNamespaceCache.clear();
   }
+
+  assert(!ModuleScopes.empty() && ModuleScopes.back().Module == Mod &&
+         "left the wrong module scope");
+  ModuleScopes.pop_back();
+
+  // We got to the end of processing a #include of a local module. Create an
+  // ImportDecl as we would for an imported module.
+  FileID File = getSourceManager().getFileID(EofLoc);
+  assert(File != getSourceManager().getMainFileID() &&
+         "end of submodule in main source file");
+  SourceLocation DirectiveLoc = getSourceManager().getIncludeLoc(File);
+  BuildModuleInclude(DirectiveLoc, Mod);
 }
 
 void Sema::createImplicitModuleImportForErrorRecovery(SourceLocation Loc,
