@@ -4251,7 +4251,8 @@ public:
   }
 };
 
-/// \brief Represents a 'co_await' expression.
+/// \brief Represents a 'co_await' expression while the type of the promise
+/// is dependent.
 class CoawaitDependentExpr : public Expr {
   SourceLocation KeywordLoc;
   Stmt *Operand;

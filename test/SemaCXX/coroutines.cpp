@@ -237,6 +237,21 @@ namespace dependent_operator_co_await_lookup {
   };
   template void await_template(outer); // expected-note {{instantiation}}
   template void await_template_2(outer);
+
+  template <typename T, typename U> coro<T> await_template_3(U t) {
+    co_await t;
+  }
+  struct transform_awaitable {};
+  struct transformed {};
+  struct transform_promise {
+    coro<transform_promise> get_return_object();
+    suspend_always initial_suspend();
+    suspend_always final_suspend();
+    transformed await_transform(transform_awaitable);
+  };
+  void operator co_await(transform_awaitable) = delete;
+  awaitable operator co_await(transformed);
+  template coro<transform_promise> await_template_3<transform_promise>(transform_awaitable);
 }
 
 struct yield_fn_tag {};

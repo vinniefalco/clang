@@ -3281,8 +3281,8 @@ recurse:
   // These all can only appear in local or variable-initialization
   // contexts and so should never appear in a mangling.
   case Expr::AddrLabelExprClass:
-  case Expr::CoawaitDependentExprClass: // FIXME(EricWF) can this ever be
-                                        // mangled?
+  // This should no longer exist in the AST by now
+  case Expr::CoawaitDependentExprClass:
   case Expr::DesignatedInitUpdateExprClass:
   case Expr::ImplicitValueInitExprClass:
   case Expr::NoInitExprClass:
