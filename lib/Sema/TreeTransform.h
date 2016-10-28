@@ -1318,6 +1318,16 @@ public:
     return getSema().BuildCoawaitExpr(CoawaitLoc, Result);
   }
 
+  /// \brief Build a new co_await expression.
+  ///
+  /// By default, performs semantic analysis to build the new expression.
+  /// Subclasses may override this routine to provide different behavior.
+  ExprResult RebuildCoawaitDependentExpr(SourceLocation CoawaitLoc,
+                                         Expr *Result,
+                                         const UnresolvedSet<16>& Candidates) {
+    return getSema().BuildCoawaitDependentExpr(CoawaitLoc, Result, Candidates);
+  }
+
   /// \brief Build a new co_yield expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -6682,6 +6692,21 @@ TreeTransform<Derived>::TransformCoawaitExpr(CoawaitExpr *E) {
   // Always rebuild; we don't know if this needs to be injected into a new
   // context or if the promise type has changed.
   return getDerived().RebuildCoawaitExpr(E->getKeywordLoc(), Result.get());
+}
+
+template<typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformCoawaitDependentExpr(CoawaitDependentExpr *E) {
+  ExprResult Result = getDerived().TransformInitializer(E->getOperand(),
+                                                        /*NotCopyInit*/false);
+  if (Result.isInvalid())
+    return ExprError();
+
+  // Always rebuild; we don't know if this needs to be injected into a new
+  // context or if the promise type has changed.
+  return getDerived().RebuildCoawaitDependentExpr(E->getKeywordLoc(),
+                                                  Result.get(),
+                                                  E->getOperatorCandidates());
 }
 
 template<typename Derived>

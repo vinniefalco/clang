@@ -21,21 +21,29 @@
 using namespace clang;
 using namespace sema;
 
+static bool lookupMember(Sema &S, const char* Name, CXXRecordDecl *RD,
+                          SourceLocation Loc) {
+      DeclarationName DN = S.PP.getIdentifierInfo(Name);
+      LookupResult LR(S, DN, Loc, Sema::LookupMemberName);
+      return S.LookupQualifiedName(LR, RD);
+}
+
 /// Look up the std::coroutine_traits<...>::promise_type for the given
 /// function type.
 static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
-                                  SourceLocation Loc) {
+                                  SourceLocation KwLoc,
+                                  SourceLocation FuncLoc) {
   // FIXME: Cache std::coroutine_traits once we've found it.
   NamespaceDecl *StdExp = S.lookupStdExperimentalNamespace();
   if (!StdExp) {
-    S.Diag(Loc, diag::err_implied_std_coroutine_traits_not_found);
+    S.Diag(KwLoc, diag::err_implied_std_coroutine_traits_not_found);
     return QualType();
   }
 
   LookupResult Result(S, &S.PP.getIdentifierTable().get("coroutine_traits"),
-                      Loc, Sema::LookupOrdinaryName);
+                      FuncLoc, Sema::LookupOrdinaryName);
   if (!S.LookupQualifiedName(Result, StdExp)) {
-    S.Diag(Loc, diag::err_implied_std_coroutine_traits_not_found);
+    S.Diag(KwLoc, diag::err_implied_std_coroutine_traits_not_found);
     return QualType();
   }
 
@@ -49,22 +57,22 @@ static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
   }
 
   // Form template argument list for coroutine_traits<R, P1, P2, ...>.
-  TemplateArgumentListInfo Args(Loc, Loc);
+  TemplateArgumentListInfo Args(KwLoc, KwLoc);
   Args.addArgument(TemplateArgumentLoc(
       TemplateArgument(FnType->getReturnType()),
-      S.Context.getTrivialTypeSourceInfo(FnType->getReturnType(), Loc)));
+      S.Context.getTrivialTypeSourceInfo(FnType->getReturnType(), KwLoc)));
   // FIXME: If the function is a non-static member function, add the type
   // of the implicit object parameter before the formal parameters.
   for (QualType T : FnType->getParamTypes())
     Args.addArgument(TemplateArgumentLoc(
-        TemplateArgument(T), S.Context.getTrivialTypeSourceInfo(T, Loc)));
+        TemplateArgument(T), S.Context.getTrivialTypeSourceInfo(T, KwLoc)));
 
   // Build the template-id.
   QualType CoroTrait =
-      S.CheckTemplateIdType(TemplateName(CoroTraits), Loc, Args);
+      S.CheckTemplateIdType(TemplateName(CoroTraits), KwLoc, Args);
   if (CoroTrait.isNull())
     return QualType();
-  if (S.RequireCompleteType(Loc, CoroTrait,
+  if (S.RequireCompleteType(KwLoc, CoroTrait,
                             diag::err_coroutine_traits_missing_specialization))
     return QualType();
 
@@ -72,29 +80,34 @@ static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
   assert(RD && "specialization of class template is not a class?");
 
   // Look up the ::promise_type member.
-  LookupResult R(S, &S.PP.getIdentifierTable().get("promise_type"), Loc,
+  LookupResult R(S, &S.PP.getIdentifierTable().get("promise_type"), KwLoc,
                  Sema::LookupOrdinaryName);
   S.LookupQualifiedName(R, RD);
   auto *Promise = R.getAsSingle<TypeDecl>();
   if (!Promise) {
-    S.Diag(Loc, diag::err_implied_std_coroutine_traits_promise_type_not_found)
+    S.Diag(FuncLoc, diag::err_implied_std_coroutine_traits_promise_type_not_found)
         << RD;
     return QualType();
   }
-
   // The promise type is required to be a class type.
   QualType PromiseType = S.Context.getTypeDeclType(Promise);
-  if (!PromiseType->getAsCXXRecordDecl()) {
-    // Use the fully-qualified name of the type.
+
+  auto buildNNS = [&]() {
     auto *NNS = NestedNameSpecifier::Create(S.Context, nullptr, StdExp);
     NNS = NestedNameSpecifier::Create(S.Context, NNS, false,
                                       CoroTrait.getTypePtr());
-    PromiseType = S.Context.getElaboratedType(ETK_None, NNS, PromiseType);
+    return S.Context.getElaboratedType(ETK_None, NNS, PromiseType);
+  };
 
-    S.Diag(Loc, diag::err_implied_std_coroutine_traits_promise_type_not_class)
-        << PromiseType;
+  RD = PromiseType->getAsCXXRecordDecl();
+  if (!RD) {
+    S.Diag(FuncLoc, diag::err_implied_std_coroutine_traits_promise_type_not_class)
+        << buildNNS();
     return QualType();
   }
+  if (S.RequireCompleteType(FuncLoc, buildNNS(),
+                            diag::err_coroutine_promise_type_incomplete))
+    return QualType();
 
   return PromiseType;
 }
@@ -176,7 +189,8 @@ static FunctionScopeInfo *checkCoroutineContext(Sema &S, SourceLocation Loc,
     QualType T = FD->getType()->isDependentType()
                      ? S.Context.DependentTy
                      : lookupPromiseType(
-                           S, FD->getType()->castAs<FunctionProtoType>(), Loc);
+                           S, FD->getType()->castAs<FunctionProtoType>(),
+                           Loc, FD->getLocation());
     if (T.isNull())
       return nullptr;
 
@@ -213,13 +227,22 @@ static Expr *buildBuiltinCall(Sema &S, SourceLocation Loc, Builtin::ID Id,
   return Call.get();
 }
 
+
 /// Build a call to 'operator co_await' if there is a suitable operator for
 /// the given expression.
-static ExprResult buildOperatorCoawaitCall(Sema &SemaRef, Scope *S,
-                                           SourceLocation Loc, Expr *E) {
+static UnresolvedSet<16> lookupOperatorCoawaitCall(Sema &SemaRef, Scope *S,
+                                            SourceLocation Loc, Expr *E) {
   UnresolvedSet<16> Functions;
   SemaRef.LookupOverloadedOperatorName(OO_Coawait, S, E->getType(), QualType(),
                                        Functions);
+  return Functions;
+}
+
+/// Build a call to 'operator co_await' if there is a suitable operator for
+/// the given expression.
+static ExprResult buildOperatorCoawaitCall(Sema &SemaRef,
+                                           SourceLocation Loc, Expr *E,
+                                           const UnresolvedSet<16> &Functions) {
   return SemaRef.CreateOverloadedUnaryOp(Loc, UO_Coawait, Functions, E);
 }
 
@@ -268,6 +291,23 @@ static ReadySuspendResumeResult buildCoawaitCalls(Sema &S, SourceLocation Loc,
   return Calls;
 }
 
+static ExprResult buildPromiseCall(Sema &S, FunctionScopeInfo *Coroutine,
+                                   SourceLocation Loc, StringRef Name,
+                                   MutableArrayRef<Expr *> Args) {
+  assert(Coroutine->CoroutinePromise && "no promise for coroutine");
+
+  // Form a reference to the promise.
+  auto *Promise = Coroutine->CoroutinePromise;
+  ExprResult PromiseRef = S.BuildDeclRefExpr(
+      Promise, Promise->getType().getNonReferenceType(), VK_LValue, Loc);
+  if (PromiseRef.isInvalid())
+    return ExprError();
+
+  // Call 'yield_value', passing in E.
+  return buildMemberCall(S, PromiseRef.get(), Loc, Name, Args);
+}
+
+
 ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
   if (!Coroutine) {
@@ -279,13 +319,54 @@ ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
     if (R.isInvalid()) return ExprError();
     E = R.get();
   }
-
+  auto Candidates = lookupOperatorCoawaitCall(*this, S, Loc, E);
+#if 0
   ExprResult Awaitable = buildOperatorCoawaitCall(*this, S, Loc, E);
+  if (Awaitable.isInvalid())
+    return ExprError();
+#endif
+  return BuildCoawaitDependentExpr(Loc, E, Candidates);
+}
+
+
+ExprResult Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
+                                           const UnresolvedSet<16>& Candidates) {
+  auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
+  if (!Coroutine)
+    return ExprError();
+
+  if (E->getType()->isPlaceholderType()) {
+    ExprResult R = CheckPlaceholderExpr(E);
+    if (R.isInvalid()) return ExprError();
+    E = R.get();
+  }
+  auto *Promise = Coroutine->CoroutinePromise;
+  if (Promise->getType()->isDependentType() || CurContext->isDependentContext()) {
+    Expr *Res = new (Context) CoawaitDependentExpr(Loc, Context.DependentTy,
+                                                   E, Candidates);
+    Coroutine->CoroutineStmts.push_back(Res);
+    return Res;
+  }
+  CXXRecordDecl *RD = Promise->getType()->getAsCXXRecordDecl();
+  assert(RD && "Type should have already been checked");
+
+  if (lookupMember(*this, "await_transform", RD, Loc)) {
+    ExprResult R = buildPromiseCall(*this, Coroutine, Loc,
+                                   "await_transform", E);
+    if (R.isInvalid()) {
+      Diag(Loc, diag::note_coroutine_promise_call_implicitly_required_here)
+          << E->getSourceRange();
+      return ExprError();
+    }
+    E = R.get();
+  }
+  ExprResult Awaitable = buildOperatorCoawaitCall(*this, Loc, E, Candidates);
   if (Awaitable.isInvalid())
     return ExprError();
 
   return BuildCoawaitExpr(Loc, Awaitable.get());
 }
+
 ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
   if (!Coroutine)
@@ -319,22 +400,6 @@ ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
   return Res;
 }
 
-static ExprResult buildPromiseCall(Sema &S, FunctionScopeInfo *Coroutine,
-                                   SourceLocation Loc, StringRef Name,
-                                   MutableArrayRef<Expr *> Args) {
-  assert(Coroutine->CoroutinePromise && "no promise for coroutine");
-
-  // Form a reference to the promise.
-  auto *Promise = Coroutine->CoroutinePromise;
-  ExprResult PromiseRef = S.BuildDeclRefExpr(
-      Promise, Promise->getType().getNonReferenceType(), VK_LValue, Loc);
-  if (PromiseRef.isInvalid())
-    return ExprError();
-
-  // Call 'yield_value', passing in E.
-  return buildMemberCall(S, PromiseRef.get(), Loc, Name, Args);
-}
-
 ExprResult Sema::ActOnCoyieldExpr(Scope *S, SourceLocation Loc, Expr *E) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_yield");
   if (!Coroutine) {
@@ -349,7 +414,8 @@ ExprResult Sema::ActOnCoyieldExpr(Scope *S, SourceLocation Loc, Expr *E) {
     return ExprError();
 
   // Build 'operator co_await' call.
-  Awaitable = buildOperatorCoawaitCall(*this, S, Loc, Awaitable.get());
+  auto Functions = lookupOperatorCoawaitCall(*this, S, Loc, Awaitable.get());
+  Awaitable = buildOperatorCoawaitCall(*this, Loc, Awaitable.get(), Functions);
   if (Awaitable.isInvalid())
     return ExprError();
 
@@ -581,7 +647,8 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   bool AnyCoawaits = false;
   bool AnyCoyields = false;
   for (auto *CoroutineStmt : Fn->CoroutineStmts) {
-    AnyCoawaits |= isa<CoawaitExpr>(CoroutineStmt);
+    AnyCoawaits |= isa<CoawaitExpr>(CoroutineStmt)
+                || isa<CoawaitDependentExpr>(CoroutineStmt);
     AnyCoyields |= isa<CoyieldExpr>(CoroutineStmt);
   }
 
@@ -633,17 +700,13 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
       !Fn->CoroutinePromise->getType()->isDependentType()) {
     CXXRecordDecl *RD = Fn->CoroutinePromise->getType()->getAsCXXRecordDecl();
     assert(RD && "Type should have already been checked");
+
+
     // [dcl.fct.def.coroutine]/4
     // The unqualified-ids 'return_void' and 'return_value' are looked up in
     // the scope of class P. If both are found, the program is ill-formed.
-    DeclarationName RVoidDN = PP.getIdentifierInfo("return_void");
-    LookupResult RVoidResult(*this, RVoidDN, Loc, Sema::LookupMemberName);
-    const bool HasRVoid = LookupQualifiedName(RVoidResult, RD);
-
-    DeclarationName RValueDN = PP.getIdentifierInfo("return_value");
-    LookupResult RValueResult(*this, RValueDN, Loc, Sema::LookupMemberName);
-    const bool HasRValue = LookupQualifiedName(RValueResult, RD);
-
+    const bool HasRVoid = lookupMember(*this, "return_void", RD, Loc);
+    const bool HasRValue = lookupMember(*this, "return_value", RD, Loc);
     if (HasRVoid && HasRValue) {
       // FIXME Improve this diagnostic
       Diag(FD->getLocation(), diag::err_coroutine_promise_return_ill_formed)
@@ -662,9 +725,8 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
     // [dcl.fct.def.coroutine]/3
     // The unqualified-id set_exception is found in the scope of P by class
     // member access lookup (3.4.5).
-    DeclarationName SetExDN = PP.getIdentifierInfo("set_exception");
-    LookupResult SetExResult(*this, SetExDN, Loc, Sema::LookupMemberName);
-    if (LookupQualifiedName(SetExResult, RD)) {
+
+    if (lookupMember(*this, "set_exception", RD, Loc)) {
       // Form the call 'p.set_exception(std::current_exception())'
       SetException = buildStdCurrentExceptionCall(*this, Loc);
       if (SetException.isInvalid())

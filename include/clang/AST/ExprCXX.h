@@ -4251,6 +4251,55 @@ public:
   }
 };
 
+
+/// \brief Represents a 'co_await' expression.
+class CoawaitDependentExpr : public Expr {
+  SourceLocation KeywordLoc;
+  Stmt *Operand;
+  UnresolvedSet<16> CoawaitOperatorCandidates;
+
+  friend class ASTStmtReader;
+public:
+
+   CoawaitDependentExpr(SourceLocation KeywordLoc, QualType Ty,
+                        Expr *Op, UnresolvedSet<16> OperatorCandidates)
+      : Expr(CoawaitDependentExprClass, Ty, VK_RValue, OK_Ordinary, true, true, true,
+             Op->containsUnexpandedParameterPack()),
+        KeywordLoc(KeywordLoc), Operand(Op),
+        CoawaitOperatorCandidates(OperatorCandidates) {
+    assert(Op->isTypeDependent() && Ty->isDependentType() &&
+           "wrong constructor for non-dependent co_await/co_yield expression");
+  }
+
+  CoawaitDependentExpr(EmptyShell Empty)
+          : Expr(CoawaitDependentExprClass, Empty) {}
+
+  Expr *getOperand() const {
+    return static_cast<Expr*>(Operand);
+  }
+
+  const UnresolvedSet<16>& getOperatorCandidates() const {
+    return CoawaitOperatorCandidates;
+  }
+
+  SourceLocation getKeywordLoc() const { return KeywordLoc; }
+
+  SourceLocation getLocStart() const LLVM_READONLY {
+    return KeywordLoc;
+  }
+  SourceLocation getLocEnd() const LLVM_READONLY {
+    return getOperand()->getLocEnd();
+  }
+
+  child_range children() {
+    return child_range(&Operand, &Operand + 1);
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == CoawaitDependentExprClass;
+  }
+};
+
 /// \brief Represents a 'co_yield' expression.
 class CoyieldExpr : public CoroutineSuspendExpr {
   friend class ASTStmtReader;
