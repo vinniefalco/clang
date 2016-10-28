@@ -188,6 +188,9 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::CXXFoldExprClass:
   case Expr::NoInitExprClass:
   case Expr::DesignatedInitUpdateExprClass:
+  // FIXME How should we classify co_await expressions while they're still
+  // dependent?
+  case Expr::CoawaitDependentExprClass:
   case Expr::CoyieldExprClass:
     return Cl::CL_PRValue;
 
