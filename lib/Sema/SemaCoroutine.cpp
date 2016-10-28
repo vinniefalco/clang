@@ -103,8 +103,7 @@ static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
     return S.Context.getElaboratedType(ETK_None, NNS, PromiseType);
   };
 
-  RD = PromiseType->getAsCXXRecordDecl();
-  if (!RD) {
+  if (!PromiseType->getAsCXXRecordDecl()) {
     S.Diag(FuncLoc,
            diag::err_implied_std_coroutine_traits_promise_type_not_class)
         << buildNNS();
@@ -641,7 +640,7 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
     Diag(Fn->FirstReturnLoc, diag::err_return_in_coroutine);
     auto *First = Fn->CoroutineStmts[0];
     Diag(First->getLocStart(), diag::note_declared_coroutine_here)
-        << (isa<CoawaitExpr>(First) ? 0 :
+        << ((isa<CoawaitExpr>(First) || isa<CoawaitDependentExpr>(First)) ? 0 :
             isa<CoyieldExpr>(First) ? 1 : 2);
   }
 
