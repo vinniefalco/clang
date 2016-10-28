@@ -351,7 +351,8 @@ Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
     ExprResult R =
         buildPromiseCall(*this, Coroutine, Loc, "await_transform", E);
     if (R.isInvalid()) {
-      Diag(Loc, diag::note_coroutine_promise_implicit_await_transform_required_here)
+      Diag(Loc,
+           diag::note_coroutine_promise_implicit_await_transform_required_here)
           << E->getSourceRange();
       return ExprError();
     }
@@ -656,7 +657,7 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
 
   assert((!AnyDependentCoawaits ||
           Fn->CoroutinePromise->getType()->isDependentType()) &&
-          "All dependent coawait expressions should already be resolved");
+         "All dependent coawait expressions should already be resolved");
 
   SourceLocation Loc = FD->getLocation();
 
