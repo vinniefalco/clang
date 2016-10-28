@@ -21,11 +21,11 @@
 using namespace clang;
 using namespace sema;
 
-static bool lookupMember(Sema &S, const char* Name, CXXRecordDecl *RD,
-                          SourceLocation Loc) {
-      DeclarationName DN = S.PP.getIdentifierInfo(Name);
-      LookupResult LR(S, DN, Loc, Sema::LookupMemberName);
-      return S.LookupQualifiedName(LR, RD);
+static bool lookupMember(Sema &S, const char *Name, CXXRecordDecl *RD,
+                         SourceLocation Loc) {
+  DeclarationName DN = S.PP.getIdentifierInfo(Name);
+  LookupResult LR(S, DN, Loc, Sema::LookupMemberName);
+  return S.LookupQualifiedName(LR, RD);
 }
 
 /// Look up the std::coroutine_traits<...>::promise_type for the given
@@ -85,7 +85,8 @@ static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
   S.LookupQualifiedName(R, RD);
   auto *Promise = R.getAsSingle<TypeDecl>();
   if (!Promise) {
-    S.Diag(FuncLoc, diag::err_implied_std_coroutine_traits_promise_type_not_found)
+    S.Diag(FuncLoc,
+           diag::err_implied_std_coroutine_traits_promise_type_not_found)
         << RD;
     return QualType();
   }
@@ -101,7 +102,8 @@ static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
 
   RD = PromiseType->getAsCXXRecordDecl();
   if (!RD) {
-    S.Diag(FuncLoc, diag::err_implied_std_coroutine_traits_promise_type_not_class)
+    S.Diag(FuncLoc,
+           diag::err_implied_std_coroutine_traits_promise_type_not_class)
         << buildNNS();
     return QualType();
   }
@@ -186,11 +188,11 @@ static FunctionScopeInfo *checkCoroutineContext(Sema &S, SourceLocation Loc,
 
   // If we don't have a promise variable, build one now.
   if (!ScopeInfo->CoroutinePromise) {
-    QualType T = FD->getType()->isDependentType()
-                     ? S.Context.DependentTy
-                     : lookupPromiseType(
-                           S, FD->getType()->castAs<FunctionProtoType>(),
-                           Loc, FD->getLocation());
+    QualType T =
+        FD->getType()->isDependentType()
+            ? S.Context.DependentTy
+            : lookupPromiseType(S, FD->getType()->castAs<FunctionProtoType>(),
+                                Loc, FD->getLocation());
     if (T.isNull())
       return nullptr;
 
@@ -227,11 +229,11 @@ static Expr *buildBuiltinCall(Sema &S, SourceLocation Loc, Builtin::ID Id,
   return Call.get();
 }
 
-
 /// Build a call to 'operator co_await' if there is a suitable operator for
 /// the given expression.
 static UnresolvedSet<16> lookupOperatorCoawaitCall(Sema &SemaRef, Scope *S,
-                                            SourceLocation Loc, Expr *E) {
+                                                   SourceLocation Loc,
+                                                   Expr *E) {
   UnresolvedSet<16> Functions;
   SemaRef.LookupOverloadedOperatorName(OO_Coawait, S, E->getType(), QualType(),
                                        Functions);
@@ -240,8 +242,8 @@ static UnresolvedSet<16> lookupOperatorCoawaitCall(Sema &SemaRef, Scope *S,
 
 /// Build a call to 'operator co_await' if there is a suitable operator for
 /// the given expression.
-static ExprResult buildOperatorCoawaitCall(Sema &SemaRef,
-                                           SourceLocation Loc, Expr *E,
+static ExprResult buildOperatorCoawaitCall(Sema &SemaRef, SourceLocation Loc,
+                                           Expr *E,
                                            const UnresolvedSet<16> &Functions) {
   return SemaRef.CreateOverloadedUnaryOp(Loc, UO_Coawait, Functions, E);
 }
@@ -307,7 +309,6 @@ static ExprResult buildPromiseCall(Sema &S, FunctionScopeInfo *Coroutine,
   return buildMemberCall(S, PromiseRef.get(), Loc, Name, Args);
 }
 
-
 ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
   if (!Coroutine) {
@@ -319,42 +320,38 @@ ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
     if (R.isInvalid()) return ExprError();
     E = R.get();
   }
-  auto Candidates = lookupOperatorCoawaitCall(*this, S, Loc, E);
-#if 0
-  ExprResult Awaitable = buildOperatorCoawaitCall(*this, S, Loc, E);
-  if (Awaitable.isInvalid())
-    return ExprError();
-#endif
-  return BuildCoawaitDependentExpr(Loc, E, Candidates);
+  return BuildCoawaitDependentExpr(Loc, E,
+                                   lookupOperatorCoawaitCall(*this, S, Loc, E));
 }
 
-
-ExprResult Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
-                                           const UnresolvedSet<16>& Candidates) {
+ExprResult
+Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
+                                const UnresolvedSet<16> &Candidates) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
   if (!Coroutine)
     return ExprError();
 
   if (E->getType()->isPlaceholderType()) {
     ExprResult R = CheckPlaceholderExpr(E);
-    if (R.isInvalid()) return ExprError();
+    if (R.isInvalid())
+      return ExprError();
     E = R.get();
   }
+
   auto *Promise = Coroutine->CoroutinePromise;
-  if (Promise->getType()->isDependentType() || CurContext->isDependentContext()) {
-    Expr *Res = new (Context) CoawaitDependentExpr(Loc, Context.DependentTy,
-                                                   E, Candidates);
+  if (Promise->getType()->isDependentType()) {
+    Expr *Res = new (Context)
+        CoawaitDependentExpr(Loc, Context.DependentTy, E, Candidates);
     Coroutine->CoroutineStmts.push_back(Res);
     return Res;
   }
-  CXXRecordDecl *RD = Promise->getType()->getAsCXXRecordDecl();
-  assert(RD && "Type should have already been checked");
 
+  CXXRecordDecl *RD = Promise->getType()->getAsCXXRecordDecl();
   if (lookupMember(*this, "await_transform", RD, Loc)) {
-    ExprResult R = buildPromiseCall(*this, Coroutine, Loc,
-                                   "await_transform", E);
+    ExprResult R =
+        buildPromiseCall(*this, Coroutine, Loc, "await_transform", E);
     if (R.isInvalid()) {
-      Diag(Loc, diag::note_coroutine_promise_call_implicitly_required_here)
+      Diag(Loc, diag::note_coroutine_promise_implicit_await_transform_required_here)
           << E->getSourceRange();
       return ExprError();
     }
@@ -645,16 +642,21 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   }
 
   bool AnyCoawaits = false;
+  bool AnyDependentCoawaits = false;
   bool AnyCoyields = false;
   for (auto *CoroutineStmt : Fn->CoroutineStmts) {
-    AnyCoawaits |= isa<CoawaitExpr>(CoroutineStmt)
-                || isa<CoawaitDependentExpr>(CoroutineStmt);
+    AnyCoawaits |= isa<CoawaitExpr>(CoroutineStmt);
+    AnyDependentCoawaits |= isa<CoawaitDependentExpr>(CoroutineStmt);
     AnyCoyields |= isa<CoyieldExpr>(CoroutineStmt);
   }
 
-  if (!AnyCoawaits && !AnyCoyields)
+  if (!AnyCoawaits && !AnyCoyields && !AnyDependentCoawaits)
     Diag(Fn->CoroutineStmts.front()->getLocStart(),
          diag::ext_coroutine_without_co_await_co_yield);
+
+  assert((!AnyDependentCoawaits ||
+          Fn->CoroutinePromise->getType()->isDependentType()) &&
+          "All dependent coawait expressions should already be resolved");
 
   SourceLocation Loc = FD->getLocation();
 
@@ -700,7 +702,6 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
       !Fn->CoroutinePromise->getType()->isDependentType()) {
     CXXRecordDecl *RD = Fn->CoroutinePromise->getType()->getAsCXXRecordDecl();
     assert(RD && "Type should have already been checked");
-
 
     // [dcl.fct.def.coroutine]/4
     // The unqualified-ids 'return_void' and 'return_value' are looked up in

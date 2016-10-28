@@ -1324,7 +1324,7 @@ public:
   /// Subclasses may override this routine to provide different behavior.
   ExprResult RebuildCoawaitDependentExpr(SourceLocation CoawaitLoc,
                                          Expr *Result,
-                                         const UnresolvedSet<16>& Candidates) {
+                                         const UnresolvedSet<16> &Candidates) {
     return getSema().BuildCoawaitDependentExpr(CoawaitLoc, Result, Candidates);
   }
 
@@ -6694,24 +6694,22 @@ TreeTransform<Derived>::TransformCoawaitExpr(CoawaitExpr *E) {
   return getDerived().RebuildCoawaitExpr(E->getKeywordLoc(), Result.get());
 }
 
-template<typename Derived>
+template <typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformCoawaitDependentExpr(CoawaitDependentExpr *E) {
   ExprResult Result = getDerived().TransformInitializer(E->getOperand(),
-                                                        /*NotCopyInit*/false);
+                                                        /*NotCopyInit*/ false);
   if (Result.isInvalid())
     return ExprError();
 
   // Always rebuild; we don't know if this needs to be injected into a new
   // context or if the promise type has changed.
-  return getDerived().RebuildCoawaitDependentExpr(E->getKeywordLoc(),
-                                                  Result.get(),
-                                                  E->getOperatorCandidates());
+  return getDerived().RebuildCoawaitDependentExpr(
+      E->getKeywordLoc(), Result.get(), E->getOperatorCandidates());
 }
 
-template<typename Derived>
-ExprResult
-TreeTransform<Derived>::TransformCoyieldExpr(CoyieldExpr *E) {
+template <typename Derived>
+ExprResult TreeTransform<Derived>::TransformCoyieldExpr(CoyieldExpr *E) {
   ExprResult Result = getDerived().TransformInitializer(E->getOperand(),
                                                         /*NotCopyInit*/false);
   if (Result.isInvalid())

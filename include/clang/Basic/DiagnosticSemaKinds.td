@@ -8657,8 +8657,8 @@ def err_malformed_std_current_exception : Error<
   "'std::current_exception' must be a function">;
 def err_coroutine_promise_return_ill_formed : Error<
   "%0 declares both 'return_value' and 'return_void'">;
-def note_coroutine_promise_call_implicitly_required_here : Note<
-  "call to '%0' is implicitly required here">;
+def note_coroutine_promise_implicit_await_transform_required_here : Note<
+  "call to 'await_transform' implicitly required by 'co_await' here">;
 }
 
 let CategoryName = "Documentation Issue" in {

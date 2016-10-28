@@ -59,13 +59,13 @@ void no_specialization() {
 template <typename... T>
 struct std::experimental::coroutine_traits<int, T...> {};
 
-int no_promise_type() {// expected-error {{this function cannot be a coroutine: 'std::experimental::coroutine_traits<int>' has no member named 'promise_type'}}
+int no_promise_type() { // expected-error {{this function cannot be a coroutine: 'std::experimental::coroutine_traits<int>' has no member named 'promise_type'}}
   co_await a;
 }
 
 template <>
 struct std::experimental::coroutine_traits<double, double> { typedef int promise_type; };
-double bad_promise_type(double) {  // expected-error {{this function cannot be a coroutine: 'experimental::coroutine_traits<double, double>::promise_type' (aka 'int') is not a class}}
+double bad_promise_type(double) { // expected-error {{this function cannot be a coroutine: 'experimental::coroutine_traits<double, double>::promise_type' (aka 'int') is not a class}}
   co_await a;
 }
 
@@ -371,41 +371,40 @@ struct bad_promise_9 {
   coro<bad_promise_9> get_return_object();
   suspend_always initial_suspend();
   suspend_always final_suspend();
-  void await_transform(void*); // expected-note {{candidate}}
+  void await_transform(void *);                                // expected-note {{candidate}}
   awaitable await_transform(int) __attribute__((unavailable)); // expected-note {{explicitly made unavailable}}
   void return_void();
 };
 coro<bad_promise_9> calls_await_transform() {
   co_await 42; // expected-error {{call to unavailable member function 'await_transform'}}
+  // expected-note@-1 {{call to 'await_transform' implicitly required by 'co_await' here}}
 }
-
 
 struct bad_promise_10 {
   coro<bad_promise_10> get_return_object();
   suspend_always initial_suspend();
   suspend_always final_suspend();
-  int await_transform; // expected-note {{'await_transform' declared here}}
+  int await_transform;
   void return_void();
 };
 coro<bad_promise_10> bad_coawait() {
   // FIXME this diagnostic is terrible
-  co_await 42; // expected-error {{'await_transform' is required to be a non-static member function of the coroutine's promise type}}
+  co_await 42; // expected-error {{called object type 'int' is not a function or function pointer}}
+  // expected-note@-1 {{call to 'await_transform' implicitly required by 'co_await' here}}
 }
-
 
 struct bad_promise_11 {
   coro<bad_promise_11> get_return_object();
   suspend_always initial_suspend();
   suspend_always final_suspend();
-  static void await_transform(); // expected-note {{'await_transform' declared here}}
+  static void await_transform();
   static awaitable await_transform(int);
   void return_void();
 };
 coro<bad_promise_11> bad_static_coawait() {
   // FIXME this diagnostic is terrible
-  co_await 42; // expected-error {{'await_transform' is required to be a non-static member function of the coroutine's promise type}}
+  co_await 42;
 }
-
 
 template<> struct std::experimental::coroutine_traits<int, int, const char**>
 { using promise_type = promise; };
