@@ -25,6 +25,9 @@ static bool lookupMember(Sema &S, const char *Name, CXXRecordDecl *RD,
                          SourceLocation Loc) {
   DeclarationName DN = S.PP.getIdentifierInfo(Name);
   LookupResult LR(S, DN, Loc, Sema::LookupMemberName);
+  // Suppress diagnostics when a private member is selected. The same warnings
+  // will be produced again when building the call.
+  LR.suppressDiagnostics();
   return S.LookupQualifiedName(LR, RD);
 }
 

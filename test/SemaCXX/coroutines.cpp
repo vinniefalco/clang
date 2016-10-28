@@ -368,17 +368,21 @@ namespace std {
 int *current_exception();
 }
 
-struct bad_promise_8 {
+struct bad_promise_base {
+private:
+  void return_void(); // expected-note {{declared private here}}
+};
+struct bad_promise_8 : bad_promise_base {
   coro<bad_promise_8> get_return_object();
   suspend_always initial_suspend();
   suspend_always final_suspend();
-  void return_void();
   void set_exception();                                   // expected-note {{function not viable}}
   void set_exception(int *) __attribute__((unavailable)); // expected-note {{explicitly made unavailable}}
   void set_exception(void *);                             // expected-note {{candidate function}}
 };
 coro<bad_promise_8> calls_set_exception() {
   // expected-error@-1 {{call to unavailable member function 'set_exception'}}
+  // expected-error@-2 {{'return_void' is a private member of 'bad_promise_base'}}
   co_await a;
 }
 
@@ -408,15 +412,20 @@ coro<bad_promise_10> bad_coawait() {
   // expected-note@-1 {{call to 'await_transform' implicitly required by 'co_await' here}}
 }
 
-struct bad_promise_11 {
-  coro<bad_promise_11> get_return_object();
+struct call_operator {
+  template <class ...Args> awaitable operator()(Args...) const { return a; }
+};
+void ret_void();
+struct good_promise_1 {
+  coro<good_promise_1> get_return_object();
   suspend_always initial_suspend();
   suspend_always final_suspend();
-  static void await_transform();
-  static awaitable await_transform(int);
-  void return_void();
+  static const call_operator await_transform;
+  using Fn = void(*)();
+  Fn return_void = ret_void;
 };
-coro<bad_promise_11> bad_static_coawait() {
+const call_operator good_promise_1::await_transform;
+coro<good_promise_1> ok_static_coawait() {
   // FIXME this diagnostic is terrible
   co_await 42;
 }
