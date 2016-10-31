@@ -8037,7 +8037,7 @@ public:
   ExprResult BuildCoawaitExpr(SourceLocation KwLoc, Expr *E);
   ExprResult
   BuildCoawaitDependentExpr(SourceLocation KwLoc, Expr *E,
-                            const UnresolvedSet<16> &CoawaitOperatorCandidates);
+                            const UnresolvedSetImpl &CoawaitOperatorCandidates);
   ExprResult BuildCoyieldExpr(SourceLocation KwLoc, Expr *E);
   StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E);
 

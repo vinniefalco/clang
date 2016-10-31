@@ -79,7 +79,7 @@ static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
                             diag::err_coroutine_traits_missing_specialization))
     return QualType();
 
-  CXXRecordDecl *RD = CoroTrait->getAsCXXRecordDecl();
+  auto *RD = CoroTrait->getAsCXXRecordDecl();
   assert(RD && "specialization of class template is not a class?");
 
   // Look up the ::promise_type member.
@@ -212,7 +212,7 @@ static FunctionScopeInfo *checkCoroutineContext(Sema &S, SourceLocation Loc,
 }
 
 static Expr *buildBuiltinCall(Sema &S, SourceLocation Loc, Builtin::ID Id,
-                              MutableArrayRef<Expr *> CallArgs) {
+                              MultiExprArg CallArgs) {
   StringRef Name = S.Context.BuiltinInfo.getName(Id);
   LookupResult R(S, &S.Context.Idents.get(Name), Loc, Sema::LookupOrdinaryName);
   S.LookupName(R, S.TUScope, /*AllowBuiltinCreation=*/true);
@@ -231,8 +231,7 @@ static Expr *buildBuiltinCall(Sema &S, SourceLocation Loc, Builtin::ID Id,
   return Call.get();
 }
 
-/// Build a call to 'operator co_await' if there is a suitable operator for
-/// the given expression.
+/// Lookup the visible 'operator co_await' functions in the given scope.
 static UnresolvedSet<16> lookupOperatorCoawaitCall(Sema &SemaRef, Scope *S,
                                                    SourceLocation Loc,
                                                    Expr *E) {
@@ -246,7 +245,7 @@ static UnresolvedSet<16> lookupOperatorCoawaitCall(Sema &SemaRef, Scope *S,
 /// the given expression.
 static ExprResult buildOperatorCoawaitCall(Sema &SemaRef, SourceLocation Loc,
                                            Expr *E,
-                                           const UnresolvedSet<16> &Functions) {
+                                           const UnresolvedSetImpl &Functions) {
   return SemaRef.CreateOverloadedUnaryOp(Loc, UO_Coawait, Functions, E);
 }
 
@@ -257,7 +256,7 @@ struct ReadySuspendResumeResult {
 
 static ExprResult buildMemberCall(Sema &S, Expr *Base, SourceLocation Loc,
                                   StringRef Name,
-                                  MutableArrayRef<Expr *> Args) {
+                                  MultiExprArg Args) {
   DeclarationNameInfo NameInfo(&S.PP.getIdentifierTable().get(Name), Loc);
 
   // FIXME: Fix BuildMemberReferenceExpr to take a const CXXScopeSpec&.
@@ -297,7 +296,7 @@ static ReadySuspendResumeResult buildCoawaitCalls(Sema &S, SourceLocation Loc,
 
 static ExprResult buildPromiseCall(Sema &S, FunctionScopeInfo *Coroutine,
                                    SourceLocation Loc, StringRef Name,
-                                   MutableArrayRef<Expr *> Args) {
+                                   MultiExprArg Args) {
   assert(Coroutine->CoroutinePromise && "no promise for coroutine");
 
   // Form a reference to the promise.
@@ -328,7 +327,7 @@ ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
 
 ExprResult
 Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
-                                const UnresolvedSet<16> &Candidates) {
+                                const UnresolvedSetImpl &Candidates) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
   if (!Coroutine)
     return ExprError();
@@ -348,7 +347,7 @@ Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
     return Res;
   }
 
-  CXXRecordDecl *RD = Promise->getType()->getAsCXXRecordDecl();
+  auto *RD = Promise->getType()->getAsCXXRecordDecl();
   if (lookupMember(*this, "await_transform", RD, Loc)) {
     ExprResult R =
         buildPromiseCall(*this, Coroutine, Loc, "await_transform", E);

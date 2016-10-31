@@ -1324,7 +1324,7 @@ public:
   /// Subclasses may override this routine to provide different behavior.
   ExprResult RebuildCoawaitDependentExpr(SourceLocation CoawaitLoc,
                                          Expr *Result,
-                                         const UnresolvedSet<16> &Candidates) {
+                                         const UnresolvedSetImpl &Candidates) {
     return getSema().BuildCoawaitDependentExpr(CoawaitLoc, Result, Candidates);
   }
 

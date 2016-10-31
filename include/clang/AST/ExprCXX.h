@@ -4262,21 +4262,24 @@ class CoawaitDependentExpr : public Expr {
 
 public:
   CoawaitDependentExpr(SourceLocation KeywordLoc, QualType Ty, Expr *Op,
-                       UnresolvedSet<16> OperatorCandidates)
-      : Expr(CoawaitDependentExprClass, Ty, VK_RValue, OK_Ordinary, true, true,
-             true, Op->containsUnexpandedParameterPack()),
-        KeywordLoc(KeywordLoc), Operand(Op),
-        CoawaitOperatorCandidates(OperatorCandidates) {
+                       const UnresolvedSetImpl &OperatorCandidates)
+      : Expr(CoawaitDependentExprClass, Ty, VK_RValue, OK_Ordinary,
+             /*TypeDependent*/ true, /*ValueDependent*/ true,
+             /*InstantiationDependent*/ true,
+             Op->containsUnexpandedParameterPack()),
+        KeywordLoc(KeywordLoc), Operand(Op), CoawaitOperatorCandidates() {
     assert(Op->isTypeDependent() && Ty->isDependentType() &&
            "wrong constructor for non-dependent co_await/co_yield expression");
+    CoawaitOperatorCandidates.append(OperatorCandidates.begin(),
+                                     OperatorCandidates.end());
   }
 
   CoawaitDependentExpr(EmptyShell Empty)
       : Expr(CoawaitDependentExprClass, Empty) {}
 
-  Expr *getOperand() const { return static_cast<Expr *>(Operand); }
+  Expr *getOperand() const { return cast<Expr>(Operand); }
 
-  const UnresolvedSet<16> &getOperatorCandidates() const {
+  const UnresolvedSetImpl &getOperatorCandidates() const {
     return CoawaitOperatorCandidates;
   }
 
