@@ -346,7 +346,10 @@ static FunctionScopeInfo *checkCoroutineContext(Sema &S, SourceLocation Loc,
   return ScopeInfo;
 }
 
-static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KwLoc) {
+static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
+                                    StringRef Keyword) {
+  if (!checkCoroutineContext(S, KWLoc, Keyword))
+    return false;
   auto *ScopeInfo = S.getCurFunction();
   assert(ScopeInfo->CoroutinePromise);
   assert(!ScopeInfo->Coroutine);
@@ -355,7 +358,7 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KwLoc) {
   auto *Fn = cast<FunctionDecl>(S.CurContext);
   SourceLocation Loc = Fn->getLocStart();
   // Build the initial suspend point
-  auto buildSuspends = [&](const char *Name) -> ExprResult {
+  auto buildSuspends = [&](StringRef Name) -> ExprResult {
     ExprResult Suspend = buildPromiseCall(S, ScopeInfo->CoroutinePromise,
                                           Loc, Name, None);
     if (Suspend.isInvalid())
@@ -364,7 +367,14 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KwLoc) {
     if (Suspend.isInvalid())
       return ExprError();
     Suspend = S.BuildCoawaitExpr(Loc, Suspend.get());
-    return S.ActOnFinishFullExpr(Suspend.get());
+    Suspend = S.ActOnFinishFullExpr(Suspend.get());
+    if (Suspend.isInvalid()) {
+      S.Diag(Loc, diag::note_coroutine_promise_call_implicitly_required)
+          << ((Name == "initial_suspend") ? 0 : 1);
+      S.Diag(KWLoc, diag::note_declared_coroutine_here)
+          << Keyword;
+    }
+    return Suspend;
   };
 
   ExprResult InitSuspend = buildSuspends("initial_suspend");
@@ -408,9 +418,7 @@ StmtResult Sema::BuildCoroutineBodyStmt(VarDecl *Promise, Expr *InitSuspend,
 }
 
 ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
-  auto *FSI = checkCoroutineContext(*this, Loc, "co_await");
-  if (!FSI || (!FSI->Coroutine &&
-          !actOnCoroutineBodyStart(*this, S, Loc))) {
+  if (!actOnCoroutineBodyStart(*this, S, Loc, "co_await")) {
     CorrectDelayedTyposInExpr(E);
     return ExprError();
   }
@@ -501,16 +509,14 @@ ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
 }
 
 ExprResult Sema::ActOnCoyieldExpr(Scope *S, SourceLocation Loc, Expr *E) {
-  auto *FSI = checkCoroutineContext(*this, Loc, "co_yield");
-  if (!FSI || (!FSI->Coroutine &&
-          !actOnCoroutineBodyStart(*this, S, Loc))) {
+  if (!actOnCoroutineBodyStart(*this, S, Loc, "co_yield")) {
     CorrectDelayedTyposInExpr(E);
     return ExprError();
   }
 
   // Build yield_value call.
   ExprResult Awaitable =
-      buildPromiseCall(*this, FSI->CoroutinePromise, Loc, "yield_value", E);
+      buildPromiseCall(*this, getCurFunction()->CoroutinePromise, Loc, "yield_value", E);
   if (Awaitable.isInvalid())
     return ExprError();
 
@@ -556,9 +562,7 @@ ExprResult Sema::BuildCoyieldExpr(SourceLocation Loc, Expr *E) {
 }
 
 StmtResult Sema::ActOnCoreturnStmt(Scope *S, SourceLocation Loc, Expr *E) {
-  auto *FSI = checkCoroutineContext(*this, Loc, "co_return");
-  if (!FSI || (!FSI->Coroutine &&
-          !actOnCoroutineBodyStart(*this, S, Loc))) {
+  if (!actOnCoroutineBodyStart(*this, S, Loc, "co_return")) {
     CorrectDelayedTyposInExpr(E);
     return StmtError();
   }
