@@ -159,6 +159,10 @@ public:
 
   /// \brief The promise object for this coroutine, if any.
   VarDecl *CoroutinePromise;
+
+  /// \brief The partially built coroutine body statement for this function
+  /// It contains the implicitly generated statements that must be built
+  /// during the initial parse such as the initial and final suspend points.
   CoroutineBodyStmt *Coroutine;
 
   /// \brief The list of coroutine control flow constructs (co_await, co_yield,

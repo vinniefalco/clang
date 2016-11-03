@@ -8040,8 +8040,9 @@ public:
                                        UnresolvedLookupExpr *Lookup);
   ExprResult BuildCoyieldExpr(SourceLocation KwLoc, Expr *E);
   StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E);
-  StmtResult BuildCoroutineBodyStmt(VarDecl *Promise, Expr *InitSuspend,
-                                     Expr *FinalSuspend);
+  StmtResult BuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
+                                     Stmt *FinalSuspend, Stmt *OnFallthrough,
+  Stmt *OnException, Expr *Allocation, Stmt *Deallocation, Expr *ReturnValue);
 
   VarDecl* buildCoroutinePromise(SourceLocation Loc);
   void CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body);

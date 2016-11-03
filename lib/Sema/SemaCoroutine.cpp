@@ -360,14 +360,14 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
   auto *Fn = cast<FunctionDecl>(S.CurContext);
   SourceLocation Loc = Fn->getLocation();
   // Build the initial suspend point
-  auto buildSuspends = [&](StringRef Name) -> ExprResult {
+  auto buildSuspends = [&](StringRef Name) -> StmtResult {
     ExprResult Suspend = buildPromiseCall(S, ScopeInfo->CoroutinePromise,
                                           Loc, Name, None);
     if (Suspend.isInvalid())
-      return ExprError();
+      return StmtError();
     Suspend = buildOperatorCoawaitCall(S, SC, Loc, Suspend.get());
     if (Suspend.isInvalid())
-      return ExprError();
+      return StmtError();
     Suspend = S.BuildCoawaitExpr(Loc, Suspend.get(),
             /*IsImplicitlyCreated*/true);
     Suspend = S.ActOnFinishFullExpr(Suspend.get());
@@ -376,60 +376,31 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
           << ((Name == "initial_suspend") ? 0 : 1);
       S.Diag(KWLoc, diag::note_declared_coroutine_here)
           << Keyword;
+      return StmtError();
     }
-    return Suspend;
+    return cast<Stmt>(Suspend.get());
   };
 
-  ExprResult InitSuspend = buildSuspends("initial_suspend");
+  StmtResult InitSuspend = buildSuspends("initial_suspend");
   if (InitSuspend.isInvalid())
     return false;
 
-  ExprResult FinalSuspend = buildSuspends("final_suspend");
+  StmtResult FinalSuspend = buildSuspends("final_suspend");
   if (FinalSuspend.isInvalid())
     return false;
 
   StmtResult Res = S.BuildCoroutineBodyStmt(ScopeInfo->CoroutinePromise,
                                             InitSuspend.get(),
-                                            FinalSuspend.get());
+                                            FinalSuspend.get(),
+                                            nullptr, nullptr, nullptr, nullptr,
+                                            nullptr);
   Res = S.ActOnFinishFullStmt(Res.get());
   if (Res.isInvalid())
     return false;
-  assert(Res.get());
+
   ScopeInfo->Coroutine = cast<CoroutineBodyStmt>(Res.get());
   ScopeInfo->CoroutineStmts.clear(); // FIXME
   return true;
-}
-
-StmtResult Sema::BuildCoroutineBodyStmt(VarDecl *Promise, Expr *InitSuspend,
-                                        Expr *FinalSuspend) {
-  // Form a declaration statement for the promise declaration, so that AST
-  // visitors can more easily find it.
-  // FIXME Get real location
-  auto *Coroutine =
-      checkCoroutineContext(*this, SourceLocation(), "co_await");
-  if (!Coroutine)
-    return StmtError();
-
-  auto checkPlaceholders = [&](Expr *&E) {
-    if (E && E->getType()->isPlaceholderType() &&
-        !E->getType()->isSpecificPlaceholderType(BuiltinType::Overload)) {
-      ExprResult R = CheckPlaceholderExpr(E);
-      if (R.isInvalid()) return false;
-      E = R.get();
-    }
-    return true;
-  };
-  if (!checkPlaceholders(InitSuspend) || !checkPlaceholders(FinalSuspend))
-    return StmtError();
-
-  StmtResult PromiseStmt =
-      ActOnDeclStmt(ConvertDeclToDeclGroup(Promise), Promise->getLocStart(),
-                    Promise->getLocEnd());
-  if (PromiseStmt.isInvalid())
-    return StmtError();
-
-  return new (Context) CoroutineBodyStmt(PromiseStmt.get(), InitSuspend,
-                                         FinalSuspend);
 }
 
 ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
@@ -757,6 +728,55 @@ static bool buildAllocationAndDeallocation(Sema &S, SourceLocation Loc,
   return true;
 }
 
+
+StmtResult Sema::BuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
+                                        Stmt *FinalSuspend, Stmt *OnException,
+                                        Stmt *OnFallthrough, Expr *Allocation,
+                                        Stmt *Deallocation, Expr *ReturnValue) {
+  // Form a declaration statement for the promise declaration, so that AST
+  // visitors can more easily find it.
+  // FIXME Get real location
+  auto *FSI =
+      checkCoroutineContext(*this, SourceLocation(), "co_await");
+  if (!FSI)
+    return StmtError();
+
+  auto checkPlaceholders = [&](Stmt *&S) mutable {
+    Expr *E = cast<Expr>(S);
+    if (E && E->getType()->isPlaceholderType() &&
+        !E->getType()->isSpecificPlaceholderType(BuiltinType::Overload)) {
+      ExprResult R = CheckPlaceholderExpr(E);
+      if (R.isInvalid()) return false;
+      S = cast<Stmt>(R.get());
+    }
+    return true;
+  };
+  if (!checkPlaceholders(InitSuspend) || !checkPlaceholders(FinalSuspend))
+    return StmtError();
+
+  StmtResult PromiseStmt =
+      ActOnDeclStmt(ConvertDeclToDeclGroup(Promise), Promise->getLocStart(),
+                    Promise->getLocEnd());
+  if (PromiseStmt.isInvalid())
+    return StmtError();
+
+
+  if (!Allocation || !Deallocation)
+    if (!buildAllocationAndDeallocation(*this,
+                                        cast<FunctionDecl>(CurContext)->getLocation(),
+                                        FSI, Allocation, Deallocation))
+    return StmtError();
+
+  assert(Allocation && Deallocation);
+  return new (Context) CoroutineBodyStmt(/*Body*/nullptr,
+                                         PromiseStmt.get(), InitSuspend,
+                                         FinalSuspend, /*OnException*/nullptr,
+                                         /*OnFallthrough*/nullptr,
+                                         Allocation, Deallocation,
+                                        /*ReturnValue*/nullptr, None);
+}
+
+
 void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   FunctionScopeInfo *Fn = getCurFunction();
   assert(Fn && Fn->CoroutinePromise && "not a coroutine");
@@ -802,13 +822,9 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   Stmt *PromiseStmt = Fn->Coroutine->getPromiseDeclStmt();
   Stmt *InitSuspend = Fn->Coroutine->getInitSuspendStmt();
   Stmt *FinalSuspend = Fn->Coroutine->getFinalSuspendStmt();
+  Expr *Allocation = Fn->Coroutine->getAllocate();
+  Stmt *Deallocation = Fn->Coroutine->getDeallocate();
   assert(PromiseStmt && InitSuspend && FinalSuspend && "must already be built");
-
-  // Form and check allocation and deallocation calls.
-  Expr *Allocation = nullptr;
-  Stmt *Deallocation = nullptr;
-  if (!buildAllocationAndDeallocation(*this, Loc, Fn, Allocation, Deallocation))
-    return FD->setInvalidDecl();
 
   // control flowing off the end of the coroutine.
   // Also try to form 'p.set_exception(std::current_exception());' to handle

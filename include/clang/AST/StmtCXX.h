@@ -331,20 +331,6 @@ public:
     assert(ParamMoves.empty() && "not implemented yet");
   }
 
-  CoroutineBodyStmt(Stmt *Promise, Stmt *InitSuspend = nullptr,
-                    Stmt *FinalSuspend = nullptr)
-      : Stmt(CoroutineBodyStmtClass) {
-    SubStmts[CoroutineBodyStmt::Body] = nullptr;
-    SubStmts[CoroutineBodyStmt::Promise] = Promise;
-    SubStmts[CoroutineBodyStmt::InitSuspend] = InitSuspend;
-    SubStmts[CoroutineBodyStmt::FinalSuspend] = FinalSuspend;
-    SubStmts[CoroutineBodyStmt::OnException] = nullptr;
-    SubStmts[CoroutineBodyStmt::OnFallthrough] = nullptr;
-    SubStmts[CoroutineBodyStmt::Allocate] = nullptr;
-    SubStmts[CoroutineBodyStmt::Deallocate] = nullptr;
-    SubStmts[CoroutineBodyStmt::ReturnValue] = nullptr;
-  }
-
   /// \brief Retrieve the body of the coroutine as written. This will be either
   /// a CompoundStmt or a TryStmt.
   Stmt *getBody() const {
