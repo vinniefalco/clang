@@ -1337,13 +1337,13 @@ public:
     return getSema().BuildCoyieldExpr(CoyieldLoc, Result);
   }
 
-  StmtResult RebuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
+  StmtResult RebuildCoroutineBodyStmt(Stmt *Body, VarDecl *Promise, Stmt *InitSuspend,
                                       Stmt *FinalSuspend, Stmt *OnException,
                                       Stmt *OnFallthrough,
                                        Expr *Allocation,
                                       Stmt *Deallocation, Expr *ReturnObject) {
     return getSema().BuildCoroutineBodyStmt(
-        Promise, InitSuspend, FinalSuspend, OnException,  OnFallthrough,
+        Body, Promise, InitSuspend, FinalSuspend, OnException,  OnFallthrough,
         Allocation, Deallocation, ReturnObject);
   }
   /// \brief Build a new Objective-C \@try statement.
@@ -6690,10 +6690,6 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   getDerived().transformedLocalDecl(Promise, NewPromise);
   ScopeInfo->CoroutinePromise = NewPromise;
 
-  StmtResult BodyRes = getDerived().TransformStmt(S->getBody());
-  if (BodyRes.isInvalid())
-    return StmtError();
-
   // Transform the implicit coroutine statements we built during the initial
   // parse.
   StmtResult InitSuspend = getDerived().TransformStmt(S->getInitSuspendStmt());
@@ -6704,9 +6700,12 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   if (FinalSuspend.isInvalid())
     return StmtError();
 
+  StmtResult BodyRes = getDerived().TransformStmt(S->getBody());
+  if (BodyRes.isInvalid())
+    return StmtError();
+
   Stmt *SetException = S->getExceptionHandler();
   Stmt *Fallthrough = S->getFallthroughHandler();
-
   if (Fallthrough) {
     StmtResult Res = getDerived().TransformStmt(Fallthrough);
     if (Res.isInvalid())
@@ -6739,7 +6738,7 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   Expr *ReturnObject = S->getReturnValueInit();
   if (ReturnObject) {
     ExprResult Res = getDerived().TransformInitializer(ReturnObject,
-                                                       /*NoCopyInit*/ false);
+            /*NoCopyInit*/false);
     if (Res.isInvalid())
       return StmtError();
     ReturnObject = Res.get();
@@ -6747,8 +6746,9 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
 
   // Do a partial rebuild of the coroutine body and stash it in the ScopeInfo
   StmtResult Result = getDerived().RebuildCoroutineBodyStmt(
-      NewPromise, InitSuspend.get(), FinalSuspend.get(), SetException,
-      Fallthrough, Allocation, Deallocation, ReturnObject);
+      BodyRes.get(), NewPromise, InitSuspend.get(), FinalSuspend.get(),
+      SetException, Fallthrough, Allocation,
+      Deallocation, ReturnObject);
   if (Result.isInvalid())
     return StmtError();
   ScopeInfo->Coroutine = cast<CoroutineBodyStmt>(Result.get());

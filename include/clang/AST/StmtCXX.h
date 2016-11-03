@@ -339,7 +339,7 @@ public:
     return SubStmts[SubStmt::Body];
   }
   void setBody(Stmt *B) {
-    assert(!SubStmts[SubStmt::Body]);
+    assert(!B || !isa<CoroutineBodyStmt>(B));
     SubStmts[SubStmt::Body] = B;
   }
   Stmt *getPromiseDeclStmt() const { return SubStmts[SubStmt::Promise]; }

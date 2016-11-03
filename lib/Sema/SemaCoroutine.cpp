@@ -384,7 +384,7 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
   if (FinalSuspend.isInvalid())
     return false;
 
-  StmtResult Res = S.BuildCoroutineBodyStmt(
+  StmtResult Res = S.BuildCoroutineBodyStmt(/*Body*/nullptr,
       ScopeInfo->CoroutinePromise, InitSuspend.get(), FinalSuspend.get(),
       nullptr, nullptr, nullptr, nullptr, nullptr);
   Res = S.ActOnFinishFullStmt(Res.get());
@@ -392,7 +392,6 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
     return false;
 
   ScopeInfo->Coroutine = cast<CoroutineBodyStmt>(Res.get());
-  ScopeInfo->CoroutineStmts.clear(); // FIXME
   return true;
 }
 
@@ -468,8 +467,8 @@ ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E,
   if (E->getType()->isDependentType()) {
     Expr *Res = new (Context)
         CoawaitExpr(Loc, Context.DependentTy, E, IsImplicitlyCreated);
-    //if (!IsImplicitlyCreated)
-      Coroutine->CoroutineStmts.push_back(Res);
+
+    Coroutine->CoroutineStmts.push_back(Res);
     return Res;
   }
 
@@ -485,8 +484,8 @@ ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E,
 
   Expr *Res = new (Context) CoawaitExpr(Loc, E, RSS.Results[0], RSS.Results[1],
                                         RSS.Results[2], IsImplicitlyCreated);
-  //if (!IsImplicitlyCreated)
-    Coroutine->CoroutineStmts.push_back(Res);
+
+  Coroutine->CoroutineStmts.push_back(Res);
   return Res;
 }
 
@@ -784,10 +783,10 @@ static bool buildAllocationAndDeallocation(Sema &S, SourceLocation Loc,
   return true;
 }
 
-StmtResult Sema::BuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
-                                        Stmt *FinalSuspend, Stmt *OnException,
+StmtResult Sema::BuildCoroutineBodyStmt(Stmt *Body, VarDecl *Promise, Stmt *InitSuspend,
+                                        Stmt *FinalSuspend, Stmt *SetException,
                                         Stmt *OnFallthrough, Expr *Allocation,
-                                        Stmt *Deallocation, Expr *ReturnValue) {
+                                        Stmt *Deallocation, Expr *ReturnObjectInit) {
   assert(Promise && InitSuspend && FinalSuspend && "these nodes must already be built");
   // Form a declaration statement for the promise declaration, so that AST
   // visitors can more easily find it.
@@ -817,26 +816,60 @@ StmtResult Sema::BuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
   if (PromiseStmt.isInvalid())
     return StmtError();
 
+  if (!OnFallthrough && !buildFallthrough(*this, Loc, FD, FSI, OnFallthrough))
+    return StmtError();
+
+  if (!SetException && !buildSetException(*this, Loc, FD, FSI, SetException))
+    return StmtError();
+
+  if (!Allocation || !Deallocation) {
+    if (!buildAllocationAndDeallocation(*this, Loc, FSI, Allocation,
+                                        Deallocation))
+      return StmtError();
+  }
+
+  // Build implicit 'p.get_return_object()' expression and form initialization
+  // of return type from it.
+  if (!ReturnObjectInit) {
+    ExprResult ReturnObject =
+        buildPromiseCall(*this, Promise, Loc, "get_return_object", None);
+    if (ReturnObject.isInvalid())
+      return StmtError();
+    QualType RetType = FD->getReturnType();
+    if (!RetType->isDependentType()) {
+      InitializedEntity Entity =
+          InitializedEntity::InitializeResult(Loc, RetType, false);
+      ReturnObject = PerformMoveOrCopyInitialization(Entity, nullptr, RetType,
+                                                     ReturnObject.get());
+      if (ReturnObject.isInvalid())
+        return StmtError();
+    }
+    ReturnObject = ActOnFinishFullExpr(ReturnObject.get(), Loc);
+    if (ReturnObject.isInvalid())
+      return StmtError();
+    ReturnObjectInit = ReturnObject.get();
+  }
+
   return new (Context) CoroutineBodyStmt(
-      /*Body*/ nullptr, PromiseStmt.get(), InitSuspend, FinalSuspend,
-      OnException, OnFallthrough, Allocation, Deallocation, ReturnValue, None);
+      Body, PromiseStmt.get(), InitSuspend, FinalSuspend,
+      SetException, OnFallthrough, Allocation, Deallocation, ReturnObjectInit, None);
 }
 
 void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
-  FunctionScopeInfo *Fn = getCurFunction();
-  assert(Fn && Fn->CoroutinePromise && "not a coroutine");
-  VarDecl *Promise = Fn->CoroutinePromise;
+  FunctionScopeInfo *FSI = getCurFunction();
+  assert(FSI && FSI->CoroutinePromise && "not a coroutine");
+  VarDecl *Promise = FSI->CoroutinePromise;
 
   // Check if we failed to build the initial/final suspend points during the
   // initial parse.
-  if (!Fn->Coroutine || Fn->CoroutineStmts.empty())
+  if (!FSI->Coroutine || FSI->CoroutineStmts.empty())
     return FD->setInvalidDecl();
 
   // Coroutines [stmt.return]p1:
   //   A return statement shall not appear in a coroutine.
-  if (Fn->FirstReturnLoc.isValid()) {
-    Diag(Fn->FirstReturnLoc, diag::err_return_in_coroutine);
-    auto *First = Fn->CoroutineStmts[0];
+  if (FSI->FirstReturnLoc.isValid()) {
+    Diag(FSI->FirstReturnLoc, diag::err_return_in_coroutine);
+    auto *First = FSI->CoroutineStmts[0];
     Diag(First->getLocStart(), diag::note_declared_coroutine_here)
         << ((isa<CoawaitExpr>(First) || isa<DependentCoawaitExpr>(First))
                 ? "co_await"
@@ -846,14 +879,17 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   bool AnyCoawaits = false;
   bool AnyDependentCoawaits = false;
   bool AnyCoyields = false;
-  for (auto *CoroutineStmt : Fn->CoroutineStmts) {
-    AnyCoawaits |= isa<CoawaitExpr>(CoroutineStmt);
+  for (auto *CoroutineStmt : FSI->CoroutineStmts) {
+    // Don't count the implicitly generated initial/final suspend points
+    if (isa<CoawaitExpr>(CoroutineStmt)
+            && !cast<CoawaitExpr>(CoroutineStmt)->isImplicitlyCreated())
+      AnyCoawaits = true;
     AnyDependentCoawaits |= isa<DependentCoawaitExpr>(CoroutineStmt);
     AnyCoyields |= isa<CoyieldExpr>(CoroutineStmt);
   }
 
   if (!AnyCoawaits && !AnyCoyields && !AnyDependentCoawaits)
-    Diag(Fn->CoroutineStmts.front()->getLocStart(),
+    Diag(FSI->CoroutineStmts.front()->getLocStart(),
          diag::ext_coroutine_without_co_await_co_yield);
 
   assert((!AnyDependentCoawaits || Promise->getType()->isDependentType()) &&
@@ -863,54 +899,12 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
 
   // Form a declaration statement for the promise declaration, so that AST
   // visitors can more easily find it.
-  auto *Coro = Fn->Coroutine;
+  auto *Coro = FSI->Coroutine;
   Stmt *PromiseStmt = Coro->getPromiseDeclStmt();
   Stmt *InitSuspend = Coro->getInitSuspendStmt();
   Stmt *FinalSuspend = Coro->getFinalSuspendStmt();
-  Stmt *SetException = Coro->getExceptionHandler();
-  Stmt *Fallthrough = Coro->getFallthroughHandler();
-  Expr *Allocation = Coro->getAllocate();
-  Stmt *Deallocation = Coro->getDeallocate();
-  Expr *ReturnObjectInit = Coro->getReturnValueInit();
   assert(PromiseStmt && InitSuspend && FinalSuspend && "must already be built");
 
-  auto FSI = Fn;
-  if (!Fallthrough && !buildFallthrough(*this, Loc, FD, FSI, Fallthrough))
-    return FD->setInvalidDecl();
-  Coro->setFalltroughHandler(Fallthrough);
-
-  if (!SetException && !buildSetException(*this, Loc, FD, FSI, SetException))
-    return FD->setInvalidDecl();
-  Coro->setExceptionHandler(SetException);
-
-  if (!Allocation || !Deallocation)
-    if (!buildAllocationAndDeallocation(*this, Loc, FSI, Allocation,
-                                        Deallocation))
-      return FD->setInvalidDecl();
-  Coro->setAllocate(Allocation);
-  Coro->setDeallocate(Deallocation);
-
-  // Build implicit 'p.get_return_object()' expression and form initialization
-  // of return type from it.
-  if (!ReturnObjectInit) {
-    ExprResult ReturnObject =
-        buildPromiseCall(*this, Promise, Loc, "get_return_object", None);
-    if (ReturnObject.isInvalid())
-      return FD->setInvalidDecl();
-    QualType RetType = FD->getReturnType();
-    if (!RetType->isDependentType()) {
-      InitializedEntity Entity =
-          InitializedEntity::InitializeResult(Loc, RetType, false);
-      ReturnObject = PerformMoveOrCopyInitialization(Entity, nullptr, RetType,
-                                                     ReturnObject.get());
-      if (ReturnObject.isInvalid())
-        return FD->setInvalidDecl();
-    }
-    ReturnObject = ActOnFinishFullExpr(ReturnObject.get(), Loc);
-    if (ReturnObject.isInvalid())
-      return FD->setInvalidDecl();
-    Coro->setReturnValueInit(ReturnObject.get());
-  }
   // FIXME: Perform move-initialization of parameters into frame-local copies.
   SmallVector<Expr*, 16> ParamMoves;
   Coro->setBody(Body);
