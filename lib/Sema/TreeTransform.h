@@ -1338,11 +1338,12 @@ public:
   }
 
   StmtResult RebuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
-                                      Stmt *FinalSuspend, Stmt *OnFallthrough,
-                                      Stmt *OnException, Expr *Allocation,
-                                      Stmt *Deallocation, Stmt *ReturnObject) {
+                                      Stmt *FinalSuspend, Stmt *OnException,
+                                      Stmt *OnFallthrough,
+                                       Expr *Allocation,
+                                      Stmt *Deallocation, Expr *ReturnObject) {
     return getSema().BuildCoroutineBodyStmt(
-        Promise, InitSuspend, FinalSuspend, OnFallthrough, OnException,
+        Promise, InitSuspend, FinalSuspend, OnException,  OnFallthrough,
         Allocation, Deallocation, ReturnObject);
   }
   /// \brief Build a new Objective-C \@try statement.
@@ -6698,6 +6699,23 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   if (FinalSuspend.isInvalid())
     return StmtError();
 
+  Stmt *Fallthrough = S->getFallthroughHandler();
+  Stmt *SetException = S->getExceptionHandler();
+
+  if (Fallthrough) {
+    StmtResult Res = getDerived().TransformStmt(Fallthrough);
+    if (Res.isInvalid())
+      return StmtError();
+    Fallthrough = Res.get();
+  }
+
+  if (SetException) {
+    StmtResult Res = getDerived().TransformStmt(SetException);
+    if (Res.isInvalid())
+      return StmtError();
+    SetException = Res.get();
+  }
+
   // Transform any additional statements we may have already built.
   Expr *Allocation = nullptr;
   Stmt *Deallocation = nullptr;
@@ -6716,7 +6734,7 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   // Do a partial rebuild of the coroutine body and stash it in the ScopeInfo
   StmtResult Result = getDerived().RebuildCoroutineBodyStmt(
       NewPromise, InitSuspend.get(), FinalSuspend.get(),
-      /*OnFallthrough*/ nullptr, /*OnException*/ nullptr, Allocation,
+      SetException, Fallthrough, Allocation,
       Deallocation, /*ReturnObject*/ nullptr);
   if (Result.isInvalid())
     return StmtError();

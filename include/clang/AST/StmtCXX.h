@@ -327,6 +327,8 @@ public:
     SubStmts[CoroutineBodyStmt::Allocate] = Allocate;
     SubStmts[CoroutineBodyStmt::Deallocate] = Deallocate;
     SubStmts[CoroutineBodyStmt::ReturnValue] = ReturnValue;
+    assert(Promise && InitSuspend && FinalSuspend &&
+                   "these members must never be null");
     // FIXME: Tail-allocate space for parameter move expressions and store them.
     assert(ParamMoves.empty() && "not implemented yet");
   }
@@ -367,18 +369,18 @@ public:
     return SubStmts[SubStmt::OnFallthrough];
   }
 
-  Expr *getAllocate() const { return cast<Expr>(SubStmts[SubStmt::Allocate]); }
+  Expr *getAllocate() const { return cast_or_null<Expr>(SubStmts[SubStmt::Allocate]); }
   Stmt *getDeallocate() const { return SubStmts[SubStmt::Deallocate]; }
 
   Expr *getReturnValueInit() const {
-    return cast<Expr>(SubStmts[SubStmt::ReturnValue]);
+    return cast_or_null<Expr>(SubStmts[SubStmt::ReturnValue]);
   }
 
   SourceLocation getLocStart() const LLVM_READONLY {
-    return getBody() ? getBody()->getLocStart() : SourceLocation();
+    return getBody() ? getBody()->getLocStart() : getPromiseDecl()->getLocStart();
   }
   SourceLocation getLocEnd() const LLVM_READONLY {
-    return getBody() ? getBody()->getLocEnd() : SourceLocation();
+    return getBody() ? getBody()->getLocEnd() : getPromiseDecl()->getLocStart();
   }
 
   child_range children() {

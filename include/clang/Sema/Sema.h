@@ -8041,8 +8041,8 @@ public:
   ExprResult BuildCoyieldExpr(SourceLocation KwLoc, Expr *E);
   StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E);
   StmtResult BuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
-                                    Stmt *FinalSuspend, Stmt *OnFallthrough,
-                                    Stmt *OnException, Expr *Allocation,
+                                    Stmt *FinalSuspend, Stmt *OnException,
+                                    Stmt *OnFallthrough, Expr *Allocation,
                                     Stmt *Deallocation, Expr *ReturnValue);
 
   VarDecl *buildCoroutinePromise(SourceLocation Loc);
