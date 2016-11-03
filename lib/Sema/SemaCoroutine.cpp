@@ -317,7 +317,6 @@ VarDecl *Sema::buildCoroutinePromise(SourceLocation Loc) {
     return nullptr;
   ActOnUninitializedDecl(VD, false);
   assert(!VD->isInvalidDecl());
-
   return VD;
 }
 
@@ -388,7 +387,7 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
   StmtResult Res = S.BuildCoroutineBodyStmt(
       ScopeInfo->CoroutinePromise, InitSuspend.get(), FinalSuspend.get(),
       nullptr, nullptr, nullptr, nullptr, nullptr);
-  //Res = S.ActOnFinishFullStmt(Res.get());
+  Res = S.ActOnFinishFullStmt(Res.get());
   if (Res.isInvalid())
     return false;
 
@@ -711,8 +710,7 @@ static bool buildAllocationAndDeallocation(Sema &S, SourceLocation Loc,
                                            Expr *&Allocation,
                                            Stmt *&Deallocation) {
   assert(!Allocation && !Deallocation && "alloc/dealloc statements have already been built");
-  TypeSourceInfo *TInfo = Fn->CoroutinePromise->getTypeSourceInfo();
-  QualType PromiseType = TInfo->getType();
+  QualType PromiseType = Fn->CoroutinePromise->getType();
   if (PromiseType->isDependentType())
     return true;
 
@@ -800,7 +798,7 @@ StmtResult Sema::BuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
   auto Loc = FD->getLocation();
 
   auto checkPlaceholders = [&](Stmt *&S) mutable {
-    Expr *E = cast<Expr>(S);
+    Expr *E = cast_or_null<Expr>(S);
     if (E && E->getType()->isPlaceholderType() &&
         !E->getType()->isSpecificPlaceholderType(BuiltinType::Overload)) {
       ExprResult R = CheckPlaceholderExpr(E);
@@ -819,21 +817,9 @@ StmtResult Sema::BuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
   if (PromiseStmt.isInvalid())
     return StmtError();
 
-  if (!OnException && !buildSetException(*this, Loc, FD, FSI, OnException))
-    return StmtError();
-
-  if (!OnFallthrough && !buildFallthrough(*this, Loc, FD, FSI, OnFallthrough))
-    return StmtError();
-
-  if (!Allocation || !Deallocation)
-    if (!buildAllocationAndDeallocation(*this, Loc, FSI, Allocation, Deallocation))
-      return StmtError();
-
-  return new (Context)
-      CoroutineBodyStmt(/*Body*/ nullptr, PromiseStmt.get(), InitSuspend,
-                        FinalSuspend, OnException, OnFallthrough, Allocation,
-                        Deallocation,
-                        /*ReturnValue*/ nullptr, None);
+  return new (Context) CoroutineBodyStmt(
+      /*Body*/ nullptr, PromiseStmt.get(), InitSuspend, FinalSuspend,
+      OnException, OnFallthrough, Allocation, Deallocation, ReturnValue, None);
 }
 
 void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
@@ -877,41 +863,56 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
 
   // Form a declaration statement for the promise declaration, so that AST
   // visitors can more easily find it.
-  Stmt *PromiseStmt = Fn->Coroutine->getPromiseDeclStmt();
-  Stmt *InitSuspend = Fn->Coroutine->getInitSuspendStmt();
-  Stmt *FinalSuspend = Fn->Coroutine->getFinalSuspendStmt();
-  Stmt *SetException = Fn->Coroutine->getExceptionHandler();
-  Stmt *Fallthrough = Fn->Coroutine->getFallthroughHandler();
-  Expr *Allocation = Fn->Coroutine->getAllocate();
-  Stmt *Deallocation = Fn->Coroutine->getDeallocate();
+  auto *Coro = Fn->Coroutine;
+  Stmt *PromiseStmt = Coro->getPromiseDeclStmt();
+  Stmt *InitSuspend = Coro->getInitSuspendStmt();
+  Stmt *FinalSuspend = Coro->getFinalSuspendStmt();
+  Stmt *SetException = Coro->getExceptionHandler();
+  Stmt *Fallthrough = Coro->getFallthroughHandler();
+  Expr *Allocation = Coro->getAllocate();
+  Stmt *Deallocation = Coro->getDeallocate();
+  Expr *ReturnObjectInit = Coro->getReturnValueInit();
   assert(PromiseStmt && InitSuspend && FinalSuspend && "must already be built");
+
+  auto FSI = Fn;
+  if (!Fallthrough && !buildFallthrough(*this, Loc, FD, FSI, Fallthrough))
+    return FD->setInvalidDecl();
+  Coro->setFalltroughHandler(Fallthrough);
+
+  if (!SetException && !buildSetException(*this, Loc, FD, FSI, SetException))
+    return FD->setInvalidDecl();
+  Coro->setExceptionHandler(SetException);
+
+  if (!Allocation || !Deallocation)
+    if (!buildAllocationAndDeallocation(*this, Loc, FSI, Allocation,
+                                        Deallocation))
+      return FD->setInvalidDecl();
+  Coro->setAllocate(Allocation);
+  Coro->setDeallocate(Deallocation);
 
   // Build implicit 'p.get_return_object()' expression and form initialization
   // of return type from it.
-  ExprResult ReturnObject =
-      buildPromiseCall(*this, Promise, Loc, "get_return_object", None);
-  if (ReturnObject.isInvalid())
-    return FD->setInvalidDecl();
-  QualType RetType = FD->getReturnType();
-  if (!RetType->isDependentType()) {
-    InitializedEntity Entity =
-        InitializedEntity::InitializeResult(Loc, RetType, false);
-    ReturnObject = PerformMoveOrCopyInitialization(Entity, nullptr, RetType,
-                                                   ReturnObject.get());
+  if (!ReturnObjectInit) {
+    ExprResult ReturnObject =
+        buildPromiseCall(*this, Promise, Loc, "get_return_object", None);
     if (ReturnObject.isInvalid())
       return FD->setInvalidDecl();
+    QualType RetType = FD->getReturnType();
+    if (!RetType->isDependentType()) {
+      InitializedEntity Entity =
+          InitializedEntity::InitializeResult(Loc, RetType, false);
+      ReturnObject = PerformMoveOrCopyInitialization(Entity, nullptr, RetType,
+                                                     ReturnObject.get());
+      if (ReturnObject.isInvalid())
+        return FD->setInvalidDecl();
+    }
+    ReturnObject = ActOnFinishFullExpr(ReturnObject.get(), Loc);
+    if (ReturnObject.isInvalid())
+      return FD->setInvalidDecl();
+    Coro->setReturnValueInit(ReturnObject.get());
   }
-  ReturnObject = ActOnFinishFullExpr(ReturnObject.get(), Loc);
-  if (ReturnObject.isInvalid())
-    return FD->setInvalidDecl();
-
   // FIXME: Perform move-initialization of parameters into frame-local copies.
   SmallVector<Expr*, 16> ParamMoves;
-
-  assert(!Body || !isa<CoroutineBodyStmt>(Body));
-  // Build body for the coroutine wrapper statement.
-  Body = new (Context)
-      CoroutineBodyStmt(Body, PromiseStmt, InitSuspend, FinalSuspend,
-                        SetException, Fallthrough, Allocation,
-                        Deallocation, ReturnObject.get(), ParamMoves);
+  Coro->setBody(Body);
+  Body = Coro;
 }

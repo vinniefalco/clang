@@ -6677,17 +6677,22 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   // FIXME: The coroutine body is always rebuilt by ActOnFinishFunctionBody
 
   auto *ScopeInfo = SemaRef.getCurFunction();
+  auto *FD = cast<FunctionDecl>(SemaRef.CurContext);
   assert(ScopeInfo && !ScopeInfo->Coroutine && !ScopeInfo->CoroutinePromise &&
          "expected clean scope info");
 
   // The new CoroutinePromise object needs to be built and put into the current
   // FunctionScopeInfo before any transformations or rebuilding occurs.
   auto *Promise = S->getPromiseDecl();
-  auto *NewPromise = SemaRef.buildCoroutinePromise(Promise->getLocation());
-  if (!ScopeInfo->CoroutinePromise)
+  auto *NewPromise = SemaRef.buildCoroutinePromise(FD->getLocation());
+  if (!NewPromise)
     return StmtError();
   getDerived().transformedLocalDecl(Promise, NewPromise);
   ScopeInfo->CoroutinePromise = NewPromise;
+
+  StmtResult BodyRes = getDerived().TransformStmt(S->getBody());
+  if (BodyRes.isInvalid())
+    return StmtError();
 
   // Transform the implicit coroutine statements we built during the initial
   // parse.
@@ -6699,8 +6704,8 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   if (FinalSuspend.isInvalid())
     return StmtError();
 
-  Stmt *Fallthrough = S->getFallthroughHandler();
   Stmt *SetException = S->getExceptionHandler();
+  Stmt *Fallthrough = S->getFallthroughHandler();
 
   if (Fallthrough) {
     StmtResult Res = getDerived().TransformStmt(Fallthrough);
@@ -6731,17 +6736,25 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
     Deallocation = DeallocRes.get();
   }
 
+  Expr *ReturnObject = S->getReturnValueInit();
+  if (ReturnObject) {
+    ExprResult Res = getDerived().TransformInitializer(ReturnObject,
+                                                       /*NoCopyInit*/ false);
+    if (Res.isInvalid())
+      return StmtError();
+    ReturnObject = Res.get();
+  }
+
   // Do a partial rebuild of the coroutine body and stash it in the ScopeInfo
   StmtResult Result = getDerived().RebuildCoroutineBodyStmt(
-      NewPromise, InitSuspend.get(), FinalSuspend.get(),
-      SetException, Fallthrough, Allocation,
-      Deallocation, /*ReturnObject*/ nullptr);
+      NewPromise, InitSuspend.get(), FinalSuspend.get(), SetException,
+      Fallthrough, Allocation, Deallocation, ReturnObject);
   if (Result.isInvalid())
     return StmtError();
   ScopeInfo->Coroutine = cast<CoroutineBodyStmt>(Result.get());
 
   // FIXME return the re-built CoroutineBodyStmt
-  return getDerived().TransformStmt(S->getBody());
+  return BodyRes.get();
 }
 
 template<typename Derived>
