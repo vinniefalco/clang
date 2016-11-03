@@ -16,6 +16,7 @@
 #define LLVM_CLANG_SEMA_SCOPEINFO_H
 
 #include "clang/AST/Expr.h"
+#include "clang/AST/StmtCXX.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/CapturedStmt.h"
 #include "clang/Basic/PartialDiagnostic.h"
@@ -157,7 +158,7 @@ public:
   SmallVector<ReturnStmt*, 4> Returns;
 
   /// \brief The promise object for this coroutine, if any.
-  VarDecl *CoroutinePromise;
+  CoroutineBodyStmt *Coroutine;
 
   /// \brief The list of coroutine control flow constructs (co_await, co_yield,
   /// co_return) that occur within the function or block. Empty if and only if
@@ -391,6 +392,7 @@ public:
       ObjCWarnForNoDesignatedInitChain(false),
       ObjCIsSecondaryInit(false),
       ObjCWarnForNoInitDelegation(false),
+      Coroutine(nullptr),
       ErrorTrap(Diag) { }
 
   virtual ~FunctionScopeInfo();

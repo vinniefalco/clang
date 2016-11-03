@@ -208,8 +208,10 @@ static FunctionScopeInfo *checkCoroutineContext(Sema &S, Scope *SC,
   assert(isa<FunctionDecl>(S.CurContext) && "not in a function scope");
   auto *FD = cast<FunctionDecl>(S.CurContext);
 
-  assert((SC || FD->hasOperatorCoawaitLookupResults()) &&
-         "we should already have the lookup results");
+  auto *ScopeInfo = S.getCurFunction();
+  assert(ScopeInfo && "missing function scope for function");
+
+  assert((SC || ScopeInfo->Coroutine) && "coroutine body should have already been built")
 
   // Lookup operator co_await in the current scope and stash it in the function
   // declaration.
@@ -221,28 +223,43 @@ static FunctionScopeInfo *checkCoroutineContext(Sema &S, Scope *SC,
     FD->setOperatorCoawaitLookupResults(E.get());
   }
 
-  auto *ScopeInfo = S.getCurFunction();
-  assert(ScopeInfo && "missing function scope for function");
+  if (ScopeInfo->Coroutine) {
+    assert(ScopeInfo->Coroutine->getPromiseDecl() &&
+           ScopeInfo->Coroutine->getInitSuspendStmt() &&
+           ScopeInfo->Coroutine->getFinalSuspendStmt() &&
+           "statements should already be built");
+    return ScopeInfo;
+  }
+  assert(SC && "we can only build the coroutine during the initial parse");
 
-  // If we don't have a promise variable, build one now.
-  if (!ScopeInfo->CoroutinePromise) {
-    QualType T =
-        FD->getType()->isDependentType()
+
+  QualType T = FD->getType()->isDependentType()
             ? S.Context.DependentTy
             : lookupPromiseType(S, FD->getType()->castAs<FunctionProtoType>(),
                                 Loc, FD->getLocation());
-    if (T.isNull())
-      return nullptr;
+  if (T.isNull())
+    return nullptr;
 
-    // Create and default-initialize the promise.
-    ScopeInfo->CoroutinePromise =
-        VarDecl::Create(S.Context, FD, FD->getLocation(), FD->getLocation(),
+  auto *VD = VarDecl::Create(S.Context, FD, FD->getLocation(), FD->getLocation(),
                         &S.PP.getIdentifierTable().get("__promise"), T,
                         S.Context.getTrivialTypeSourceInfo(T, Loc), SC_None);
-    S.CheckVariableDeclarationType(ScopeInfo->CoroutinePromise);
-    if (!ScopeInfo->CoroutinePromise->isInvalidDecl())
-      S.ActOnUninitializedDecl(ScopeInfo->CoroutinePromise, false);
-  }
+  S.CheckVariableDeclarationType(VD);
+  if (!VD->isInvalidDecl())
+    S.ActOnUninitializedDecl(VD, false);
+    assert(!VD->isInvalidDecl());
+
+  // Form a declaration statement for the promise declaration, so that AST
+  // visitors can more easily find it.
+  StmtResult PromiseStmt =
+      S.ActOnDeclStmt(S.ConvertDeclToDeclGroup(VD), Loc, Loc);
+  if (PromiseStmt.isInvalid())
+    return nullptr;
+
+  ScopeInfo->Coroutine = new (S.Context) CoroutineBodyStmt(Stmt::EmptyShell());
+  ScopeInfo->Coroutine->setPromiseDeclStmt(PromiseStmt.get());
+
+  // Build the initial suspend point
+
 
   return ScopeInfo;
 }

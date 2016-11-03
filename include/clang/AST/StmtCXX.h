@@ -331,6 +331,10 @@ public:
     assert(ParamMoves.empty() && "not implemented yet");
   }
 
+  CoroutineBodyStmt(EmptyShell Empty) : Stmt(CoroutineBodyStmtClass, Empty) {
+    std::fill(SubStmts, SubStmts + CoroutineBodyStmt::FirstParamMove, nullptr);
+  }
+
   /// \brief Retrieve the body of the coroutine as written. This will be either
   /// a CompoundStmt or a TryStmt.
   Stmt *getBody() const {
@@ -342,8 +346,22 @@ public:
     return cast<VarDecl>(cast<DeclStmt>(getPromiseDeclStmt())->getSingleDecl());
   }
 
+  void setPromiseDeclStmt(Stmt *S) {
+    assert(SubStmts[SubStmt::Promise] == nullptr);
+    SubStmts[SubStmt::Promise] = S;
+  }
+
   Stmt *getInitSuspendStmt() const { return SubStmts[SubStmt::InitSuspend]; }
   Stmt *getFinalSuspendStmt() const { return SubStmts[SubStmt::FinalSuspend]; }
+
+  void setInitialSuspendStmt(Stmt *Suspend) {
+    assert(SubStmts[SubStmt::InitSuspend] == nullptr);
+    SubStmts[SubStmt::InitSuspend] = Suspend;
+  }
+  void setFinalSuspendStmt(Stmt *Suspend) {
+    assert(SubStmts[SubStmt::FinalSuspend] == nullptr);
+    SubStmts[SubStmt::FinalSuspend] = Suspend;
+  }
 
   Stmt *getExceptionHandler() const { return SubStmts[SubStmt::OnException]; }
   Stmt *getFallthroughHandler() const {
