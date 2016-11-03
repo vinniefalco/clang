@@ -177,14 +177,46 @@ static bool isValidCoroutineContext(Sema &S, SourceLocation Loc,
   return !Diagnosed;
 }
 
+static ExprResult buildOperatorCoawaitLookupExpr(Sema &SemaRef, Scope *S,
+                                                 SourceLocation Loc) {
+  DeclarationName OpName =
+      SemaRef.Context.DeclarationNames.getCXXOperatorName(OO_Coawait);
+  LookupResult Operators(SemaRef, OpName, SourceLocation(),
+                         Sema::LookupOperatorName);
+  SemaRef.LookupName(Operators, S);
+
+  assert(!Operators.isAmbiguous() && "Operator lookup cannot be ambiguous");
+  const auto &Functions = Operators.asUnresolvedSet();
+  bool IsOverloaded =
+      Functions.size() > 1 ||
+      (Functions.size() == 1 && isa<FunctionTemplateDecl>(*Functions.begin()));
+  Expr *CoawaitOp = UnresolvedLookupExpr::Create(
+      SemaRef.Context, /*NamingClass*/ nullptr, NestedNameSpecifierLoc(),
+      DeclarationNameInfo(OpName, Loc), /*RequiresADL*/ true, IsOverloaded,
+      Functions.begin(), Functions.end());
+  assert(CoawaitOp);
+  return CoawaitOp;
+}
+
 /// Check that this is a context in which a coroutine suspension can appear.
-static FunctionScopeInfo *checkCoroutineContext(Sema &S, SourceLocation Loc,
+static FunctionScopeInfo *checkCoroutineContext(Sema &S, Scope *SC,
+                                                SourceLocation Loc,
                                                 StringRef Keyword) {
   if (!isValidCoroutineContext(S, Loc, Keyword))
     return nullptr;
 
   assert(isa<FunctionDecl>(S.CurContext) && "not in a function scope");
   auto *FD = cast<FunctionDecl>(S.CurContext);
+  assert((SC || FD->hasOperatorCoawaitLookupResults()) &&
+         "we should already have the lookup results");
+  if (SC && !FD->hasOperatorCoawaitLookupResults()) {
+    ExprResult E = buildOperatorCoawaitLookupExpr(S, SC, Loc);
+    if (E.isInvalid())
+      return nullptr;
+    assert(E.get());
+    FD->setOperatorCoawaitLookupResults(E.get());
+  }
+
   auto *ScopeInfo = S.getCurFunction();
   assert(ScopeInfo && "missing function scope for function");
 
@@ -231,21 +263,15 @@ static Expr *buildBuiltinCall(Sema &S, SourceLocation Loc, Builtin::ID Id,
   return Call.get();
 }
 
-/// Lookup the visible 'operator co_await' functions in the given scope.
-static UnresolvedSet<16> lookupOperatorCoawaitCall(Sema &SemaRef, Scope *S,
-                                                   SourceLocation Loc,
-                                                   Expr *E) {
-  UnresolvedSet<16> Functions;
-  SemaRef.LookupOverloadedOperatorName(OO_Coawait, S, E->getType(), QualType(),
-                                       Functions);
-  return Functions;
-}
-
 /// Build a call to 'operator co_await' if there is a suitable operator for
 /// the given expression.
 static ExprResult buildOperatorCoawaitCall(Sema &SemaRef, SourceLocation Loc,
-                                           Expr *E,
-                                           const UnresolvedSetImpl &Functions) {
+                                           Expr *E) {
+  auto *FD = cast<FunctionDecl>(SemaRef.CurContext);
+  assert(FD && FD->hasOperatorCoawaitLookupResults());
+  auto *ULE = cast<UnresolvedLookupExpr>(FD->getOperatorCoawaitLookupResults());
+  UnresolvedSet<16> Functions;
+  Functions.append(ULE->decls_begin(), ULE->decls_end());
   return SemaRef.CreateOverloadedUnaryOp(Loc, UO_Coawait, Functions, E);
 }
 
@@ -311,7 +337,8 @@ static ExprResult buildPromiseCall(Sema &S, FunctionScopeInfo *Coroutine,
 }
 
 ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
-  auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
+  assert(S);
+  auto *Coroutine = checkCoroutineContext(*this, S, Loc, "co_await");
   if (!Coroutine) {
     CorrectDelayedTyposInExpr(E);
     return ExprError();
@@ -321,14 +348,12 @@ ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
     if (R.isInvalid()) return ExprError();
     E = R.get();
   }
-  return BuildCoawaitDependentExpr(Loc, E,
-                                   lookupOperatorCoawaitCall(*this, S, Loc, E));
+  return BuildDependentCoawaitExpr(Loc, E);
 }
 
-ExprResult
-Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
-                                const UnresolvedSetImpl &Candidates) {
-  auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
+ExprResult Sema::BuildDependentCoawaitExpr(SourceLocation Loc, Expr *E) {
+  auto *Coroutine =
+      checkCoroutineContext(*this, /*Scope*/ nullptr, Loc, "co_await");
   if (!Coroutine)
     return ExprError();
 
@@ -341,8 +366,7 @@ Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
 
   auto *Promise = Coroutine->CoroutinePromise;
   if (Promise->getType()->isDependentType()) {
-    Expr *Res = new (Context)
-        CoawaitDependentExpr(Loc, Context.DependentTy, E, Candidates);
+    Expr *Res = new (Context) DependentCoawaitExpr(Loc, Context.DependentTy, E);
     Coroutine->CoroutineStmts.push_back(Res);
     return Res;
   }
@@ -359,7 +383,7 @@ Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
     }
     E = R.get();
   }
-  ExprResult Awaitable = buildOperatorCoawaitCall(*this, Loc, E, Candidates);
+  ExprResult Awaitable = buildOperatorCoawaitCall(*this, Loc, E);
   if (Awaitable.isInvalid())
     return ExprError();
 
@@ -367,7 +391,8 @@ Sema::BuildCoawaitDependentExpr(SourceLocation Loc, Expr *E,
 }
 
 ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
-  auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
+  auto *Coroutine =
+      checkCoroutineContext(*this, /*Scope*/ nullptr, Loc, "co_await");
   if (!Coroutine)
     return ExprError();
 
@@ -400,7 +425,7 @@ ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
 }
 
 ExprResult Sema::ActOnCoyieldExpr(Scope *S, SourceLocation Loc, Expr *E) {
-  auto *Coroutine = checkCoroutineContext(*this, Loc, "co_yield");
+  auto *Coroutine = checkCoroutineContext(*this, S, Loc, "co_yield");
   if (!Coroutine) {
     CorrectDelayedTyposInExpr(E);
     return ExprError();
@@ -413,15 +438,15 @@ ExprResult Sema::ActOnCoyieldExpr(Scope *S, SourceLocation Loc, Expr *E) {
     return ExprError();
 
   // Build 'operator co_await' call.
-  auto Functions = lookupOperatorCoawaitCall(*this, S, Loc, Awaitable.get());
-  Awaitable = buildOperatorCoawaitCall(*this, Loc, Awaitable.get(), Functions);
+  Awaitable = buildOperatorCoawaitCall(*this, Loc, Awaitable.get());
   if (Awaitable.isInvalid())
     return ExprError();
 
   return BuildCoyieldExpr(Loc, Awaitable.get());
 }
 ExprResult Sema::BuildCoyieldExpr(SourceLocation Loc, Expr *E) {
-  auto *Coroutine = checkCoroutineContext(*this, Loc, "co_yield");
+  auto *Coroutine =
+      checkCoroutineContext(*this, /*Scope*/ nullptr, Loc, "co_yield");
   if (!Coroutine)
     return ExprError();
 
@@ -453,8 +478,8 @@ ExprResult Sema::BuildCoyieldExpr(SourceLocation Loc, Expr *E) {
   return Res;
 }
 
-StmtResult Sema::ActOnCoreturnStmt(SourceLocation Loc, Expr *E) {
-  auto *Coroutine = checkCoroutineContext(*this, Loc, "co_return");
+StmtResult Sema::ActOnCoreturnStmt(Scope *S, SourceLocation Loc, Expr *E) {
+  auto *Coroutine = checkCoroutineContext(*this, S, Loc, "co_return");
   if (!Coroutine) {
     CorrectDelayedTyposInExpr(E);
     return StmtError();
@@ -463,7 +488,8 @@ StmtResult Sema::ActOnCoreturnStmt(SourceLocation Loc, Expr *E) {
 }
 
 StmtResult Sema::BuildCoreturnStmt(SourceLocation Loc, Expr *E) {
-  auto *Coroutine = checkCoroutineContext(*this, Loc, "co_return");
+  auto *Coroutine =
+      checkCoroutineContext(*this, /*Scope*/ nullptr, Loc, "co_return");
   if (!Coroutine)
     return StmtError();
 
@@ -639,8 +665,9 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
     Diag(Fn->FirstReturnLoc, diag::err_return_in_coroutine);
     auto *First = Fn->CoroutineStmts[0];
     Diag(First->getLocStart(), diag::note_declared_coroutine_here)
-        << ((isa<CoawaitExpr>(First) || isa<CoawaitDependentExpr>(First)) ? 0 :
-            isa<CoyieldExpr>(First) ? 1 : 2);
+        << ((isa<CoawaitExpr>(First) || isa<DependentCoawaitExpr>(First))
+                ? 0
+                : isa<CoyieldExpr>(First) ? 1 : 2);
   }
 
   bool AnyCoawaits = false;
@@ -648,7 +675,7 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   bool AnyCoyields = false;
   for (auto *CoroutineStmt : Fn->CoroutineStmts) {
     AnyCoawaits |= isa<CoawaitExpr>(CoroutineStmt);
-    AnyDependentCoawaits |= isa<CoawaitDependentExpr>(CoroutineStmt);
+    AnyDependentCoawaits |= isa<DependentCoawaitExpr>(CoroutineStmt);
     AnyCoyields |= isa<CoyieldExpr>(CoroutineStmt);
   }
 
@@ -669,23 +696,23 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   if (PromiseStmt.isInvalid())
     return FD->setInvalidDecl();
 
+  auto buildSuspends = [&](const char *Name) {
+    ExprResult Suspend = buildPromiseCall(*this, Fn, Loc, Name, None);
+    if (Suspend.isInvalid())
+      return Suspend;
+    Suspend = buildOperatorCoawaitCall(*this, Loc, Suspend.get());
+    if (Suspend.isInvalid())
+      return Suspend;
+    // FIXME: Support operator co_await here.
+    Suspend = BuildCoawaitExpr(Loc, Suspend.get());
+    return ActOnFinishFullExpr(Suspend.get());
+  };
+
   // Form and check implicit 'co_await p.initial_suspend();' statement.
-  ExprResult InitialSuspend =
-      buildPromiseCall(*this, Fn, Loc, "initial_suspend", None);
-  // FIXME: Support operator co_await here.
-  if (!InitialSuspend.isInvalid())
-    InitialSuspend = BuildCoawaitExpr(Loc, InitialSuspend.get());
-  InitialSuspend = ActOnFinishFullExpr(InitialSuspend.get());
+  ExprResult InitialSuspend = buildSuspends("initial_suspend");
   if (InitialSuspend.isInvalid())
     return FD->setInvalidDecl();
-
-  // Form and check implicit 'co_await p.final_suspend();' statement.
-  ExprResult FinalSuspend =
-      buildPromiseCall(*this, Fn, Loc, "final_suspend", None);
-  // FIXME: Support operator co_await here.
-  if (!FinalSuspend.isInvalid())
-    FinalSuspend = BuildCoawaitExpr(Loc, FinalSuspend.get());
-  FinalSuspend = ActOnFinishFullExpr(FinalSuspend.get());
+  ExprResult FinalSuspend = buildSuspends("final_suspend");
   if (FinalSuspend.isInvalid())
     return FD->setInvalidDecl();
 

@@ -4231,6 +4231,8 @@ public:
 /// \brief Represents a 'co_await' expression.
 class CoawaitExpr : public CoroutineSuspendExpr {
   friend class ASTStmtReader;
+
+  unsigned RequiresAwaitTransform : 1;
 public:
   CoawaitExpr(SourceLocation CoawaitLoc, Expr *Operand, Expr *Ready,
               Expr *Suspend, Expr *Resume)
@@ -4253,35 +4255,27 @@ public:
 
 /// \brief Represents a 'co_await' expression while the type of the promise
 /// is dependent.
-class CoawaitDependentExpr : public Expr {
+class DependentCoawaitExpr : public Expr {
   SourceLocation KeywordLoc;
   Stmt *Operand;
-  UnresolvedSet<16> CoawaitOperatorCandidates;
 
   friend class ASTStmtReader;
 
 public:
-  CoawaitDependentExpr(SourceLocation KeywordLoc, QualType Ty, Expr *Op,
-                       const UnresolvedSetImpl &OperatorCandidates)
-      : Expr(CoawaitDependentExprClass, Ty, VK_RValue, OK_Ordinary,
+  DependentCoawaitExpr(SourceLocation KeywordLoc, QualType Ty, Expr *Op)
+      : Expr(DependentCoawaitExprClass, Ty, VK_RValue, OK_Ordinary,
              /*TypeDependent*/ true, /*ValueDependent*/ true,
              /*InstantiationDependent*/ true,
              Op->containsUnexpandedParameterPack()),
-        KeywordLoc(KeywordLoc), Operand(Op), CoawaitOperatorCandidates() {
+        KeywordLoc(KeywordLoc), Operand(Op) {
     assert(Op->isTypeDependent() && Ty->isDependentType() &&
            "wrong constructor for non-dependent co_await/co_yield expression");
-    CoawaitOperatorCandidates.append(OperatorCandidates.begin(),
-                                     OperatorCandidates.end());
   }
 
-  CoawaitDependentExpr(EmptyShell Empty)
-      : Expr(CoawaitDependentExprClass, Empty) {}
+  DependentCoawaitExpr(EmptyShell Empty)
+      : Expr(DependentCoawaitExprClass, Empty) {}
 
   Expr *getOperand() const { return cast<Expr>(Operand); }
-
-  const UnresolvedSetImpl &getOperatorCandidates() const {
-    return CoawaitOperatorCandidates;
-  }
 
   SourceLocation getKeywordLoc() const { return KeywordLoc; }
 
@@ -4293,7 +4287,7 @@ public:
   child_range children() { return child_range(&Operand, &Operand + 1); }
 
   static bool classof(const Stmt *T) {
-    return T->getStmtClass() == CoawaitDependentExprClass;
+    return T->getStmtClass() == DependentCoawaitExprClass;
   }
 };
 

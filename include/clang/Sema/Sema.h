@@ -8032,12 +8032,10 @@ public:
   //
   ExprResult ActOnCoawaitExpr(Scope *S, SourceLocation KwLoc, Expr *E);
   ExprResult ActOnCoyieldExpr(Scope *S, SourceLocation KwLoc, Expr *E);
-  StmtResult ActOnCoreturnStmt(SourceLocation KwLoc, Expr *E);
+  StmtResult ActOnCoreturnStmt(Scope *S, SourceLocation KwLoc, Expr *E);
 
   ExprResult BuildCoawaitExpr(SourceLocation KwLoc, Expr *E);
-  ExprResult
-  BuildCoawaitDependentExpr(SourceLocation KwLoc, Expr *E,
-                            const UnresolvedSetImpl &CoawaitOperatorCandidates);
+  ExprResult BuildDependentCoawaitExpr(SourceLocation KwLoc, Expr *E);
   ExprResult BuildCoyieldExpr(SourceLocation KwLoc, Expr *E);
   StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E);
 

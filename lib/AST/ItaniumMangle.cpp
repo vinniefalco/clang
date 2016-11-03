@@ -3282,7 +3282,7 @@ recurse:
   // contexts and so should never appear in a mangling.
   case Expr::AddrLabelExprClass:
   // This should no longer exist in the AST by now
-  case Expr::CoawaitDependentExprClass:
+  case Expr::DependentCoawaitExprClass:
   case Expr::DesignatedInitUpdateExprClass:
   case Expr::ImplicitValueInitExprClass:
   case Expr::NoInitExprClass:

@@ -1664,6 +1664,13 @@ private:
                       DependentFunctionTemplateSpecializationInfo *>
     TemplateOrSpecialization;
 
+  /// \brief The results of looking up operator co_await in the function scope.
+  ///
+  /// For non-coroutine functions this value will be NULL. For coroutines
+  /// this value is an UnresolvedLookupExpr for operator co_await built in
+  /// the original function scope.
+  Stmt *OperatorCoawaitLookupResults;
+
   /// DNLoc - Provides source/type location info for the
   /// declaration name embedded in the DeclaratorDecl base class.
   DeclarationNameLoc DNLoc;
@@ -1720,7 +1727,7 @@ protected:
         IsLateTemplateParsed(false), IsConstexpr(isConstexprSpecified),
         UsesSEHTry(false), HasSkippedBody(false), WillHaveBody(false),
         EndRangeLoc(NameInfo.getEndLoc()), TemplateOrSpecialization(),
-        DNLoc(NameInfo.getInfo()) {}
+        OperatorCoawaitLookupResults(nullptr), DNLoc(NameInfo.getInfo()) {}
 
   typedef Redeclarable<FunctionDecl> redeclarable_base;
   FunctionDecl *getNextRedeclarationImpl() override {
@@ -1768,7 +1775,7 @@ public:
                               bool isConstexprSpecified = false);
 
   static FunctionDecl *CreateDeserialized(ASTContext &C, unsigned ID);
-                       
+
   DeclarationNameInfo getNameInfo() const {
     return DeclarationNameInfo(getDeclName(), getLocation(), DNLoc);
   }
@@ -1850,6 +1857,10 @@ public:
 
   void setBody(Stmt *B);
   void setLazyBody(uint64_t Offset) { Body = Offset; }
+
+  void setOperatorCoawaitLookupResults(Stmt *E);
+  const Expr *getOperatorCoawaitLookupResults() const;
+  bool hasOperatorCoawaitLookupResults() const;
 
   /// Whether this function is variadic.
   bool isVariadic() const;
