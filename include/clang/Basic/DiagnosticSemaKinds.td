@@ -8674,7 +8674,7 @@ def note_coroutine_promise_implicit_await_transform_required_here : Note<
   "call to 'await_transform' implicitly required by 'co_await' here">;
 def note_coroutine_promise_call_implicitly_required : Note<
   "call to '%select{initial_suspend|final_suspend}0' implicitly "
-  "required by the coroutine's %select{initial suspend point|final suspend point}0">;
+  "required by the %select{initial suspend point|final suspend point}0">;
 }
 
 let CategoryName = "Documentation Issue" in {

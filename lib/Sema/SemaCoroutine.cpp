@@ -352,11 +352,13 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
     return false;
   auto *ScopeInfo = S.getCurFunction();
   assert(ScopeInfo->CoroutinePromise);
-  assert(!ScopeInfo->Coroutine);
+  if (ScopeInfo->Coroutine)
+    return true;
+
   assert(ScopeInfo->CoroutineStmts.empty());
 
   auto *Fn = cast<FunctionDecl>(S.CurContext);
-  SourceLocation Loc = Fn->getLocStart();
+  SourceLocation Loc = Fn->getLocation();
   // Build the initial suspend point
   auto buildSuspends = [&](StringRef Name) -> ExprResult {
     ExprResult Suspend = buildPromiseCall(S, ScopeInfo->CoroutinePromise,
@@ -366,7 +368,8 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
     Suspend = buildOperatorCoawaitCall(S, SC, Loc, Suspend.get());
     if (Suspend.isInvalid())
       return ExprError();
-    Suspend = S.BuildCoawaitExpr(Loc, Suspend.get());
+    Suspend = S.BuildCoawaitExpr(Loc, Suspend.get(),
+            /*IsImplicitlyCreated*/true);
     Suspend = S.ActOnFinishFullExpr(Suspend.get());
     if (Suspend.isInvalid()) {
       S.Diag(Loc, diag::note_coroutine_promise_call_implicitly_required)
@@ -407,9 +410,21 @@ StmtResult Sema::BuildCoroutineBodyStmt(VarDecl *Promise, Expr *InitSuspend,
   if (!Coroutine)
     return StmtError();
 
-  SourceLocation Loc;
+  auto checkPlaceholders = [&](Expr *&E) {
+    if (E && E->getType()->isPlaceholderType() &&
+        !E->getType()->isSpecificPlaceholderType(BuiltinType::Overload)) {
+      ExprResult R = CheckPlaceholderExpr(E);
+      if (R.isInvalid()) return false;
+      E = R.get();
+    }
+    return true;
+  };
+  if (!checkPlaceholders(InitSuspend) || !checkPlaceholders(FinalSuspend))
+    return StmtError();
+
   StmtResult PromiseStmt =
-      ActOnDeclStmt(ConvertDeclToDeclGroup(Promise), Loc, Loc);
+      ActOnDeclStmt(ConvertDeclToDeclGroup(Promise), Promise->getLocStart(),
+                    Promise->getLocEnd());
   if (PromiseStmt.isInvalid())
     return StmtError();
 
@@ -474,7 +489,8 @@ ExprResult Sema::BuildDependentCoawaitExpr(SourceLocation Loc, Expr *E,
   return BuildCoawaitExpr(Loc, Awaitable.get());
 }
 
-ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
+ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E,
+                                  bool IsImplicitlyCreated) {
   auto *Coroutine =
       checkCoroutineContext(*this, Loc, "co_await");
   if (!Coroutine)
@@ -487,8 +503,10 @@ ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
   }
 
   if (E->getType()->isDependentType()) {
-    Expr *Res = new (Context) CoawaitExpr(Loc, Context.DependentTy, E);
-    Coroutine->CoroutineStmts.push_back(Res);
+    Expr *Res = new (Context) CoawaitExpr(Loc, Context.DependentTy, E,
+                                          IsImplicitlyCreated);
+    if (!IsImplicitlyCreated)
+      Coroutine->CoroutineStmts.push_back(Res);
     return Res;
   }
 
@@ -503,8 +521,9 @@ ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
     return ExprError();
 
   Expr *Res = new (Context) CoawaitExpr(Loc, E, RSS.Results[0], RSS.Results[1],
-                                        RSS.Results[2]);
-  Coroutine->CoroutineStmts.push_back(Res);
+                                        RSS.Results[2], IsImplicitlyCreated);
+  if (!IsImplicitlyCreated)
+    Coroutine->CoroutineStmts.push_back(Res);
   return Res;
 }
 
@@ -739,18 +758,15 @@ static bool buildAllocationAndDeallocation(Sema &S, SourceLocation Loc,
 }
 
 void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
-  if (FD->isInvalidDecl())
-    return;
-
   FunctionScopeInfo *Fn = getCurFunction();
-  assert(Fn && !Fn->CoroutineStmts.empty() && "not a coroutine");
+  assert(Fn && Fn->CoroutinePromise && "not a coroutine");
   VarDecl *Promise = Fn->CoroutinePromise;
-  assert(Promise);
 
-  if (!Fn->Coroutine) {
+  // Check if we failed to build the initial/final suspend points during the
+  // initial parse.
+  if (!Fn->Coroutine || Fn->CoroutineStmts.empty())
     return FD->setInvalidDecl();
-  }
-  assert(Fn->Coroutine);
+
   // Coroutines [stmt.return]p1:
   //   A return statement shall not appear in a coroutine.
   if (Fn->FirstReturnLoc.isValid()) {
@@ -758,8 +774,8 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
     auto *First = Fn->CoroutineStmts[0];
     Diag(First->getLocStart(), diag::note_declared_coroutine_here)
         << ((isa<CoawaitExpr>(First) || isa<DependentCoawaitExpr>(First))
-                ? 0
-                : isa<CoyieldExpr>(First) ? 1 : 2);
+                ? "co_await"
+                : isa<CoyieldExpr>(First) ? "co_yield" : "co_return");
   }
 
   bool AnyCoawaits = false;

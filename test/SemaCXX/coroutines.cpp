@@ -73,8 +73,9 @@ template <>
 struct std::experimental::coroutine_traits<double, int> {
   struct promise_type {};
 };
-double bad_promise_type_2(int) {
-  co_yield 0; // expected-error {{no member named 'yield_value' in 'std::experimental::coroutine_traits<double, int>::promise_type'}}
+double bad_promise_type_2(int) { // expected-error {{no member named 'initial_suspend'}}
+  // FIXME: Say something about the missing 'yield_value'.
+  co_yield 0;
 }
 
 struct promise; // expected-note {{forward declaration}}
@@ -284,8 +285,11 @@ namespace dependent_operator_co_await_lookup {
 
   template <>
   struct dependent_member<long> {
-    coro<transform_promise> mem_fn() const {
-      co_await transform_awaitable{}; // expected-error {{no member named 'await_ready'}}
+    // FIXME this diagnostic is terrible
+    coro<transform_promise> mem_fn() const { // expected-error {{no member named 'await_ready' in 'dependent_operator_co_await_lookup::transformed'}}
+      // expected-note@-1 {{call to 'initial_suspend' implicitly required by the initial suspend point}}
+      // expected-note@+1 {{function is a coroutine due to use of 'co_await' here}}
+      co_await transform_awaitable{};
     }
     template <class R, class U>
     coro<R> dep_mem_fn(U u) { co_await u; }
@@ -302,8 +306,12 @@ namespace dependent_operator_co_await_lookup {
 
 
   template <>
-  coro<transform_promise> dependent_member<long>::dep_mem_fn<transform_promise>(int) {
-    co_await transform_awaitable{}; // expected-error {{no member named 'await_ready'}}
+  coro<transform_promise>
+  // FIXME this diagnostic is terrible
+  dependent_member<long>::dep_mem_fn<transform_promise>(int) { // expected-error {{no member named 'await_ready' in 'dependent_operator_co_await_lookup::transformed'}}
+    //expected-note@-1 {{call to 'initial_suspend' implicitly required by the initial suspend point}}
+    //expected-note@+1 {{function is a coroutine due to use of 'co_await' here}}
+    co_await transform_awaitable{};
   }
 
   void operator co_await(transform_awaitable) = delete;
@@ -402,7 +410,8 @@ struct bad_promise_4 {
 };
 // FIXME: This diagnostic is terrible.
 coro<bad_promise_4> bad_initial_suspend() { // expected-error {{no member named 'await_ready' in 'not_awaitable'}}
-  co_await a;
+  // expected-note@-1 {{'initial_suspend' implicitly required}}
+  co_await a; // expected-note {{use of 'co_await' here}}
 }
 
 struct bad_promise_5 {
@@ -412,7 +421,8 @@ struct bad_promise_5 {
 };
 // FIXME: This diagnostic is terrible.
 coro<bad_promise_5> bad_final_suspend() { // expected-error {{no member named 'await_ready' in 'not_awaitable'}}
-  co_await a;
+  // expected-note@-1 {{'final_suspend' implicitly required}}
+  co_await a; // expected-note {{use of 'co_await' here}}
 }
 
 struct bad_promise_6 {
