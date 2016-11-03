@@ -207,8 +207,12 @@ static FunctionScopeInfo *checkCoroutineContext(Sema &S, Scope *SC,
 
   assert(isa<FunctionDecl>(S.CurContext) && "not in a function scope");
   auto *FD = cast<FunctionDecl>(S.CurContext);
+
   assert((SC || FD->hasOperatorCoawaitLookupResults()) &&
          "we should already have the lookup results");
+
+  // Lookup operator co_await in the current scope and stash it in the function
+  // declaration.
   if (SC && !FD->hasOperatorCoawaitLookupResults()) {
     ExprResult E = buildOperatorCoawaitLookupExpr(S, SC, Loc);
     if (E.isInvalid())
