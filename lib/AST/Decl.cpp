@@ -2519,25 +2519,6 @@ bool FunctionDecl::hasBody(const FunctionDecl *&Definition) const {
   return false;
 }
 
-void FunctionDecl::setOperatorCoawaitLookupResults(Stmt *E) {
-  assert(willHaveBody() && "setting the lookup results from outside the function body");
-  assert(!hasOperatorCoawaitLookupResults() && "lookup results have already been set");
-  OperatorCoawaitLookupResults = E;
-}
-
-const Expr *FunctionDecl::getOperatorCoawaitLookupResults() const {
-  const auto *FD = getTemplateInstantiationPattern();
-  if (!FD)
-    FD = this;
-  assert(FD->willHaveBody());
-  return cast_or_null<Expr>(FD->OperatorCoawaitLookupResults);
-
-}
-
-bool FunctionDecl::hasOperatorCoawaitLookupResults() const {
-  return getOperatorCoawaitLookupResults() != nullptr;
-}
-
 bool FunctionDecl::hasTrivialBody() const
 {
   Stmt *S = getBody();

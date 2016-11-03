@@ -8035,7 +8035,8 @@ public:
   StmtResult ActOnCoreturnStmt(Scope *S, SourceLocation KwLoc, Expr *E);
 
   ExprResult BuildCoawaitExpr(SourceLocation KwLoc, Expr *E);
-  ExprResult BuildDependentCoawaitExpr(SourceLocation KwLoc, Expr *E);
+  ExprResult BuildDependentCoawaitExpr(SourceLocation KwLoc, Expr *E,
+                                       UnresolvedLookupExpr *Lookup);
   ExprResult BuildCoyieldExpr(SourceLocation KwLoc, Expr *E);
   StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E);
 
