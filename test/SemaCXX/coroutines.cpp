@@ -266,7 +266,8 @@ namespace dependent_operator_co_await_lookup {
 
   awaitable operator co_await(await_arg_1);
 
-  template <typename T, typename U> coro<T> await_template_3(U t) {
+  template <typename T, typename U>
+  coro<T> await_template_3(U t) {
     co_await t;
   }
 
@@ -297,18 +298,13 @@ namespace dependent_operator_co_await_lookup {
 
   awaitable operator co_await(await_arg_2); // expected-note {{'operator co_await' should be declared prior to the call site}}
 
-
-  template
-  struct dependent_member<basic_promise<await_arg_1>, 0>;
-  template
-  struct dependent_member<basic_promise<await_arg_2>, 0>; // expected-note {{in instantiation}}
-
-
+  template struct dependent_member<basic_promise<await_arg_1>, 0>;
+  template struct dependent_member<basic_promise<await_arg_2>, 0>; // expected-note {{in instantiation}}
 
   template <>
   coro<transform_promise>
-  // FIXME this diagnostic is terrible
-  dependent_member<long>::dep_mem_fn<transform_promise>(int) { // expected-error {{no member named 'await_ready' in 'dependent_operator_co_await_lookup::transformed'}}
+      // FIXME this diagnostic is terrible
+      dependent_member<long>::dep_mem_fn<transform_promise>(int) { // expected-error {{no member named 'await_ready' in 'dependent_operator_co_await_lookup::transformed'}}
     //expected-note@-1 {{call to 'initial_suspend' implicitly required by the initial suspend point}}
     //expected-note@+1 {{function is a coroutine due to use of 'co_await' here}}
     co_await transform_awaitable{};
@@ -318,7 +314,7 @@ namespace dependent_operator_co_await_lookup {
   awaitable operator co_await(transformed);
 
   template coro<transform_promise>
-  dependent_member<long>::dep_mem_fn<transform_promise>(transform_awaitable);
+      dependent_member<long>::dep_mem_fn<transform_promise>(transform_awaitable);
 
   template <>
   coro<transform_promise> dependent_member<long>::dep_mem_fn<transform_promise>(long) {
@@ -498,7 +494,8 @@ coro<bad_promise_10> bad_coawait() {
 }
 
 struct call_operator {
-  template <class ...Args> awaitable operator()(Args...) const { return a; }
+  template <class... Args>
+  awaitable operator()(Args...) const { return a; }
 };
 void ret_void();
 struct good_promise_1 {
@@ -506,7 +503,7 @@ struct good_promise_1 {
   suspend_always initial_suspend();
   suspend_always final_suspend();
   static const call_operator await_transform;
-  using Fn = void(*)();
+  using Fn = void (*)();
   Fn return_void = ret_void;
 };
 const call_operator good_promise_1::await_transform;

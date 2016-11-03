@@ -1314,7 +1314,8 @@ public:
   ///
   /// By default, performs semantic analysis to build the new expression.
   /// Subclasses may override this routine to provide different behavior.
-  ExprResult RebuildCoawaitExpr(SourceLocation CoawaitLoc, Expr *Result, bool IsImplicitlyCreated) {
+  ExprResult RebuildCoawaitExpr(SourceLocation CoawaitLoc, Expr *Result,
+                                bool IsImplicitlyCreated) {
     return getSema().BuildCoawaitExpr(CoawaitLoc, Result, IsImplicitlyCreated);
   }
 
@@ -1323,7 +1324,8 @@ public:
   /// By default, performs semantic analysis to build the new expression.
   /// Subclasses may override this routine to provide different behavior.
   ExprResult RebuildDependentCoawaitExpr(SourceLocation CoawaitLoc,
-                                         Expr *Result, UnresolvedLookupExpr *Lookup) {
+                                         Expr *Result,
+                                         UnresolvedLookupExpr *Lookup) {
     return getSema().BuildDependentCoawaitExpr(CoawaitLoc, Result, Lookup);
   }
 
@@ -1335,12 +1337,13 @@ public:
     return getSema().BuildCoyieldExpr(CoyieldLoc, Result);
   }
 
-
   StmtResult RebuildCoroutineBodyStmt(VarDecl *Promise, Stmt *InitSuspend,
                                       Stmt *FinalSuspend, Stmt *OnFallthrough,
-  Stmt *OnException, Expr *Allocation, Stmt *Deallocation, Stmt *ReturnObject) {
-    return getSema().BuildCoroutineBodyStmt(Promise, InitSuspend, FinalSuspend,
-    OnFallthrough, OnException, Allocation, Deallocation, ReturnObject);
+                                      Stmt *OnException, Expr *Allocation,
+                                      Stmt *Deallocation, Stmt *ReturnObject) {
+    return getSema().BuildCoroutineBodyStmt(
+        Promise, InitSuspend, FinalSuspend, OnFallthrough, OnException,
+        Allocation, Deallocation, ReturnObject);
   }
   /// \brief Build a new Objective-C \@try statement.
   ///
@@ -6690,7 +6693,8 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   StmtResult InitSuspend = getDerived().TransformStmt(S->getInitSuspendStmt());
   if (InitSuspend.isInvalid())
     return StmtError();
-  StmtResult FinalSuspend = getDerived().TransformStmt(S->getFinalSuspendStmt());
+  StmtResult FinalSuspend =
+      getDerived().TransformStmt(S->getFinalSuspendStmt());
   if (FinalSuspend.isInvalid())
     return StmtError();
 
@@ -6711,9 +6715,9 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
 
   // Do a partial rebuild of the coroutine body and stash it in the ScopeInfo
   StmtResult Result = getDerived().RebuildCoroutineBodyStmt(
-          NewPromise, InitSuspend.get(), FinalSuspend.get(),
-          /*OnFallthrough*/nullptr, /*OnException*/nullptr, Allocation,
-          Deallocation, /*ReturnObject*/nullptr);
+      NewPromise, InitSuspend.get(), FinalSuspend.get(),
+      /*OnFallthrough*/ nullptr, /*OnException*/ nullptr, Allocation,
+      Deallocation, /*ReturnObject*/ nullptr);
   if (Result.isInvalid())
     return StmtError();
   ScopeInfo->Coroutine = cast<CoroutineBodyStmt>(Result.get());
@@ -6759,9 +6763,8 @@ TreeTransform<Derived>::TransformDependentCoawaitExpr(DependentCoawaitExpr *E) {
 
   // Always rebuild; we don't know if this needs to be injected into a new
   // context or if the promise type has changed.
-  return getDerived().RebuildDependentCoawaitExpr(E->getKeywordLoc(),
-                                                  Result.get(),
-                                                  E->getOperatorCoawaitLookup());
+  return getDerived().RebuildDependentCoawaitExpr(
+      E->getKeywordLoc(), Result.get(), E->getOperatorCoawaitLookup());
 }
 
 template <typename Derived>

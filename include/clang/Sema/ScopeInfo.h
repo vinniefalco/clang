@@ -382,24 +382,16 @@ public:
         (HasIndirectGoto ||
           (HasBranchProtectedScope && HasBranchIntoScope));
   }
-  
+
   FunctionScopeInfo(DiagnosticsEngine &Diag)
-    : Kind(SK_Function),
-      HasBranchProtectedScope(false),
-      HasBranchIntoScope(false),
-      HasIndirectGoto(false),
-      HasDroppedStmt(false),
-      HasOMPDeclareReductionCombiner(false),
-      HasFallthroughStmt(false),
-      HasPotentialAvailabilityViolations(false),
-      ObjCShouldCallSuper(false),
-      ObjCIsDesignatedInit(false),
-      ObjCWarnForNoDesignatedInitChain(false),
-      ObjCIsSecondaryInit(false),
-      ObjCWarnForNoInitDelegation(false),
-      CoroutinePromise(nullptr),
-      Coroutine(nullptr),
-      ErrorTrap(Diag) { }
+      : Kind(SK_Function), HasBranchProtectedScope(false),
+        HasBranchIntoScope(false), HasIndirectGoto(false),
+        HasDroppedStmt(false), HasOMPDeclareReductionCombiner(false),
+        HasFallthroughStmt(false), HasPotentialAvailabilityViolations(false),
+        ObjCShouldCallSuper(false), ObjCIsDesignatedInit(false),
+        ObjCWarnForNoDesignatedInitChain(false), ObjCIsSecondaryInit(false),
+        ObjCWarnForNoInitDelegation(false), CoroutinePromise(nullptr),
+        Coroutine(nullptr), ErrorTrap(Diag) {}
 
   virtual ~FunctionScopeInfo();
 
