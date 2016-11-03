@@ -158,6 +158,7 @@ public:
   SmallVector<ReturnStmt*, 4> Returns;
 
   /// \brief The promise object for this coroutine, if any.
+  VarDecl *CoroutinePromise;
   CoroutineBodyStmt *Coroutine;
 
   /// \brief The list of coroutine control flow constructs (co_await, co_yield,
@@ -392,6 +393,7 @@ public:
       ObjCWarnForNoDesignatedInitChain(false),
       ObjCIsSecondaryInit(false),
       ObjCWarnForNoInitDelegation(false),
+      CoroutinePromise(nullptr),
       Coroutine(nullptr),
       ErrorTrap(Diag) { }
 

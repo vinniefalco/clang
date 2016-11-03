@@ -331,8 +331,18 @@ public:
     assert(ParamMoves.empty() && "not implemented yet");
   }
 
-  CoroutineBodyStmt(EmptyShell Empty) : Stmt(CoroutineBodyStmtClass, Empty) {
-    std::fill(SubStmts, SubStmts + CoroutineBodyStmt::FirstParamMove, nullptr);
+  CoroutineBodyStmt(Stmt *Promise, Stmt *InitSuspend = nullptr,
+                    Stmt *FinalSuspend = nullptr)
+      : Stmt(CoroutineBodyStmtClass) {
+    SubStmts[CoroutineBodyStmt::Body] = nullptr;
+    SubStmts[CoroutineBodyStmt::Promise] = Promise;
+    SubStmts[CoroutineBodyStmt::InitSuspend] = InitSuspend;
+    SubStmts[CoroutineBodyStmt::FinalSuspend] = FinalSuspend;
+    SubStmts[CoroutineBodyStmt::OnException] = nullptr;
+    SubStmts[CoroutineBodyStmt::OnFallthrough] = nullptr;
+    SubStmts[CoroutineBodyStmt::Allocate] = nullptr;
+    SubStmts[CoroutineBodyStmt::Deallocate] = nullptr;
+    SubStmts[CoroutineBodyStmt::ReturnValue] = nullptr;
   }
 
   /// \brief Retrieve the body of the coroutine as written. This will be either
@@ -340,7 +350,10 @@ public:
   Stmt *getBody() const {
     return SubStmts[SubStmt::Body];
   }
-
+  void setBody(Stmt *B) {
+    assert(!SubStmts[SubStmt::Body]);
+    SubStmts[SubStmt::Body] = B;
+  }
   Stmt *getPromiseDeclStmt() const { return SubStmts[SubStmt::Promise]; }
   VarDecl *getPromiseDecl() const {
     return cast<VarDecl>(cast<DeclStmt>(getPromiseDeclStmt())->getSingleDecl());
@@ -376,10 +389,10 @@ public:
   }
 
   SourceLocation getLocStart() const LLVM_READONLY {
-    return getBody()->getLocStart();
+    return getBody() ? getBody()->getLocStart() : SourceLocation();
   }
   SourceLocation getLocEnd() const LLVM_READONLY {
-    return getBody()->getLocEnd();
+    return getBody() ? getBody()->getLocEnd() : SourceLocation();
   }
 
   child_range children() {

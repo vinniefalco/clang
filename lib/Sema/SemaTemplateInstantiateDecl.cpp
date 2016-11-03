@@ -3714,6 +3714,8 @@ void Sema::InstantiateFunctionDefinition(SourceLocation PointOfInstantiation,
 
     if (Body.isInvalid())
       Function->setInvalidDecl();
+    else
+      assert(Body.get());
 
     ActOnFinishFunctionBody(Function, Body.get(),
                             /*IsInstantiation=*/true);

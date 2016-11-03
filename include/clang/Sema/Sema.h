@@ -8039,7 +8039,10 @@ public:
                                        UnresolvedLookupExpr *Lookup);
   ExprResult BuildCoyieldExpr(SourceLocation KwLoc, Expr *E);
   StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E);
+  StmtResult BuildCoroutineBodyStmt(VarDecl *Promise, Expr *InitSuspend,
+                                     Expr *FinalSuspend);
 
+  VarDecl* buildCoroutinePromise(SourceLocation Loc);
   void CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body);
 
   //===--------------------------------------------------------------------===//
