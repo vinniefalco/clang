@@ -6678,7 +6678,8 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
 
   auto *ScopeInfo = SemaRef.getCurFunction();
   auto *FD = cast<FunctionDecl>(SemaRef.CurContext);
-  assert(ScopeInfo && !ScopeInfo->Coroutine && !ScopeInfo->CoroutinePromise &&
+  assert(ScopeInfo && !ScopeInfo->CoroutinePromise
+          && ScopeInfo->CoroutineStmts.empty() &&
          "expected clean scope info");
 
   // The new CoroutinePromise object needs to be built and put into the current
@@ -6699,6 +6700,7 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
       getDerived().TransformStmt(S->getFinalSuspendStmt());
   if (FinalSuspend.isInvalid())
     return StmtError();
+  assert(ScopeInfo->CoroutineStmts.size() == 2);
 
   StmtResult BodyRes = getDerived().TransformStmt(S->getBody());
   if (BodyRes.isInvalid())
@@ -6745,16 +6747,11 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   }
 
   // Do a partial rebuild of the coroutine body and stash it in the ScopeInfo
-  StmtResult Result = getDerived().RebuildCoroutineBodyStmt(
+  return getDerived().RebuildCoroutineBodyStmt(
       BodyRes.get(), NewPromise, InitSuspend.get(), FinalSuspend.get(),
       SetException, Fallthrough, Allocation,
       Deallocation, ReturnObject);
-  if (Result.isInvalid())
-    return StmtError();
-  ScopeInfo->Coroutine = cast<CoroutineBodyStmt>(Result.get());
 
-  // FIXME return the re-built CoroutineBodyStmt
-  return BodyRes.get();
 }
 
 template<typename Derived>

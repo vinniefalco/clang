@@ -160,10 +160,9 @@ public:
   /// \brief The promise object for this coroutine, if any.
   VarDecl *CoroutinePromise;
 
-  /// \brief The partially built coroutine body statement for this function
-  /// It contains the implicitly generated statements that must be built
-  /// during the initial parse such as the initial and final suspend points.
-  CoroutineBodyStmt *Coroutine;
+  /// \brief The initial and final suspendpoints
+  std::pair<Stmt*, Stmt*> CoroutineSuspends;
+
 
   /// \brief The list of coroutine control flow constructs (co_await, co_yield,
   /// co_return) that occur within the function or block. Empty if and only if
@@ -391,7 +390,7 @@ public:
         ObjCShouldCallSuper(false), ObjCIsDesignatedInit(false),
         ObjCWarnForNoDesignatedInitChain(false), ObjCIsSecondaryInit(false),
         ObjCWarnForNoInitDelegation(false), CoroutinePromise(nullptr),
-        Coroutine(nullptr), ErrorTrap(Diag) {}
+        ErrorTrap(Diag) {}
 
   virtual ~FunctionScopeInfo();
 

@@ -328,6 +328,8 @@ static FunctionScopeInfo *checkCoroutineContext(Sema &S, SourceLocation Loc,
 
   assert(isa<FunctionDecl>(S.CurContext) && "not in a function scope");
   auto *FD = cast<FunctionDecl>(S.CurContext);
+  if (FD->isInvalidDecl())
+    return nullptr;
 
   auto *ScopeInfo = S.getCurFunction();
   assert(ScopeInfo && "missing function scope for function");
@@ -348,15 +350,16 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
     return false;
   auto *ScopeInfo = S.getCurFunction();
   assert(ScopeInfo->CoroutinePromise);
-  if (ScopeInfo->Coroutine)
-    return true;
 
-  assert(ScopeInfo->CoroutineStmts.empty());
+  // If we have existing coroutine statements then we have already built
+  // the initial and final suspend points.
+  if (!ScopeInfo->CoroutineStmts.empty())
+    return true;
 
   auto *Fn = cast<FunctionDecl>(S.CurContext);
   SourceLocation Loc = Fn->getLocation();
   // Build the initial suspend point
-  auto buildSuspends = [&](StringRef Name) -> StmtResult {
+  auto buildSuspends = [&](StringRef Name) mutable -> StmtResult {
     ExprResult Suspend =
         buildPromiseCall(S, ScopeInfo->CoroutinePromise, Loc, Name, None);
     if (Suspend.isInvalid())
@@ -366,6 +369,7 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
       return StmtError();
     Suspend = S.BuildCoawaitExpr(Loc, Suspend.get(),
                                  /*IsImplicitlyCreated*/ true);
+
     Suspend = S.ActOnFinishFullExpr(Suspend.get());
     if (Suspend.isInvalid()) {
       S.Diag(Loc, diag::note_coroutine_promise_call_implicitly_required)
@@ -375,29 +379,25 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
     }
     return cast<Stmt>(Suspend.get());
   };
+  assert(ScopeInfo->CoroutineStmts.size() == 0);
 
   StmtResult InitSuspend = buildSuspends("initial_suspend");
   if (InitSuspend.isInvalid())
     return false;
 
+  //assert(ScopeInfo->CoroutineStmts.size() == 1);
+
   StmtResult FinalSuspend = buildSuspends("final_suspend");
   if (FinalSuspend.isInvalid())
     return false;
 
-  StmtResult Res = S.BuildCoroutineBodyStmt(/*Body*/nullptr,
-      ScopeInfo->CoroutinePromise, InitSuspend.get(), FinalSuspend.get(),
-      nullptr, nullptr, nullptr, nullptr, nullptr);
-  Res = S.ActOnFinishFullStmt(Res.get());
-  if (Res.isInvalid())
-    return false;
-
-  ScopeInfo->Coroutine = cast<CoroutineBodyStmt>(Res.get());
   return true;
 }
 
 ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
   if (!actOnCoroutineBodyStart(*this, S, Loc, "co_await")) {
     CorrectDelayedTyposInExpr(E);
+    cast<FunctionDecl>(CurContext)->setInvalidDecl();
     return ExprError();
   }
 
@@ -492,6 +492,7 @@ ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E,
 ExprResult Sema::ActOnCoyieldExpr(Scope *S, SourceLocation Loc, Expr *E) {
   if (!actOnCoroutineBodyStart(*this, S, Loc, "co_yield")) {
     CorrectDelayedTyposInExpr(E);
+    cast<FunctionDecl>(CurContext)->setInvalidDecl();
     return ExprError();
   }
 
@@ -544,6 +545,7 @@ ExprResult Sema::BuildCoyieldExpr(SourceLocation Loc, Expr *E) {
 StmtResult Sema::ActOnCoreturnStmt(Scope *S, SourceLocation Loc, Expr *E) {
   if (!actOnCoroutineBodyStart(*this, S, Loc, "co_return")) {
     CorrectDelayedTyposInExpr(E);
+    cast<FunctionDecl>(CurContext)->setInvalidDecl();
     return StmtError();
   }
   return BuildCoreturnStmt(Loc, E);
@@ -823,6 +825,7 @@ StmtResult Sema::BuildCoroutineBodyStmt(Stmt *Body, VarDecl *Promise, Stmt *Init
     return StmtError();
 
   if (!Allocation || !Deallocation) {
+    assert(!Allocation && !Deallocation && "These should be a package deal");
     if (!buildAllocationAndDeallocation(*this, Loc, FSI, Allocation,
                                         Deallocation))
       return StmtError();
@@ -860,10 +863,22 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   assert(FSI && FSI->CoroutinePromise && "not a coroutine");
   VarDecl *Promise = FSI->CoroutinePromise;
 
+
   // Check if we failed to build the initial/final suspend points during the
   // initial parse.
-  if (!FSI->Coroutine || FSI->CoroutineStmts.empty())
+  if (FSI->CoroutineStmts.size() < 2)
     return FD->setInvalidDecl();
+
+  // FIXME: Perform move-initialization of parameters into frame-local copies.
+  SmallVector<Expr*, 16> ParamMoves;
+  if (Body && !isa<CoroutineBodyStmt>(Body)) {
+    StmtResult BodyRes = BuildCoroutineBodyStmt(Body, FSI->CoroutinePromise, FSI->CoroutineStmts[0],
+                         FSI->CoroutineStmts[1], nullptr, nullptr, nullptr, nullptr, nullptr);
+    if (BodyRes.isInvalid())
+      return FD->setInvalidDecl();
+    Body = BodyRes.get();
+  }
+
 
   // Coroutines [stmt.return]p1:
   //   A return statement shall not appear in a coroutine.
@@ -895,18 +910,5 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   assert((!AnyDependentCoawaits || Promise->getType()->isDependentType()) &&
          "All dependent coawait expressions should already be resolved");
 
-  SourceLocation Loc = FD->getLocation();
 
-  // Form a declaration statement for the promise declaration, so that AST
-  // visitors can more easily find it.
-  auto *Coro = FSI->Coroutine;
-  Stmt *PromiseStmt = Coro->getPromiseDeclStmt();
-  Stmt *InitSuspend = Coro->getInitSuspendStmt();
-  Stmt *FinalSuspend = Coro->getFinalSuspendStmt();
-  assert(PromiseStmt && InitSuspend && FinalSuspend && "must already be built");
-
-  // FIXME: Perform move-initialization of parameters into frame-local copies.
-  SmallVector<Expr*, 16> ParamMoves;
-  Coro->setBody(Body);
-  Body = Coro;
 }
