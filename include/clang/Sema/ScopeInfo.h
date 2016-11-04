@@ -137,8 +137,8 @@ public:
   /// false if there is an invocation of an initializer on 'self'.
   bool ObjCWarnForNoInitDelegation : 1;
 
-  /// true iff we have attempted to build the initial and final coroutine
-  /// suspend points.
+  /// \brief Wether this function has already built, or tried to build, the
+  /// the initial and final coroutine suspend points.
   bool HasCoroutineSuspends : 1;
 
   /// First 'return' statement in the current function.
@@ -398,6 +398,7 @@ public:
 
   void setCoroutineSuspends(Stmt *Initial, Stmt *Final) {
     assert(Initial && Final && "suspend points cannot be null");
+    assert(CoroutineStmts.first == nullptr && "suspend points already set");
     HasCoroutineSuspends = true;
     CoroutineSuspends.first = Initial;
     CoroutineSuspends.second = Final;

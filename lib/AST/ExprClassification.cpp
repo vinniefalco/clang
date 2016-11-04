@@ -129,6 +129,7 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::UnresolvedLookupExprClass:
   case Expr::UnresolvedMemberExprClass:
   case Expr::TypoExprClass:
+  case Expr::DependentCoawaitExprClass:
   case Expr::CXXDependentScopeMemberExprClass:
   case Expr::DependentScopeDeclRefExprClass:
     // ObjC instance variables are lvalues
@@ -188,9 +189,6 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::CXXFoldExprClass:
   case Expr::NoInitExprClass:
   case Expr::DesignatedInitUpdateExprClass:
-  // FIXME How should we classify co_await expressions while they're still
-  // dependent?
-  case Expr::DependentCoawaitExprClass:
   case Expr::CoyieldExprClass:
     return Cl::CL_PRValue;
 

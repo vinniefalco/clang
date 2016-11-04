@@ -347,39 +347,19 @@ public:
     return cast<VarDecl>(cast<DeclStmt>(getPromiseDeclStmt())->getSingleDecl());
   }
 
-  void setPromiseDeclStmt(Stmt *S) {
-    assert(SubStmts[SubStmt::Promise] == nullptr);
-    SubStmts[SubStmt::Promise] = S;
-  }
-
   Stmt *getInitSuspendStmt() const { return SubStmts[SubStmt::InitSuspend]; }
   Stmt *getFinalSuspendStmt() const { return SubStmts[SubStmt::FinalSuspend]; }
 
-  void setInitialSuspendStmt(Stmt *Suspend) {
-    assert(SubStmts[SubStmt::InitSuspend] == nullptr);
-    SubStmts[SubStmt::InitSuspend] = Suspend;
-  }
-  void setFinalSuspendStmt(Stmt *Suspend) {
-    assert(SubStmts[SubStmt::FinalSuspend] == nullptr);
-    SubStmts[SubStmt::FinalSuspend] = Suspend;
-  }
-
   Stmt *getExceptionHandler() const { return SubStmts[SubStmt::OnException]; }
-  void setExceptionHandler(Stmt *S) { SubStmts[SubStmt::OnException] = S; }
   Stmt *getFallthroughHandler() const {
     return SubStmts[SubStmt::OnFallthrough];
   }
-  void setFalltroughHandler(Stmt *S) { SubStmts[SubStmt::OnFallthrough] = S; }
   Expr *getAllocate() const { return cast_or_null<Expr>(SubStmts[SubStmt::Allocate]); }
   Stmt *getDeallocate() const { return SubStmts[SubStmt::Deallocate]; }
-  void setAllocate(Expr *E) { SubStmts[SubStmt::Allocate] = E; }
-  void setDeallocate(Stmt *S) { SubStmts[SubStmt::Deallocate] = S; }
 
   Expr *getReturnValueInit() const {
     return cast_or_null<Expr>(SubStmts[SubStmt::ReturnValue]);
   }
-
-  void setReturnValueInit(Expr *E) { SubStmts[SubStmt::ReturnValue] = E; }
 
   SourceLocation getLocStart() const LLVM_READONLY {
     return getBody() ? getBody()->getLocStart() : getPromiseDecl()->getLocStart();
