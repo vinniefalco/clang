@@ -23,6 +23,7 @@
 #include "clang/Sema/CleanupInfo.h"
 #include "clang/Sema/Ownership.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include <algorithm>
@@ -136,6 +137,10 @@ public:
   /// false if there is an invocation of an initializer on 'self'.
   bool ObjCWarnForNoInitDelegation : 1;
 
+  /// true iff we have attempted to build the initial and final coroutine
+  /// suspend points.
+  bool HasCoroutineSuspends : 1;
+
   /// First 'return' statement in the current function.
   SourceLocation FirstReturnLoc;
 
@@ -160,9 +165,8 @@ public:
   /// \brief The promise object for this coroutine, if any.
   VarDecl *CoroutinePromise;
 
-  /// \brief The initial and final suspendpoints
-  std::pair<Stmt*, Stmt*> CoroutineSuspends;
-
+  /// \brief The initial and final coroutine suspend points.
+  std::pair<Stmt *, Stmt *> CoroutineSuspends;
 
   /// \brief The list of coroutine control flow constructs (co_await, co_yield,
   /// co_return) that occur within the function or block. Empty if and only if
@@ -382,6 +386,23 @@ public:
           (HasBranchProtectedScope && HasBranchIntoScope));
   }
 
+  void setCoroutineSuspendsInvalid() {
+    assert(!HasCoroutineSuspends && CoroutineSuspends.first == nullptr &&
+           "we already have valid suspend points");
+    HasCoroutineSuspends = true;
+  }
+
+  bool hasInvalidCoroutineSuspends() const {
+    return HasCoroutineSuspends && CoroutineSuspends.first == nullptr;
+  }
+
+  void setCoroutineSuspends(Stmt *Initial, Stmt *Final) {
+    assert(Initial && Final && "suspend points cannot be null");
+    HasCoroutineSuspends = true;
+    CoroutineSuspends.first = Initial;
+    CoroutineSuspends.second = Final;
+  }
+
   FunctionScopeInfo(DiagnosticsEngine &Diag)
       : Kind(SK_Function), HasBranchProtectedScope(false),
         HasBranchIntoScope(false), HasIndirectGoto(false),
@@ -389,8 +410,8 @@ public:
         HasFallthroughStmt(false), HasPotentialAvailabilityViolations(false),
         ObjCShouldCallSuper(false), ObjCIsDesignatedInit(false),
         ObjCWarnForNoDesignatedInitChain(false), ObjCIsSecondaryInit(false),
-        ObjCWarnForNoInitDelegation(false), CoroutinePromise(nullptr),
-        ErrorTrap(Diag) {}
+        ObjCWarnForNoInitDelegation(false), HasCoroutineSuspends(false),
+        CoroutinePromise(nullptr), ErrorTrap(Diag) {}
 
   virtual ~FunctionScopeInfo();
 

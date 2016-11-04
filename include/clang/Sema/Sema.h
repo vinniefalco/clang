@@ -8039,7 +8039,8 @@ public:
   ExprResult BuildDependentCoawaitExpr(SourceLocation KwLoc, Expr *E,
                                        UnresolvedLookupExpr *Lookup);
   ExprResult BuildCoyieldExpr(SourceLocation KwLoc, Expr *E);
-  StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E);
+  StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E,
+                               bool IsImplicitlyCreated = false);
   StmtResult BuildCoroutineBodyStmt(Stmt *Body, VarDecl *Promise, Stmt *InitSuspend,
                                     Stmt *FinalSuspend, Stmt *OnException,
                                     Stmt *OnFallthrough, Expr *Allocation,

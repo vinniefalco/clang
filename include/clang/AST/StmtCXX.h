@@ -414,10 +414,14 @@ class CoreturnStmt : public Stmt {
   enum SubStmt { Operand, PromiseCall, Count };
   Stmt *SubStmts[SubStmt::Count];
 
+  bool IsImplicitlyCreated : 1;
+
   friend class ASTStmtReader;
 public:
-  CoreturnStmt(SourceLocation CoreturnLoc, Stmt *Operand, Stmt *PromiseCall)
-      : Stmt(CoreturnStmtClass), CoreturnLoc(CoreturnLoc) {
+  CoreturnStmt(SourceLocation CoreturnLoc, Stmt *Operand, Stmt *PromiseCall,
+               bool IsImplicit = false)
+      : Stmt(CoreturnStmtClass), CoreturnLoc(CoreturnLoc),
+        IsImplicitlyCreated(IsImplicit) {
     SubStmts[SubStmt::Operand] = Operand;
     SubStmts[SubStmt::PromiseCall] = PromiseCall;
   }
@@ -434,6 +438,8 @@ public:
   Expr *getPromiseCall() const {
     return static_cast<Expr*>(SubStmts[PromiseCall]);
   }
+  bool isImplicitlyCreated() const { return IsImplicitlyCreated; }
+  void setImplicitlyCreated(bool value = true) { IsImplicitlyCreated = value; }
 
   SourceLocation getLocStart() const LLVM_READONLY { return CoreturnLoc; }
   SourceLocation getLocEnd() const LLVM_READONLY {

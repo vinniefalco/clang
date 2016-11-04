@@ -74,8 +74,7 @@ struct std::experimental::coroutine_traits<double, int> {
   struct promise_type {};
 };
 double bad_promise_type_2(int) { // expected-error {{no member named 'initial_suspend'}}
-  // FIXME: Say something about the missing 'yield_value'.
-  co_yield 0;
+  co_yield 0;                    // expected-error {{no member named 'yield_value'}}
 }
 
 struct promise; // expected-note {{forward declaration}}
@@ -291,6 +290,7 @@ namespace dependent_operator_co_await_lookup {
       // expected-note@-1 {{call to 'initial_suspend' implicitly required by the initial suspend point}}
       // expected-note@+1 {{function is a coroutine due to use of 'co_await' here}}
       co_await transform_awaitable{};
+      // expected-error@-1 {{no member named 'await_ready'}}
     }
     template <class R, class U>
     coro<R> dep_mem_fn(U u) { co_await u; }
@@ -308,6 +308,7 @@ namespace dependent_operator_co_await_lookup {
     //expected-note@-1 {{call to 'initial_suspend' implicitly required by the initial suspend point}}
     //expected-note@+1 {{function is a coroutine due to use of 'co_await' here}}
     co_await transform_awaitable{};
+    // expected-error@-1 {{no member named 'await_ready'}}
   }
 
   void operator co_await(transform_awaitable) = delete;

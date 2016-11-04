@@ -1306,8 +1306,10 @@ public:
   ///
   /// By default, performs semantic analysis to build the new statement.
   /// Subclasses may override this routine to provide different behavior.
-  StmtResult RebuildCoreturnStmt(SourceLocation CoreturnLoc, Expr *Result) {
-    return getSema().BuildCoreturnStmt(CoreturnLoc, Result);
+  StmtResult RebuildCoreturnStmt(SourceLocation CoreturnLoc, Expr *Result,
+                                 bool IsImplicitlyCreated) {
+    return getSema().BuildCoreturnStmt(CoreturnLoc, Result,
+                                       IsImplicitlyCreated);
   }
 
   /// \brief Build a new co_await expression.
@@ -6678,9 +6680,13 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
 
   auto *ScopeInfo = SemaRef.getCurFunction();
   auto *FD = cast<FunctionDecl>(SemaRef.CurContext);
-  assert(ScopeInfo && !ScopeInfo->CoroutinePromise
-          && ScopeInfo->CoroutineStmts.empty() &&
-         "expected clean scope info");
+  assert(ScopeInfo && !ScopeInfo->CoroutinePromise &&
+         !ScopeInfo->HasCoroutineSuspends &&
+         ScopeInfo->CoroutineStmts.empty() && "expected clean scope info");
+
+  // Set that we have (possibly-invalid) suspend points before we do anything
+  // that may fail.
+  ScopeInfo->setCoroutineSuspendsInvalid();
 
   // The new CoroutinePromise object needs to be built and put into the current
   // FunctionScopeInfo before any transformations or rebuilding occurs.
@@ -6700,7 +6706,7 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
       getDerived().TransformStmt(S->getFinalSuspendStmt());
   if (FinalSuspend.isInvalid())
     return StmtError();
-  assert(ScopeInfo->CoroutineStmts.size() == 2);
+  ScopeInfo->setCoroutineSuspends(InitSuspend.get(), FinalSuspend.get());
 
   StmtResult BodyRes = getDerived().TransformStmt(S->getBody());
   if (BodyRes.isInvalid())
@@ -6764,7 +6770,8 @@ TreeTransform<Derived>::TransformCoreturnStmt(CoreturnStmt *S) {
 
   // Always rebuild; we don't know if this needs to be injected into a new
   // context or if the promise type has changed.
-  return getDerived().RebuildCoreturnStmt(S->getKeywordLoc(), Result.get());
+  return getDerived().RebuildCoreturnStmt(S->getKeywordLoc(), Result.get(),
+                                          S->isImplicitlyCreated());
 }
 
 template<typename Derived>
