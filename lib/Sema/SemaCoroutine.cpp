@@ -680,7 +680,7 @@ static bool buildSetException(Sema &S, SourceLocation Loc,
   auto *Promise = FTI->CoroutinePromise;
   if (Promise->getType()->isDependentType())
      return true;
- 
+
   CXXRecordDecl *RD = Promise->getType()->getAsCXXRecordDecl();
 
   // [dcl.fct.def.coroutine]/3
