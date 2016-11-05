@@ -1339,13 +1339,13 @@ public:
     return getSema().BuildCoyieldExpr(CoyieldLoc, Result);
   }
 
-  StmtResult RebuildCoroutineBodyStmt(Stmt *Body, VarDecl *Promise, Stmt *InitSuspend,
-                                      Stmt *FinalSuspend, Stmt *OnException,
-                                      Stmt *OnFallthrough,
-                                       Expr *Allocation,
-                                      Stmt *Deallocation, Expr *ReturnObject) {
+  StmtResult RebuildCoroutineBodyStmt(Stmt *Body, VarDecl *Promise,
+                                      Stmt *InitSuspend, Stmt *FinalSuspend,
+                                      Stmt *OnException, Stmt *OnFallthrough,
+                                      Expr *Allocation, Stmt *Deallocation,
+                                      Expr *ReturnObject) {
     return getSema().BuildCoroutineBodyStmt(
-        Body, Promise, InitSuspend, FinalSuspend, OnException,  OnFallthrough,
+        Body, Promise, InitSuspend, FinalSuspend, OnException, OnFallthrough,
         Allocation, Deallocation, ReturnObject);
   }
   /// \brief Build a new Objective-C \@try statement.
@@ -6746,7 +6746,7 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   Expr *ReturnObject = S->getReturnValueInit();
   if (ReturnObject) {
     ExprResult Res = getDerived().TransformInitializer(ReturnObject,
-            /*NoCopyInit*/false);
+                                                       /*NoCopyInit*/ false);
     if (Res.isInvalid())
       return StmtError();
     ReturnObject = Res.get();
@@ -6755,9 +6755,7 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   // Do a partial rebuild of the coroutine body and stash it in the ScopeInfo
   return getDerived().RebuildCoroutineBodyStmt(
       BodyRes.get(), NewPromise, InitSuspend.get(), FinalSuspend.get(),
-      SetException, Fallthrough, Allocation,
-      Deallocation, ReturnObject);
-
+      SetException, Fallthrough, Allocation, Deallocation, ReturnObject);
 }
 
 template<typename Derived>

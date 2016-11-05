@@ -634,11 +634,8 @@ static FunctionDecl *findDeleteForPromise(Sema &S, SourceLocation Loc,
   return OperatorDelete;
 }
 
-static bool buildFallthrough(Sema &S, SourceLocation Loc,
-                             FunctionDecl *FD,
-                             FunctionScopeInfo *FTI,
-                             Stmt *&OnFallthrough)
-{
+static bool buildFallthrough(Sema &S, SourceLocation Loc, FunctionDecl *FD,
+                             FunctionScopeInfo *FTI, Stmt *&OnFallthrough) {
   assert(!OnFallthrough && "rebuilding existing OnFallthrough");
   auto *Promise = FTI->CoroutinePromise;
   if (Promise->getType()->isDependentType())
@@ -671,15 +668,12 @@ static bool buildFallthrough(Sema &S, SourceLocation Loc,
   return true;
 }
 
-static bool buildSetException(Sema &S, SourceLocation Loc,
-                             FunctionDecl *FD,
-                             FunctionScopeInfo *FTI,
-                             Stmt *&OnException)
-{
+static bool buildSetException(Sema &S, SourceLocation Loc, FunctionDecl *FD,
+                              FunctionScopeInfo *FTI, Stmt *&OnException) {
   assert(!OnException && "rebuilding existing set_exception");
   auto *Promise = FTI->CoroutinePromise;
   if (Promise->getType()->isDependentType())
-     return true;
+    return true;
 
   CXXRecordDecl *RD = Promise->getType()->getAsCXXRecordDecl();
 
@@ -701,14 +695,14 @@ static bool buildSetException(Sema &S, SourceLocation Loc,
   return true;
 }
 
-
 // Builds allocation and deallocation for the coroutine. Returns false on
 // failure.
 static bool buildAllocationAndDeallocation(Sema &S, SourceLocation Loc,
                                            FunctionScopeInfo *Fn,
                                            Expr *&Allocation,
                                            Stmt *&Deallocation) {
-  assert(!Allocation && !Deallocation && "alloc/dealloc statements have already been built");
+  assert(!Allocation && !Deallocation &&
+         "alloc/dealloc statements have already been built");
   QualType PromiseType = Fn->CoroutinePromise->getType();
   if (PromiseType->isDependentType())
     return true;
@@ -783,11 +777,13 @@ static bool buildAllocationAndDeallocation(Sema &S, SourceLocation Loc,
   return true;
 }
 
-StmtResult Sema::BuildCoroutineBodyStmt(Stmt *Body, VarDecl *Promise, Stmt *InitSuspend,
-                                        Stmt *FinalSuspend, Stmt *SetException,
-                                        Stmt *OnFallthrough, Expr *Allocation,
-                                        Stmt *Deallocation, Expr *ReturnObjectInit) {
-  assert(Promise && InitSuspend && FinalSuspend && "these nodes must already be built");
+StmtResult Sema::BuildCoroutineBodyStmt(Stmt *Body, VarDecl *Promise,
+                                        Stmt *InitSuspend, Stmt *FinalSuspend,
+                                        Stmt *SetException, Stmt *OnFallthrough,
+                                        Expr *Allocation, Stmt *Deallocation,
+                                        Expr *ReturnObjectInit) {
+  assert(Promise && InitSuspend && FinalSuspend &&
+         "these nodes must already be built");
   // Form a declaration statement for the promise declaration, so that AST
   // visitors can more easily find it.
   // FIXME Get real location
@@ -852,8 +848,8 @@ StmtResult Sema::BuildCoroutineBodyStmt(Stmt *Body, VarDecl *Promise, Stmt *Init
   }
 
   return new (Context) CoroutineBodyStmt(
-      Body, PromiseStmt.get(), InitSuspend, FinalSuspend,
-      SetException, OnFallthrough, Allocation, Deallocation, ReturnObjectInit, None);
+      Body, PromiseStmt.get(), InitSuspend, FinalSuspend, SetException,
+      OnFallthrough, Allocation, Deallocation, ReturnObjectInit, None);
 }
 
 void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
@@ -878,7 +874,6 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
       return FD->setInvalidDecl();
     Body = BodyRes.get();
   }
-
 
   // Coroutines [stmt.return]p1:
   //   A return statement shall not appear in a coroutine.
@@ -909,5 +904,4 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
 
   assert((!AnyDependentCoawaits || Promise->getType()->isDependentType()) &&
          "All dependent coawait expressions should already be resolved");
-
 }
