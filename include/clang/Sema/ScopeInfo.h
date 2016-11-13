@@ -398,7 +398,7 @@ public:
 
   void setCoroutineSuspends(Stmt *Initial, Stmt *Final) {
     assert(Initial && Final && "suspend points cannot be null");
-    assert(CoroutineStmts.first == nullptr && "suspend points already set");
+    assert(CoroutineSuspends.first == nullptr && "suspend points already set");
     HasCoroutineSuspends = true;
     CoroutineSuspends.first = Initial;
     CoroutineSuspends.second = Final;
