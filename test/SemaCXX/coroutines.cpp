@@ -214,6 +214,13 @@ auto deduced_return_coroutine() {
 }
 
 struct outer {};
+struct await_arg_1 {};
+struct await_arg_2 {};
+
+namespace adl_ns {
+struct coawait_arg_type {};
+awaitable operator co_await(coawait_arg_type);
+}
 
 namespace dependent_operator_co_await_lookup {
   template<typename T> void await_template(T t) {
@@ -236,6 +243,94 @@ namespace dependent_operator_co_await_lookup {
   };
   template void await_template(outer); // expected-note {{instantiation}}
   template void await_template_2(outer);
+
+  struct transform_awaitable {};
+  struct transformed {};
+
+  struct transform_promise {
+    typedef transform_awaitable await_arg;
+    coro<transform_promise> get_return_object();
+    transformed initial_suspend();
+    ::adl_ns::coawait_arg_type final_suspend();
+    transformed await_transform(transform_awaitable);
+  };
+  template <class AwaitArg>
+  struct basic_promise {
+    typedef AwaitArg await_arg;
+    coro<basic_promise> get_return_object();
+    awaitable initial_suspend();
+    awaitable final_suspend();
+  };
+
+  awaitable operator co_await(await_arg_1);
+
+  template <typename T, typename U>
+  coro<T> await_template_3(U t) {
+    co_await t;
+  }
+
+  template coro<basic_promise<await_arg_1>> await_template_3<basic_promise<await_arg_1>>(await_arg_1);
+
+  template <class T, int I = 0>
+  struct dependent_member {
+    coro<T> mem_fn() const {
+      co_await typename T::await_arg{}; // expected-error {{call to function 'operator co_await'}}}
+    }
+    template <class U>
+    coro<T> dep_mem_fn(U t) {
+      co_await t;
+    }
+  };
+
+  template <>
+  struct dependent_member<long> {
+    // FIXME this diagnostic is terrible
+    coro<transform_promise> mem_fn() const { // expected-error {{no member named 'await_ready' in 'dependent_operator_co_await_lookup::transformed'}}
+      // expected-note@-1 {{call to 'initial_suspend' implicitly required by the initial suspend point}}
+      // expected-note@+1 {{function is a coroutine due to use of 'co_await' here}}
+      co_await transform_awaitable{};
+      // expected-error@-1 {{no member named 'await_ready'}}
+    }
+    template <class R, class U>
+    coro<R> dep_mem_fn(U u) { co_await u; }
+  };
+
+  awaitable operator co_await(await_arg_2); // expected-note {{'operator co_await' should be declared prior to the call site}}
+
+  template struct dependent_member<basic_promise<await_arg_1>, 0>;
+  template struct dependent_member<basic_promise<await_arg_2>, 0>; // expected-note {{in instantiation}}
+
+  template <>
+  coro<transform_promise>
+      // FIXME this diagnostic is terrible
+      dependent_member<long>::dep_mem_fn<transform_promise>(int) { // expected-error {{no member named 'await_ready' in 'dependent_operator_co_await_lookup::transformed'}}
+    //expected-note@-1 {{call to 'initial_suspend' implicitly required by the initial suspend point}}
+    //expected-note@+1 {{function is a coroutine due to use of 'co_await' here}}
+    co_await transform_awaitable{};
+    // expected-error@-1 {{no member named 'await_ready'}}
+  }
+
+  void operator co_await(transform_awaitable) = delete;
+  awaitable operator co_await(transformed);
+
+  template coro<transform_promise>
+      dependent_member<long>::dep_mem_fn<transform_promise>(transform_awaitable);
+
+  template <>
+  coro<transform_promise> dependent_member<long>::dep_mem_fn<transform_promise>(long) {
+    co_await transform_awaitable{};
+  }
+
+  template <>
+  struct dependent_member<int> {
+    coro<transform_promise> mem_fn() const {
+      co_await transform_awaitable{};
+    }
+  };
+
+  template coro<transform_promise> await_template_3<transform_promise>(transform_awaitable);
+  template struct dependent_member<transform_promise>;
+  template coro<transform_promise> dependent_member<transform_promise>::dep_mem_fn(transform_awaitable);
 }
 
 struct yield_fn_tag {};
