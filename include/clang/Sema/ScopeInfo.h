@@ -385,8 +385,8 @@ public:
   }
 
   void setNeedsCoroutineSuspends(bool value = true) {
-    assert(NeedsCoroutineSuspends && CoroutineSuspends.first == nullptr &&
-           "we already have valid suspend points");
+    assert((!value || CoroutineSuspends.first == nullptr) &&
+            "we already have valid suspend points");
     NeedsCoroutineSuspends = value;
   }
 
