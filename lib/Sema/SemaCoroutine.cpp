@@ -193,6 +193,12 @@ static FunctionScopeInfo *checkCoroutineContext(Sema &S, SourceLocation Loc,
   return ScopeInfo;
 }
 
+VarDecl *Sema::buildCoroutinePromise(SourceLocation Loc) {
+  // FIXME(EricWF): Implement this
+  assert(false);
+  return nullptr;
+}
+
 static Expr *buildBuiltinCall(Sema &S, SourceLocation Loc, Builtin::ID Id,
                               MutableArrayRef<Expr *> CallArgs) {
   StringRef Name = S.Context.BuiltinInfo.getName(Id);
@@ -284,9 +290,9 @@ ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
   if (Awaitable.isInvalid())
     return ExprError();
 
-  return BuildCoawaitExpr(Loc, Awaitable.get());
+  return BuildCoawaitExpr(Loc, Awaitable.get(), /*IsImplicit*/false);
 }
-ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
+ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E, bool IsImplicit) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
   if (!Coroutine)
     return ExprError();
@@ -314,8 +320,9 @@ ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E) {
     return ExprError();
 
   Expr *Res = new (Context) CoawaitExpr(Loc, E, RSS.Results[0], RSS.Results[1],
-                                        RSS.Results[2]);
-  Coroutine->CoroutineStmts.push_back(Res);
+                                        RSS.Results[2], IsImplicit);
+  if (!IsImplicit)
+    Coroutine->CoroutineStmts.push_back(Res);
   return Res;
 }
 
@@ -388,16 +395,16 @@ ExprResult Sema::BuildCoyieldExpr(SourceLocation Loc, Expr *E) {
   return Res;
 }
 
-StmtResult Sema::ActOnCoreturnStmt(SourceLocation Loc, Expr *E) {
+StmtResult Sema::ActOnCoreturnStmt(Scope *S, SourceLocation Loc, Expr *E) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_return");
   if (!Coroutine) {
     CorrectDelayedTyposInExpr(E);
     return StmtError();
   }
-  return BuildCoreturnStmt(Loc, E);
+  return BuildCoreturnStmt(Loc, E, /*IsImplicit*/false);
 }
 
-StmtResult Sema::BuildCoreturnStmt(SourceLocation Loc, Expr *E) {
+StmtResult Sema::BuildCoreturnStmt(SourceLocation Loc, Expr *E, bool IsImplicit) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_return");
   if (!Coroutine)
     return StmtError();
@@ -424,9 +431,17 @@ StmtResult Sema::BuildCoreturnStmt(SourceLocation Loc, Expr *E) {
 
   Expr *PCE = ActOnFinishFullExpr(PC.get()).get();
 
-  Stmt *Res = new (Context) CoreturnStmt(Loc, E, PCE);
-  Coroutine->CoroutineStmts.push_back(Res);
+  Stmt *Res = new (Context) CoreturnStmt(Loc, E, PCE, IsImplicit);
+  if (!IsImplicit)
+    Coroutine->CoroutineStmts.push_back(Res);
   return Res;
+}
+
+ExprResult Sema::BuildDependentCoawaitExpr(SourceLocation KwLoc, Expr *E,
+                                           UnresolvedLookupExpr* Lookup)
+{
+  // FIXME: implement this
+  return ExprError();
 }
 
 static ExprResult buildStdCurrentExceptionCall(Sema &S, SourceLocation Loc) {
@@ -608,7 +623,7 @@ public:
 
 void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   FunctionScopeInfo *Fn = getCurFunction();
-  assert(Fn && !Fn->CoroutineStmts.empty() && "not a coroutine");
+  assert(Fn && Fn->CoroutinePromise && "not a coroutine");
 
   // Coroutines [stmt.return]p1:
   //   A return statement shall not appear in a coroutine.
@@ -645,7 +660,7 @@ bool SubStmtBuilder::makeInitialSuspend() {
       buildPromiseCall(S, &Fn, Loc, "initial_suspend", None);
   // FIXME: Support operator co_await here.
   if (!InitialSuspend.isInvalid())
-    InitialSuspend = S.BuildCoawaitExpr(Loc, InitialSuspend.get());
+    InitialSuspend = S.BuildCoawaitExpr(Loc, InitialSuspend.get(), /*IsImplicit*/true);
   InitialSuspend = S.ActOnFinishFullExpr(InitialSuspend.get());
   if (InitialSuspend.isInvalid())
     return false;
@@ -660,7 +675,7 @@ bool SubStmtBuilder::makeFinalSuspend() {
       buildPromiseCall(S, &Fn, Loc, "final_suspend", None);
   // FIXME: Support operator co_await here.
   if (!FinalSuspend.isInvalid())
-    FinalSuspend = S.BuildCoawaitExpr(Loc, FinalSuspend.get());
+    FinalSuspend = S.BuildCoawaitExpr(Loc, FinalSuspend.get(), /*IsImplicit*/true);
   FinalSuspend = S.ActOnFinishFullExpr(FinalSuspend.get());
   if (FinalSuspend.isInvalid())
     return false;

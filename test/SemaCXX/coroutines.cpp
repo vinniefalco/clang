@@ -73,7 +73,7 @@ template <>
 struct std::experimental::coroutine_traits<double, int> {
   struct promise_type {};
 };
-double bad_promise_type_2(int) {
+double bad_promise_type_2(int) { // expected-error {{no member named 'initial_suspend'}}
   co_yield 0; // expected-error {{no member named 'yield_value' in 'std::experimental::coroutine_traits<double, int>::promise_type'}}
 }
 
