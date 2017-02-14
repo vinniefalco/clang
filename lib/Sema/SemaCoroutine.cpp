@@ -885,13 +885,8 @@ bool SubStmtBuilder::makeOnFallthrough() {
   // [dcl.fct.def.coroutine]/4
   // The unqualified-ids 'return_void' and 'return_value' are looked up in
   // the scope of class P. If both are found, the program is ill-formed.
-  DeclarationName RVoidDN = S.PP.getIdentifierInfo("return_void");
-  LookupResult RVoidResult(S, RVoidDN, Loc, Sema::LookupMemberName);
-  const bool HasRVoid = S.LookupQualifiedName(RVoidResult, PromiseRecordDecl);
-
-  DeclarationName RValueDN = S.PP.getIdentifierInfo("return_value");
-  LookupResult RValueResult(S, RValueDN, Loc, Sema::LookupMemberName);
-  const bool HasRValue = S.LookupQualifiedName(RValueResult, PromiseRecordDecl);
+  const bool HasRVoid = lookupMember(S, "return_void", PromiseRecordDecl, Loc);
+  const bool HasRValue = lookupMember(S, "return_value", PromiseRecordDecl, Loc);
 
   StmtResult Fallthrough;
   if (HasRVoid && HasRValue) {
@@ -903,7 +898,8 @@ bool SubStmtBuilder::makeOnFallthrough() {
     // If the unqualified-id return_void is found, flowing off the end of a
     // coroutine is equivalent to a co_return with no operand. Otherwise,
     // flowing off the end of a coroutine results in undefined behavior.
-    Fallthrough = S.BuildCoreturnStmt(FD.getLocation(), nullptr);
+    Fallthrough = S.BuildCoreturnStmt(FD.getLocation(), nullptr,
+                                      /*IsImplicit*/false);
     Fallthrough = S.ActOnFinishFullStmt(Fallthrough.get());
     if (Fallthrough.isInvalid())
       return false;
@@ -931,9 +927,7 @@ bool SubStmtBuilder::makeOnException() {
   // [dcl.fct.def.coroutine]/3
   // The unqualified-id set_exception is found in the scope of P by class
   // member access lookup (3.4.5).
-  DeclarationName SetExDN = S.PP.getIdentifierInfo("set_exception");
-  LookupResult SetExResult(S, SetExDN, Loc, Sema::LookupMemberName);
-  if (S.LookupQualifiedName(SetExResult, PromiseRecordDecl)) {
+  if (lookupMember(S, "set_exception", PromiseRecordDecl, Loc)) {
     // Form the call 'p.set_exception(std::current_exception())'
     SetException = buildStdCurrentExceptionCall(S, Loc);
     if (SetException.isInvalid())
