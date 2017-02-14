@@ -21,6 +21,16 @@
 using namespace clang;
 using namespace sema;
 
+static bool lookupMember(Sema &S, const char *Name, CXXRecordDecl *RD,
+                         SourceLocation Loc) {
+  DeclarationName DN = S.PP.getIdentifierInfo(Name);
+  LookupResult LR(S, DN, Loc, Sema::LookupMemberName);
+  // Suppress diagnostics when a private member is selected. The same warnings
+  // will be produced again when building the call.
+  LR.suppressDiagnostics();
+  return S.LookupQualifiedName(LR, RD);
+}
+
 /// Look up the std::coroutine_traits<...>::promise_type for the given
 /// function type.
 static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
@@ -437,11 +447,36 @@ StmtResult Sema::BuildCoreturnStmt(SourceLocation Loc, Expr *E, bool IsImplicit)
   return Res;
 }
 
-ExprResult Sema::BuildDependentCoawaitExpr(SourceLocation KwLoc, Expr *E,
+ExprResult Sema::BuildDependentCoawaitExpr(SourceLocation Loc, Expr *E,
                                            UnresolvedLookupExpr* Lookup)
 {
-  // FIXME: implement this
-  return ExprError();
+  auto *FSI = checkCoroutineContext(*this, Loc, "co_await");
+  if (!FSI)
+    return ExprError();
+
+  if (E->getType()->isPlaceholderType()) {
+    ExprResult R = CheckPlaceholderExpr(E);
+    if (R.isInvalid())
+      return ExprError();
+    E = R.get();
+  }
+
+  auto *Promise = FSI->CoroutinePromise;
+  if (Promise->getType()->isDependentType()) {
+    Expr *Res =
+        new (Context) DependentCoawaitExpr(Loc, Context.DependentTy, E, Lookup);
+    FSI->CoroutineStmts.push_back(Res);
+    return Res;
+  }
+
+  auto *RD = Promise->getType()->getAsCXXRecordDecl();
+  if (lookupMember(*this, "await_transform", RD, Loc)) {
+    ExprResult R = buildPromiseCall(*this, Promise, Loc, "await_transform", E);
+    if (R.isInvalid()) {
+      Diag(Loc,
+           diag::note_coroutine_promise_implicit_await_transform_required_here)
+          << E->getSourceRange();
+      return ExprError();
 }
 
 static ExprResult buildStdCurrentExceptionCall(Sema &S, SourceLocation Loc) {
