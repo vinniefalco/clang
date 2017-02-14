@@ -8179,10 +8179,10 @@ public:
   ExprResult ActOnCoyieldExpr(Scope *S, SourceLocation KwLoc, Expr *E);
   StmtResult ActOnCoreturnStmt(Scope *S, SourceLocation KwLoc, Expr *E);
 
-  ExprResult BuildCoawaitExpr(SourceLocation KwLoc, Expr *E,
-                              bool IsImplicit = false);
-  ExprResult BuildDependentCoawaitExpr(SourceLocation KwLoc, Expr *E,
-                                       UnresolvedLookupExpr* Lookup);
+  ExprResult BuildResolvedCoawaitExpr(SourceLocation KwLoc, Expr *E,
+                                      bool IsImplicit = false);
+  ExprResult BuildUnresolvedCoawaitExpr(SourceLocation KwLoc, Expr *E,
+                                        UnresolvedLookupExpr* Lookup);
   ExprResult BuildCoyieldExpr(SourceLocation KwLoc, Expr *E);
   StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E,
                                bool IsImplicit = false);

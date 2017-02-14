@@ -1373,7 +1373,7 @@ public:
   /// Subclasses may override this routine to provide different behavior.
   ExprResult RebuildCoawaitExpr(SourceLocation CoawaitLoc, Expr *Result,
                                 bool IsImplicit) {
-    return getSema().BuildCoawaitExpr(CoawaitLoc, Result, IsImplicit);
+    return getSema().BuildResolvedCoawaitExpr(CoawaitLoc, Result, IsImplicit);
   }
 
   /// \brief Build a new co_await expression.
@@ -1383,7 +1383,7 @@ public:
   ExprResult RebuildDependentCoawaitExpr(SourceLocation CoawaitLoc,
                                          Expr *Result,
                                          UnresolvedLookupExpr *Lookup) {
-    return getSema().BuildDependentCoawaitExpr(CoawaitLoc, Result, Lookup);
+    return getSema().BuildUnresolvedCoawaitExpr(CoawaitLoc, Result, Lookup);
   }
 
   /// \brief Build a new co_yield expression.

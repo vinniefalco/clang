@@ -367,8 +367,8 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
     Suspend = buildOperatorCoawaitCall(S, SC, Loc, Suspend.get());
     if (Suspend.isInvalid())
       return StmtError();
-    Suspend = S.BuildCoawaitExpr(Loc, Suspend.get(),
-                                 /*IsImplicit*/ true);
+    Suspend = S.BuildResolvedCoawaitExpr(Loc, Suspend.get(),
+                                         /*IsImplicit*/ true);
     Suspend = S.ActOnFinishFullExpr(Suspend.get());
     if (Suspend.isInvalid()) {
       S.Diag(Loc, diag::note_coroutine_promise_call_implicitly_required)
@@ -406,11 +406,11 @@ ExprResult Sema::ActOnCoawaitExpr(Scope *S, SourceLocation Loc, Expr *E) {
   ExprResult Lookup = buildOperatorCoawaitLookupExpr(*this, S, Loc);
   if (Lookup.isInvalid())
     return ExprError();
-  return BuildDependentCoawaitExpr(Loc, E,
+  return BuildUnresolvedCoawaitExpr(Loc, E,
                                    cast<UnresolvedLookupExpr>(Lookup.get()));
 }
 
-ExprResult Sema::BuildDependentCoawaitExpr(SourceLocation Loc, Expr *E,
+ExprResult Sema::BuildUnresolvedCoawaitExpr(SourceLocation Loc, Expr *E,
                                            UnresolvedLookupExpr *Lookup) {
   auto *FSI = checkCoroutineContext(*this, Loc, "co_await");
   if (!FSI)
@@ -446,10 +446,10 @@ ExprResult Sema::BuildDependentCoawaitExpr(SourceLocation Loc, Expr *E,
   if (Awaitable.isInvalid())
     return ExprError();
 
-  return BuildCoawaitExpr(Loc, Awaitable.get());
+  return BuildResolvedCoawaitExpr(Loc, Awaitable.get());
 }
 
-ExprResult Sema::BuildCoawaitExpr(SourceLocation Loc, Expr *E,
+ExprResult Sema::BuildResolvedCoawaitExpr(SourceLocation Loc, Expr *E,
                                   bool IsImplicit) {
   auto *Coroutine = checkCoroutineContext(*this, Loc, "co_await");
   if (!Coroutine)
