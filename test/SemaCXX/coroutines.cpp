@@ -464,6 +464,51 @@ coro<bad_promise_8> calls_set_exception() {
   co_await a;
 }
 
+struct bad_promise_9 {
+  coro<bad_promise_9> get_return_object();
+  suspend_always initial_suspend();
+  suspend_always final_suspend();
+  void await_transform(void *);                                // expected-note {{candidate}}
+  awaitable await_transform(int) __attribute__((unavailable)); // expected-note {{explicitly made unavailable}}
+  void return_void();
+};
+coro<bad_promise_9> calls_await_transform() {
+  co_await 42; // expected-error {{call to unavailable member function 'await_transform'}}
+  // expected-note@-1 {{call to 'await_transform' implicitly required by 'co_await' here}}
+}
+
+struct bad_promise_10 {
+  coro<bad_promise_10> get_return_object();
+  suspend_always initial_suspend();
+  suspend_always final_suspend();
+  int await_transform;
+  void return_void();
+};
+coro<bad_promise_10> bad_coawait() {
+  // FIXME this diagnostic is terrible
+  co_await 42; // expected-error {{called object type 'int' is not a function or function pointer}}
+  // expected-note@-1 {{call to 'await_transform' implicitly required by 'co_await' here}}
+}
+
+struct call_operator {
+  template <class... Args>
+  awaitable operator()(Args...) const { return a; }
+};
+void ret_void();
+struct good_promise_1 {
+  coro<good_promise_1> get_return_object();
+  suspend_always initial_suspend();
+  suspend_always final_suspend();
+  static const call_operator await_transform;
+  using Fn = void (*)();
+  Fn return_void = ret_void;
+};
+const call_operator good_promise_1::await_transform;
+coro<good_promise_1> ok_static_coawait() {
+  // FIXME this diagnostic is terrible
+  co_await 42;
+}
+
 template<> struct std::experimental::coroutine_traits<int, int, const char**>
 { using promise_type = promise; };
 
