@@ -59,14 +59,14 @@ void no_specialization() {
 template <typename... T>
 struct std::experimental::coroutine_traits<int, T...> {};
 
-int no_promise_type() {
-  co_await a; // expected-error {{this function cannot be a coroutine: 'std::experimental::coroutine_traits<int>' has no member named 'promise_type'}}
+int no_promise_type() { // expected-error {{this function cannot be a coroutine: 'std::experimental::coroutine_traits<int>' has no member named 'promise_type'}}
+  co_await a;
 }
 
 template <>
 struct std::experimental::coroutine_traits<double, double> { typedef int promise_type; };
-double bad_promise_type(double) {
-  co_await a; // expected-error {{this function cannot be a coroutine: 'experimental::coroutine_traits<double, double>::promise_type' (aka 'int') is not a class}}
+double bad_promise_type(double) { // expected-error {{this function cannot be a coroutine: 'experimental::coroutine_traits<double, double>::promise_type' (aka 'int') is not a class}}
+  co_await a;
 }
 
 template <>
@@ -77,7 +77,7 @@ double bad_promise_type_2(int) { // expected-error {{no member named 'initial_su
   co_yield 0; // expected-error {{no member named 'yield_value' in 'std::experimental::coroutine_traits<double, int>::promise_type'}}
 }
 
-struct promise; // expected-note 2{{forward declaration}}
+struct promise; // expected-note {{forward declaration}}
 struct promise_void;
 struct void_tag {};
 template <typename... T>
@@ -94,9 +94,7 @@ struct coroutine_handle;
 }
 
 // FIXME: This diagnostic is terrible.
-void undefined_promise() { // expected-error {{variable has incomplete type 'promise_type'}}
-  // FIXME: This diagnostic doesn't make any sense.
-  // expected-error@-2 {{incomplete definition of type 'promise'}}
+void undefined_promise() { // expected-error {{this function cannot be a coroutine: 'experimental::coroutine_traits<void>::promise_type' (aka 'promise') is an incomplete type}}
   co_await a;
 }
 
@@ -293,6 +291,7 @@ struct bad_promise_2 {
   // FIXME: We shouldn't offer a typo-correction here!
   suspend_always final_suspend(); // expected-note {{here}}
 };
+// FIXME: This shouldn't happen twice
 coro<bad_promise_2> missing_initial_suspend() { // expected-error {{no member named 'initial_suspend' in 'bad_promise_2'}}
   co_await a;
 }
@@ -313,7 +312,8 @@ struct bad_promise_4 {
 };
 // FIXME: This diagnostic is terrible.
 coro<bad_promise_4> bad_initial_suspend() { // expected-error {{no member named 'await_ready' in 'not_awaitable'}}
-  co_await a;
+  // expected-note@-1 {{call to 'initial_suspend' implicitly required by the initial suspend point}}
+  co_await a; // expected-note {{function is a coroutine due to use of 'co_await' here}}
 }
 
 struct bad_promise_5 {
@@ -323,7 +323,8 @@ struct bad_promise_5 {
 };
 // FIXME: This diagnostic is terrible.
 coro<bad_promise_5> bad_final_suspend() { // expected-error {{no member named 'await_ready' in 'not_awaitable'}}
-  co_await a;
+  // expected-note@-1 {{call to 'final_suspend' implicitly required by the final suspend point}}
+  co_await a; // expected-note {{function is a coroutine due to use of 'co_await' here}}
 }
 
 struct bad_promise_6 {

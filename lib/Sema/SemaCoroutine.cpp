@@ -96,7 +96,7 @@ static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
   // The promise type is required to be a class type.
   QualType PromiseType = S.Context.getTypeDeclType(Promise);
 
-  auto buildNNS = [&]() {
+  auto buildElaboratedType = [&]() {
     auto *NNS = NestedNameSpecifier::Create(S.Context, nullptr, StdExp);
     NNS = NestedNameSpecifier::Create(S.Context, NNS, false,
                                       CoroTrait.getTypePtr());
@@ -106,10 +106,10 @@ static QualType lookupPromiseType(Sema &S, const FunctionProtoType *FnType,
   if (!PromiseType->getAsCXXRecordDecl()) {
     S.Diag(FuncLoc,
            diag::err_implied_std_coroutine_traits_promise_type_not_class)
-        << buildNNS();
+        << buildElaboratedType();
     return QualType();
   }
-  if (S.RequireCompleteType(FuncLoc, buildNNS(),
+  if (S.RequireCompleteType(FuncLoc, buildElaboratedType(),
                             diag::err_coroutine_promise_type_incomplete))
     return QualType();
 
@@ -351,10 +351,10 @@ static bool actOnCoroutineBodyStart(Sema &S, Scope *SC, SourceLocation KWLoc,
 
   // If we have existing coroutine statements then we have already built
   // the initial and final suspend points.
-  if (ScopeInfo->HasCoroutineSuspends)
+  if (!ScopeInfo->NeedsCoroutineSuspends)
     return true;
 
-  ScopeInfo->setCoroutineSuspendsInvalid();
+  ScopeInfo->setNeedsCoroutineSuspends(false);
 
   auto *Fn = cast<FunctionDecl>(S.CurContext);
   SourceLocation Loc = Fn->getLocation();
@@ -835,8 +835,8 @@ void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
     Diag(Fn->FirstReturnLoc, diag::err_return_in_coroutine);
     auto *First = Fn->CoroutineStmts[0];
     Diag(First->getLocStart(), diag::note_declared_coroutine_here)
-        << (isa<CoawaitExpr>(First) ? 0 :
-            isa<CoyieldExpr>(First) ? 1 : 2);
+        << (isa<CoawaitExpr>(First) ? "co_await" :
+            isa<CoyieldExpr>(First) ? "co_yield" : "co_return");
   }
   SubStmtBuilder Builder(*this, *FD, *Fn, Body);
   if (Builder.isInvalid())
@@ -859,32 +859,16 @@ bool SubStmtBuilder::makePromiseStmt() {
 }
 
 bool SubStmtBuilder::makeInitialSuspend() {
-  // Form and check implicit 'co_await p.initial_suspend();' statement.
-  ExprResult InitialSuspend =
-      buildPromiseCall(S, Fn.CoroutinePromise, Loc, "initial_suspend", None);
-  // FIXME: Support operator co_await here.
-  if (!InitialSuspend.isInvalid())
-    InitialSuspend = S.BuildCoawaitExpr(Loc, InitialSuspend.get(), /*IsImplicit*/true);
-  InitialSuspend = S.ActOnFinishFullExpr(InitialSuspend.get());
-  if (InitialSuspend.isInvalid())
+  if (Fn.hasInvalidCoroutineSuspends())
     return false;
-
-  this->InitialSuspend = InitialSuspend.get();
+  this->InitialSuspend = cast<Expr>(Fn.CoroutineSuspends.first);
   return true;
 }
 
 bool SubStmtBuilder::makeFinalSuspend() {
-  // Form and check implicit 'co_await p.final_suspend();' statement.
-  ExprResult FinalSuspend =
-      buildPromiseCall(S, Fn.CoroutinePromise, Loc, "final_suspend", None);
-  // FIXME: Support operator co_await here.
-  if (!FinalSuspend.isInvalid())
-    FinalSuspend = S.BuildCoawaitExpr(Loc, FinalSuspend.get(), /*IsImplicit*/true);
-  FinalSuspend = S.ActOnFinishFullExpr(FinalSuspend.get());
-  if (FinalSuspend.isInvalid())
+  if (Fn.hasInvalidCoroutineSuspends())
     return false;
-
-  this->FinalSuspend = FinalSuspend.get();
+  this->FinalSuspend = cast<Expr>(Fn.CoroutineSuspends.second);
   return true;
 }
 
@@ -993,4 +977,11 @@ bool SubStmtBuilder::makeReturnObject() {
 bool SubStmtBuilder::makeParamMoves() {
   // FIXME: Perform move-initialization of parameters into frame-local copies.
   return true;
+}
+
+StmtResult Sema::BuildCoroutineBodyStmt(CoroutineBodyStmt::CtorArgs Args) {
+  CoroutineBodyStmt *Res = CoroutineBodyStmt::Create(Context, Args);
+  if (!Res)
+    return StmtError();
+  return Res;
 }

@@ -137,7 +137,7 @@ public:
 
   /// \brief Whether this function has already built, or tried to build, the
   /// the initial and final coroutine suspend points.
-  bool HasCoroutineSuspends : 1;
+  bool NeedsCoroutineSuspends : 1;
 
   /// First 'return' statement in the current function.
   SourceLocation FirstReturnLoc;
@@ -384,20 +384,20 @@ public:
           (HasBranchProtectedScope && HasBranchIntoScope));
   }
 
-  void setCoroutineSuspendsInvalid() {
-    assert(!HasCoroutineSuspends && CoroutineSuspends.first == nullptr &&
+  void setNeedsCoroutineSuspends(bool value = true) {
+    assert(NeedsCoroutineSuspends && CoroutineSuspends.first == nullptr &&
            "we already have valid suspend points");
-    HasCoroutineSuspends = true;
+    NeedsCoroutineSuspends = value;
   }
 
   bool hasInvalidCoroutineSuspends() const {
-    return HasCoroutineSuspends && CoroutineSuspends.first == nullptr;
+    return !NeedsCoroutineSuspends && CoroutineSuspends.first == nullptr;
   }
 
   void setCoroutineSuspends(Stmt *Initial, Stmt *Final) {
     assert(Initial && Final && "suspend points cannot be null");
     assert(CoroutineSuspends.first == nullptr && "suspend points already set");
-    HasCoroutineSuspends = true;
+    NeedsCoroutineSuspends = false;
     CoroutineSuspends.first = Initial;
     CoroutineSuspends.second = Final;
   }
@@ -411,7 +411,7 @@ public:
       HasOMPDeclareReductionCombiner(false),
       HasFallthroughStmt(false),
       HasPotentialAvailabilityViolations(false),
-      HasCoroutineSuspends(false),
+      NeedsCoroutineSuspends(true),
       ObjCShouldCallSuper(false),
       ObjCIsDesignatedInit(false),
       ObjCWarnForNoDesignatedInitChain(false),

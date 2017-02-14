@@ -1394,6 +1394,10 @@ public:
     return getSema().BuildCoyieldExpr(CoyieldLoc, Result);
   }
 
+  StmtResult RebuildCoroutineBodyStmt(CoroutineBodyStmt::CtorArgs Args) {
+    return getSema().BuildCoroutineBodyStmt(Args);
+  }
+
   /// \brief Build a new Objective-C \@try statement.
   ///
   /// By default, performs semantic analysis to build the new statement.
@@ -6845,7 +6849,91 @@ StmtResult
 TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   // The coroutine body should be re-formed by the caller if necessary.
   // FIXME: The coroutine body is always rebuilt by ActOnFinishFunctionBody
-  return getDerived().TransformStmt(S->getBody());
+  CoroutineBodyStmt::CtorArgs BodyArgs;
+
+  auto *ScopeInfo = SemaRef.getCurFunction();
+  auto *FD = cast<FunctionDecl>(SemaRef.CurContext);
+  assert(ScopeInfo && !ScopeInfo->CoroutinePromise &&
+         ScopeInfo->NeedsCoroutineSuspends &&
+         ScopeInfo->CoroutineSuspends.first == nullptr &&
+         ScopeInfo->CoroutineSuspends.second == nullptr &&
+         ScopeInfo->CoroutineStmts.empty() && "expected clean scope info");
+
+  // Set that we have (possibly-invalid) suspend points before we do anything
+  // that may fail.
+  ScopeInfo->setNeedsCoroutineSuspends(false);
+
+  // The new CoroutinePromise object needs to be built and put into the current
+  // FunctionScopeInfo before any transformations or rebuilding occurs.
+  auto *Promise = S->getPromiseDecl();
+  auto *NewPromise = SemaRef.buildCoroutinePromise(FD->getLocation());
+  if (!NewPromise)
+    return StmtError();
+  getDerived().transformedLocalDecl(Promise, NewPromise);
+  ScopeInfo->CoroutinePromise = NewPromise;
+  StmtResult PromiseStmt = SemaRef.ActOnDeclStmt(
+          SemaRef.ConvertDeclToDeclGroup(NewPromise),
+          FD->getLocation(), FD->getLocation());
+  assert(!PromiseStmt.isInvalid());
+  BodyArgs.Promise = PromiseStmt.get();
+
+  // Transform the implicit coroutine statements we built during the initial
+  // parse.
+  StmtResult InitSuspend = getDerived().TransformStmt(S->getInitSuspendStmt());
+  if (InitSuspend.isInvalid())
+    return StmtError();
+  StmtResult FinalSuspend =
+      getDerived().TransformStmt(S->getFinalSuspendStmt());
+  if (FinalSuspend.isInvalid())
+    return StmtError();
+  ScopeInfo->setCoroutineSuspends(InitSuspend.get(), FinalSuspend.get());
+  assert(isa<Expr>(InitSuspend.get()) && isa<Expr>(FinalSuspend.get()));
+  BodyArgs.InitialSuspend = cast<Expr>(InitSuspend.get());
+  BodyArgs.FinalSuspend = cast<Expr>(FinalSuspend.get());
+
+  StmtResult BodyRes = getDerived().TransformStmt(S->getBody());
+  if (BodyRes.isInvalid())
+    return StmtError();
+  BodyArgs.Body = BodyRes.get();
+
+  if (S->getFallthroughHandler()) {
+    StmtResult Res = getDerived().TransformStmt(S->getFallthroughHandler());
+    if (Res.isInvalid())
+      return StmtError();
+    BodyArgs.OnFallthrough = Res.get();
+  }
+
+  if (S->getExceptionHandler()) {
+    StmtResult Res = getDerived().TransformStmt(S->getExceptionHandler());
+    if (Res.isInvalid())
+      return StmtError();
+    BodyArgs.OnException = Res.get();
+  }
+
+  // Transform any additional statements we may have already built
+  if (S->getAllocate() && S->getDeallocate()) {
+    ExprResult AllocRes = getDerived().TransformExpr(S->getAllocate());
+    if (AllocRes.isInvalid())
+      return StmtError();
+    BodyArgs.Allocate = AllocRes.get();
+
+    ExprResult DeallocRes = getDerived().TransformExpr(S->getDeallocate());
+    if (DeallocRes.isInvalid())
+      return StmtError();
+    BodyArgs.Deallocate = DeallocRes.get();
+  }
+
+  Expr *ReturnObject = S->getReturnValueInit();
+  if (ReturnObject) {
+    ExprResult Res = getDerived().TransformInitializer(ReturnObject,
+            /*NoCopyInit*/false);
+    if (Res.isInvalid())
+      return StmtError();
+    BodyArgs.ReturnValue = Res.get();
+  }
+
+  // Do a partial rebuild of the coroutine body and stash it in the ScopeInfo
+  return getDerived().RebuildCoroutineBodyStmt(BodyArgs);
 }
 
 template<typename Derived>
