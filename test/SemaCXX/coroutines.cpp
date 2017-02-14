@@ -450,17 +450,22 @@ namespace std {
 int *current_exception();
 }
 
-struct bad_promise_8 {
+struct bad_promise_base {
+private:
+  void return_void();
+};
+struct bad_promise_8 : bad_promise_base {
   coro<bad_promise_8> get_return_object();
   suspend_always initial_suspend();
   suspend_always final_suspend();
-  void return_void();
   void set_exception();                                   // expected-note {{function not viable}}
   void set_exception(int *) __attribute__((unavailable)); // expected-note {{explicitly made unavailable}}
   void set_exception(void *);                             // expected-note {{candidate function}}
 };
 coro<bad_promise_8> calls_set_exception() {
   // expected-error@-1 {{call to unavailable member function 'set_exception'}}
+  // FIXME: also warn about private 'return_void' here. Even though building
+  // the call to set_exception has already failed.
   co_await a;
 }
 
