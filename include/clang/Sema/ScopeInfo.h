@@ -135,8 +135,8 @@ public:
   /// false if there is an invocation of an initializer on 'self'.
   bool ObjCWarnForNoInitDelegation : 1;
 
-  /// \brief Whether this function has already built, or tried to build, the
-  /// the initial and final coroutine suspend points.
+  /// \brief True only when this function has not already built, or attempted
+  /// to build, the initial and final coroutine suspend points
   bool NeedsCoroutineSuspends : 1;
 
   /// First 'return' statement in the current function.

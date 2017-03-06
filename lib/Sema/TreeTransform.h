@@ -6978,9 +6978,6 @@ TreeTransform<Derived>::TransformDependentCoawaitExpr(DependentCoawaitExpr *E) {
   if (LookupResult.isInvalid())
     return ExprError();
 
-  // FIXME(EricWF): Remove this
-  assert(isa<UnresolvedLookupExpr>(LookupResult.get()) && "Expected lookup expr");
-
   // Always rebuild; we don't know if this needs to be injected into a new
   // context or if the promise type has changed.
   return getDerived().RebuildDependentCoawaitExpr(
