@@ -203,7 +203,6 @@ static ExprResult buildOperatorCoawaitLookupExpr(Sema &SemaRef, Scope *S,
 static ExprResult buildOperatorCoawaitCall(Sema &SemaRef, SourceLocation Loc,
                                            Expr *E,
                                            UnresolvedLookupExpr *Lookup) {
-
   UnresolvedSet<16> Functions;
   Functions.append(Lookup->decls_begin(), Lookup->decls_end());
   return SemaRef.CreateOverloadedUnaryOp(Loc, UO_Coawait, Functions, E);
