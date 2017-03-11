@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 #
 #===- git-clang-format - ClangFormat Git Integration ---------*- python -*--===#
 #
@@ -23,7 +23,6 @@ git clang-format -h
 Requires Python 2.7                                                              
 """               
 
-from __future__ import print_function
 import argparse
 import collections
 import contextlib
@@ -139,15 +138,15 @@ def main():
   if opts.verbose >= 1:
     ignored_files.difference_update(changed_lines)
     if ignored_files:
-      print('Ignoring changes in the following files (wrong extension):')
+      print 'Ignoring changes in the following files (wrong extension):'
       for filename in ignored_files:
-        print('    %s' % filename)
+        print '   ', filename
     if changed_lines:
-      print('Running clang-format on the following files:')
+      print 'Running clang-format on the following files:'
       for filename in changed_lines:
-        print('    %s' % filename)
+        print '   ', filename
   if not changed_lines:
-    print('no modified files to format')
+    print 'no modified files to format'
     return
   # The computed diff outputs absolute paths, so we must cd before accessing
   # those files.
@@ -164,20 +163,20 @@ def main():
                                                  binary=opts.binary,
                                                  style=opts.style)
   if opts.verbose >= 1:
-    print('old tree:', old_tree)
-    print('new tree:', new_tree)
+    print 'old tree:', old_tree
+    print 'new tree:', new_tree
   if old_tree == new_tree:
     if opts.verbose >= 0:
-      print('clang-format did not modify any files')
+      print 'clang-format did not modify any files'
   elif opts.diff:
     print_diff(old_tree, new_tree)
   else:
     changed_files = apply_changes(old_tree, new_tree, force=opts.force,
                                   patch_mode=opts.patch)
     if (opts.verbose >= 0 and not opts.patch) or opts.verbose >= 1:
-      print('changed files:')
+      print 'changed files:'
       for filename in changed_files:
-        print('    %s' % filename)
+        print '   ', filename
 
 
 def load_git_config(non_string_options=None):
@@ -290,25 +289,6 @@ def compute_diff(commits, files):
   return p
 
 
-def to_bytes(str):
-    # Encode to UTF-8 to get binary data.
-    if isinstance(str, bytes):
-        return str
-    return str.encode('utf-8')
-
-def to_string(bytes):
-    if isinstance(bytes, str):
-        return bytes
-    return to_bytes(bytes)
-
-def convert_string(bytes):
-    try:
-        return to_string(bytes.decode('utf-8'))
-    except AttributeError: # 'str' object has no attribute 'decode'.
-        return str(bytes)
-    except UnicodeError:
-        return str(bytes)
-
 def extract_lines(patch_file):
   """Extract the changed lines in `patch_file`.
 
@@ -320,10 +300,10 @@ def extract_lines(patch_file):
   list of line `Range`s."""
   matches = {}
   for line in patch_file:
-    match = re.search(to_bytes(r'^\+\+\+\ [^/]+/(.*)'), line)
+    match = re.search(r'^\+\+\+\ [^/]+/(.*)', line)
     if match:
-      filename = match.group(1).rstrip(b'\r\n')
-    match = re.search(to_bytes(r'^@@ -[0-9,]+ \+(\d+)(,(\d+))?'), line)
+      filename = match.group(1).rstrip('\r\n')
+    match = re.search(r'^@@ -[0-9,]+ \+(\d+)(,(\d+))?', line)
     if match:
       start_line = int(match.group(1))
       line_count = 1
@@ -340,14 +320,10 @@ def filter_by_extension(dictionary, allowed_extensions):
   `allowed_extensions` must be a collection of lowercase file extensions,
   excluding the period."""
   allowed_extensions = frozenset(allowed_extensions)
-  keys_to_delete = []
-  for filename in list(dictionary.keys()):
-    filename_cp = convert_string(bytes(filename))
-    base_ext = filename_cp.rsplit('.', 1)
+  for filename in dictionary.keys():
+    base_ext = filename.rsplit('.', 1)
     if len(base_ext) == 1 or base_ext[1].lower() not in allowed_extensions:
-      keys_to_delete += [filename]
-  for key in keys_to_delete:
-    del dictionary[key]
+      del dictionary[filename]
 
 
 def cd_to_toplevel():
@@ -369,7 +345,7 @@ def run_clang_format_and_save_to_tree(changed_lines, revision=None,
 
   Returns the object ID (SHA-1) of the created tree."""
   def index_info_generator():
-    for filename, line_ranges in changed_lines.items():
+    for filename, line_ranges in changed_lines.iteritems():
       if revision:
         git_metadata_cmd = ['git', 'ls-tree',
                             '%s:%s' % (revision, os.path.dirname(filename)),
@@ -380,13 +356,11 @@ def run_clang_format_and_save_to_tree(changed_lines, revision=None,
         mode = oct(int(stdout.split()[0], 8))
       else:
         mode = oct(os.stat(filename).st_mode)
-      if mode.startswith('0o'):
-          mode = '0' + mode[2:]
       blob_id = clang_format_to_blob(filename, line_ranges,
                                      revision=revision,
                                      binary=binary,
                                      style=style)
-      yield to_bytes('%s %s\t%s' % (mode, convert_string(blob_id), convert_string(filename)))
+      yield '%s %s\t%s' % (mode, blob_id, filename)
   return create_tree(index_info_generator(), '--index-info')
 
 
@@ -400,21 +374,12 @@ def create_tree(input_lines, mode):
   assert mode in ('--stdin', '--index-info')
   cmd = ['git', 'update-index', '--add', '-z', mode]
   with temporary_index_file():
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE)
-    Failed = False
-    try:
-        for line in input_lines:
-          # FIXME: This is really really broken in python3
-          p.stdin.write(b'%s\0' % line)
-        p.stdin.close()
-    except:
-        Failed = True
-    exitCode = p.wait()
-    out = convert_string(p.stdout.read())
-    err = convert_string(p.stderr.read())
-    if exitCode != 0 or Failed:
-      die('`%s` failed\nstdout:\n%s\nstderr:\n%s\n' % (' '.join(cmd), out, err))
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    for line in input_lines:
+      p.stdin.write('%s\0' % line)
+    p.stdin.close()
+    if p.wait() != 0:
+      die('`%s` failed' % ' '.join(cmd))
     tree_id = run('git', 'write-tree')
     return tree_id
 
@@ -455,7 +420,7 @@ def clang_format_to_blob(filename, line_ranges, revision=None,
     else:
       raise
   clang_format_stdin.close()
-  hash_object_cmd = ['git', 'hash-object', '-w', '--path='+convert_string(filename), '--stdin']
+  hash_object_cmd = ['git', 'hash-object', '-w', '--path='+filename, '--stdin']
   hash_object = subprocess.Popen(hash_object_cmd, stdin=clang_format.stdout,
                                  stdout=subprocess.PIPE)
   clang_format.stdout.close()
@@ -466,7 +431,7 @@ def clang_format_to_blob(filename, line_ranges, revision=None,
     die('`%s` failed' % ' '.join(clang_format_cmd))
   if git_show and git_show.wait() != 0:
     die('`%s` failed' % ' '.join(git_show_cmd))
-  return stdout.rstrip(b'\r\n')
+  return stdout.rstrip('\r\n')
 
 
 @contextlib.contextmanager
@@ -492,7 +457,6 @@ def create_temporary_index(tree=None):
   If `tree` is not None, use that as the tree to read in.  Otherwise, an
   empty index is created."""
   gitdir = run('git', 'rev-parse', '--git-dir')
-  gitdir = convert_string(gitdir)
   path = os.path.join(gitdir, temp_index_basename)
   if tree is None:
     tree = '--empty'
@@ -524,10 +488,10 @@ def apply_changes(old_tree, new_tree, force=False, patch_mode=False):
   if not force:
     unstaged_files = run('git', 'diff-files', '--name-status', *changed_files)
     if unstaged_files:
-      print('The following files would be modified but have unstaged changes:',
-            file=sys.stderr)
-      print(unstaged_files, file=sys.stderr)
-      print('Please commit, stage, or stash them first.', file=sys.stderr)
+      print >>sys.stderr, ('The following files would be modified but '
+                           'have unstaged changes:')
+      print >>sys.stderr, unstaged_files
+      print >>sys.stderr, 'Please commit, stage, or stash them first.'
       sys.exit(2)
   if patch_mode:
     # In patch mode, we could just as well create an index from the new tree
@@ -554,25 +518,23 @@ def run(*args, **kwargs):
   p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                        stdin=subprocess.PIPE)
   stdout, stderr = p.communicate(input=stdin)
-  stdout = convert_string(stdout)
-  stderr = convert_string(stderr)
   if p.returncode == 0:
     if stderr:
       if verbose:
-        print('`%s` printed to stderr:' % ' '.join(args), file=sys.stderr)
-      print(stderr.rstrip(), file=sys.stderr)
+        print >>sys.stderr, '`%s` printed to stderr:' % ' '.join(args)
+      print >>sys.stderr, stderr.rstrip()
     if strip:
       stdout = stdout.rstrip('\r\n')
     return stdout
   if verbose:
-    print('`%s` returned %s' % (' '.join(args), p.returncode), file=sys.stderr)
+    print >>sys.stderr, '`%s` returned %s' % (' '.join(args), p.returncode)
   if stderr:
-    print(stderr.rstrip(), file=sys.stderr)
+    print >>sys.stderr, stderr.rstrip()
   sys.exit(2)
 
 
 def die(message):
-  print('error:', message, file=sys.stderr)
+  print >>sys.stderr, 'error:', message
   sys.exit(2)
 
 
