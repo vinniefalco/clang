@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 #
 #===- git-clang-format - ClangFormat Git Integration ---------*- python -*--===#
 #
@@ -493,8 +493,8 @@ def apply_changes(old_tree, new_tree, force=False, patch_mode=False):
   if not force:
     unstaged_files = run('git', 'diff-files', '--name-status', *changed_files)
     if unstaged_files:
-      print(('The following files would be modified but '
-                           'have unstaged changes:'), file=sys.stderr)
+      print('The following files would be modified but '
+                'have unstaged changes:', file=sys.stderr)
       print(unstaged_files, file=sys.stderr)
       print('Please commit, stage, or stash them first.', file=sys.stderr)
       sys.exit(2)
@@ -548,26 +548,26 @@ def die(message):
   sys.exit(2)
 
 
-def to_bytes(str):
+def to_bytes(str_input):
     # Encode to UTF-8 to get binary data.
-    if isinstance(str, bytes):
-        return str
-    return str.encode('utf-8')
+    if isinstance(str_input, bytes):
+        return str_input
+    return str_input.encode('utf-8')
 
 
-def to_string(bytes):
-    if isinstance(bytes, str):
-        return bytes
-    return to_bytes(bytes)
+def to_string(bytes_input):
+    if isinstance(bytes_input, str):
+        return bytes_input
+    return to_bytes(bytes_input)
 
 
-def convert_string(bytes):
+def convert_string(bytes_input):
     try:
-        return to_string(bytes.decode('utf-8'))
+        return to_string(bytes_input.decode('utf-8'))
     except AttributeError: # 'str' object has no attribute 'decode'.
-        return str(bytes)
+        return str(bytes_input)
     except UnicodeError:
-        return str(bytes)
+        return str(bytes_input)
 
 if __name__ == '__main__':
   main()
