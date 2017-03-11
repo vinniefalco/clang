@@ -558,7 +558,7 @@ def to_bytes(str_input):
 def to_string(bytes_input):
     if isinstance(bytes_input, str):
         return bytes_input
-    return to_bytes(bytes_input)
+    return bytes_input.encode('utf-8')
 
 
 def convert_string(bytes_input):
