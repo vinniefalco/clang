@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 #
 #===- git-clang-format - ClangFormat Git Integration ---------*- python -*--===#
 #
@@ -189,9 +189,9 @@ def load_git_config(non_string_options=None):
   if non_string_options is None:
     non_string_options = {}
   out = {}
-  for entry in run('git', 'config', '--list', '--null').split(b'\0'):
+  for entry in run('git', 'config', '--list', '--null').split('\0'):
     if entry:
-      name, value = entry.split(b'\n', 1)
+      name, value = entry.split('\n', 1)
       if name in non_string_options:
         value = run('git', 'config', non_string_options[name], name)
       out[name] = value
@@ -380,11 +380,13 @@ def run_clang_format_and_save_to_tree(changed_lines, revision=None,
         mode = oct(int(stdout.split()[0], 8))
       else:
         mode = oct(os.stat(filename).st_mode)
+      if mode.startswith('0o'):
+          mode = '0' + mode[2:]
       blob_id = clang_format_to_blob(filename, line_ranges,
                                      revision=revision,
                                      binary=binary,
                                      style=style)
-      yield '%s %s\t%s' % (mode, blob_id, filename)
+      yield to_bytes('%s %s\t%s' % (mode, convert_string(blob_id), convert_string(filename)))
   return create_tree(index_info_generator(), '--index-info')
 
 
@@ -398,13 +400,21 @@ def create_tree(input_lines, mode):
   assert mode in ('--stdin', '--index-info')
   cmd = ['git', 'update-index', '--add', '-z', mode]
   with temporary_index_file():
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    for line in input_lines:
-      # FIXME: This is really really broken in python3
-      p.stdin.write(b'%s\0' % to_bytes(line))
-    p.stdin.close()
-    if p.wait() != 0:
-      die('`%s` failed' % ' '.join(cmd))
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+    Failed = False
+    try:
+        for line in input_lines:
+          # FIXME: This is really really broken in python3
+          p.stdin.write(b'%s\0' % line)
+        p.stdin.close()
+    except:
+        Failed = True
+    exitCode = p.wait()
+    out = convert_string(p.stdout.read())
+    err = convert_string(p.stderr.read())
+    if exitCode != 0 or Failed:
+      die('`%s` failed\nstdout:\n%s\nstderr:\n%s\n' % (' '.join(cmd), out, err))
     tree_id = run('git', 'write-tree')
     return tree_id
 
@@ -544,13 +554,15 @@ def run(*args, **kwargs):
   p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                        stdin=subprocess.PIPE)
   stdout, stderr = p.communicate(input=stdin)
+  stdout = convert_string(stdout)
+  stderr = convert_string(stderr)
   if p.returncode == 0:
     if stderr:
       if verbose:
         print('`%s` printed to stderr:' % ' '.join(args), file=sys.stderr)
       print(stderr.rstrip(), file=sys.stderr)
     if strip:
-      stdout = stdout.rstrip(b'\r\n')
+      stdout = stdout.rstrip('\r\n')
     return stdout
   if verbose:
     print('`%s` returned %s' % (' '.join(args), p.returncode), file=sys.stderr)
