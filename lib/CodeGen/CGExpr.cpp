@@ -2425,6 +2425,13 @@ LValue CodeGenFunction::EmitObjCEncodeExprLValue(const ObjCEncodeExpr *E) {
 }
 
 LValue CodeGenFunction::EmitPredefinedLValue(const PredefinedExpr *E) {
+  if (E->getIdentType() == PredefinedExpr::Constexpr) {
+    assert(false && "FIXME(EricWF)");
+    LValueBaseInfo BaseInfo(AlignmentSource::Decl, false);
+    Address DeclPtr = CreateMemTemp(E->getType(), ".constexprliteral");
+    LValue Result = MakeAddrLValue(DeclPtr, E->getType(), BaseInfo);
+
+  }
   auto SL = E->getFunctionName();
   assert(SL != nullptr && "No StringLiteral name in PredefinedExpr");
   StringRef FnName = CurFn->getName();

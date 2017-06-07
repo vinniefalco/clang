@@ -1549,8 +1549,10 @@ static bool IsGlobalLValue(APValue::LValueBase B) {
     // storage duration.
     return cast<MaterializeTemporaryExpr>(E)->getStorageDuration() == SD_Static;
   // A string literal has static storage duration.
+  case Expr::PredefinedExprClass: {
+    return cast<PredefinedExpr>(E)->getIdentType() != PredefinedExpr::Constexpr;
+  }
   case Expr::StringLiteralClass:
-  case Expr::PredefinedExprClass:
   case Expr::ObjCStringLiteralClass:
   case Expr::ObjCEncodeExprClass:
   case Expr::CXXTypeidExprClass:
@@ -2430,8 +2432,10 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
     return APSInt::getUnsigned(Str.c_str()[Index]);
   }
 
-  if (auto PE = dyn_cast<PredefinedExpr>(Lit))
+  if (auto PE = dyn_cast<PredefinedExpr>(Lit)) {
+    assert(PE->getIdentType() != PredefinedExpr::Constexpr);
     Lit = PE->getFunctionName();
+  }
   const StringLiteral *S = cast<StringLiteral>(Lit);
   const ConstantArrayType *CAT =
       Info.Ctx.getAsConstantArrayType(S->getType());
@@ -3124,6 +3128,7 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
   // Check for special cases where there is no existing APValue to look at.
   const Expr *Base = LVal.Base.dyn_cast<const Expr*>();
   if (Base && !LVal.CallIndex && !Type.isVolatileQualified()) {
+    const PredefinedExpr *PEBase = dyn_cast<PredefinedExpr>(Base);
     if (const CompoundLiteralExpr *CLE = dyn_cast<CompoundLiteralExpr>(Base)) {
       // In C99, a CompoundLiteralExpr is an lvalue, and we defer evaluating the
       // initializer until now for such expressions. Such an expression can't be
@@ -3137,7 +3142,11 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
         return false;
       CompleteObject LitObj(&Lit, Base->getType());
       return extractSubobject(Info, Conv, LitObj, LVal.Designator, RVal);
-    } else if (isa<StringLiteral>(Base) || isa<PredefinedExpr>(Base)) {
+    } else if (PEBase && PEBase->getIdentType() == PredefinedExpr::Constexpr) {
+      APValue TrueVal = APValue(Info.Ctx.MakeIntValue(true, PEBase->getType()));
+      CompleteObject BoolObj(&TrueVal, PEBase->getType());
+      return extractSubobject(Info, Conv, BoolObj, LVal.Designator, RVal);
+    } else if (isa<StringLiteral>(Base) || PEBase) {
       // We represent a string literal array as an lvalue pointing at the
       // corresponding expression, rather than building an array of chars.
       // FIXME: Support ObjCEncodeExpr, MakeStringConstant
@@ -6979,6 +6988,13 @@ public:
     return Success(E->getValue(), E);
   }
 
+  bool VisitPredefinedExpr(const PredefinedExpr *E) {
+    if (E->getIdentType() == PredefinedExpr::Constexpr)
+      return Success(true, E);
+    Info.FFDiag(E);
+    return false;
+  }
+
   bool VisitObjCBoolLiteralExpr(const ObjCBoolLiteralExpr *E) {
     return Success(E->getValue(), E);
   }
@@ -10197,7 +10213,6 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
 #define STMT(Node, Base) case Expr::Node##Class:
 #define EXPR(Node, Base)
 #include "clang/AST/StmtNodes.inc"
-  case Expr::PredefinedExprClass:
   case Expr::FloatingLiteralClass:
   case Expr::ImaginaryLiteralClass:
   case Expr::StringLiteralClass:
@@ -10275,6 +10290,12 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::DependentCoawaitExprClass:
   case Expr::CoyieldExprClass:
     return ICEDiag(IK_NotICE, E->getLocStart());
+
+  case Expr::PredefinedExprClass: {
+    if (cast<PredefinedExpr>(E)->getIdentType() == PredefinedExpr::Constexpr)
+      return NoDiag();
+    return ICEDiag(IK_NotICE, E->getLocStart());
+  }
 
   case Expr::InitListExprClass: {
     // C++03 [dcl.init]p13: If T is a scalar type, then a declaration of the

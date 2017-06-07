@@ -1185,9 +1185,10 @@ public:
 class PredefinedExpr : public Expr {
 public:
   enum IdentType {
+    Constexpr,
     Func,
     Function,
-    LFunction,  // Same as Function, but as wide string.
+    LFunction, // Same as Function, but as wide string.
     FuncDName,
     FuncSig,
     PrettyFunction,
@@ -1199,15 +1200,17 @@ public:
 private:
   SourceLocation Loc;
   IdentType Type;
-  Stmt *FnName;
+  Stmt *PredefinedObj;
 
 public:
+  PredefinedExpr(SourceLocation L, QualType FNTy, IdentType IT);
   PredefinedExpr(SourceLocation L, QualType FNTy, IdentType IT,
                  StringLiteral *SL);
 
   /// \brief Construct an empty predefined expression.
   explicit PredefinedExpr(EmptyShell Empty)
-      : Expr(PredefinedExprClass, Empty), Loc(), Type(Func), FnName(nullptr) {}
+      : Expr(PredefinedExprClass, Empty), Loc(), Type(Func),
+        PredefinedObj(nullptr) {}
 
   IdentType getIdentType() const { return Type; }
 
@@ -1230,9 +1233,13 @@ public:
   }
 
   // Iterators
-  child_range children() { return child_range(&FnName, &FnName + 1); }
+  child_range children() {
+    return child_range(&PredefinedObj,
+                       PredefinedObj ? &PredefinedObj + 1 : &PredefinedObj);
+  }
   const_child_range children() const {
-    return const_child_range(&FnName, &FnName + 1);
+    return const_child_range(&PredefinedObj, PredefinedObj ? &PredefinedObj + 1
+                                                           : &PredefinedObj);
   }
 
   friend class ASTStmtReader;

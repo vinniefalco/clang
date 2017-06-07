@@ -458,20 +458,35 @@ SourceLocation DeclRefExpr::getLocEnd() const {
   return getNameInfo().getLocEnd();
 }
 
+PredefinedExpr::PredefinedExpr(SourceLocation L, QualType FNTy, IdentType IT)
+    : Expr(PredefinedExprClass, FNTy, VK_LValue, OK_Ordinary,
+           FNTy->isDependentType(), FNTy->isDependentType(),
+           FNTy->isInstantiationDependentType(),
+           /*ContainsUnexpandedParameterPack=*/false),
+      Loc(L), Type(IT), PredefinedObj(nullptr) {
+  assert(IT == IdentType::Constexpr &&
+         "constructor cannot be used for this predefined expr type");
+}
+
 PredefinedExpr::PredefinedExpr(SourceLocation L, QualType FNTy, IdentType IT,
                                StringLiteral *SL)
     : Expr(PredefinedExprClass, FNTy, VK_LValue, OK_Ordinary,
            FNTy->isDependentType(), FNTy->isDependentType(),
            FNTy->isInstantiationDependentType(),
            /*ContainsUnexpandedParameterPack=*/false),
-      Loc(L), Type(IT), FnName(SL) {}
+      Loc(L), Type(IT), PredefinedObj(SL) {
+  assert(IT != IdentType::Constexpr &&
+         "constructor cannot be used for this predefined expr type");
+}
 
 StringLiteral *PredefinedExpr::getFunctionName() {
-  return cast_or_null<StringLiteral>(FnName);
+  return cast_or_null<StringLiteral>(PredefinedObj);
 }
 
 StringRef PredefinedExpr::getIdentTypeName(PredefinedExpr::IdentType IT) {
   switch (IT) {
+  case Constexpr:
+    return "__constexpr__";
   case Func:
     return "__func__";
   case Function:
