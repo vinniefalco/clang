@@ -3143,8 +3143,9 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       CompleteObject LitObj(&Lit, Base->getType());
       return extractSubobject(Info, Conv, LitObj, LVal.Designator, RVal);
     } else if (PEBase && PEBase->getIdentType() == PredefinedExpr::Constexpr) {
-      APValue TrueVal = APValue(Info.Ctx.MakeIntValue(true, PEBase->getType()));
-      CompleteObject BoolObj(&TrueVal, PEBase->getType());
+      bool Val = !Info.IsSpeculativelyEvaluating; // FIXME: should this ever be false
+      APValue BoolVal = APValue(Info.Ctx.MakeIntValue(false, PEBase->getType()));
+      CompleteObject BoolObj(&BoolVal, PEBase->getType());
       return extractSubobject(Info, Conv, BoolObj, LVal.Designator, RVal);
     } else if (isa<StringLiteral>(Base) || PEBase) {
       // We represent a string literal array as an lvalue pointing at the
@@ -5048,7 +5049,11 @@ public:
   bool VisitUnaryPreIncDec(const UnaryOperator *UO);
 
   bool VisitDeclRefExpr(const DeclRefExpr *E);
-  bool VisitPredefinedExpr(const PredefinedExpr *E) { return Success(E); }
+  bool VisitPredefinedExpr(const PredefinedExpr *E) {
+    if (E->getIdentType() == PredefinedExpr::Constexpr)
+      return false;
+    return Success(E);
+  }
   bool VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *E);
   bool VisitCompoundLiteralExpr(const CompoundLiteralExpr *E);
   bool VisitMemberExpr(const MemberExpr *E);
@@ -6990,7 +6995,7 @@ public:
 
   bool VisitPredefinedExpr(const PredefinedExpr *E) {
     if (E->getIdentType() == PredefinedExpr::Constexpr)
-      return Success(true, E);
+      return Success(false, E);
     Info.FFDiag(E);
     return false;
   }

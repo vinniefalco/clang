@@ -1056,6 +1056,7 @@ public:
     }
     case Expr::PredefinedExprClass: {
       unsigned Type = cast<PredefinedExpr>(E)->getIdentType();
+      assert(Type != PredefinedExpr::Constexpr);
       if (CGF) {
         LValue Res = CGF->EmitPredefinedLValue(cast<PredefinedExpr>(E));
         return cast<ConstantAddress>(Res.getAddress());
