@@ -3122,8 +3122,11 @@ static CompleteObject findCompleteObject(EvalInfo &Info, const Expr *E,
 static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
                                            QualType Type,
                                            const LValue &LVal, APValue &RVal) {
-  if (LVal.Designator.Invalid)
+  if (LVal.Designator.Invalid) {
+    const Expr *Base = LVal.Base.dyn_cast<const Expr*>();
+    assert(!Base || !isa<PredefinedExpr>(Base));
     return false;
+  }
 
   // Check for special cases where there is no existing APValue to look at.
   const Expr *Base = LVal.Base.dyn_cast<const Expr*>();
@@ -3144,9 +3147,10 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       return extractSubobject(Info, Conv, LitObj, LVal.Designator, RVal);
     } else if (PEBase && PEBase->getIdentType() == PredefinedExpr::Constexpr) {
       bool Val = !Info.IsSpeculativelyEvaluating; // FIXME: should this ever be false
-      APValue BoolVal = APValue(Info.Ctx.MakeIntValue(false, PEBase->getType()));
+      APValue BoolVal = APValue(Info.Ctx.MakeIntValue(true, PEBase->getType()));
       CompleteObject BoolObj(&BoolVal, PEBase->getType());
-      return extractSubobject(Info, Conv, BoolObj, LVal.Designator, RVal);
+      RVal = BoolVal;
+      return true || extractSubobject(Info, Conv, BoolObj, LVal.Designator, RVal);
     } else if (isa<StringLiteral>(Base) || PEBase) {
       // We represent a string literal array as an lvalue pointing at the
       // corresponding expression, rather than building an array of chars.
@@ -5050,8 +5054,14 @@ public:
 
   bool VisitDeclRefExpr(const DeclRefExpr *E);
   bool VisitPredefinedExpr(const PredefinedExpr *E) {
-    if (E->getIdentType() == PredefinedExpr::Constexpr)
-      return false;
+    if (E->getIdentType() == PredefinedExpr::Constexpr) {
+      APValue RefValue;
+      // FIXME: Make an lvalue
+      if (!handleLValueToRValueConversion(this->Info, E, E->getType(), Result,
+                                          RefValue))
+        return false;
+      return Success(RefValue, E);
+    }
     return Success(E);
   }
   bool VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *E);
