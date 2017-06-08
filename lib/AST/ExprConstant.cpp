@@ -3146,7 +3146,7 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       CompleteObject LitObj(&Lit, Base->getType());
       return extractSubobject(Info, Conv, LitObj, LVal.Designator, RVal);
     } else if (PEBase && PEBase->getIdentType() == PredefinedExpr::Constexpr) {
-      bool Val = !Info.IsSpeculativelyEvaluating; // FIXME: should this ever be false
+      assert(false);
       APValue BoolVal = APValue(Info.Ctx.MakeIntValue(true, PEBase->getType()));
       CompleteObject BoolObj(&BoolVal, PEBase->getType());
       RVal = BoolVal;
@@ -5054,14 +5054,9 @@ public:
 
   bool VisitDeclRefExpr(const DeclRefExpr *E);
   bool VisitPredefinedExpr(const PredefinedExpr *E) {
-    if (E->getIdentType() == PredefinedExpr::Constexpr) {
-      APValue RefValue;
-      // FIXME: Make an lvalue
-      if (!handleLValueToRValueConversion(this->Info, E, E->getType(), Result,
-                                          RefValue))
-        return false;
-      return Success(RefValue, E);
-    }
+    assert(E->getIdentType() != PredefinedExpr::Constexpr);
+    if (E->getIdentType() == PredefinedExpr::Constexpr)
+      return false;
     return Success(E);
   }
   bool VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *E);
@@ -7004,8 +6999,11 @@ public:
   }
 
   bool VisitPredefinedExpr(const PredefinedExpr *E) {
-    if (E->getIdentType() == PredefinedExpr::Constexpr)
+    if (E->getIdentType() == PredefinedExpr::Constexpr) {
+      if (Info.CurrentCall && Info.CurrentCall->Callee)
+        return Success(true, E);
       return Success(false, E);
+    }
     Info.FFDiag(E);
     return false;
   }

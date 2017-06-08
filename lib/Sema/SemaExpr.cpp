@@ -3129,12 +3129,10 @@ ExprResult Sema::BuildPredefinedExpr(SourceLocation Loc,
     currentDecl = Context.getTranslationUnitDecl();
   }
 
-  QualType ResTy;
-  if (IT == PredefinedExpr::Constexpr) {
-    // FIXME:
+  if (IT == PredefinedExpr::Constexpr)
     return new (Context) PredefinedExpr(Loc, Context.BoolTy, IT);
-  }
 
+  QualType ResTy;
   StringLiteral *SL = nullptr;
   if (cast<DeclContext>(currentDecl)->isDependentContext())
     ResTy = Context.DependentTy;
@@ -3171,9 +3169,7 @@ ExprResult Sema::ActOnPredefinedExpr(SourceLocation Loc, tok::TokenKind Kind) {
 
   switch (Kind) {
   default: llvm_unreachable("Unknown simple primary expr!");
-  case tok::kw___constexpr__:
-    IT = PredefinedExpr::Constexpr;
-    break;
+  case tok::kw___constexpr__: IT = PredefinedExpr::Constexpr; break;
   case tok::kw___func__: IT = PredefinedExpr::Func; break; // [C99 6.4.2.2]
   case tok::kw___FUNCTION__: IT = PredefinedExpr::Function; break;
   case tok::kw___FUNCDNAME__: IT = PredefinedExpr::FuncDName; break; // [MS]

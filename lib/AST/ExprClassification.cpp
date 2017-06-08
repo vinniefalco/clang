@@ -117,8 +117,6 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::StringLiteralClass:
     // @encode is equivalent to its string
   case Expr::ObjCEncodeExprClass:
-    // __func__ and friends are too.
-  case Expr::PredefinedExprClass:
     // Property references are lvalues
   case Expr::ObjCSubscriptRefExprClass:
   case Expr::ObjCPropertyRefExprClass:
@@ -140,6 +138,10 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::MSPropertySubscriptExprClass:
   case Expr::OMPArraySectionExprClass:
     return Cl::CL_LValue;
+
+  // __func__ and friends are too.
+  case Expr::PredefinedExprClass:
+    return E->isLValue() ? Cl::CL_LValue : Cl::CL_PRValue;
 
     // C99 6.5.2.5p5 says that compound literals are lvalues.
     // In C++, they're prvalue temporaries, except for file-scope arrays.

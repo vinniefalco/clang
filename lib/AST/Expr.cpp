@@ -459,7 +459,7 @@ SourceLocation DeclRefExpr::getLocEnd() const {
 }
 
 PredefinedExpr::PredefinedExpr(SourceLocation L, QualType FNTy, IdentType IT)
-    : Expr(PredefinedExprClass, FNTy, VK_LValue, OK_Ordinary,
+    : Expr(PredefinedExprClass, FNTy, VK_RValue, OK_Ordinary,
            FNTy->isDependentType(), FNTy->isDependentType(),
            FNTy->isInstantiationDependentType(),
            /*ContainsUnexpandedParameterPack=*/false),
