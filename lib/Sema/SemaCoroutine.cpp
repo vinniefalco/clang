@@ -777,26 +777,28 @@ StmtResult Sema::BuildCopromiseStmt(SourceLocation KwLoc, Stmt *D,
                                     bool IsImplicit) {
   if (!D || !isValidCoroutineContext(*this, KwLoc, "co_promise"))
     return StmtError();
-
-  auto *VD = cast<VarDecl>(cast<DeclStmt>(D)->getSingleDecl());
-  if (VD->isInvalidDecl())
-    return StmtError();
   auto *FD = dyn_cast<FunctionDecl>(CurContext);
   auto FuncLoc = FD->getLocation();
+
+  auto *VD = cast<VarDecl>(cast<DeclStmt>(D)->getSingleDecl());
+  CheckVariableDeclarationType(VD);
+  if (VD->isInvalidDecl())
+    return StmtError();
+
   QualType PT = VD->getType();
-  if (!PT->isDependentType()) {
-    if (!PT->getAsCXXRecordDecl()) {
-      Diag(FuncLoc,
-           diag::err_implied_std_coroutine_traits_promise_type_not_class)
-          << PT;
-      return StmtError();
-    }
-    if (RequireCompleteType(FuncLoc, PT,
-                            diag::err_coroutine_promise_type_incomplete))
-      return StmtError();
+  if (PT->isDependentType())
+    return new (Context) CopromiseStmt(KwLoc, D, IsImplicit);
+
+  if (!PT->getAsCXXRecordDecl()) {
+    Diag(FuncLoc, diag::err_implied_std_coroutine_traits_promise_type_not_class)
+        << PT;
+    return StmtError();
   }
-  Stmt *Res = new (Context) CopromiseStmt(KwLoc, D, IsImplicit);
-  return Res;
+  if (RequireCompleteType(FuncLoc, PT,
+                          diag::err_coroutine_promise_type_incomplete))
+    return StmtError();
+
+  return new (Context) CopromiseStmt(KwLoc, D, IsImplicit);
 }
 
 /// Look up the std::nothrow object.
