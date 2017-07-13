@@ -8994,7 +8994,7 @@ def err_malformed_std_coroutine_traits : Error<
 def err_implied_std_coroutine_traits_promise_type_not_found : Error<
   "this function cannot be a coroutine: %q0 has no member named 'promise_type'">;
 def err_implied_std_coroutine_traits_promise_type_not_class : Error<
-  "this function cannot be a coroutine: %0 is not a class">;
+  "this function cannot be a coroutine: The promise type (%0) is not a class">;
 def err_coroutine_promise_type_incomplete : Error<
   "this function cannot be a coroutine: %0 is an incomplete type">;
 def err_coroutine_type_missing_specialization : Error<

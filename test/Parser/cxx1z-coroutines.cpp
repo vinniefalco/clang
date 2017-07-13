@@ -34,6 +34,11 @@ void operator co_await(); // expected-error {{must have at least one parameter}}
 void operator co_await(X, Y, Z); // expected-error {{must be a unary operator}}
 void operator co_await(int); // expected-error {{parameter of class or enumeration type}}
 
+namespace co_promise_test {
+template <class T>
+void foo(T) {
+  { co_promise T z = 42; } // expected-error {{'co_promise' declaration must be first declaration in the function}}
+}
 template <class T>
 void bar(T) {
   co_promise T z = 42;
@@ -52,3 +57,4 @@ struct test_mem {
     co_return 42;
   }
 };
+} // namespace
