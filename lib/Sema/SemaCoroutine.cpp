@@ -778,6 +778,27 @@ StmtResult Sema::BuildCopromiseStmt(SourceLocation KwLoc, Stmt *D,
   if (!D || !isValidCoroutineContext(*this, KwLoc, "co_promise"))
     return StmtError();
 
+  auto *VD = cast<VarDecl>(cast<DeclStmt>(D)->getSingleDecl());
+  assert(VD);
+  if (VD->getType()->isUndeducedType()) {
+    ExprResult Res = CorrectDelayedTyposInExpr(VD->getInit());
+    assert(!Res.isUsable());
+    return StmtError();
+  }
+  auto *FD = dyn_cast<FunctionDecl>(CurContext);
+  auto FuncLoc = FD->getLocation();
+  QualType PT = VD->getType();
+  if (!PT->isDependentType()) {
+    if (!PT->getAsCXXRecordDecl()) {
+      Diag(FuncLoc,
+           diag::err_implied_std_coroutine_traits_promise_type_not_class)
+          << PT;
+      return StmtError();
+    }
+    if (RequireCompleteType(FuncLoc, PT,
+                            diag::err_coroutine_promise_type_incomplete))
+      return StmtError();
+  }
   Stmt *Res = new (Context) CopromiseStmt(KwLoc, D, IsImplicit);
   return Res;
 }
