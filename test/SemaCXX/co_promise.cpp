@@ -64,7 +64,7 @@ struct promise_float {
 };
 
 struct promise_int { // expected-note 1+ {{candidate}}
-  promise_int(int val); // expected-note {{candidate}}
+  promise_int(int val); // expected-note 1+ {{candidate}}
   int get_return_object();
   suspend_always initial_suspend();
   suspend_always final_suspend();
@@ -87,10 +87,31 @@ int set_own_promise_incorrect() {
   co_return foo.get();
 }
 
+
+template <class T>
+int dependent_co_promise(T x) {
+  co_promise promise_int foo(x); // expected-error {{no matching constructor}}
+  co_return 42;
+}
+
+template int dependent_co_promise(int);
+template int dependent_co_promise(void*); // expected-note {{requested here}}
+
+
+template <class T>
+void dependent_co_promise_type() {
+  co_promise T foo; // expected-error {{no matching constructor}}
+  co_return;
+}
+
+template void dependent_co_promise_type<promise_void>();
+template void dependent_co_promise_type<int>(); // expected-note {{requested here}}
+
+
 template <>
 struct std::experimental::coroutine_traits<void> { using promise_type = promise_void; };
 
-void set_foo() {
-  // FIXME: Make this deduce to `promise_void`
+void co_promise_auto_fails() {
+  // FIXME: Should this deduce to promise_void?
   co_promise auto p; // expected-error {{requires an initializer}}
 }

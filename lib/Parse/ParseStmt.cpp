@@ -273,7 +273,7 @@ Retry:
   case tok::kw_co_promise: {
     SemiError = "co_promise";
     Res = StmtError();
-    if (!Stmts.empty()) {
+    if (!Stmts.empty() || !getCurScope()->isFunctionScope()) {
       SourceLocation Loc = ConsumeToken();
       Diag(Loc, diag::err_co_promise_not_first_decl);
       break;
