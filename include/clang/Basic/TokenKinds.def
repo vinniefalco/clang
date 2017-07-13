@@ -370,6 +370,7 @@ CONCEPTS_KEYWORD(requires)
 KEYWORD(co_await                    , KEYCOROUTINES)
 KEYWORD(co_return                   , KEYCOROUTINES)
 KEYWORD(co_yield                    , KEYCOROUTINES)
+KEYWORD(co_promise                  , KEYCOROUTINES)
 
 // C++ modules TS keywords
 MODULES_KEYWORD(module)

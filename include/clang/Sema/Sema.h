@@ -8385,8 +8385,10 @@ public:
   //
   bool ActOnCoroutineBodyStart(Scope *S, SourceLocation KwLoc,
                                StringRef Keyword);
+
   ExprResult ActOnCoawaitExpr(Scope *S, SourceLocation KwLoc, Expr *E);
   ExprResult ActOnCoyieldExpr(Scope *S, SourceLocation KwLoc, Expr *E);
+  StmtResult ActOnCopromiseStmt(Scope *S, SourceLocation KwLoc, Stmt *D);
   StmtResult ActOnCoreturnStmt(Scope *S, SourceLocation KwLoc, Expr *E);
 
   ExprResult BuildResolvedCoawaitExpr(SourceLocation KwLoc, Expr *E,
@@ -8396,8 +8398,10 @@ public:
   ExprResult BuildCoyieldExpr(SourceLocation KwLoc, Expr *E);
   StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E,
                                bool IsImplicit = false);
+  StmtResult BuildCopromiseStmt(SourceLocation KwLoc, Stmt *D,
+                                bool IsImplicit = false);
   StmtResult BuildCoroutineBodyStmt(CoroutineBodyStmt::CtorArgs);
-  VarDecl *buildCoroutinePromise(SourceLocation Loc);
+  StmtResult BuildImplicitCoroutinePromise(SourceLocation Loc);
   void CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body);
 
   //===--------------------------------------------------------------------===//

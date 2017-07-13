@@ -33,3 +33,14 @@ void f(X x, Z z) {
 void operator co_await(); // expected-error {{must have at least one parameter}}
 void operator co_await(X, Y, Z); // expected-error {{must be a unary operator}}
 void operator co_await(int); // expected-error {{parameter of class or enumeration type}}
+
+template <class T>
+void bar(T) {
+  co_promise T z = 42;
+}
+
+template <class T>
+void baz(T) {
+  int x = 42;
+  co_promise T z = 42; // expected-error {{'co_promise' declaration must be first declaration in the function}}
+}

@@ -87,6 +87,15 @@ const VarDecl *CXXForRangeStmt::getLoopVariable() const {
   return const_cast<CXXForRangeStmt *>(this)->getLoopVariable();
 }
 
+CopromiseStmt::CopromiseStmt(SourceLocation CopromiseLoc, Stmt *PromiseDecl,
+                             bool IsImplicit)
+    : Stmt(CopromiseStmtClass), CopromiseLoc(CopromiseLoc),
+      PromiseDecl(PromiseDecl), IsImplicit(IsImplicit) {}
+
+VarDecl *CopromiseStmt::getPromiseDecl() const {
+  return cast<VarDecl>(cast<DeclStmt>(getPromiseDeclStmt())->getSingleDecl());
+}
+
 CoroutineBodyStmt *CoroutineBodyStmt::Create(
     const ASTContext &C, CoroutineBodyStmt::CtorArgs const &Args) {
   std::size_t Size = totalSizeToAlloc<Stmt *>(
@@ -114,4 +123,19 @@ CoroutineBodyStmt::CoroutineBodyStmt(CoroutineBodyStmt::CtorArgs const &Args)
       Args.ReturnStmtOnAllocFailure;
   std::copy(Args.ParamMoves.begin(), Args.ParamMoves.end(),
             const_cast<Stmt **>(getParamMoves().data()));
+  assert(!Args.Promise || isa<CopromiseStmt>(Args.Promise));
+}
+
+CopromiseStmt *CoroutineBodyStmt::getCopromiseStmt() const {
+  return cast_or_null<CopromiseStmt>(getStoredStmts()[SubStmt::Promise]);
+}
+Stmt *CoroutineBodyStmt::getPromiseDeclStmt() const {
+  auto *S = getCopromiseStmt();
+  return S ? S->getPromiseDeclStmt() : nullptr;
+}
+VarDecl *CoroutineBodyStmt::getPromiseDecl() const {
+  auto *S = getCopromiseStmt();
+  if (!S)
+    return nullptr;
+  return cast<VarDecl>(cast<DeclStmt>(S)->getSingleDecl());
 }

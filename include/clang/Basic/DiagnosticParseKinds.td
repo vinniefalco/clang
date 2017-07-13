@@ -1155,6 +1155,8 @@ def err_objc_type_args_after_protocols : Error<
 let CategoryName = "Coroutines Issue" in {
 def err_for_co_await_not_range_for : Error<
   "'co_await' modifier can only be applied to range-based for loop">;
+def err_co_promise_not_first_decl : Error<
+  "'co_promise' declaration must be first declaration in the function">;
 }
 
 } // end of Parser diagnostics

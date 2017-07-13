@@ -270,7 +270,19 @@ Retry:
     Res = ParseReturnStatement();
     SemiError = "co_return";
     break;
-
+  case tok::kw_co_promise: {
+    bool HasError = !Stmts.empty();
+    SourceLocation KwLoc = Tok.getLocation();
+    StmtResult PromiseRes = ParseCopromiseStatement();
+    if (HasError || PromiseRes.isInvalid()) {
+      Res = StmtError();
+      SemiError = "co_promise";
+      if (HasError)
+        Diag(KwLoc, diag::err_co_promise_not_first_decl);
+      break;
+    }
+    return PromiseRes;
+  }
   case tok::kw_asm: {
     ProhibitAttributes(Attrs);
     bool msAsm = false;
@@ -1876,6 +1888,26 @@ StmtResult Parser::ParseContinueStatement() {
 StmtResult Parser::ParseBreakStatement() {
   SourceLocation BreakLoc = ConsumeToken();  // eat the 'break'.
   return Actions.ActOnBreakStmt(BreakLoc, getCurScope());
+}
+
+/// ParseCopromiseStatement
+///       co_promise-statement:
+///         co_promise simple-declarator ';'
+///
+/// Note: this lets the caller parse the end ';'.
+///
+StmtResult Parser::ParseCopromiseStatement() {
+  SourceLocation CoPromiseLoc = ConsumeToken(); // eat the 'co_return'.
+  ParsedAttributesWithRange attrs(AttrFactory);
+  MaybeParseCXX11Attributes(attrs);
+  SourceLocation DeclStart = Tok.getLocation(), DeclEnd;
+  DeclGroupPtrTy DG = ParseSimpleDeclaration(
+      Declarator::InitStmtContext, DeclEnd, attrs, /*RequireSemi=*/true);
+  StmtResult InitStmt = Actions.ActOnDeclStmt(DG, DeclStart, DeclEnd);
+  if (InitStmt.isInvalid())
+    return InitStmt;
+  return Actions.ActOnCopromiseStmt(getCurScope(), CoPromiseLoc,
+                                    InitStmt.get());
 }
 
 /// ParseReturnStatement

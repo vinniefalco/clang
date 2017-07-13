@@ -293,6 +293,46 @@ public:
   }
 };
 
+/// \brief Represents a 'co_return' statement in the C++ Coroutines TS.
+///
+/// This statament models the initialization of the coroutine promise
+/// (encapsulating the eventual notional return value) from an expression
+/// (or braced-init-list), followed by termination of the coroutine.
+///
+/// This initialization is modeled by the evaluation of the operand
+/// followed by a call to one of:
+///   <promise>.return_value(<operand>)
+///   <promise>.return_void()
+/// which we name the "promise call".
+class CopromiseStmt : public Stmt {
+  SourceLocation CopromiseLoc;
+  Stmt *PromiseDecl;
+  bool IsImplicit : 1;
+
+  friend class ASTStmtReader;
+
+public:
+  CopromiseStmt(SourceLocation CopromiseLoc, Stmt *PromiseDecl,
+                bool IsImplicit = false);
+
+  SourceLocation getKeywordLoc() const { return CopromiseLoc; }
+
+  Stmt *getPromiseDeclStmt() const { return PromiseDecl; }
+  VarDecl *getPromiseDecl() const;
+
+  bool isImplicit() const { return IsImplicit; }
+  void setIsImplicit(bool value = true) { IsImplicit = value; }
+
+  SourceLocation getLocStart() const LLVM_READONLY { return CopromiseLoc; }
+  SourceLocation getLocEnd() const LLVM_READONLY { return CopromiseLoc; }
+
+  child_range children() { return child_range(&PromiseDecl, &PromiseDecl + 1); }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == CopromiseStmtClass;
+  }
+};
+
 /// \brief Represents the body of a coroutine. This wraps the normal function
 /// body and holds the additional semantic context required to set up and tear
 /// down the coroutine frame.
@@ -358,12 +398,9 @@ public:
     return getStoredStmts()[SubStmt::Body];
   }
 
-  Stmt *getPromiseDeclStmt() const {
-    return getStoredStmts()[SubStmt::Promise];
-  }
-  VarDecl *getPromiseDecl() const {
-    return cast<VarDecl>(cast<DeclStmt>(getPromiseDeclStmt())->getSingleDecl());
-  }
+  CopromiseStmt *getCopromiseStmt() const;
+  Stmt *getPromiseDeclStmt() const;
+  VarDecl *getPromiseDecl() const;
 
   Stmt *getInitSuspendStmt() const {
     return getStoredStmts()[SubStmt::InitSuspend];

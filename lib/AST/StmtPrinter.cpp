@@ -2461,6 +2461,15 @@ void StmtPrinter::VisitCoroutineBodyStmt(CoroutineBodyStmt *S) {
   Visit(S->getBody());
 }
 
+void StmtPrinter::VisitCopromiseStmt(CopromiseStmt *S) {
+  OS << "co_promise";
+  if (S->getPromiseDeclStmt()) {
+    OS << " ";
+    Visit(S->getPromiseDeclStmt());
+  }
+  OS << ";";
+}
+
 void StmtPrinter::VisitCoreturnStmt(CoreturnStmt *S) {
   OS << "co_return";
   if (S->getOperand()) {

@@ -305,6 +305,11 @@ void ASTStmtWriter::VisitCoroutineBodyStmt(CoroutineBodyStmt *S) {
   llvm_unreachable("unimplemented");
 }
 
+void ASTStmtWriter::VisitCopromiseStmt(CopromiseStmt *S) {
+  // FIXME: Implement coroutine serialization.
+  llvm_unreachable("unimplemented");
+}
+
 void ASTStmtWriter::VisitCoreturnStmt(CoreturnStmt *S) {
   // FIXME: Implement coroutine serialization.
   llvm_unreachable("unimplemented");

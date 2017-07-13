@@ -1359,6 +1359,15 @@ public:
                                     Constraints, Clobbers, Exprs, EndLoc);
   }
 
+  /// \brief Build a new co_promise statement.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  StmtResult RebuildCopromiseStmt(SourceLocation CopromiseLoc, Stmt *Dcl,
+                                  bool IsImplicit) {
+    return getSema().BuildCopromiseStmt(CopromiseLoc, Dcl, IsImplicit);
+  }
+
   /// \brief Build a new co_return statement.
   ///
   /// By default, performs semantic analysis to build the new statement.
@@ -6869,11 +6878,11 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
 
   // The new CoroutinePromise object needs to be built and put into the current
   // FunctionScopeInfo before any transformations or rebuilding occurs.
-  auto *Promise = SemaRef.buildCoroutinePromise(FD->getLocation());
-  if (!Promise)
+  StmtResult PromiseRes =
+      getDerived().TransformCopromiseStmt(S->getCopromiseStmt());
+  if (PromiseRes.isInvalid())
     return StmtError();
-  getDerived().transformedLocalDecl(S->getPromiseDecl(), Promise);
-  ScopeInfo->CoroutinePromise = Promise;
+  ScopeInfo->CoroutinePromise = cast<CopromiseStmt>(PromiseRes.get());
 
   // Transform the implicit coroutine statements we built during the initial
   // parse.
@@ -6904,7 +6913,10 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
   Builder.ReturnValue = Res.get();
 
   if (S->hasDependentPromiseType()) {
-    assert(!Promise->getType()->isDependentType() &&
+    assert(!cast<CopromiseStmt>(PromiseRes.get())
+                ->getPromiseDecl()
+                ->getType()
+                ->isDependentType() &&
            "the promise type must no longer be dependent");
     assert(!S->getFallthroughHandler() && !S->getExceptionHandler() &&
            !S->getReturnStmtOnAllocFailure() && !S->getDeallocate() &&
@@ -6963,6 +6975,30 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
     return StmtError();
 
   return getDerived().RebuildCoroutineBodyStmt(Builder);
+}
+
+template <typename Derived>
+StmtResult TreeTransform<Derived>::TransformCopromiseStmt(CopromiseStmt *S) {
+  StmtResult PromiseDecl;
+  // The new CoroutinePromise object needs to be built and put into the current
+  // FunctionScopeInfo before any transformations or rebuilding occurs.
+  if (S->isImplicit()) {
+    PromiseDecl = SemaRef.BuildImplicitCoroutinePromise(S->getLocStart());
+    if (PromiseDecl.isInvalid())
+      return StmtError();
+    auto *PD =
+        cast<VarDecl>(cast<DeclStmt>(PromiseDecl.get())->getSingleDecl());
+    getDerived().transformedLocalDecl(S->getPromiseDecl(), PD);
+  } else {
+    PromiseDecl = getDerived().TransformStmt(S->getPromiseDeclStmt());
+  }
+  if (PromiseDecl.isInvalid())
+    return StmtError();
+
+  // Always rebuild; we don't know if this needs to be injected into a new
+  // context or if the promise type has changed.
+  return getDerived().RebuildCopromiseStmt(S->getKeywordLoc(),
+                                           PromiseDecl.get(), S->isImplicit());
 }
 
 template<typename Derived>

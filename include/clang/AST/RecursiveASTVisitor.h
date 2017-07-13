@@ -2525,6 +2525,12 @@ DEF_TRAVERSE_STMT(CoroutineBodyStmt, {
     ShouldVisitChildren = false;
   }
 })
+DEF_TRAVERSE_STMT(CopromiseStmt, {
+  if (!getDerived().shouldVisitImplicitCode()) {
+    TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getPromiseDeclStmt());
+    ShouldVisitChildren = false;
+  }
+})
 DEF_TRAVERSE_STMT(CoreturnStmt, {
   if (!getDerived().shouldVisitImplicitCode()) {
     TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getOperand());
