@@ -63,8 +63,8 @@ struct promise_float {
   void unhandled_exception();
 };
 
-struct promise_int {
-  promise_int(int val);
+struct promise_int { // expected-note 1+ {{candidate}}
+  promise_int(int val); // expected-note {{candidate}}
   int get_return_object();
   suspend_always initial_suspend();
   suspend_always final_suspend();
@@ -78,11 +78,11 @@ int set_own_promise() {
   co_return foo.get();
 }
 
-int no_set_own_promise() {
+int no_set_own_promise() { // expected-error {{cannot be a coroutine}}
   co_return 42;
 }
 
 int set_own_promise_incorrect() {
-  co_promise promise_int foo;
+  co_promise promise_int foo; // expected-error{{no matching constructor for initialization of 'promise_int'}}
   co_return foo.get();
 }

@@ -149,7 +149,5 @@ Stmt *CoroutineBodyStmt::getPromiseDeclStmt() const {
 }
 VarDecl *CoroutineBodyStmt::getPromiseDecl() const {
   auto *S = getCopromiseStmt();
-  if (!S)
-    return nullptr;
-  return cast<VarDecl>(cast<DeclStmt>(S)->getSingleDecl());
+  return S ? S->getPromiseDecl() : nullptr;
 }
