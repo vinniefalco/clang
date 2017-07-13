@@ -48,7 +48,7 @@ void baz(T) {
 template <class T>
 struct test_mem {
   int mem() {
-    co_promise promise_int x = 42;
-    //co_return 42;
+    co_promise promise_int x = 42; // expected-error {{unknown type name 'promise_int'}}
+    co_return 42;
   }
 };

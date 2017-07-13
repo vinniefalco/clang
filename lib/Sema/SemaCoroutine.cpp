@@ -779,12 +779,8 @@ StmtResult Sema::BuildCopromiseStmt(SourceLocation KwLoc, Stmt *D,
     return StmtError();
 
   auto *VD = cast<VarDecl>(cast<DeclStmt>(D)->getSingleDecl());
-  assert(VD);
-  if (VD->getType()->isUndeducedType()) {
-    ExprResult Res = CorrectDelayedTyposInExpr(VD->getInit());
-    assert(!Res.isUsable());
+  if (VD->isInvalidDecl())
     return StmtError();
-  }
   auto *FD = dyn_cast<FunctionDecl>(CurContext);
   auto FuncLoc = FD->getLocation();
   QualType PT = VD->getType();
