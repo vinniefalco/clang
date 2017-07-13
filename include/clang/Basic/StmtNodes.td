@@ -51,6 +51,7 @@ def CXXForRangeStmt : Stmt;
 // C++ Coroutines TS statements
 def CoroutineBodyStmt : Stmt;
 def CoreturnStmt : Stmt;
+def CopromiseStmt : Stmt;
 
 // Expressions
 def Expr : Stmt<1>;

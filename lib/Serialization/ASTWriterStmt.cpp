@@ -308,6 +308,11 @@ void ASTStmtWriter::VisitCoroutineBodyStmt(CoroutineBodyStmt *CoroStmt) {
   Code = serialization::STMT_COROUTINE_BODY;
 }
 
+void ASTStmtWriter::VisitCopromiseStmt(CopromiseStmt *S) {
+  // FIXME: Implement coroutine serialization.
+  llvm_unreachable("unimplemented");
+}
+
 void ASTStmtWriter::VisitCoreturnStmt(CoreturnStmt *S) {
   VisitStmt(S);
   Record.AddSourceLocation(S->getKeywordLoc());

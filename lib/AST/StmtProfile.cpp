@@ -1787,6 +1787,8 @@ void StmtProfiler::VisitCoroutineBodyStmt(const CoroutineBodyStmt *S) {
   VisitStmt(S);
 }
 
+void StmtProfiler::VisitCopromiseStmt(const CopromiseStmt *S) { VisitStmt(S); }
+
 void StmtProfiler::VisitCoreturnStmt(const CoreturnStmt *S) {
   VisitStmt(S);
 }

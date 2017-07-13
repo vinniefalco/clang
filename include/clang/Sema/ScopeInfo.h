@@ -16,6 +16,7 @@
 #define LLVM_CLANG_SEMA_SCOPEINFO_H
 
 #include "clang/AST/Expr.h"
+#include "clang/AST/StmtCXX.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/CapturedStmt.h"
 #include "clang/Basic/PartialDiagnostic.h"
@@ -170,7 +171,7 @@ public:
   SmallVector<ReturnStmt*, 4> Returns;
 
   /// \brief The promise object for this coroutine, if any.
-  VarDecl *CoroutinePromise = nullptr;
+  CopromiseStmt *CoroutinePromise = nullptr;
 
   /// \brief The initial and final coroutine suspend points.
   std::pair<Stmt *, Stmt *> CoroutineSuspends;
@@ -390,14 +391,21 @@ public:
 
   bool isCoroutine() const { return !FirstCoroutineStmtLoc.isInvalid(); }
 
+  VarDecl *getCoroutinePromiseDecl() const {
+    if (!CoroutinePromise)
+      return nullptr;
+    return CoroutinePromise->getPromiseDecl();
+  }
+
   void setFirstCoroutineStmt(SourceLocation Loc, StringRef Keyword) {
     assert(FirstCoroutineStmtLoc.isInvalid() &&
                    "first coroutine statement location already set");
     FirstCoroutineStmtLoc = Loc;
     FirstCoroutineStmtKind = llvm::StringSwitch<unsigned char>(Keyword)
-            .Case("co_return", 0)
-            .Case("co_await", 1)
-            .Case("co_yield", 2);
+                                 .Case("co_return", 0)
+                                 .Case("co_await", 1)
+                                 .Case("co_yield", 2)
+                                 .Case("co_promise", 3);
   }
 
   StringRef getFirstCoroutineStmtKeyword() const {
@@ -407,6 +415,8 @@ public:
     case 0: return "co_return";
     case 1: return "co_await";
     case 2: return "co_yield";
+    case 3:
+      return "co_promise";
     default:
       llvm_unreachable("FirstCoroutineStmtKind has an invalid value");
     };

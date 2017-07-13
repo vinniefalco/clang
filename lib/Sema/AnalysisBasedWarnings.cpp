@@ -727,7 +727,8 @@ static void CheckFallThroughForBody(Sema &S, const Decl *D, const Stmt *Body,
   SourceLocation LBrace = Body->getLocStart(), RBrace = Body->getLocEnd();
   auto EmitDiag = [&](SourceLocation Loc, unsigned DiagID) {
     if (IsCoroutine)
-      S.Diag(Loc, DiagID) << S.getCurFunction()->CoroutinePromise->getType();
+      S.Diag(Loc, DiagID)
+          << S.getCurFunction()->getCoroutinePromiseDecl()->getType();
     else
       S.Diag(Loc, DiagID);
   };

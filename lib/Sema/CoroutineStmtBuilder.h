@@ -57,7 +57,6 @@ public:
   bool isInvalid() const { return !this->IsValid; }
 
 private:
-  bool makePromiseStmt();
   bool makeInitialAndFinalSuspend();
   bool makeNewAndDeleteExpr();
   bool makeOnFallthrough();

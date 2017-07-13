@@ -5,8 +5,19 @@
 namespace std {
 namespace experimental {
 
+template <class...>
+using void_t = void;
+
+template <class Ret, class = void>
+struct coroutine_traits_base {};
+template <class Ret>
+struct coroutine_traits_base<Ret, void_t<typename Ret::promise_type>> {
+  using promise_type = typename Ret::promise_type;
+};
+
 template <class Ret, typename... T>
-struct coroutine_traits { using promise_type = typename Ret::promise_type; };
+struct coroutine_traits : coroutine_traits_base<Ret> {
+};
 
 template <class Promise = void>
 struct coroutine_handle {
