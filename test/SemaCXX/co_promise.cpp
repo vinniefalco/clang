@@ -86,3 +86,11 @@ int set_own_promise_incorrect() {
   co_promise promise_int foo; // expected-error{{no matching constructor for initialization of 'promise_int'}}
   co_return foo.get();
 }
+
+template <>
+struct std::experimental::coroutine_traits<void> { using promise_type = promise_void; };
+
+void set_foo() {
+  // FIXME: Make this deduce to `promise_void`
+  co_promise auto p; // expected-error {{requires an initializer}}
+}
