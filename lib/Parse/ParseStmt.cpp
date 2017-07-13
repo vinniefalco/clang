@@ -271,17 +271,16 @@ Retry:
     SemiError = "co_return";
     break;
   case tok::kw_co_promise: {
-    bool HasError = !Stmts.empty();
-    SourceLocation KwLoc = Tok.getLocation();
-    StmtResult PromiseRes = ParseCopromiseStatement();
-    if (HasError || PromiseRes.isInvalid()) {
-      Res = StmtError();
-      SemiError = "co_promise";
-      if (HasError)
-        Diag(KwLoc, diag::err_co_promise_not_first_decl);
+    SemiError = "co_promise";
+    Res = StmtError();
+    if (!Stmts.empty()) {
+      SourceLocation Loc = ConsumeToken();
+      Diag(Loc, diag::err_co_promise_not_first_decl);
       break;
     }
-    return PromiseRes;
+    if (!ParseCopromiseStatement().isInvalid())
+      return StmtEmpty();
+    break;
   }
   case tok::kw_asm: {
     ProhibitAttributes(Attrs);

@@ -44,3 +44,11 @@ void baz(T) {
   int x = 42;
   co_promise T z = 42; // expected-error {{'co_promise' declaration must be first declaration in the function}}
 }
+
+template <class T>
+struct test_mem {
+  int mem() {
+    co_promise promise_int x = 42;
+    //co_return 42;
+  }
+};
