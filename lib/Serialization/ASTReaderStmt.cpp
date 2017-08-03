@@ -3351,6 +3351,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       S = new (Context) VAArgExpr(Empty);
       break;
 
+    case EXPR_SOURCE_LOC:
+      S = new (Context) SourceLocExpr(Empty);
+      break;
+
     case EXPR_ADDR_LABEL:
       S = new (Context) AddrLabelExpr(Empty);
       break;

@@ -1341,6 +1341,8 @@ namespace clang {
       EXPR_CHOOSE,
       /// \brief A GNUNullExpr record.
       EXPR_GNU_NULL,
+      /// \brief A SourceLocExpr record
+      EXPR_SOURCE_LOC,
       /// \brief A ShuffleVectorExpr record.
       EXPR_SHUFFLE_VECTOR,
       /// \brief A ConvertVectorExpr record.
