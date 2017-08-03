@@ -1812,10 +1812,13 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, QualType Ty,
                              SourceLocation CallerLoc, Expr *E)
-    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary, false, false, false,
+    : Expr(SourceLocExprClass, Ty, Type == Line ? VK_RValue : VK_LValue,
+           OK_Ordinary, Ty->isDependentType(), false, Ty->isDependentType(),
            false),
       Val(E), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
-      CallerLoc(CallerLoc) {}
+      CallerLoc(CallerLoc) {
+  assert(Ty->isDependentType() == (E == nullptr) && "expected expression");
+}
 
 const char *SourceLocExpr::getBuiltinStr() const {
   switch (Type) {
@@ -1825,32 +1828,7 @@ const char *SourceLocExpr::getBuiltinStr() const {
     return "__builtin_FUNCTION";
   case Line:
     return "__builtin_LINE";
-  default:
-    llvm_unreachable("unhandled switch case");
   }
-}
-
-SourceLocExpr *SourceLocExpr::Create(const ASTContext &C, IdentType Type,
-                                     SourceLocation BuiltinLoc,
-                                     SourceLocation RParen,
-                                     SourceLocation CallerLoc,
-                                     Decl *CallerDecl) {
-  SourceLocation Loc = C.getSema
-                           // FIXME
-                           QualType Ty;
-  switch (Type) {
-  case File:
-  case Function: {
-    Ty = C.CharTy;
-    Ty.addConst();
-    Ty = C.getConstantArrayType(Ty, llvm::APInt(32, Val.size() + 1),
-                                ArrayType::Normal, 0);
-  }
-  case Line:
-    Ty = C.UnsignedIntTy;
-    break;
-  }
-  return new (C) SourceLocExpr(Type, BuiltinLoc, RParen, C.UnsignedIntTy);
 }
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
@@ -2978,6 +2956,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case ObjCAvailabilityCheckExprClass:
   case CXXUuidofExprClass:
   case OpaqueValueExprClass:
+  case SourceLocExprClass:
     // These never have a side-effect.
     return false;
 

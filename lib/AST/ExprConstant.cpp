@@ -7902,12 +7902,6 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
     return BuiltinOp == Builtin::BI__atomic_always_lock_free ?
         Success(0, E) : Error(E);
   }
-  case Builtin::BI__builtin_LINE:
-    assert(false);
-  case Builtin::BI__builtin_FILE:
-    assert(false);
-  case Builtin::BI__builtin_FUNCTION:
-    assert(false);
   }
 }
 
@@ -10267,6 +10261,7 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::CoawaitExprClass:
   case Expr::DependentCoawaitExprClass:
   case Expr::CoyieldExprClass:
+  case Expr::SourceLocExprClass: // FIXME make this constexpr
     return ICEDiag(IK_NotICE, E->getLocStart());
 
   case Expr::InitListExprClass: {

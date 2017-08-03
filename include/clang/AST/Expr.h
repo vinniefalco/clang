@@ -3810,7 +3810,7 @@ public:
     File,
     Line,
   };
-  Expr *Val;
+  Stmt *Val;
   IdentType Type;
   SourceLocation BuiltinLoc, RParenLoc, CallerLoc;
 
@@ -3822,10 +3822,6 @@ public:
   /// \brief Build an empty call expression.
   SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
 
-  static SourceLocExpr *Create(const ASTContext &C, IdentType Type,
-                               SourceLocation BuiltinLoc, SourceLocation RParen,
-                               SourceLocation CallerLoc, Decl *CallerDecl);
-
   const char *getBuiltinStr() const LLVM_READONLY;
   IdentType getIdentType() const LLVM_READONLY { return Type; }
   SourceLocation getLocation() const LLVM_READONLY { return BuiltinLoc; }
@@ -3836,17 +3832,17 @@ public:
   SourceLocation getCallerLoc() const LLVM_READONLY { return CallerLoc; }
   void setCallerLoc(SourceLocation Loc) { CallerLoc = Loc; }
 
-  const Expr *getSubExpr() const { return Val; }
-  Expr *getSubExpr() { return Val; }
+  const Expr *getSubExpr() const { return cast_or_null<Expr>(Val); }
+  Expr *getSubExpr() { return cast_or_null<Expr>(Val); }
   void setSubExpr(Expr *E) { Val = E; }
 
   child_range children() {
-    return Val ? child_change(&Val, &Val + 1)
+    return Val ? child_range(&Val, &Val + 1)
                : child_range(child_iterator(), child_iterator());
   }
 
   const_child_range children() const {
-    return Val ? const_child_change(&Val, &Val + 1)
+    return Val ? const_child_range(&Val, &Val + 1)
                : const_child_range(const_child_iterator(),
                                    const_child_iterator());
   }
