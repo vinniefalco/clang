@@ -12898,17 +12898,17 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
 
   switch (Type) {
   case SourceLocExpr::Line: {
-    unsigned MaxWidth = S.Context.getTargetInfo().getIntWidth();
+    unsigned MaxWidth = Context.getTargetInfo().getIntWidth();
     llvm::APInt IntVal(MaxWidth, PLoc.getLine());
     Val = IntegerLiteral::Create(Context, IntVal, Context.UnsignedIntTy,
-                                 LParenLoc);
+                                 BuiltinLoc);
     break;
   }
   case SourceLocExpr::File:
     Val = CreateString(PLoc.getFilename());
     break;
   case SourceLocExpr::Function: {
-    if (CurrentDecl == Context.getTranslationUnitDecl())
+    if (CallerDecl == Context.getTranslationUnitDecl())
       Val = CreateString("");
     else
       Val = CreateString(
@@ -12919,7 +12919,7 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
   assert(Val && "should not be null");
   Ty = Val->getType();
   return new (Context)
-      SourceLocExpr(Type, BuiltinLoc, RPLoc, Ty, CallerLoc, Val)
+      SourceLocExpr(Type, BuiltinLoc, RPLoc, Ty, CallerLoc, Val);
 }
 
 bool Sema::ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&Exp,

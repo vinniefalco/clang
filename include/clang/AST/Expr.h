@@ -3850,6 +3850,13 @@ public:
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == SourceLocExprClass;
   }
+
+private:
+  friend class ASTStmtReader;
+
+  void setIdentType(IdentType T) { Type = T; }
+  void setLocStart(SourceLocation L) { BuiltinLoc = L; }
+  void setLocEnd(SourceLocation L) { RParenLoc = L; }
 };
 
 /// @brief Describes an C or C++ initializer list.

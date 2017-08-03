@@ -862,6 +862,15 @@ void ASTStmtReader::VisitVAArgExpr(VAArgExpr *E) {
   E->setIsMicrosoftABI(Record.readInt());
 }
 
+void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
+  VisitExpr(E);
+  E->setSubExpr(Record.readSubExpr());
+  E->setLocStart(ReadSourceLocation());
+  E->setLocEnd(ReadSourceLocation());
+  E->setCallerLoc(ReadSourceLocation());
+  E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
+}
+
 void ASTStmtReader::VisitAddrLabelExpr(AddrLabelExpr *E) {
   VisitExpr(E);
   E->setAmpAmpLoc(ReadSourceLocation());
