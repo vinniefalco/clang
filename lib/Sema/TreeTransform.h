@@ -2401,9 +2401,10 @@ public:
   ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                   SourceLocation BuiltinLoc,
                                   SourceLocation RPLoc,
+                                  bool IsInDefaultArg,
                                   SourceLocation CallerLoc, Decl *CallerDecl) {
-    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, CallerLoc,
-                                        CallerDecl);
+    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, IsInDefaultArg,
+                                        CallerLoc, CallerDecl);
   }
 
   /// \brief Build a new expression list in parentheses.

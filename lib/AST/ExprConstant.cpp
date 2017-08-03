@@ -10261,7 +10261,6 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::CoawaitExprClass:
   case Expr::DependentCoawaitExprClass:
   case Expr::CoyieldExprClass:
-  case Expr::SourceLocExprClass: // FIXME make this constexpr
     return ICEDiag(IK_NotICE, E->getLocStart());
 
   case Expr::InitListExprClass: {
@@ -10280,6 +10279,11 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
     // GCC considers the GNU __null value to be an integral constant expression.
     return NoDiag();
 
+  case Expr::SourceLocExprClass:{ // FIXME make this constexpr
+    auto *SLE = cast<SourceLocExpr>(E);
+    assert(SLE && SLE->getSubExpr());
+    return CheckICE(SLE->getSubExpr(), Ctx);
+  }
   case Expr::SubstNonTypeTemplateParmExprClass:
     return
       CheckICE(cast<SubstNonTypeTemplateParmExpr>(E)->getReplacement(), Ctx);

@@ -1811,11 +1811,12 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, QualType Ty,
+                             bool IsInDefaultArg,
                              SourceLocation CallerLoc, Expr *E)
     : Expr(SourceLocExprClass, Ty, Type == Line ? VK_RValue : VK_LValue,
            OK_Ordinary, Ty->isDependentType(), false, Ty->isDependentType(),
            false),
-      Val(E), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
+      IsInDefaultArg(IsInDefaultArg), Val(E), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
       CallerLoc(CallerLoc) {
   assert(Ty->isDependentType() == (E == nullptr) && "expected expression");
 }

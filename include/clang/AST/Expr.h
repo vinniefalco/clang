@@ -3810,13 +3810,15 @@ public:
     File,
     Line,
   };
+  bool IsInDefaultArg : 1;
   Stmt *Val;
   IdentType Type;
   SourceLocation BuiltinLoc, RParenLoc, CallerLoc;
 
 public:
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                QualType Ty, SourceLocation CallerLoc = SourceLocation(),
+                QualType Ty, bool IsInDefaultArg,
+                SourceLocation CallerLoc = SourceLocation(),
                 Expr *E = nullptr);
 
   /// \brief Build an empty call expression.
@@ -3835,6 +3837,9 @@ public:
   const Expr *getSubExpr() const { return cast_or_null<Expr>(Val); }
   Expr *getSubExpr() { return cast_or_null<Expr>(Val); }
   void setSubExpr(Expr *E) { Val = E; }
+
+  bool isInDefaultArg() const { return IsInDefaultArg; }
+  void setIsInDefaultArg(bool V = true) { IsInDefaultArg = V; }
 
   child_range children() {
     return Val ? child_range(&Val, &Val + 1)

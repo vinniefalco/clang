@@ -1,7 +1,7 @@
 // RUN: %clang_cc1 -std=c++1z -fcxx-exceptions -fexceptions -verify %s
 
 #define assert(...) ((__VA_ARGS__) ? ((void)0) : throw 42)
-
+#if 0
 namespace std {
 namespace experimental {
 struct source_location {
@@ -33,9 +33,9 @@ public:
 } // namespace std
 
 using SL = std::experimental::source_location;
-
+#endif
 namespace test_line {
-
+#if 0
 static_assert(SL::current().line() == __LINE__);
 
 static constexpr SL GlobalS = SL::current();
@@ -53,12 +53,22 @@ constexpr bool test_line_fn() {
   return true;
 }
 static_assert(test_line_fn());
+#endif
 
+constexpr int test_line_fn(int x = __builtin_LINE()) {
+  return x;
+}
+void bar() {
+  test_line_fn();
+}
+
+#if 0
 template <class T>
 constexpr bool test_line_fn_template(T Expect, int L = __builtin_LINE()) {
   return Expect == L;
 }
 static_assert(test_line_fn_template(59));
+#endif
 
 } // namespace test_line
-// expected-no-diagnostics
+

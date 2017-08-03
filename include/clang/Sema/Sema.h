@@ -4397,6 +4397,7 @@ public:
                                 SourceLocation RPLoc);
   ExprResult BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc, SourceLocation RPLoc,
+                                bool IsInDefaultArg,
                                 SourceLocation CallerLoc, Decl *CallerDecl);
 
   // __null
