@@ -2235,7 +2235,8 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
         return SourceLocExpr::Line;
       llvm_unreachable("invalid keyword");
     }();
-    Res = Actions.ActOnSourceLocExpr(Type, StartLoc, ConsumeParen());
+    Res = Actions.ActOnSourceLocExpr(getCurScope(), Type, StartLoc,
+                                     ConsumeParen());
     break;
   }
   }

@@ -2393,6 +2393,19 @@ public:
                                     RParenLoc);
   }
 
+  /// \brief Build a new __builtin_FILE, __builtin_FUNCTION, or __builtin_LINE
+  /// expression.
+  ///
+  /// By default, performs semantic analysis to build the new expression.
+  /// Subclasses may override this routine to provide different behavior.
+  ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
+                                  SourceLocation BuiltinLoc,
+                                  SourceLocation RPLoc,
+                                  SourceLocation CallerLoc, Decl *CallerDecl) {
+    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, CallerLoc,
+                                        CallerDecl);
+  }
+
   /// \brief Build a new expression list in parentheses.
   ///
   /// By default, performs semantic analysis to build the new expression.

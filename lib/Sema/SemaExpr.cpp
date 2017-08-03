@@ -12849,7 +12849,7 @@ ExprResult Sema::ActOnGNUNullExpr(SourceLocation TokenLoc) {
   return new (Context) GNUNullExpr(Ty, TokenLoc);
 }
 
-ExprResult Sema::ActOnSourceLocExpr(SourceLocExpr::IdentType Type,
+ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc) {
   Decl *currentDecl = nullptr;
@@ -12879,10 +12879,8 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     Decl *CallerDecl) {
   assert(CallerDecl && "cannot be null");
   assert(!cast<DeclContext>(CallerDecl)->isDependentContext());
-  SourceLocation Loc = CallerLoc;
-  Loc = SourceMgr.getExpansionRange(Loc).second;
-  PresumedLoc PLoc = SourceMgr.getPresumedLoc(Loc);
-  QualType Ty;
+  PresumedLoc PLoc =
+      SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(CallerLoc).second);
   Expr *Val;
 
   auto CreateString = [&](StringRef SVal) {
@@ -12917,9 +12915,8 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
   }
   }
   assert(Val && "should not be null");
-  Ty = Val->getType();
   return new (Context)
-      SourceLocExpr(Type, BuiltinLoc, RPLoc, Ty, CallerLoc, Val);
+      SourceLocExpr(Type, BuiltinLoc, RPLoc, Val->getType(), CallerLoc, Val);
 }
 
 bool Sema::ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&Exp,
