@@ -12849,44 +12849,57 @@ ExprResult Sema::ActOnGNUNullExpr(SourceLocation TokenLoc) {
   return new (Context) GNUNullExpr(Ty, TokenLoc);
 }
 
+static Decl *GetCurrentDecl(Sema &S) {
+  Decl *currentDecl = nullptr;
+  if (const BlockScopeInfo *BSI = S.getCurBlock())
+    currentDecl = BSI->TheDecl;
+  else if (const LambdaScopeInfo *LSI = S.getCurLambda())
+    currentDecl = LSI->CallOperator;
+  else if (const CapturedRegionScopeInfo *CSI = S.getCurCapturedRegion())
+    currentDecl = CSI->TheCapturedDecl;
+  else
+    currentDecl = S.getCurFunctionOrMethodDecl();
+
+  if (!currentDecl) {
+    currentDecl = S.Context.getTranslationUnitDecl();
+  }
+  return currentDecl;
+}
+
 ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc) {
-  if (cast<DeclContext>(currentDecl)->isDependentContext())
-    return new (Context)
-        SourceLocExpr(Type, BuiltinLoc, RPLoc, Context.DependentTy);
-
-  Decl *currentDecl = nullptr;
-  if (const BlockScopeInfo *BSI = getCurBlock())
-    currentDecl = BSI->TheDecl;
-  else if (const LambdaScopeInfo *LSI = getCurLambda())
-    currentDecl = LSI->CallOperator;
-  else if (const CapturedRegionScopeInfo *CSI = getCurCapturedRegion())
-    currentDecl = CSI->TheCapturedDecl;
-  else
-    currentDecl = getCurFunctionOrMethodDecl();
-
-  if (!currentDecl) {
-    currentDecl = Context.getTranslationUnitDecl();
-  }
-
   S->dump();
   Scope *SS = S;
   while (SS) {
     SS->dump();
     SS = SS->getParent();
   }
-  if (!S->isFunctionPrototypeScope())
-    return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, /*IsInDefaultArg*/ false,
-                              RPLoc, currentDecl);
 
-  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, /*IsInDefaultArg*/ true,
-                              RPLoc, currentDecl);
+  return BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc,
+                                      S->isFunctionPrototypeScope());
+
+  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, RPLoc, currentDecl);
 }
+
+ExprResult Sema::BuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
+                                              SourceLocation BuiltinLoc,
+                                              SourceLocation RPLoc,
+                                              bool IsInDefaultArg) {
+  Decl *currentDecl = GetCurrentDecl(*this);
+  bool IsUnresolved =
+      IsInDefaultArg || (Type == SourceLocExpr::Function &&
+                         cast<DeclContext>(currentDecl)->isDependentContext());
+  if (IsUnresolved) {
+    return new (Context) UnresolvedSourceLocExpr(
+        Type, BuiltinLoc, RPLoc, Context.DependentTy, IsInDefaultArg);
+  }
+  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, RPLoc, currentDecl);
+}
+
 ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc,
-                                    bool IsInDefaultArg,
                                     SourceLocation CallerLoc,
                                     Decl *CallerDecl) {
   assert(CallerDecl && "cannot be null");

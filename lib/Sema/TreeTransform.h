@@ -2398,15 +2398,13 @@ public:
   ///
   /// By default, performs semantic analysis to build the new expression.
   /// Subclasses may override this routine to provide different behavior.
-  ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
-                                  SourceLocation BuiltinLoc,
-                                  SourceLocation RPLoc,
-                                  bool IsInDefaultArg,
-                                  SourceLocation CallerLoc, Decl *CallerDecl) {
-    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, IsInDefaultArg,
-                                        CallerLoc, CallerDecl);
+  ExprResult RebuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
+                                            SourceLocation BuiltinLoc,
+                                            SourceLocation RPLoc,
+                                            bool IsInDefaultArg) {
+    return getSema().BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc,
+                                                  IsInDefaultArg);
   }
-
   /// \brief Build a new expression list in parentheses.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -9806,9 +9804,17 @@ TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
 }
 
 template <typename Derived>
+ExprResult TreeTransform<Derived>::TransformUnresolvedSourceLocExpr(
+    UnresolvedSourceLocExpr *E) {
+  return getDerived().RebuildUnresolvedSourceLocExpr(
+      E->getIdentType(), E->getLocStart(), E->getLocEnd(), E->isInDefaultArg());
+}
+
+template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
-  // FIXME: Implement this
-  return E;
+  if (!E->isTypeDependent())
+    return E;
+  assert(false);
 }
 
 template<typename Derived>
@@ -10045,7 +10051,7 @@ TreeTransform<Derived>::TransformCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
   if (!Param)
     return ExprError();
 
-  if (false && !getDerived().AlwaysRebuild() && Param == E->getParam())
+  if (!getDerived().AlwaysRebuild() && Param == E->getParam())
     return E;
 
   return getDerived().RebuildCXXDefaultArgExpr(E->getUsedLocation(), Param);

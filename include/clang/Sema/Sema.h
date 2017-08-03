@@ -4395,9 +4395,12 @@ public:
   ExprResult ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc,
                                 SourceLocation RPLoc);
+  ExprResult BuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
+                                          SourceLocation BuiltinLoc,
+                                          SourceLocation RPLoc,
+                                          bool IsInDefaultArg);
   ExprResult BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc, SourceLocation RPLoc,
-                                bool IsInDefaultArg,
                                 SourceLocation CallerLoc, Decl *CallerDecl);
 
   // __null

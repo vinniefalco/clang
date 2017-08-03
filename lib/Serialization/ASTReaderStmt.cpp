@@ -869,6 +869,13 @@ void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
   E->setLocEnd(ReadSourceLocation());
   E->setCallerLoc(ReadSourceLocation());
   E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
+}
+
+void ASTStmtReader::VisitUnresolvedSourceLocExpr(UnresolvedSourceLocExpr *E) {
+  VisitExpr(E);
+  E->setLocStart(ReadSourceLocation());
+  E->setLocEnd(ReadSourceLocation());
+  E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
   E->setIsInDefaultArg(Record.readInt());
 }
 

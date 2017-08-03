@@ -1811,17 +1811,15 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, QualType Ty,
-                             bool IsInDefaultArg,
                              SourceLocation CallerLoc, Expr *E)
-    : Expr(SourceLocExprClass, Ty, Type == Line ? VK_RValue : VK_LValue,
-           OK_Ordinary, Ty->isDependentType(), false, Ty->isDependentType(),
-           false),
-      IsInDefaultArg(IsInDefaultArg), Val(E), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
+    : Expr(SourceLocExprClass, Ty, E->getValueKind(), E->getObjectKind(), false,
+           false, false, false),
+      Val(E), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
       CallerLoc(CallerLoc) {
-  assert(Ty->isDependentType() == (E == nullptr) && "expected expression");
+  assert(!Ty->isDependentType() && "expected expression");
 }
 
-const char *SourceLocExpr::getBuiltinStr() const {
+const char *SourceLocExpr::GetBuiltinStr(IdentType Type) {
   switch (Type) {
   case File:
     return "__builtin_FILE";
@@ -1831,6 +1829,16 @@ const char *SourceLocExpr::getBuiltinStr() const {
     return "__builtin_LINE";
   }
 }
+
+UnresolvedSourceLocExpr::UnresolvedSourceLocExpr(IdentType Type,
+                                                 SourceLocation BLoc,
+                                                 SourceLocation RParenLoc,
+                                                 QualType Ty,
+                                                 bool IsInDefaultArg)
+    : Expr(UnresolvedSourceLocExprClass, Ty, VK_RValue, OK_Ordinary, true,
+           false, true, false),
+      IsInDefaultArg(IsInDefaultArg), Type(Type), BuiltinLoc(BLoc),
+      RParenLoc(RParenLoc) {}
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
                            ArrayRef<Expr*> initExprs, SourceLocation rbraceloc)
@@ -2958,6 +2966,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case CXXUuidofExprClass:
   case OpaqueValueExprClass:
   case SourceLocExprClass:
+  case UnresolvedSourceLocExprClass:
     // These never have a side-effect.
     return false;
 
