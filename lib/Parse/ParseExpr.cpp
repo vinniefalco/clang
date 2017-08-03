@@ -619,6 +619,9 @@ class CastExpressionIdValidator : public CorrectionCandidateCallback {
 /// [GNU]   '__builtin_offsetof' '(' type-name ',' offsetof-member-designator')'
 /// [GNU]   '__builtin_choose_expr' '(' assign-expr ',' assign-expr ','
 ///                                     assign-expr ')'
+/// [GNU]   '__builtin_FILE' '(' ')'
+/// [GNU]   '__builtin_FUNCTION' '(' ')'
+/// [GNU]   '__builtin_LINE' '(' ')'
 /// [GNU]   '__builtin_types_compatible_p' '(' type-name ',' type-name ')'
 /// [GNU]   '__null'
 /// [OBJC]  '[' objc-message-expr ']'
@@ -627,20 +630,18 @@ class CastExpressionIdValidator : public CorrectionCandidateCallback {
 /// [OBJC]  '\@encode' '(' type-name ')'
 /// [OBJC]  objc-string-literal
 /// [C++]   simple-type-specifier '(' expression-list[opt] ')'      [C++ 5.2.3]
-/// [C++11] simple-type-specifier braced-init-list                  [C++11 5.2.3]
-/// [C++]   typename-specifier '(' expression-list[opt] ')'         [C++ 5.2.3]
-/// [C++11] typename-specifier braced-init-list                     [C++11 5.2.3]
-/// [C++]   'const_cast' '<' type-name '>' '(' expression ')'       [C++ 5.2p1]
-/// [C++]   'dynamic_cast' '<' type-name '>' '(' expression ')'     [C++ 5.2p1]
-/// [C++]   'reinterpret_cast' '<' type-name '>' '(' expression ')' [C++ 5.2p1]
-/// [C++]   'static_cast' '<' type-name '>' '(' expression ')'      [C++ 5.2p1]
-/// [C++]   'typeid' '(' expression ')'                             [C++ 5.2p1]
-/// [C++]   'typeid' '(' type-id ')'                                [C++ 5.2p1]
-/// [C++]   'this'          [C++ 9.3.2]
-/// [G++]   unary-type-trait '(' type-id ')'
-/// [G++]   binary-type-trait '(' type-id ',' type-id ')'           [TODO]
-/// [EMBT]  array-type-trait '(' type-id ',' integer ')'
-/// [clang] '^' block-literal
+/// [C++11] simple-type-specifier braced-init-list [C++11 5.2.3] [C++]
+/// typename-specifier '(' expression-list[opt] ')'         [C++ 5.2.3] [C++11]
+/// typename-specifier braced-init-list                     [C++11 5.2.3] [C++]
+/// 'const_cast' '<' type-name '>' '(' expression ')'       [C++ 5.2p1] [C++]
+/// 'dynamic_cast' '<' type-name '>' '(' expression ')'     [C++ 5.2p1] [C++]
+/// 'reinterpret_cast' '<' type-name '>' '(' expression ')' [C++ 5.2p1] [C++]
+/// 'static_cast' '<' type-name '>' '(' expression ')'      [C++ 5.2p1] [C++]
+/// 'typeid' '(' expression ')'                             [C++ 5.2p1] [C++]
+/// 'typeid' '(' type-id ')'                                [C++ 5.2p1] [C++]
+/// 'this'          [C++ 9.3.2] [G++]   unary-type-trait '(' type-id ')' [G++]
+/// binary-type-trait '(' type-id ',' type-id ')'           [TODO] [EMBT]
+/// array-type-trait '(' type-id ',' integer ')' [clang] '^' block-literal
 ///
 ///       constant: [C99 6.4.4]
 ///         integer-constant
@@ -650,14 +651,14 @@ class CastExpressionIdValidator : public CorrectionCandidateCallback {
 ///
 ///       id-expression: [C++ 5.1]
 ///                   unqualified-id
-///                   qualified-id          
+///                   qualified-id
 ///
 ///       unqualified-id: [C++ 5.1]
 ///                   identifier
 ///                   operator-function-id
 ///                   conversion-function-id
-///                   '~' class-name        
-///                   template-id           
+///                   '~' class-name
+///                   template-id
 ///
 ///       new-expression: [C++ 5.3.4]
 ///                   '::'[opt] 'new' new-placement[opt] new-type-id
@@ -722,7 +723,7 @@ class CastExpressionIdValidator : public CorrectionCandidateCallback {
 ///                   '__trivially_copyable'
 ///
 ///       binary-type-trait:
-/// [GNU]             '__is_base_of'       
+/// [GNU]             '__is_base_of'
 /// [MS]              '__is_convertible_to'
 ///                   '__is_convertible'
 ///                   '__is_same'
@@ -1072,6 +1073,9 @@ ExprResult Parser::ParseCastExpression(bool isUnaryExpression,
   case tok::kw___builtin_choose_expr:
   case tok::kw___builtin_astype: // primary-expression: [OCL] as_type()
   case tok::kw___builtin_convertvector:
+  case tok::kw___builtin_FILE:
+  case tok::kw___builtin_LINE:
+  case tok::kw___builtin_FUNCTION:
     return ParseBuiltinPrimaryExpression();
   case tok::kw___null:
     return Actions.ActOnGNUNullExpr(ConsumeToken());
@@ -1991,6 +1995,9 @@ ExprResult Parser::ParseUnaryExprOrTypeTraitExpression() {
 /// [GNU]   '__builtin_choose_expr' '(' assign-expr ',' assign-expr ','
 ///                                     assign-expr ')'
 /// [GNU]   '__builtin_types_compatible_p' '(' type-name ',' type-name ')'
+/// [GNU]   '__builtin_FILE' '(' ')'
+/// [GNU]   '__builtin_FUNCTION' '(' ')'
+/// [GNU]   '__builtin_LINE' '(' ')'
 /// [OCL]   '__builtin_astype' '(' assignment-expression ',' type-name ')'
 ///
 /// [GNU] offsetof-member-designator:
@@ -2208,6 +2215,27 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
     
     Res = Actions.ActOnConvertVectorExpr(Expr.get(), DestTy.get(), StartLoc, 
                                          ConsumeParen());
+    break;
+  }
+  case tok::kw___builtin_FILE:
+  case tok::kw___builtin_LINE:
+  case tok::kw___builtin_FUNCTION: {
+    // Attempt to consume the r-paren.
+    if (Tok.isNot(tok::r_paren)) {
+      Diag(Tok, diag::err_expected) << tok::r_paren;
+      SkipUntil(tok::r_paren, StopAtSemi);
+      return ExprError();
+    }
+    SourceLocExpr::IdentType Type = [&] {
+      if (T == tok::kw___builtin_FILE)
+        return SourceLocExpr::File;
+      if (T == tok::kw___builtin_FUNCTION)
+        return SourceLocExpr::Function;
+      if (T == tok::kw___builtin_LINE)
+        return SourceLocExpr::Line;
+      llvm_unreachable("invalid keyword");
+    }();
+    Res = Actions.ActOnSourceLocExpr(Type, StartLoc, ConsumeParen());
     break;
   }
   }

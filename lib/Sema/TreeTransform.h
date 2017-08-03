@@ -9182,9 +9182,8 @@ TreeTransform<Derived>::TransformCallExpr(CallExpr *E) {
                                   &ArgChanged))
     return ExprError();
 
-  if (!getDerived().AlwaysRebuild() &&
-      Callee.get() == E->getCallee() &&
-      !ArgChanged)
+  if (false && !getDerived().AlwaysRebuild() &&
+      Callee.get() == E->getCallee() && !ArgChanged)
     return SemaRef.MaybeBindToTemporary(E);
 
   // FIXME: Wrong source location information for the '('.
@@ -9792,6 +9791,12 @@ TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
   return getDerived().TransformCallExpr(E);
 }
 
+template <typename Derived>
+ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
+  // FIXME: Implement this
+  return E;
+}
+
 template<typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformCUDAKernelCallExpr(CUDAKernelCallExpr *E) {
@@ -10026,8 +10031,7 @@ TreeTransform<Derived>::TransformCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
   if (!Param)
     return ExprError();
 
-  if (!getDerived().AlwaysRebuild() &&
-      Param == E->getParam())
+  if (false && !getDerived().AlwaysRebuild() && Param == E->getParam())
     return E;
 
   return getDerived().RebuildCXXDefaultArgExpr(E->getUsedLocation(), Param);

@@ -4392,6 +4392,10 @@ public:
   ExprResult BuildVAArgExpr(SourceLocation BuiltinLoc, Expr *E,
                             TypeSourceInfo *TInfo, SourceLocation RPLoc);
 
+  ExprResult ActOnSourceLocExpr(SourceLocExpr::IdentType Type,
+                                SourceLocation BuiltinLoc,
+                                SourceLocation RPLoc);
+
   // __null
   ExprResult ActOnGNUNullExpr(SourceLocation TokenLoc);
 

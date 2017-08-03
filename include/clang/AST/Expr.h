@@ -3800,6 +3800,62 @@ public:
   }
 };
 
+/// BuiltinSourceLocExpr - Represents a function call to one of
+/// __builtin_LINE(),
+/// __builtin_FUNCTION(), or __BUILTIN_FILE()
+class SourceLocExpr final : public Expr {
+public:
+  enum IdentType {
+    Function,
+    File,
+    Line,
+  };
+  Expr *Val;
+  IdentType Type;
+  SourceLocation BuiltinLoc, RParenLoc, CallerLoc;
+
+public:
+  SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
+                QualType Ty, SourceLocation CallerLoc = SourceLocation(),
+                Expr *E = nullptr);
+
+  /// \brief Build an empty call expression.
+  SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
+
+  static SourceLocExpr *Create(const ASTContext &C, IdentType Type,
+                               SourceLocation BuiltinLoc,
+                               SourceLocation RParen);
+
+  const char *getBuiltinStr() const;
+  IdentType getIdentType() const { return Type; }
+  SourceLocation getLocation() const { return BuiltinLoc; }
+
+  SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
+  SourceLocation getLocEnd() const LLVM_READONLY { return RParenLoc; }
+
+  SourceLocation getCallerLoc() const { return CallerLoc; }
+  void setCallerLoc(SourceLocation Loc) const { CallerLoc = Loc; }
+
+  const Expr *getSubExpr() const { return Val; }
+  Expr *getSubExpr() { return Val; }
+  void setSubExpr(Expr *E) { Val = E; }
+
+  child_range children() {
+    return Val ? child_change(&Val, &Val + 1)
+               : child_range(child_iterator(), child_iterator());
+  }
+
+  const_child_range children() const {
+    return Val ? const_child_change(&Val, &Val + 1)
+               : const_child_range(const_child_iterator(),
+                                   const_child_iterator());
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == SourceLocExprClass;
+  }
+};
+
 /// @brief Describes an C or C++ initializer list.
 ///
 /// InitListExpr describes an initializer list, which can be used to

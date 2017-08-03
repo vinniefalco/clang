@@ -5919,7 +5919,6 @@ bool PointerExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
     // Not found: return nullptr.
     return ZeroInitialization(E);
   }
-
   default:
     return visitNonBuiltinCallExpr(E);
   }
@@ -7903,6 +7902,12 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
     return BuiltinOp == Builtin::BI__atomic_always_lock_free ?
         Success(0, E) : Error(E);
   }
+  case Builtin::BI__builtin_LINE:
+    assert(false);
+  case Builtin::BI__builtin_FILE:
+    assert(false);
+  case Builtin::BI__builtin_FUNCTION:
+    assert(false);
   }
 }
 
@@ -10552,9 +10557,8 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
     return CheckICE(cast<CXXDefaultArgExpr>(E)->getExpr(), Ctx);
   case Expr::CXXDefaultInitExprClass:
     return CheckICE(cast<CXXDefaultInitExpr>(E)->getExpr(), Ctx);
-  case Expr::ChooseExprClass: {
+  case Expr::ChooseExprClass:
     return CheckICE(cast<ChooseExpr>(E)->getChosenSubExpr(), Ctx);
-  }
   }
 
   llvm_unreachable("Invalid StmtClass!");

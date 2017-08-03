@@ -1305,6 +1305,10 @@ void StmtPrinter::VisitOMPTargetTeamsDistributeSimdDirective(
 //  Expr printing methods.
 //===----------------------------------------------------------------------===//
 
+void StmtPrinter::VisitSourceLocExpr(SourceLocExpr *Node) {
+  OS << Node->getBuiltinStr() << "()";
+}
+
 void StmtPrinter::VisitDeclRefExpr(DeclRefExpr *Node) {
   if (auto *OCED = dyn_cast<OMPCapturedExprDecl>(Node->getDecl())) {
     OCED->getInit()->IgnoreImpCasts()->printPretty(OS, nullptr, Policy);
