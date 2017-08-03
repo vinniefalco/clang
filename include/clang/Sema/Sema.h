@@ -4395,6 +4395,9 @@ public:
   ExprResult ActOnSourceLocExpr(SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc,
                                 SourceLocation RPLoc);
+  ExprResult BuildSourceLocExpr(SourceLocExpr::IdentType Type,
+                                SourceLocation BuiltinLoc, SourceLocation RPLoc,
+                                SourceLocation CallerLoc, Decl *CallerDecl);
 
   // __null
   ExprResult ActOnGNUNullExpr(SourceLocation TokenLoc);

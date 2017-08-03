@@ -12849,6 +12849,79 @@ ExprResult Sema::ActOnGNUNullExpr(SourceLocation TokenLoc) {
   return new (Context) GNUNullExpr(Ty, TokenLoc);
 }
 
+ExprResult Sema::ActOnSourceLocExpr(SourceLocExpr::IdentType Type,
+                                    SourceLocation BuiltinLoc,
+                                    SourceLocation RPLoc) {
+  Decl *currentDecl = nullptr;
+  if (const BlockScopeInfo *BSI = getCurBlock())
+    currentDecl = BSI->TheDecl;
+  else if (const LambdaScopeInfo *LSI = getCurLambda())
+    currentDecl = LSI->CallOperator;
+  else if (const CapturedRegionScopeInfo *CSI = getCurCapturedRegion())
+    currentDecl = CSI->TheCapturedDecl;
+  else
+    currentDecl = getCurFunctionOrMethodDecl();
+
+  if (!currentDecl) {
+    currentDecl = Context.getTranslationUnitDecl();
+  }
+
+  if (cast<DeclContext>(currentDecl)->isDependentContext())
+    return new (Context)
+        SourceLocExpr(Type, BuiltinLoc, RPLoc, Context.DependentTy);
+
+  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, RPLoc, currentDecl);
+}
+ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
+                                    SourceLocation BuiltinLoc,
+                                    SourceLocation RPLoc,
+                                    SourceLocation CallerLoc,
+                                    Decl *CallerDecl) {
+  assert(CallerDecl && "cannot be null");
+  assert(!cast<DeclContext>(CallerDecl)->isDependentContext());
+  SourceLocation Loc = CallerLoc;
+  Loc = SourceMgr.getExpansionRange(Loc).second;
+  PresumedLoc PLoc = SourceMgr.getPresumedLoc(Loc);
+  QualType Ty;
+  Expr *Val;
+
+  auto CreateString = [&](StringRef SVal) {
+    QualType CharTy = Context.CharTy.withConst();
+    QualType StrTy = Context.getConstantArrayType(
+        CharTy, llvm::APInt(32, SVal.size() + 1), ArrayType::Normal, 0);
+    StringLiteral *Lit =
+        StringLiteral::Create(Context, SVal, StringLiteral::Ascii,
+                              /*Pascal*/ false, StrTy, BuiltinLoc);
+    assert(Lit && "should not be null");
+    return Lit;
+  };
+
+  switch (Type) {
+  case SourceLocExpr::Line: {
+    unsigned MaxWidth = S.Context.getTargetInfo().getIntWidth();
+    llvm::APInt IntVal(MaxWidth, PLoc.getLine());
+    Val = IntegerLiteral::Create(Context, IntVal, Context.UnsignedIntTy,
+                                 LParenLoc);
+    break;
+  }
+  case SourceLocExpr::File:
+    Val = CreateString(PLoc.getFilename());
+    break;
+  case SourceLocExpr::Function: {
+    if (CurrentDecl == Context.getTranslationUnitDecl())
+      Val = CreateString("");
+    else
+      Val = CreateString(
+          PredefinedExpr::ComputeName(PredefinedExpr::Function, CallerDecl));
+    break;
+  }
+  }
+  assert(Val && "should not be null");
+  Ty = Val->getType();
+  return new (Context)
+      SourceLocExpr(Type, BuiltinLoc, RPLoc, Ty, CallerLoc, Val)
+}
+
 bool Sema::ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&Exp,
                                               bool Diagnose) {
   if (!getLangOpts().ObjC1)

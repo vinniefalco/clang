@@ -1832,9 +1832,12 @@ const char *SourceLocExpr::getBuiltinStr() const {
 
 SourceLocExpr *SourceLocExpr::Create(const ASTContext &C, IdentType Type,
                                      SourceLocation BuiltinLoc,
-                                     SourceLocation RParen) {
-  // FIXME
-  QualType Ty;
+                                     SourceLocation RParen,
+                                     SourceLocation CallerLoc,
+                                     Decl *CallerDecl) {
+  SourceLocation Loc = C.getSema
+                           // FIXME
+                           QualType Ty;
   switch (Type) {
   case File:
   case Function: {

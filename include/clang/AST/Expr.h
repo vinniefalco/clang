@@ -3823,18 +3823,18 @@ public:
   SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
 
   static SourceLocExpr *Create(const ASTContext &C, IdentType Type,
-                               SourceLocation BuiltinLoc,
-                               SourceLocation RParen);
+                               SourceLocation BuiltinLoc, SourceLocation RParen,
+                               SourceLocation CallerLoc, Decl *CallerDecl);
 
-  const char *getBuiltinStr() const;
-  IdentType getIdentType() const { return Type; }
-  SourceLocation getLocation() const { return BuiltinLoc; }
+  const char *getBuiltinStr() const LLVM_READONLY;
+  IdentType getIdentType() const LLVM_READONLY { return Type; }
+  SourceLocation getLocation() const LLVM_READONLY { return BuiltinLoc; }
 
   SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
   SourceLocation getLocEnd() const LLVM_READONLY { return RParenLoc; }
 
-  SourceLocation getCallerLoc() const { return CallerLoc; }
-  void setCallerLoc(SourceLocation Loc) const { CallerLoc = Loc; }
+  SourceLocation getCallerLoc() const LLVM_READONLY { return CallerLoc; }
+  void setCallerLoc(SourceLocation Loc) { CallerLoc = Loc; }
 
   const Expr *getSubExpr() const { return Val; }
   Expr *getSubExpr() { return Val; }
