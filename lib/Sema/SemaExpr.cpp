@@ -12849,6 +12849,91 @@ ExprResult Sema::ActOnGNUNullExpr(SourceLocation TokenLoc) {
   return new (Context) GNUNullExpr(Ty, TokenLoc);
 }
 
+namespace {
+/// A visitor for rebuilding a call to an __unknown_any expression
+/// to have an appropriate type.
+struct RebuildUnknownAnyFunction
+    : StmtVisitor<RebuildUnknownAnyFunction, ExprResult> {
+
+  Sema &S;
+
+  RebuildUnknownAnyFunction(Sema &S) : S(S) {}
+
+  ExprResult VisitStmt(Stmt *S) { llvm_unreachable("unexpected statement!"); }
+
+  ExprResult VisitExpr(Expr *E) {
+    S.Diag(E->getExprLoc(), diag::err_unsupported_unknown_any_call)
+        << E->getSourceRange();
+    return ExprError();
+  }
+
+  /// Rebuild an expression which simply semantically wraps another
+  /// expression which it shares the type and value kind of.
+  template <class T> ExprResult rebuildSugarExpr(T *E) {
+    ExprResult SubResult = Visit(E->getSubExpr());
+    if (SubResult.isInvalid())
+      return ExprError();
+
+    Expr *SubExpr = SubResult.get();
+    E->setSubExpr(SubExpr);
+    E->setType(SubExpr->getType());
+    E->setValueKind(SubExpr->getValueKind());
+    assert(E->getObjectKind() == OK_Ordinary);
+    return E;
+  }
+
+  ExprResult VisitParenExpr(ParenExpr *E) { return rebuildSugarExpr(E); }
+
+  ExprResult VisitUnaryExtension(UnaryOperator *E) {
+    return rebuildSugarExpr(E);
+  }
+
+  ExprResult VisitUnaryAddrOf(UnaryOperator *E) {
+    ExprResult SubResult = Visit(E->getSubExpr());
+    if (SubResult.isInvalid())
+      return ExprError();
+
+    Expr *SubExpr = SubResult.get();
+    E->setSubExpr(SubExpr);
+    E->setType(S.Context.getPointerType(SubExpr->getType()));
+    assert(E->getValueKind() == VK_RValue);
+    assert(E->getObjectKind() == OK_Ordinary);
+    return E;
+  }
+
+  ExprResult resolveDecl(Expr *E, ValueDecl *VD) {
+    if (!isa<FunctionDecl>(VD))
+      return VisitExpr(E);
+
+    E->setType(VD->getType());
+
+    assert(E->getValueKind() == VK_RValue);
+    if (S.getLangOpts().CPlusPlus &&
+        !(isa<CXXMethodDecl>(VD) && cast<CXXMethodDecl>(VD)->isInstance()))
+      E->setValueKind(VK_LValue);
+
+    return E;
+  }
+
+  ExprResult VisitMemberExpr(MemberExpr *E) {
+    return resolveDecl(E, E->getMemberDecl());
+  }
+
+  ExprResult VisitDeclRefExpr(DeclRefExpr *E) {
+    return resolveDecl(E, E->getDecl());
+  }
+};
+} // namespace
+
+/// Given a function expression of unknown-any type, try to rebuild it
+/// to have a function type.
+static ExprResult rebuildCXXDefaultArgExpr(Sema &S, Expr *FunctionExpr) {
+  ExprResult Result = RebuildCXXDefaultArgExpr(S).Visit(FunctionExpr);
+  if (Result.isInvalid())
+    return ExprError();
+  return S.DefaultFunctionArrayConversion(Result.get());
+}
+
 static Decl *GetCurrentDecl(Sema &S) {
   Decl *currentDecl = nullptr;
   if (const BlockScopeInfo *BSI = S.getCurBlock())
