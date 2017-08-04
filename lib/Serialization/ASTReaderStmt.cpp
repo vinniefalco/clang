@@ -867,14 +867,6 @@ void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
   E->setSubExpr(Record.readSubExpr());
   E->setLocStart(ReadSourceLocation());
   E->setLocEnd(ReadSourceLocation());
-  E->setCallerLoc(ReadSourceLocation());
-  E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
-}
-
-void ASTStmtReader::VisitUnresolvedSourceLocExpr(UnresolvedSourceLocExpr *E) {
-  VisitExpr(E);
-  E->setLocStart(ReadSourceLocation());
-  E->setLocEnd(ReadSourceLocation());
   E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
   E->setIsInDefaultArg(Record.readInt());
 }
@@ -3361,10 +3353,6 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case EXPR_SOURCE_LOC:
       S = new (Context) SourceLocExpr(Empty);
-      break;
-
-    case EXPR_UNRESOLVED_SOURCE_LOC:
-      S = new (Context) UnresolvedSourceLocExpr(Empty);
       break;
 
     case EXPR_ADDR_LABEL:

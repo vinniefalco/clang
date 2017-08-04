@@ -91,7 +91,6 @@ def ParenListExpr : DStmt<Expr>;
 def VAArgExpr : DStmt<Expr>;
 def GenericSelectionExpr : DStmt<Expr>;
 def PseudoObjectExpr : DStmt<Expr>;
-def UnresolvedSourceLocExpr : DStmt<Expr>;
 def SourceLocExpr : DStmt<Expr>;
 
 // Atomic expressions

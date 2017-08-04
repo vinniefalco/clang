@@ -3810,18 +3810,27 @@ public:
     File,
     Line,
   };
+
   Stmt *Val;
   IdentType Type;
-  SourceLocation BuiltinLoc, RParenLoc, CallerLoc;
+  SourceLocation BuiltinLoc, RParenLoc;
+  bool IsInDefaultArg : 1;
 
   static const char *GetBuiltinStr(IdentType T);
 
 public:
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                QualType Ty, SourceLocation CallerLoc, Expr *E);
+                bool IsInDefaultArg, Expr *E);
+  SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
+                bool IsInDefaultArg, QualType Ty);
 
   /// \brief Build an empty call expression.
   SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
+
+  static SourceLocExpr *Create(const ASTContext &Ctx, IdentType Type,
+                               SourceLocation BLoc, SourceLocation RParenLoc,
+                               bool IsInDefaultArg, QualType Ty,
+                               Expr *E = nullptr);
 
   const char *getBuiltinStr() const LLVM_READONLY {
     return GetBuiltinStr(Type);
@@ -3832,73 +3841,27 @@ public:
   SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
   SourceLocation getLocEnd() const LLVM_READONLY { return RParenLoc; }
 
-  SourceLocation getCallerLoc() const LLVM_READONLY { return CallerLoc; }
-  void setCallerLoc(SourceLocation Loc) { CallerLoc = Loc; }
-
   const Expr *getSubExpr() const { return cast_or_null<Expr>(Val); }
   Expr *getSubExpr() { return cast_or_null<Expr>(Val); }
   void setSubExpr(Expr *E) { Val = E; }
 
-  child_range children() { return child_range(&Val, &Val + 1); }
+  bool isInDefaultArg() const { return IsInDefaultArg; }
+  void setIsInDefaultArg(bool V = true) { IsInDefaultArg = V; }
+
+  bool isUnresolved() const { return Val == nullptr; }
+
+  child_range children() {
+    return Val ? child_range(&Val, &Val + 1)
+               : child_range(child_iterator(), child_iterator());
+  }
 
   const_child_range children() const {
-    return const_child_range(&Val, &Val + 1);
+    return Val ? const_child_range(&Val, &Val + 1)
+               : const_child_range(child_iterator(), child_iterator());
   }
 
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == SourceLocExprClass;
-  }
-
-private:
-  friend class ASTStmtReader;
-
-  void setIdentType(IdentType T) { Type = T; }
-  void setLocStart(SourceLocation L) { BuiltinLoc = L; }
-  void setLocEnd(SourceLocation L) { RParenLoc = L; }
-};
-
-class UnresolvedSourceLocExpr final : public Expr {
-public:
-  using IdentType = SourceLocExpr::IdentType;
-  static const IdentType Function = IdentType::Function;
-  static const IdentType File = IdentType::File;
-  static const IdentType Line = IdentType::Line;
-
-  bool IsInDefaultArg : 1;
-  IdentType Type;
-  SourceLocation BuiltinLoc, RParenLoc;
-
-public:
-  UnresolvedSourceLocExpr(IdentType Type, SourceLocation BLoc,
-                          SourceLocation RParenLoc, QualType Ty,
-                          bool IsInDefaultArg);
-
-  /// \brief Build an empty call expression.
-  UnresolvedSourceLocExpr(EmptyShell Empty)
-      : Expr(UnresolvedSourceLocExprClass, Empty) {}
-
-  const char *getBuiltinStr() const LLVM_READONLY {
-    return SourceLocExpr::GetBuiltinStr(Type);
-  }
-  IdentType getIdentType() const LLVM_READONLY { return Type; }
-  SourceLocation getLocation() const LLVM_READONLY { return BuiltinLoc; }
-
-  SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
-  SourceLocation getLocEnd() const LLVM_READONLY { return RParenLoc; }
-
-  bool isInDefaultArg() const { return IsInDefaultArg; }
-  void setIsInDefaultArg(bool V = true) { IsInDefaultArg = V; }
-
-  child_range children() {
-    return child_range(child_iterator(), child_iterator());
-  }
-
-  const_child_range children() const {
-    return const_child_range(const_child_iterator(), const_child_iterator());
-  }
-
-  static bool classof(const Stmt *T) {
-    return T->getStmtClass() == UnresolvedSourceLocExprClass;
   }
 
 private:

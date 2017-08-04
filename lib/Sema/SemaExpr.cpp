@@ -12876,30 +12876,31 @@ ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
     SS = SS->getParent();
   }
 
-  return BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc,
-                                      S->isFunctionPrototypeScope());
+  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc,
+                            S->isFunctionPrototypeScope());
 }
 
-ExprResult Sema::BuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
-                                              SourceLocation BuiltinLoc,
-                                              SourceLocation RPLoc,
-                                              bool IsInDefaultArg) {
+ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
+                                    SourceLocation BuiltinLoc,
+                                    SourceLocation RPLoc, bool IsInDefaultArg) {
   Decl *currentDecl = GetCurrentDecl(*this);
   bool IsUnresolved =
       IsInDefaultArg || (Type == SourceLocExpr::Function &&
                          cast<DeclContext>(currentDecl)->isDependentContext());
   if (IsUnresolved) {
-    return new (Context) UnresolvedSourceLocExpr(
-        Type, BuiltinLoc, RPLoc, Context.DependentTy, IsInDefaultArg);
+    return new (Context) SourceLocExpr(Type, BuiltinLoc, RPLoc, IsInDefaultArg,
+                                       Context.DependentTy);
+  } else {
+    ExprResult Val = BuildSourceLocValue(Type, RPLoc, currentDecl);
+    if (Val.isInvalid())
+      return ExprError();
+    return new (Context)
+        SourceLocExpr(Type, BuiltinLoc, RPLoc, IsInDefaultArg, Val.get());
   }
-  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, RPLoc, currentDecl);
 }
-
-ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
-                                    SourceLocation BuiltinLoc,
-                                    SourceLocation RPLoc,
-                                    SourceLocation CallerLoc,
-                                    Decl *CallerDecl) {
+ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,
+                                     SourceLocation CallerLoc,
+                                     Decl *CallerDecl) {
   assert(CallerDecl && "cannot be null");
   assert(!cast<DeclContext>(CallerDecl)->isDependentContext());
   PresumedLoc PLoc =
@@ -12912,7 +12913,7 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
         CharTy, llvm::APInt(32, SVal.size() + 1), ArrayType::Normal, 0);
     StringLiteral *Lit =
         StringLiteral::Create(Context, SVal, StringLiteral::Ascii,
-                              /*Pascal*/ false, StrTy, BuiltinLoc);
+                              /*Pascal*/ false, StrTy, CallerLoc);
     assert(Lit && "should not be null");
     return Lit;
   };
@@ -12922,7 +12923,7 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
     unsigned MaxWidth = Context.getTargetInfo().getIntWidth();
     llvm::APInt IntVal(MaxWidth, PLoc.getLine());
     Val = IntegerLiteral::Create(Context, IntVal, Context.UnsignedIntTy,
-                                 BuiltinLoc);
+                                 CallerLoc);
     break;
   }
   case SourceLocExpr::File:
@@ -12938,8 +12939,7 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
   }
   }
   assert(Val && "should not be null");
-  return new (Context)
-      SourceLocExpr(Type, BuiltinLoc, RPLoc, Val->getType(), CallerLoc, Val);
+  return Val;
 }
 
 bool Sema::ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&Exp,

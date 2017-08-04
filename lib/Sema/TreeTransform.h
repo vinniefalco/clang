@@ -2393,18 +2393,6 @@ public:
                                     RParenLoc);
   }
 
-  /// \brief Build a new __builtin_FILE, __builtin_FUNCTION, or __builtin_LINE
-  /// expression.
-  ///
-  /// By default, performs semantic analysis to build the new expression.
-  /// Subclasses may override this routine to provide different behavior.
-  ExprResult RebuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
-                                            SourceLocation BuiltinLoc,
-                                            SourceLocation RPLoc,
-                                            bool IsInDefaultArg) {
-    return getSema().BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc,
-                                                  IsInDefaultArg);
-  }
   /// \brief Build a new expression list in parentheses.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -2938,6 +2926,19 @@ public:
                                    ArrayRef<TemplateArgument> PartialArgs) {
     return SizeOfPackExpr::Create(SemaRef.Context, OperatorLoc, Pack, PackLoc,
                                   RParenLoc, Length, PartialArgs);
+  }
+
+  /// \brief Build a new C++ default-argument expression.
+  ///
+  /// By default, builds a new default-argument expression, which does not
+  /// require any semantic analysis. Subclasses may override this routine to
+  /// provide different behavior.
+  ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
+                                  SourceLocation BuiltinLoc,
+                                  SourceLocation RPLoc, bool IsInDefaultArg,
+                                  QualType Ty, Expr *E) {
+    return SourceLocExpr::Create(getSema().Context, Type, BuiltinLoc, RPLoc,
+                                 IsInDefaultArg, Ty, E);
   }
 
   /// \brief Build a new Objective-C boxed expression.
@@ -9804,17 +9805,13 @@ TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
 }
 
 template <typename Derived>
-ExprResult TreeTransform<Derived>::TransformUnresolvedSourceLocExpr(
-    UnresolvedSourceLocExpr *E) {
-  return getDerived().RebuildUnresolvedSourceLocExpr(
-      E->getIdentType(), E->getLocStart(), E->getLocEnd(), E->isInDefaultArg());
-}
-
-template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
-  if (!E->isTypeDependent())
+  if (!E->isTypeDependent() && !E->isUnresolved())
     return E;
-  assert(false);
+
+  return getDerived().RebuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
+                                           E->getLocEnd(), E->isInDefaultArg(),
+                                           E->getType(), E->getSubExpr());
 }
 
 template<typename Derived>

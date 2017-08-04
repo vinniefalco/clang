@@ -1810,13 +1810,31 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 }
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, QualType Ty,
-                             SourceLocation CallerLoc, Expr *E)
-    : Expr(SourceLocExprClass, Ty, E->getValueKind(), E->getObjectKind(), false,
-           false, false, false),
+                             SourceLocation RParenLoc, bool IsInDefaultArg,
+                             Expr *E)
+    : Expr(SourceLocExprClass, E->getType(), E->getValueKind(),
+           E->getObjectKind(), E->isTypeDependent(), E->isValueDependent(),
+           E->isInstantiationDependent(), false),
       Val(E), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
-      CallerLoc(CallerLoc) {
-  assert(!Ty->isDependentType() && "expected expression");
+      IsInDefaultArg(IsInDefaultArg) {}
+
+SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
+                             SourceLocation RParenLoc, bool IsInDefaultArg,
+                             QualType Ty)
+    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary, false, false, false,
+           false),
+      Val(nullptr), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
+      IsInDefaultArg(IsInDefaultArg) {}
+
+SourceLocExpr *SourceLocExpr::Create(const ASTContext &Ctx, IdentType Type,
+                                     SourceLocation BLoc,
+                                     SourceLocation RParenLoc,
+                                     bool IsInDefaultArg, QualType Ty,
+                                     Expr *E) {
+  assert(!E || E->getType() == Ty);
+  if (E)
+    return new (Ctx) SourceLocExpr(Type, BLoc, RParenLoc, IsInDefaultArg, E);
+  return new (Ctx) SourceLocExpr(Type, BLoc, RParenLoc, IsInDefaultArg, Ty);
 }
 
 const char *SourceLocExpr::GetBuiltinStr(IdentType Type) {
@@ -1829,16 +1847,6 @@ const char *SourceLocExpr::GetBuiltinStr(IdentType Type) {
     return "__builtin_LINE";
   }
 }
-
-UnresolvedSourceLocExpr::UnresolvedSourceLocExpr(IdentType Type,
-                                                 SourceLocation BLoc,
-                                                 SourceLocation RParenLoc,
-                                                 QualType Ty,
-                                                 bool IsInDefaultArg)
-    : Expr(UnresolvedSourceLocExprClass, Ty, VK_RValue, OK_Ordinary, true,
-           false, true, false),
-      IsInDefaultArg(IsInDefaultArg), Type(Type), BuiltinLoc(BLoc),
-      RParenLoc(RParenLoc) {}
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
                            ArrayRef<Expr*> initExprs, SourceLocation rbraceloc)
@@ -2966,7 +2974,6 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case CXXUuidofExprClass:
   case OpaqueValueExprClass:
   case SourceLocExprClass:
-  case UnresolvedSourceLocExprClass:
     // These never have a side-effect.
     return false;
 

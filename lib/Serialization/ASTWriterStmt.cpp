@@ -848,18 +848,9 @@ void ASTStmtWriter::VisitSourceLocExpr(SourceLocExpr *E) {
   Record.AddStmt(E->getSubExpr());
   Record.AddSourceLocation(E->getLocStart());
   Record.AddSourceLocation(E->getLocEnd());
-  Record.AddSourceLocation(E->getCallerLoc());
-  Record.push_back(E->getIdentType());
-  Code = serialization::EXPR_SOURCE_LOC;
-}
-
-void ASTStmtWriter::VisitUnresolvedSourceLocExpr(UnresolvedSourceLocExpr *E) {
-  VisitExpr(E);
-  Record.AddSourceLocation(E->getLocStart());
-  Record.AddSourceLocation(E->getLocEnd());
   Record.push_back(E->getIdentType());
   Record.push_back(E->isInDefaultArg());
-  Code = serialization::EXPR_UNRESOLVED_SOURCE_LOC;
+  Code = serialization::EXPR_SOURCE_LOC;
 }
 
 void ASTStmtWriter::VisitAddrLabelExpr(AddrLabelExpr *E) {
