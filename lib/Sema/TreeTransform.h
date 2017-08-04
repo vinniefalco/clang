@@ -9194,7 +9194,7 @@ TreeTransform<Derived>::TransformCallExpr(CallExpr *E) {
                                   &ArgChanged))
     return ExprError();
 
-  if (false && !getDerived().AlwaysRebuild() &&
+  if (!getDerived().AlwaysRebuild() &&
       Callee.get() == E->getCallee() && !ArgChanged)
     return SemaRef.MaybeBindToTemporary(E);
 

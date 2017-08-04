@@ -59,7 +59,7 @@ constexpr int test_line_fn(int x = __builtin_LINE()) {
   return x;
 }
 void bar() {
-  test_line_fn();
+  static_assert(test_line_fn() == __LINE__, "");
 }
 
 #if 0

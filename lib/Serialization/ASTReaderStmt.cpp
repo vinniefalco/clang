@@ -3363,6 +3363,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       S = new (Context) SourceLocExpr(Empty);
       break;
 
+    case EXPR_UNRESOLVED_SOURCE_LOC:
+      S = new (Context) UnresolvedSourceLocExpr(Empty);
+      break;
+
     case EXPR_ADDR_LABEL:
       S = new (Context) AddrLabelExpr(Empty);
       break;
