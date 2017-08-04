@@ -12878,8 +12878,6 @@ ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
 
   return BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc,
                                       S->isFunctionPrototypeScope());
-
-  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, RPLoc, currentDecl);
 }
 
 ExprResult Sema::BuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
