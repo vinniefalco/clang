@@ -1821,8 +1821,9 @@ SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, bool IsInDefaultArg,
                              QualType Ty)
-    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary, false, false, false,
-           false),
+    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
+           Ty->isDependentType(), Ty->isDependentType(),
+           Ty->isInstantiationDependentType(), false),
       Val(nullptr), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
       IsInDefaultArg(IsInDefaultArg) {}
 

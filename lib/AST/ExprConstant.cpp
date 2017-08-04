@@ -6959,6 +6959,11 @@ public:
   bool VisitBinaryOperator(const BinaryOperator *E);
   bool VisitOffsetOfExpr(const OffsetOfExpr *E);
   bool VisitUnaryOperator(const UnaryOperator *E);
+  bool VisitSourceLocExpr(const SourceLocExpr *E) {
+    if (!E->getSubExpr() || E->getIdentType() != SourceLocExpr::Line)
+      return Error(E);
+    return Visit(E->getSubExpr());
+  }
 
   bool VisitCastExpr(const CastExpr* E);
   bool VisitUnaryExprOrTypeTraitExpr(const UnaryExprOrTypeTraitExpr *E);

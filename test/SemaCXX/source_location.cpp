@@ -55,6 +55,8 @@ constexpr bool test_line_fn() {
 static_assert(test_line_fn());
 #endif
 
+static_assert(__builtin_LINE() == __LINE__, "");
+
 constexpr int test_line_fn(int x = __builtin_LINE()) {
   return x;
 }
