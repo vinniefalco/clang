@@ -56,7 +56,9 @@ static_assert(test_line_fn());
 
 static_assert(__builtin_LINE() == __LINE__, "");
 
-constexpr int test_line_fn_simple(int x = __builtin_LINE()) {
+constexpr int baz() { return 101; }
+
+constexpr int test_line_fn_simple(int z = baz(), int x = __builtin_LINE()) {
   return x;
 }
 void bar() {

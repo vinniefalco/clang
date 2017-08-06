@@ -4793,6 +4793,25 @@ static ExprResult rebuildCXXDefaultArgExpr(Sema &S, ParmVarDecl *Param,
                                            QualType ProtoArgType,
                                            SourceLocation Loc, Decl *CallerDecl);
 
+namespace {
+
+  class CheckForSourceLocVisitor
+    : public StmtVisitor<CheckForSourceLocVisitor, bool> {
+
+  public:
+
+    CheckForSourceLocVisitor() {}
+    bool VisitExpr(Expr *Node) {
+      bool HasSourceLocExpr = false;
+      for (Stmt *SubStmt : Node->children())
+        HasSourceLocExpr |= Visit(SubStmt);
+      return HasSourceLocExpr;
+    }
+    bool VisitSourceLocExpr(SourceLocExpr *) { return true; }
+  };
+
+}
+
 bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
                                   const FunctionProtoType *Proto,
                                   unsigned FirstParam, ArrayRef<Expr *> Args,
@@ -4847,8 +4866,8 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
       assert(Param && "can't use default arguments without a known callee");
       ExprResult ArgExpr =
         BuildCXXDefaultArgExpr(CallLoc, FDecl, Param);
+      if (!ArgExpr.isInvalid() && CheckForSourceLocVisitor{}.Visit(Param->getDefaultArg())) {
 
-      if (!ArgExpr.isInvalid()) { //Param->getDefaultArgContainsSourceLocExpr()) {
         assert(!Param->getDefaultArgContainsSourceLocExpr());
         ArgExpr = rebuildCXXDefaultArgExpr(
             *this,
