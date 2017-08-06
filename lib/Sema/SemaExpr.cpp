@@ -4788,6 +4788,10 @@ Sema::ConvertArgumentsForCall(CallExpr *Call, Expr *Fn,
   return false;
 }
 
+static Decl *GetCurrentDecl(Sema &S);
+static ExprResult rebuildCXXDefaultArgExpr(Sema &S, CXXDefaultArgExpr *Arg,
+                                           Decl *CallerDecl);
+
 bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
                                   const FunctionProtoType *Proto,
                                   unsigned FirstParam, ArrayRef<Expr *> Args,
@@ -4840,12 +4844,16 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
       Arg = ArgE.getAs<Expr>();
     } else {
       assert(Param && "can't use default arguments without a known callee");
-
       ExprResult ArgExpr =
         BuildCXXDefaultArgExpr(CallLoc, FDecl, Param);
+
+      if (!ArgExpr.isInvalid() && Param->getDefaultArgContainsSourceLocExpr()) {
+        ArgExpr = rebuildCXXDefaultArgExpr(
+            *this,
+            cast<CXXDefaultArgExpr>(ArgExpr.get()), GetCurrentDecl(*this));
+      }
       if (ArgExpr.isInvalid())
         return true;
-
       Arg = ArgExpr.getAs<Expr>();
     }
 
@@ -12852,87 +12860,49 @@ ExprResult Sema::ActOnGNUNullExpr(SourceLocation TokenLoc) {
 namespace {
 /// A visitor for rebuilding a call to an __unknown_any expression
 /// to have an appropriate type.
-struct RebuildUnknownAnyFunction
-    : StmtVisitor<RebuildUnknownAnyFunction, ExprResult> {
+struct RebuildCXXDefaultArgExpr : TreeTransform<RebuildCXXDefaultArgExpr> {
+  typedef TreeTransform<RebuildCXXDefaultArgExpr> BaseTransform;
 
-  Sema &S;
+  SourceLocation CallerLoc;
+  Decl *CallerDecl;
 
-  RebuildUnknownAnyFunction(Sema &S) : S(S) {}
+public:
+  RebuildCXXDefaultArgExpr(Sema &S, SourceLocation CallerLoc, Decl *CallerDecl)
+      : BaseTransform(S), CallerLoc(CallerLoc), CallerDecl(CallerDecl) {}
 
-  ExprResult VisitStmt(Stmt *S) { llvm_unreachable("unexpected statement!"); }
+  bool AlwaysRebuild() { return true; }
+
+  ExprResult TransformStmt(Stmt *S) {
+    llvm_unreachable("unexpected statement!");
+  }
 
   ExprResult VisitExpr(Expr *E) {
-    S.Diag(E->getExprLoc(), diag::err_unsupported_unknown_any_call)
+    SemaRef.Diag(E->getExprLoc(), diag::err_unsupported_unknown_any_call)
         << E->getSourceRange();
     return ExprError();
   }
 
-  /// Rebuild an expression which simply semantically wraps another
-  /// expression which it shares the type and value kind of.
-  template <class T> ExprResult rebuildSugarExpr(T *E) {
-    ExprResult SubResult = Visit(E->getSubExpr());
-    if (SubResult.isInvalid())
+  ExprResult TransformCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
+    return BaseTransform::TransformCXXDefaultArgExpr(E);
+  }
+
+  ExprResult TransformSourceLocExpr(SourceLocExpr *E) {
+    if (!E->isUnresolved())
+      return E;
+
+    ExprResult Value =
+        SemaRef.BuildSourceLocValue(E->getIdentType(), CallerLoc, CallerDecl);
+    if (Value.isInvalid())
       return ExprError();
-
-    Expr *SubExpr = SubResult.get();
-    E->setSubExpr(SubExpr);
-    E->setType(SubExpr->getType());
-    E->setValueKind(SubExpr->getValueKind());
-    assert(E->getObjectKind() == OK_Ordinary);
-    return E;
+    return BaseTransform::RebuildSourceLocExpr(
+        E->getIdentType(), E->getLocStart(), E->getLocEnd(),
+        E->isInDefaultArg(), E->getType(), Value.get());
   }
 
-  ExprResult VisitParenExpr(ParenExpr *E) { return rebuildSugarExpr(E); }
 
-  ExprResult VisitUnaryExtension(UnaryOperator *E) {
-    return rebuildSugarExpr(E);
-  }
 
-  ExprResult VisitUnaryAddrOf(UnaryOperator *E) {
-    ExprResult SubResult = Visit(E->getSubExpr());
-    if (SubResult.isInvalid())
-      return ExprError();
-
-    Expr *SubExpr = SubResult.get();
-    E->setSubExpr(SubExpr);
-    E->setType(S.Context.getPointerType(SubExpr->getType()));
-    assert(E->getValueKind() == VK_RValue);
-    assert(E->getObjectKind() == OK_Ordinary);
-    return E;
-  }
-
-  ExprResult resolveDecl(Expr *E, ValueDecl *VD) {
-    if (!isa<FunctionDecl>(VD))
-      return VisitExpr(E);
-
-    E->setType(VD->getType());
-
-    assert(E->getValueKind() == VK_RValue);
-    if (S.getLangOpts().CPlusPlus &&
-        !(isa<CXXMethodDecl>(VD) && cast<CXXMethodDecl>(VD)->isInstance()))
-      E->setValueKind(VK_LValue);
-
-    return E;
-  }
-
-  ExprResult VisitMemberExpr(MemberExpr *E) {
-    return resolveDecl(E, E->getMemberDecl());
-  }
-
-  ExprResult VisitDeclRefExpr(DeclRefExpr *E) {
-    return resolveDecl(E, E->getDecl());
-  }
 };
 } // namespace
-
-/// Given a function expression of unknown-any type, try to rebuild it
-/// to have a function type.
-static ExprResult rebuildCXXDefaultArgExpr(Sema &S, Expr *FunctionExpr) {
-  ExprResult Result = RebuildCXXDefaultArgExpr(S).Visit(FunctionExpr);
-  if (Result.isInvalid())
-    return ExprError();
-  return S.DefaultFunctionArrayConversion(Result.get());
-}
 
 static Decl *GetCurrentDecl(Sema &S) {
   Decl *currentDecl = nullptr;
@@ -12949,6 +12919,16 @@ static Decl *GetCurrentDecl(Sema &S) {
     currentDecl = S.Context.getTranslationUnitDecl();
   }
   return currentDecl;
+}
+
+/// Given a function expression of unknown-any type, try to rebuild it
+/// to have a function type.
+static ExprResult rebuildCXXDefaultArgExpr(Sema &S, CXXDefaultArgExpr *Arg,
+                                           Decl *CallerDecl) {
+  ExprResult Result =
+      RebuildCXXDefaultArgExpr(S, Arg->getUsedLocation(), CallerDecl)
+          .TransformExpr(Arg);
+  return Result;
 }
 
 ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,

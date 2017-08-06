@@ -832,6 +832,11 @@ protected:
     /// (even an invalid) expression for the default argument.
     unsigned DefaultArgKind : 2;
 
+    /// Whether the default argument for this parameter contains a
+    /// SourceLocExpr expression that must be rewritten every time the default
+    /// argument is used.
+    unsigned DefaultArgContainsSourceLocExpr : 1;
+
     /// Whether this parameter undergoes K&R argument promotion.
     unsigned IsKNRPromoted : 1;
 
@@ -1443,6 +1448,7 @@ protected:
       : VarDecl(DK, C, DC, StartLoc, IdLoc, Id, T, TInfo, S) {
     assert(ParmVarDeclBits.HasInheritedDefaultArg == false);
     assert(ParmVarDeclBits.DefaultArgKind == DAK_None);
+    assert(ParmVarDeclBits.DefaultArgContainsSourceLocExpr == false);
     assert(ParmVarDeclBits.IsKNRPromoted == false);
     assert(ParmVarDeclBits.IsObjCMethodParam == false);
     setDefaultArg(DefArg);
@@ -1565,6 +1571,15 @@ public:
 
   void setHasInheritedDefaultArg(bool I = true) {
     ParmVarDeclBits.HasInheritedDefaultArg = I;
+  }
+
+  bool getDefaultArgContainsSourceLocExpr() const {
+    return ParmVarDeclBits.DefaultArgContainsSourceLocExpr;
+  }
+
+  void setDefaultArgContainsSourceLocExpr(bool Value = true) {
+    assert(!Value || hasDefaultArg());
+    ParmVarDeclBits.DefaultArgContainsSourceLocExpr = Value;
   }
 
   QualType getOriginalType() const;
