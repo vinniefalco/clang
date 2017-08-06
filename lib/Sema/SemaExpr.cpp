@@ -4789,8 +4789,9 @@ Sema::ConvertArgumentsForCall(CallExpr *Call, Expr *Fn,
 }
 
 static Decl *GetCurrentDecl(Sema &S);
-static ExprResult rebuildCXXDefaultArgExpr(Sema &S, CXXDefaultArgExpr *Arg,
-                                           Decl *CallerDecl);
+static ExprResult rebuildCXXDefaultArgExpr(Sema &S, ParmVarDecl *Param,
+                                           QualType ProtoArgType,
+                                           SourceLocation Loc, Decl *CallerDecl);
 
 bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
                                   const FunctionProtoType *Proto,
@@ -4847,10 +4848,18 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
       ExprResult ArgExpr =
         BuildCXXDefaultArgExpr(CallLoc, FDecl, Param);
 
-      if (!ArgExpr.isInvalid() && Param->getDefaultArgContainsSourceLocExpr()) {
+      if (!ArgExpr.isInvalid()) { //Param->getDefaultArgContainsSourceLocExpr()) {
+        assert(!Param->getDefaultArgContainsSourceLocExpr());
         ArgExpr = rebuildCXXDefaultArgExpr(
             *this,
-            cast<CXXDefaultArgExpr>(ArgExpr.get()), GetCurrentDecl(*this));
+            Param, ProtoArgType, CallLoc, GetCurrentDecl(*this));
+        if (ArgExpr.isInvalid())
+          return true;
+        InitializedEntity Entity =  InitializedEntity::InitializeParameter(Context,
+                                                                           Param,
+                                                         ProtoArgType);
+        ArgExpr = PerformCopyInitialization(
+          Entity, SourceLocation(), ArgExpr.get(), IsListInitialization, AllowExplicit);
       }
       if (ArgExpr.isInvalid())
         return true;
@@ -12860,19 +12869,19 @@ ExprResult Sema::ActOnGNUNullExpr(SourceLocation TokenLoc) {
 namespace {
 /// A visitor for rebuilding a call to an __unknown_any expression
 /// to have an appropriate type.
-struct RebuildCXXDefaultArgExpr : TreeTransform<RebuildCXXDefaultArgExpr> {
-  typedef TreeTransform<RebuildCXXDefaultArgExpr> BaseTransform;
+struct RebuildCXXDefaultArg : public TreeTransform<RebuildCXXDefaultArg> {
+  typedef TreeTransform<RebuildCXXDefaultArg> BaseTransform;
 
   SourceLocation CallerLoc;
   Decl *CallerDecl;
 
 public:
-  RebuildCXXDefaultArgExpr(Sema &S, SourceLocation CallerLoc, Decl *CallerDecl)
+  RebuildCXXDefaultArg(Sema &S, SourceLocation CallerLoc, Decl *CallerDecl)
       : BaseTransform(S), CallerLoc(CallerLoc), CallerDecl(CallerDecl) {}
 
   bool AlwaysRebuild() { return true; }
 
-  ExprResult TransformStmt(Stmt *S) {
+  StmtResult TransformStmt(Stmt *S) {
     llvm_unreachable("unexpected statement!");
   }
 
@@ -12898,9 +12907,6 @@ public:
         E->getIdentType(), E->getLocStart(), E->getLocEnd(),
         E->isInDefaultArg(), E->getType(), Value.get());
   }
-
-
-
 };
 } // namespace
 
@@ -12923,24 +12929,25 @@ static Decl *GetCurrentDecl(Sema &S) {
 
 /// Given a function expression of unknown-any type, try to rebuild it
 /// to have a function type.
-static ExprResult rebuildCXXDefaultArgExpr(Sema &S, CXXDefaultArgExpr *Arg,
-                                           Decl *CallerDecl) {
+static ExprResult rebuildCXXDefaultArgExpr(Sema &S, ParmVarDecl *Param,
+                                           QualType ProtoArgType,
+                                           SourceLocation Loc, Decl *CallerDecl) {
   ExprResult Result =
-      RebuildCXXDefaultArgExpr(S, Arg->getUsedLocation(), CallerDecl)
-          .TransformExpr(Arg);
+      RebuildCXXDefaultArg(S, Loc, CallerDecl).TransformExpr(Param->getDefaultArg());
   return Result;
 }
 
 ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc) {
+/*
   S->dump();
   Scope *SS = S;
   while (SS) {
     SS->dump();
     SS = SS->getParent();
   }
-
+  */
   return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc,
                             S->isFunctionPrototypeScope());
 }

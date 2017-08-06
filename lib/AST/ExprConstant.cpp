@@ -4511,6 +4511,10 @@ public:
       return Error(E);
     return StmtVisitorTy::Visit(E->getExpr());
   }
+  bool VisitSourceLocExpr(const SourceLocExpr *E) {
+    assert(E->getSubExpr());
+    return StmtVisitorTy::Visit(E->getSubExpr());
+  }
   // We cannot create any objects for which cleanups are required, so there is
   // nothing to do here; all cleanups must come from unevaluated subexpressions.
   bool VisitExprWithCleanups(const ExprWithCleanups *E)
@@ -10287,7 +10291,7 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::SourceLocExprClass:{ // FIXME make this constexpr
     auto *SLE = cast<SourceLocExpr>(E);
     assert(SLE && SLE->getSubExpr());
-    return CheckICE(SLE->getSubExpr(), Ctx);
+    return CheckEvalInICE(SLE->getSubExpr(), Ctx);
   }
   case Expr::SubstNonTypeTemplateParmExprClass:
     return

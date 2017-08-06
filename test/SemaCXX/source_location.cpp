@@ -1,7 +1,7 @@
 // RUN: %clang_cc1 -std=c++1z -fcxx-exceptions -fexceptions -verify %s
 
 #define assert(...) ((__VA_ARGS__) ? ((void)0) : throw 42)
-#if 0
+
 namespace std {
 namespace experimental {
 struct source_location {
@@ -33,9 +33,9 @@ public:
 } // namespace std
 
 using SL = std::experimental::source_location;
-#endif
+
 namespace test_line {
-#if 0
+
 static_assert(SL::current().line() == __LINE__);
 
 static constexpr SL GlobalS = SL::current();
@@ -49,28 +49,28 @@ constexpr bool test_line_fn() {
 
   );
 
-  static_assert(S2.line() == (__LINE__ - 5), "");
+  static_assert(S2.line() == (__LINE__ - 4), "");
   return true;
 }
 static_assert(test_line_fn());
-#endif
 
 static_assert(__builtin_LINE() == __LINE__, "");
 
-constexpr int test_line_fn(int x = __builtin_LINE()) {
+constexpr int test_line_fn_simple(int x = __builtin_LINE()) {
   return x;
 }
 void bar() {
-  static_assert(test_line_fn() == __LINE__, "");
+  static_assert(test_line_fn_simple() == __LINE__, "");
+  static_assert(test_line_fn_simple() == __LINE__, "");
 }
 
-#if 0
 template <class T>
 constexpr bool test_line_fn_template(T Expect, int L = __builtin_LINE()) {
   return Expect == L;
 }
-static_assert(test_line_fn_template(59));
-#endif
+static_assert(test_line_fn_template(__LINE__));
+
 
 } // namespace test_line
+// expected-no-diagnostics
 

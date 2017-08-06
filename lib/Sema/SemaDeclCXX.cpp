@@ -343,8 +343,9 @@ Sema::ActOnParamDefaultArgument(Decl *param, SourceLocation EqualLoc,
   }
 
   SetParamDefaultArgument(Param, DefaultArg, EqualLoc);
-  if (!Param->isInvalidDecl())
+  if (!Param->isInvalidDecl()) {
     Param->setHasInheritedDefaultArg(DefaultArgChecker.hasSourceLocExpr());
+  }
 }
 
 /// ActOnParamUnparsedDefaultArgument - We've seen a default
