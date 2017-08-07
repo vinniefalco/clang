@@ -1868,7 +1868,8 @@ public:
 } // namespace
 
 bool SourceLocExpr::containsSourceLocExpr(const Expr *E) {
-  return CheckForSourceLocVisitor{}.Visit(E);
+  assert(E);
+  return E && CheckForSourceLocVisitor{}.Visit(E);
 }
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,

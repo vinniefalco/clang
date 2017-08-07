@@ -4546,15 +4546,15 @@ ExprResult rebuildInitWithUnresolvedSourceLocExpr(Sema &S, Expr *Init,
                                                   SourceLocation Loc);
 
 static MemInitResult rebuildCtorInit(Sema &SemaRef, BaseAndFieldInfo &Info,
-                                     FieldDecl *Field) {
+                                     FieldDecl *Field, Expr *Init) {
   assert(!Field->getType()->isDependentType());
   assert(!Field->getInClassInitializer()->isTypeDependent());
   SourceLocation Loc = Info.Ctor->getLocation();
-  ExprResult Init = rebuildInitWithUnresolvedSourceLocExpr(
-      SemaRef, Field->getInClassInitializer(), Loc);
-  if (Init.isInvalid())
+  ExprResult InitRes =
+      rebuildInitWithUnresolvedSourceLocExpr(SemaRef, Init, Loc);
+  if (InitRes.isInvalid())
     return true;
-  return SemaRef.BuildMemberInitializer(Field, Init.get(), Loc);
+  return SemaRef.BuildMemberInitializer(Field, InitRes.get(), Loc);
 }
 
 static bool CollectFieldInitializer(Sema &SemaRef, BaseAndFieldInfo &Info,
@@ -4566,8 +4566,9 @@ static bool CollectFieldInitializer(Sema &SemaRef, BaseAndFieldInfo &Info,
   // Overwhelmingly common case: we have a direct initializer for this field.
   if (CXXCtorInitializer *Init =
           Info.AllBaseFields.lookup(Field->getCanonicalDecl())) {
-    if (SourceLocExpr::containsSourceLocExpr(Field->getInClassInitializer())) {
-      MemInitResult InitExpr = rebuildCtorInit(SemaRef, Info, Field);
+    if (SourceLocExpr::containsSourceLocExpr(Init->getInit())) {
+      MemInitResult InitExpr =
+          rebuildCtorInit(SemaRef, Info, Field, Init->getInit());
       if (InitExpr.isInvalid())
         return true;
       Init = InitExpr.get();
@@ -4595,7 +4596,8 @@ static bool CollectFieldInitializer(Sema &SemaRef, BaseAndFieldInfo &Info,
     if (DIE.isInvalid())
       return true;
     if (SourceLocExpr::containsSourceLocExpr(Field->getInClassInitializer())) {
-      MemInitResult ME = rebuildCtorInit(SemaRef, Info, Field);
+      MemInitResult ME =
+          rebuildCtorInit(SemaRef, Info, Field, Field->getInClassInitializer());
       if (ME.isInvalid())
         return true;
       return Info.addFieldInitializer(ME.get());
