@@ -12987,9 +12987,9 @@ ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,
   ExprResult Res;
   switch (Type) {
   case SourceLocExpr::Column:
-    Res = CreateInt(PLoc.getColumn());
   case SourceLocExpr::Line:
-    Res = CreateInt(PLoc.getLine());
+    Res = CreateInt(Type == SourceLocExpr::Line ? PLoc.getLine()
+                                                : PLoc.getColumn());
     break;
   case SourceLocExpr::File:
     Res = CreateString(PLoc.getFilename());

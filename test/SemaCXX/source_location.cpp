@@ -8,17 +8,18 @@ namespace experimental {
 struct source_location {
 private:
   unsigned int __m_line = 0;
+  unsigned int __m_col = 0;
   const char *__m_file = nullptr;
   const char *__m_func = nullptr;
-
 public:
   static constexpr source_location current(
       const char *__file = __builtin_FILE(),
       const char *__func = __builtin_FUNCTION(),
       unsigned int __line = __builtin_LINE(),
-      unsigned int __col = 0) noexcept {
+      unsigned int __col = __builtin_COLUMN()) noexcept {
     source_location __loc;
     __loc.__m_line = __line;
+    __loc.__m_col = __col;
     __loc.__m_file = __file;
     __loc.__m_func = __func;
     return __loc;
@@ -26,7 +27,7 @@ public:
   constexpr source_location() = default;
   constexpr source_location(source_location const &) = default;
   constexpr unsigned int line() const noexcept { return __m_line; }
-  constexpr unsigned int column() const noexcept { return 0; }
+  constexpr unsigned int column() const noexcept { return __m_col; }
   constexpr const char *file() const noexcept { return __m_file; }
   constexpr const char *func() const noexcept { return __m_func; }
 };
@@ -66,11 +67,13 @@ constexpr bool is_same<T, T> = true;
 
 // test types
 static_assert(is_same<decltype(__builtin_LINE()), unsigned>);
+static_assert(is_same<decltype(__builtin_COLUMN()), unsigned>);
 static_assert(is_same<decltype(__builtin_FILE()), const char *>);
 static_assert(is_same<decltype(__builtin_FUNCTION()), const char *>);
 
 // test noexcept
 static_assert(noexcept(__builtin_LINE()));
+static_assert(noexcept(__builtin_COLUMN()));
 static_assert(noexcept(__builtin_FILE()));
 static_assert(noexcept(__builtin_FUNCTION()));
 
@@ -276,3 +279,11 @@ constexpr SL global_sl = SL::current();
 static_assert(is_equal(global_sl.func(), ""));
 
 } // namespace test_func
+
+//===----------------------------------------------------------------------===//
+//                            __builtin_COLUMN()
+//===----------------------------------------------------------------------===//
+
+namespace test_column {
+
+} // namespace test_column

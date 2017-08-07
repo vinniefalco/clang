@@ -3805,11 +3805,7 @@ public:
 /// __BUILTIN_FILE()
 class SourceLocExpr final : public Expr {
 public:
-  enum IdentType {
-    Function,
-    File,
-    Line,
-  };
+  enum IdentType { Function, File, Line, Column };
 
   Stmt *Val;
   IdentType Type;
@@ -3832,6 +3828,7 @@ public:
                                bool RequiresTransform, QualType Ty,
                                Expr *E = nullptr);
 
+  /// \brief Check if an expression contains an unresolved SourceLocExpr.
   static bool containsSourceLocExpr(const Expr *E);
 
   const char *getBuiltinStr() const LLVM_READONLY {
