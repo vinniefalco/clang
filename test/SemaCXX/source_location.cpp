@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 -std=c++1z -fcxx-exceptions -fexceptions -verify %s
+// expected-no-diagnostics
 
 #define assert(...) ((__VA_ARGS__) ? ((void)0) : throw 42)
 
@@ -260,6 +261,3 @@ constexpr SL global_sl = SL::current();
 static_assert(is_equal(global_sl.func(), ""));
 
 } // namespace test_func
-
-// expected-no-diagnostics
-
