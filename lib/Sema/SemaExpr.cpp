@@ -12863,8 +12863,7 @@ ExprResult Sema::ActOnGNUNullExpr(SourceLocation TokenLoc) {
 }
 
 namespace {
-/// A visitor for rebuilding a call to an __unknown_any expression
-/// to have an appropriate type.
+/// A visitor for rebuilding SourceLocExpr's located in default initializers.
 struct RebuildSourceLocExprInInit : public TreeTransform<RebuildSourceLocExprInInit> {
   typedef TreeTransform<RebuildSourceLocExprInInit> BaseTransform;
 
