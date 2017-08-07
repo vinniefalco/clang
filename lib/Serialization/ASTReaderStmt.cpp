@@ -871,8 +871,11 @@ void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
       static_cast<SourceLocExpr::ResolvedState>(Record.readInt()));
   if (E->isFullyResolved())
     E->setSubExpr(Record.readSubExpr());
-  else if (E->isPartiallyResolved())
-    E->setInvocationLoc(ReadSourceLocation());
+  else if (E->isPartiallyResolved()) {
+    SourceLocation Loc = ReadSourceLocation();
+    Decl *D = ReadDecl();
+    E->setLocationInfo(Loc, D);
+  }
 }
 
 void ASTStmtReader::VisitAddrLabelExpr(AddrLabelExpr *E) {

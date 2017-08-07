@@ -12884,13 +12884,8 @@ public:
       assert(E->getInvocationLoc() == CallerLoc);
       assert(false);
     }
-
-    ExprResult Value =
-        SemaRef.BuildSourceLocValue(E->getIdentType(), CallerLoc, CallerDecl);
-    if (Value.isInvalid())
-      return ExprError();
-    return BaseTransform::RebuildSourceLocExpr(
-        E->getIdentType(), E->getLocStart(), E->getLocEnd(), Value.get());
+    return SemaRef.BuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
+                                      E->getLocEnd(), CallerLoc, CallerDecl);
   }
 };
 } // namespace
@@ -12958,15 +12953,14 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     SourceLocation RPLoc,
                                     SourceLocation InvocationLoc,
                                     Decl *currentDecl) {
-  if (!currentDecl)
-    currentDecl = GetCurrentDecl(*this);
+  assert(currentDecl);
   bool IsTypeDependent =
       cast<DeclContext>(currentDecl)->isDependentContext() &&
       (Type == SourceLocExpr::Function || Type == SourceLocExpr::File);
   if (IsTypeDependent) {
-    return new (Context)
-        SourceLocExpr(Type, BuiltinLoc, RPLoc,
-                      GetTypeForSourceLocExpr(Context, Type), InvocationLoc);
+    return new (Context) SourceLocExpr(Type, BuiltinLoc, RPLoc,
+                                       GetTypeForSourceLocExpr(Context, Type),
+                                       InvocationLoc, currentDecl);
   }
   ExprResult Val = BuildSourceLocValue(Type, InvocationLoc, currentDecl);
   if (Val.isInvalid())

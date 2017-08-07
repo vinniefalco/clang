@@ -3809,10 +3809,16 @@ public:
   enum ResolvedState { Unresolved, PartiallyResolved, Resolved };
 
 private:
+  struct PartiallyResolvedInfo {
+    SourceLocation Loc;
+    Decl *CurDecl;
+  };
+
+private:
   SourceLocation BuiltinLoc, RParenLoc;
   union {
     Stmt *Value;
-    SourceLocation InvocationLoc;
+    PartiallyResolvedInfo LocationInfo;
   };
   unsigned Type : 2;
   unsigned State : 2;
@@ -3822,25 +3828,19 @@ public:
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
                 QualType Ty);
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                QualType Ty, SourceLocation InvocationLoc);
+                QualType Ty, SourceLocation InvocationLoc, Decl *CurDecl);
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
                 Expr *E);
-
-  /// \brief Build an empty call expression.
-  SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
-
-  static SourceLocExpr *Create(const ASTContext &Ctx, IdentType Type,
-                               SourceLocation BLoc, SourceLocation RParenLoc,
-                               bool RequiresTransform, QualType Ty,
-                               Expr *E = nullptr);
 
   /// \brief Check if an expression contains an unresolved SourceLocExpr.
   static bool containsSourceLocExpr(const Expr *E);
 
   const char *getBuiltinStr() const LLVM_READONLY {
-    return GetBuiltinStr(Type);
+    return GetBuiltinStr(static_cast<IdentType>(Type));
   }
-  IdentType getIdentType() const LLVM_READONLY { return Type; }
+  IdentType getIdentType() const LLVM_READONLY {
+    return static_cast<IdentType>(Type);
+  }
   SourceLocation getLocation() const LLVM_READONLY { return BuiltinLoc; }
 
   SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
@@ -3853,14 +3853,21 @@ public:
 
   SourceLocation getInvocationLoc() const {
     assert(State == PartiallyResolved);
-    return InvocationLoc;
+    return LocationInfo.Loc;
+  }
+
+  Decl *getCurDecl() const {
+    assert(isPartiallyResolved());
+    return LocationInfo.CurDecl;
   }
 
   bool isUnresolved() const { return State == Unresolved; }
   bool isFullyResolved() const { return State == Resolved; }
   bool isPartiallyResolved() const { return State == PartiallyResolved; }
 
-  ResolvedState getResolvedState() const { return State; }
+  ResolvedState getResolvedState() const {
+    return static_cast<ResolvedState>(State);
+  }
 
   child_range children() {
     return isFullyResolved() ? child_range(&Value, &Value + 1)
@@ -3880,16 +3887,21 @@ public:
 private:
   friend class ASTStmtReader;
 
+  /// \brief Build an empty call expression.
+  SourceLocExpr(EmptyShell Empty)
+      : Expr(SourceLocExprClass, Empty), Value(nullptr) {}
+
   void setIdentType(IdentType T) { Type = T; }
   void setResolvedState(ResolvedState S) { State = S; }
   void setSubExpr(Expr *E) {
     assert(State == Resolved);
     Value = E;
   }
-  void setInvocationLoc(SourceLocation Loc) {
+  void setLocationInfo(SourceLocation Loc, Decl *CurDecl) {
     assert(State == PartiallyResolved);
-    InvocationLoc = Loc;
+    LocationInfo = PartiallyResolvedInfo{Loc, CurDecl};
   }
+
   void setLocStart(SourceLocation L) { BuiltinLoc = L; }
   void setLocEnd(SourceLocation L) { RParenLoc = L; }
 };

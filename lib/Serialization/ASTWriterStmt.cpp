@@ -851,8 +851,10 @@ void ASTStmtWriter::VisitSourceLocExpr(SourceLocExpr *E) {
   Record.push_back(E->getResolvedState());
   if (E->isFullyResolved())
     Record.AddStmt(E->getSubExpr());
-  else if (E->isPartiallyResolved())
+  else if (E->isPartiallyResolved()) {
     Record.AddSourceLocation(E->getInvocationLoc());
+    Record.AddDeclRef(E->getCurDecl());
+  }
   Code = serialization::EXPR_SOURCE_LOC;
 }
 

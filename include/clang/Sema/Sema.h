@@ -4401,8 +4401,7 @@ public:
                                           SourceLocation RPLoc);
   ExprResult BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc, SourceLocation RPLoc,
-                                SourceLocation InvocationLoc,
-                                Decl *CurContext = nullptr);
+                                SourceLocation InvocationLoc, Decl *CurContext);
 
   /// \brief Build an expression representing the value of the builtin call
   ///

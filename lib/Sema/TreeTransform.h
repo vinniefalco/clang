@@ -2938,8 +2938,9 @@ public:
   ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                   SourceLocation BuiltinLoc,
                                   SourceLocation RPLoc,
-                                  SourceLocation InvocationLoc) {
-    return SemaRef.BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, InvocationLoc);
+                                  SourceLocation InvocationLoc, Decl *CurDecl) {
+    return SemaRef.BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, InvocationLoc,
+                                      CurDecl);
   }
   /// \brief FIXME
   ExprResult RebuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,

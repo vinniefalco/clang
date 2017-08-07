@@ -1811,13 +1811,10 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, QualType Ty)
-    : : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
-             Ty->isDependentType(), Ty->isDependentType(), true, false),
-        BuiltinLoc(BLoc),
-        RParenLoc(RParenLoc),
-        Value(nullptr),
-        Type(Type),
-        State(Unresolved) {}
+    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
+           Ty->isDependentType(), Ty->isDependentType(), true, false),
+      BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(nullptr), Type(Type),
+      State(Unresolved) {}
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, Expr *E)
@@ -1831,10 +1828,10 @@ SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, QualType Ty,
-                             SourceLocation InvocationLoc)
+                             SourceLocation InvocationLoc, Decl *CurDecl)
     : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
            Ty->isDependentType(), Ty->isDependentType(), true, false),
-      BuiltinLoc(BLoc), RParenLoc(RParenLoc), InvocationLoc(InvocationLoc),
+      BuiltinLoc(BLoc), RParenLoc(RParenLoc), LocationInfo{InvocationLoc, D},
       Type(Type), State(PartiallyResolved) {
   assert(!InvocationLoc.isInvalid());
 }
