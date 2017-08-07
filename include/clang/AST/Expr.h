@@ -3801,8 +3801,7 @@ public:
 };
 
 /// BuiltinSourceLocExpr - Represents a function call to one of
-/// __builtin_LINE(),
-/// __builtin_FUNCTION(), or __BUILTIN_FILE()
+/// __builtin_LINE(), __builtin_FUNCTION(), or __BUILTIN_FILE()
 class SourceLocExpr final : public Expr {
 public:
   enum IdentType {
@@ -3814,22 +3813,22 @@ public:
   Stmt *Val;
   IdentType Type;
   SourceLocation BuiltinLoc, RParenLoc;
-  bool IsInDefaultArg : 1;
+  bool RequiresTransform : 1;
 
   static const char *GetBuiltinStr(IdentType T);
 
 public:
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                bool IsInDefaultArg, Expr *E);
+                bool RequiresTransform, Expr *E);
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                bool IsInDefaultArg, QualType Ty);
+                bool RequiresTransform, QualType Ty);
 
   /// \brief Build an empty call expression.
   SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
 
   static SourceLocExpr *Create(const ASTContext &Ctx, IdentType Type,
                                SourceLocation BLoc, SourceLocation RParenLoc,
-                               bool IsInDefaultArg, QualType Ty,
+                               bool RequiresTransform, QualType Ty,
                                Expr *E = nullptr);
 
   static bool containsSourceLocExpr(const Expr *E);
@@ -3847,8 +3846,8 @@ public:
   Expr *getSubExpr() { return cast_or_null<Expr>(Val); }
   void setSubExpr(Expr *E) { Val = E; }
 
-  bool isInDefaultArg() const { return IsInDefaultArg; }
-  void setIsInDefaultArg(bool V = true) { IsInDefaultArg = V; }
+  bool requiresTransform() const { return RequiresTransform; }
+  void setRequiresTransform(bool V = true) { RequiresTransform = V; }
 
   bool isUnresolved() const { return Val == nullptr; }
 

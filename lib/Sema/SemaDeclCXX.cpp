@@ -4542,8 +4542,6 @@ static bool isIncompleteOrZeroLengthArrayType(ASTContext &Context, QualType T) {
   return false;
 }
 
-ExprResult rebuildInitWithUnresolvedSourceLocExpr(Sema &S, Expr *Init,
-                                                  SourceLocation Loc);
 
 static MemInitResult rebuildCtorInit(Sema &SemaRef, BaseAndFieldInfo &Info,
                                      FieldDecl *Field, Expr *Init) {
@@ -4551,7 +4549,7 @@ static MemInitResult rebuildCtorInit(Sema &SemaRef, BaseAndFieldInfo &Info,
   assert(!Field->getInClassInitializer()->isTypeDependent());
   SourceLocation Loc = Info.Ctor->getLocation();
   ExprResult InitRes =
-      rebuildInitWithUnresolvedSourceLocExpr(SemaRef, Init, Loc);
+      SemaRef.TransformInitWithUnresolvedSourceLocExpr(Init, Loc);
   if (InitRes.isInvalid())
     return true;
   return SemaRef.BuildMemberInitializer(Field, InitRes.get(), Loc);

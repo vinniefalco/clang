@@ -4397,10 +4397,13 @@ public:
                                 SourceLocation RPLoc);
   ExprResult BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc, SourceLocation RPLoc,
-                                bool IsInDefaultArg);
+                                bool RequiresReplacement);
 
   ExprResult BuildSourceLocValue(SourceLocExpr::IdentType Type,
                                  SourceLocation CallerLoc, Decl *CallerDecl);
+
+  ExprResult TransformInitWithUnresolvedSourceLocExpr(Expr *Init,
+                                                      SourceLocation Loc);
 
   // __null
   ExprResult ActOnGNUNullExpr(SourceLocation TokenLoc);

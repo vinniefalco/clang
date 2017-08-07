@@ -526,9 +526,6 @@ void InitListChecker::FillInEmptyInitForBase(
   }
 }
 
-ExprResult rebuildInitWithUnresolvedSourceLocExpr(Sema &S, Expr *Init,
-                                                  SourceLocation Loc);
-
 void InitListChecker::FillInEmptyInitForField(unsigned Init, FieldDecl *Field,
                                         const InitializedEntity &ParentEntity,
                                               InitListExpr *ILE,
@@ -560,8 +557,8 @@ void InitListChecker::FillInEmptyInitForField(unsigned Init, FieldDecl *Field,
       ExprResult DIE = SemaRef.BuildCXXDefaultInitExpr(Loc, Field);
       if (SourceLocExpr::containsSourceLocExpr(
               Field->getInClassInitializer())) {
-        ExprResult Res = rebuildInitWithUnresolvedSourceLocExpr(
-            SemaRef, Field->getInClassInitializer(), ILE->getLocStart());
+        ExprResult Res = SemaRef.TransformInitWithUnresolvedSourceLocExpr(
+            Field->getInClassInitializer(), ILE->getLocStart());
         if (Res.isInvalid()) {
           hadError = true;
           return;

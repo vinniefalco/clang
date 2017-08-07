@@ -868,7 +868,7 @@ void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
   E->setLocStart(ReadSourceLocation());
   E->setLocEnd(ReadSourceLocation());
   E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
-  E->setIsInDefaultArg(Record.readInt());
+  E->setRequiresTransform(Record.readInt());
 }
 
 void ASTStmtReader::VisitAddrLabelExpr(AddrLabelExpr *E) {

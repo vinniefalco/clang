@@ -1810,32 +1810,32 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 }
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, bool IsInDefaultArg,
+                             SourceLocation RParenLoc, bool RequiresTransform,
                              Expr *E)
     : Expr(SourceLocExprClass, E->getType(), E->getValueKind(),
            E->getObjectKind(), E->isTypeDependent(), E->isValueDependent(),
            E->isInstantiationDependent(), false),
       Val(E), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
-      IsInDefaultArg(IsInDefaultArg) {}
+      RequiresTransform(RequiresTransform) {}
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, bool IsInDefaultArg,
+                             SourceLocation RParenLoc, bool RequiresTransform,
                              QualType Ty)
     : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
            Ty->isDependentType(), Ty->isDependentType(),
            Ty->isInstantiationDependentType(), false),
       Val(nullptr), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
-      IsInDefaultArg(IsInDefaultArg) {}
+      RequiresTransform(RequiresTransform) {}
 
 SourceLocExpr *SourceLocExpr::Create(const ASTContext &Ctx, IdentType Type,
                                      SourceLocation BLoc,
                                      SourceLocation RParenLoc,
-                                     bool IsInDefaultArg, QualType Ty,
+                                     bool RequiresTransform, QualType Ty,
                                      Expr *E) {
   assert(!E || E->getType() == Ty);
   if (E)
-    return new (Ctx) SourceLocExpr(Type, BLoc, RParenLoc, IsInDefaultArg, E);
-  return new (Ctx) SourceLocExpr(Type, BLoc, RParenLoc, IsInDefaultArg, Ty);
+    return new (Ctx) SourceLocExpr(Type, BLoc, RParenLoc, RequiresTransform, E);
+  return new (Ctx) SourceLocExpr(Type, BLoc, RParenLoc, RequiresTransform, Ty);
 }
 
 const char *SourceLocExpr::GetBuiltinStr(IdentType Type) {
@@ -1862,7 +1862,7 @@ public:
     return HasSourceLocExpr;
   }
   bool VisitSourceLocExpr(const SourceLocExpr *SLE) {
-    return SLE->isInDefaultArg() || SLE->isUnresolved();
+    return SLE->requiresTransform() || SLE->isUnresolved();
   }
 };
 } // namespace

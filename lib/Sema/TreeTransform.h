@@ -2935,10 +2935,10 @@ public:
   /// provide different behavior.
   ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                   SourceLocation BuiltinLoc,
-                                  SourceLocation RPLoc, bool IsInDefaultArg,
+                                  SourceLocation RPLoc, bool RequiresTransform,
                                   QualType Ty, Expr *E) {
     return SourceLocExpr::Create(getSema().Context, Type, BuiltinLoc, RPLoc,
-                                 IsInDefaultArg, Ty, E);
+                                 RequiresTransform, Ty, E);
   }
 
   /// \brief Build a new Objective-C boxed expression.

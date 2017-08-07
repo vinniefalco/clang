@@ -4788,9 +4788,6 @@ Sema::ConvertArgumentsForCall(CallExpr *Call, Expr *Fn,
   return false;
 }
 
-ExprResult rebuildInitWithUnresolvedSourceLocExpr(Sema &S, Expr *Init,
-                                                  SourceLocation Loc);
-
 bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
                                   const FunctionProtoType *Proto,
                                   unsigned FirstParam, ArrayRef<Expr *> Args,
@@ -4847,8 +4844,8 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
         BuildCXXDefaultArgExpr(CallLoc, FDecl, Param);
       if (!ArgExpr.isInvalid() &&
           SourceLocExpr::containsSourceLocExpr(Param->getDefaultArg())) {
-        ArgExpr = rebuildInitWithUnresolvedSourceLocExpr(
-            *this, Param->getDefaultArg(), CallLoc);
+        ArgExpr = TransformInitWithUnresolvedSourceLocExpr(
+            Param->getDefaultArg(), CallLoc);
         if (ArgExpr.isInvalid())
           return true;
         InitializedEntity Entity =  InitializedEntity::InitializeParameter(Context,
@@ -12881,7 +12878,7 @@ public:
   }
 
   ExprResult TransformSourceLocExpr(SourceLocExpr *E) {
-    if (!E->isInDefaultArg())
+    if (!E->requiresTransform())
       return E;
 
     ExprResult Value =
@@ -12890,7 +12887,7 @@ public:
       return ExprError();
     return BaseTransform::RebuildSourceLocExpr(
         E->getIdentType(), E->getLocStart(), E->getLocEnd(),
-        E->isInDefaultArg(), E->getType(), Value.get());
+        E->requiresTransform(), E->getType(), Value.get());
   }
 };
 } // namespace
@@ -12914,18 +12911,23 @@ static Decl *GetCurrentDecl(Sema &S) {
 
 /// Given a function expression of unknown-any type, try to rebuild it
 /// to have a function type.
-ExprResult rebuildInitWithUnresolvedSourceLocExpr(Sema &S, Expr *Init,
-                                                  SourceLocation Loc) {
+ExprResult Sema::TransformInitWithUnresolvedSourceLocExpr(Expr *Init,
+                                                          SourceLocation Loc) {
   ExprResult Result =
-      RebuildSourceLocExprInInit(S, Loc, GetCurrentDecl(S)).TransformExpr(Init);
+      RebuildSourceLocExprInInit(*this, Loc, GetCurrentDecl(*this))
+          .TransformExpr(Init);
   return Result;
 }
 
 ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc) {
-  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc,
-                            S->isFunctionPrototypeScope() || S->isClassScope());
+  bool RequiresTransform =
+      // The expression appears within a default argument
+      S->isFunctionPrototypeScope() ||
+      // The expression appears within a NSDMI expression
+      S->isClassScope();
+  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, RequiresReplacement);
 }
 
 static QualType GetTypeForSourceLocExpr(const ASTContext &C,
@@ -12937,20 +12939,22 @@ static QualType GetTypeForSourceLocExpr(const ASTContext &C,
 
 ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
-                                    SourceLocation RPLoc, bool IsInDefaultArg) {
+                                    SourceLocation RPLoc,
+                                    bool RequiresTransform) {
   Decl *currentDecl = GetCurrentDecl(*this);
   bool IsTypeDependent =
       cast<DeclContext>(currentDecl)->isDependentContext() &&
       (Type == SourceLocExpr::Function || Type == SourceLocExpr::File);
-  if (IsInDefaultArg || IsTypeDependent) {
-    return new (Context) SourceLocExpr(Type, BuiltinLoc, RPLoc, IsInDefaultArg,
-                                       GetTypeForSourceLocExpr(Context, Type));
+  if (RequiresTransform || IsTypeDependent) {
+    return new (Context)
+        SourceLocExpr(Type, BuiltinLoc, RPLoc, RequiresTransform,
+                      GetTypeForSourceLocExpr(Context, Type));
   }
   ExprResult Val = BuildSourceLocValue(Type, RPLoc, currentDecl);
   if (Val.isInvalid())
     return ExprError();
   return new (Context)
-      SourceLocExpr(Type, BuiltinLoc, RPLoc, IsInDefaultArg, Val.get());
+      SourceLocExpr(Type, BuiltinLoc, RPLoc, RequiresTransform, Val.get());
 }
 
 ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,
