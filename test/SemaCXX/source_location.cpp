@@ -95,6 +95,16 @@ struct InMemInit {
 static_assert(InMemInit{}.check(87), "");
 static_assert(InMemInit{42}.check(88), "");
 
+struct AggInit {
+  int x;
+  int y = __builtin_LINE();
+  constexpr bool check(int expect) const {
+    return y == expect;
+  }
+};
+constexpr AggInit AI{42};
+static_assert(AI.check(__LINE__ - 1), "");
+
 } // namespace test_line
 
 namespace test_file {
