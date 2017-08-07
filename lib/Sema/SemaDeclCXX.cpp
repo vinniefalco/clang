@@ -59,20 +59,16 @@ namespace {
     : public StmtVisitor<CheckDefaultArgumentVisitor, bool> {
     Expr *DefaultArg;
     Sema *S;
-    bool HasSourceLocExpr;
 
   public:
     CheckDefaultArgumentVisitor(Expr *defarg, Sema *s)
-        : DefaultArg(defarg), S(s), HasSourceLocExpr(false) {}
-
-    bool hasSourceLocExpr() const { return HasSourceLocExpr; }
+        : DefaultArg(defarg), S(s) {}
 
     bool VisitExpr(Expr *Node);
     bool VisitDeclRefExpr(DeclRefExpr *DRE);
     bool VisitCXXThisExpr(CXXThisExpr *ThisE);
     bool VisitLambdaExpr(LambdaExpr *Lambda);
     bool VisitPseudoObjectExpr(PseudoObjectExpr *POE);
-    bool VisitSourceLocExpr(SourceLocExpr *SLE);
   };
 
   /// VisitExpr - Visit all of the children of this expression.
@@ -149,11 +145,6 @@ namespace {
 
     return S->Diag(Lambda->getLocStart(), 
                    diag::err_lambda_capture_default_arg);
-  }
-
-  bool CheckDefaultArgumentVisitor::VisitSourceLocExpr(SourceLocExpr *SLE) {
-    HasSourceLocExpr = true;
-    return false;
   }
 }
 
@@ -343,9 +334,6 @@ Sema::ActOnParamDefaultArgument(Decl *param, SourceLocation EqualLoc,
   }
 
   SetParamDefaultArgument(Param, DefaultArg, EqualLoc);
-  if (!Param->isInvalidDecl()) {
-    Param->setHasInheritedDefaultArg(DefaultArgChecker.hasSourceLocExpr());
-  }
 }
 
 /// ActOnParamUnparsedDefaultArgument - We've seen a default
