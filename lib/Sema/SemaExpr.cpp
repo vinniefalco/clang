@@ -12865,26 +12865,20 @@ ExprResult Sema::ActOnGNUNullExpr(SourceLocation TokenLoc) {
 namespace {
 /// A visitor for rebuilding a call to an __unknown_any expression
 /// to have an appropriate type.
-struct RebuildCXXDefaultArg : public TreeTransform<RebuildCXXDefaultArg> {
-  typedef TreeTransform<RebuildCXXDefaultArg> BaseTransform;
+struct RebuildSourceLocExprInInit : public TreeTransform<RebuildSourceLocExprInInit> {
+  typedef TreeTransform<RebuildSourceLocExprInInit> BaseTransform;
 
   SourceLocation CallerLoc;
   Decl *CallerDecl;
 
 public:
-  RebuildCXXDefaultArg(Sema &S, SourceLocation CallerLoc, Decl *CallerDecl)
+  RebuildSourceLocExprInInit(Sema &S, SourceLocation CallerLoc, Decl *CallerDecl)
       : BaseTransform(S), CallerLoc(CallerLoc), CallerDecl(CallerDecl) {}
 
   bool AlwaysRebuild() { return true; }
 
   StmtResult TransformStmt(Stmt *S) {
     llvm_unreachable("unexpected statement!");
-  }
-
-  ExprResult VisitExpr(Expr *E) {
-    SemaRef.Diag(E->getExprLoc(), diag::err_unsupported_unknown_any_call)
-        << E->getSourceRange();
-    return ExprError();
   }
 
   ExprResult TransformSourceLocExpr(SourceLocExpr *E) {
@@ -12924,7 +12918,7 @@ static Decl *GetCurrentDecl(Sema &S) {
 ExprResult rebuildInitWithUnresolvedSourceLocExpr(Sema &S, Expr *Init,
                                                   SourceLocation Loc) {
   ExprResult Result =
-      RebuildCXXDefaultArg(S, Loc, GetCurrentDecl(S)).TransformExpr(Init);
+      RebuildSourceLocExprInInit(S, Loc, GetCurrentDecl(S)).TransformExpr(Init);
   return Result;
 }
 
