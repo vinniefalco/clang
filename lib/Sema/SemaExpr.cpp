@@ -12913,9 +12913,10 @@ static Decl *GetCurrentDecl(Sema &S) {
 /// to have a function type.
 ExprResult Sema::TransformInitWithUnresolvedSourceLocExpr(Expr *Init,
                                                           SourceLocation Loc) {
+  Decl *currentDecl = GetCurrentDecl(*this);
+  assert(!cast<DeclContext>(currentDecl)->isDependentContext());
   ExprResult Result =
-      RebuildSourceLocExprInInit(*this, Loc, GetCurrentDecl(*this))
-          .TransformExpr(Init);
+      RebuildSourceLocExprInInit(*this, Loc, currentDecl).TransformExpr(Init);
   return Result;
 }
 
@@ -12927,7 +12928,7 @@ ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
       S->isFunctionPrototypeScope() ||
       // The expression appears within a NSDMI expression
       S->isClassScope();
-  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, RequiresReplacement);
+  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, RequiresTransform);
 }
 
 static QualType GetTypeForSourceLocExpr(const ASTContext &C,

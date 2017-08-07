@@ -59,6 +59,21 @@ struct Pair {
   U second;
 };
 
+template <class T, class U>
+constexpr bool is_same = false;
+template <class T>
+constexpr bool is_same<T, T> = true;
+
+// test types
+static_assert(is_same<decltype(__builtin_LINE()), unsigned>);
+static_assert(is_same<decltype(__builtin_FILE()), const char *>);
+static_assert(is_same<decltype(__builtin_FUNCTION()), const char *>);
+
+// test noexcept
+static_assert(noexcept(__builtin_LINE()));
+static_assert(noexcept(__builtin_FILE()));
+static_assert(noexcept(__builtin_FUNCTION()));
+
 //===----------------------------------------------------------------------===//
 //                            __builtin_LINE()
 //===----------------------------------------------------------------------===//
