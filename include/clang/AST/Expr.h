@@ -3832,6 +3832,8 @@ public:
                                bool IsInDefaultArg, QualType Ty,
                                Expr *E = nullptr);
 
+  static bool containsSourceLocExpr(const Expr *E);
+
   const char *getBuiltinStr() const LLVM_READONLY {
     return GetBuiltinStr(Type);
   }

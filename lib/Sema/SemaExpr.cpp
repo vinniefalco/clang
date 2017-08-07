@@ -4788,29 +4788,8 @@ Sema::ConvertArgumentsForCall(CallExpr *Call, Expr *Fn,
   return false;
 }
 
-static Decl *GetCurrentDecl(Sema &S);
-static ExprResult rebuildCXXDefaultArgExpr(Sema &S, ParmVarDecl *Param,
-                                           QualType ProtoArgType,
-                                           SourceLocation Loc, Decl *CallerDecl);
-
-namespace {
-
-  class CheckForSourceLocVisitor
-    : public StmtVisitor<CheckForSourceLocVisitor, bool> {
-
-  public:
-
-    CheckForSourceLocVisitor() {}
-    bool VisitExpr(Expr *Node) {
-      bool HasSourceLocExpr = false;
-      for (Stmt *SubStmt : Node->children())
-        HasSourceLocExpr |= Visit(SubStmt);
-      return HasSourceLocExpr;
-    }
-    bool VisitSourceLocExpr(SourceLocExpr *) { return true; }
-  };
-
-}
+ExprResult rebuildInitWithUnresolvedSourceLocExpr(Sema &S, Expr *Init,
+                                                  SourceLocation Loc);
 
 bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
                                   const FunctionProtoType *Proto,
@@ -4866,12 +4845,12 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
       assert(Param && "can't use default arguments without a known callee");
       ExprResult ArgExpr =
         BuildCXXDefaultArgExpr(CallLoc, FDecl, Param);
-      if (!ArgExpr.isInvalid() && CheckForSourceLocVisitor{}.Visit(Param->getDefaultArg())) {
+      if (!ArgExpr.isInvalid() &&
+          SourceLocExpr::containsSourceLocExpr(Param->getDefaultArg())) {
 
         assert(!Param->getDefaultArgContainsSourceLocExpr());
-        ArgExpr = rebuildCXXDefaultArgExpr(
-            *this,
-            Param, ProtoArgType, CallLoc, GetCurrentDecl(*this));
+        ArgExpr = rebuildInitWithUnresolvedSourceLocExpr(
+            *this, Param->getDefaultArg(), CallLoc);
         if (ArgExpr.isInvalid())
           return true;
         InitializedEntity Entity =  InitializedEntity::InitializeParameter(Context,
@@ -12910,10 +12889,6 @@ public:
     return ExprError();
   }
 
-  ExprResult TransformCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
-    return BaseTransform::TransformCXXDefaultArgExpr(E);
-  }
-
   ExprResult TransformSourceLocExpr(SourceLocExpr *E) {
     if (!E->isUnresolved())
       return E;
@@ -12948,27 +12923,18 @@ static Decl *GetCurrentDecl(Sema &S) {
 
 /// Given a function expression of unknown-any type, try to rebuild it
 /// to have a function type.
-static ExprResult rebuildCXXDefaultArgExpr(Sema &S, ParmVarDecl *Param,
-                                           QualType ProtoArgType,
-                                           SourceLocation Loc, Decl *CallerDecl) {
+ExprResult rebuildInitWithUnresolvedSourceLocExpr(Sema &S, Expr *Init,
+                                                  SourceLocation Loc) {
   ExprResult Result =
-      RebuildCXXDefaultArg(S, Loc, CallerDecl).TransformExpr(Param->getDefaultArg());
+      RebuildCXXDefaultArg(S, Loc, GetCurrentDecl(S)).TransformExpr(Init);
   return Result;
 }
 
 ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc) {
-/*
-  S->dump();
-  Scope *SS = S;
-  while (SS) {
-    SS->dump();
-    SS = SS->getParent();
-  }
-  */
   return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc,
-                            S->isFunctionPrototypeScope());
+                            S->isFunctionPrototypeScope() || S->isClassScope());
 }
 
 static QualType GetTypeForSourceLocExpr(const ASTContext &C,

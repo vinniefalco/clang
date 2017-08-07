@@ -554,10 +554,16 @@ void InitListChecker::FillInEmptyInitForField(unsigned Init, FieldDecl *Field,
     //   members in the aggregate, then each member not explicitly initialized
     //   shall be initialized from its brace-or-equal-initializer [...]
     if (Field->hasInClassInitializer()) {
+
       ExprResult DIE = SemaRef.BuildCXXDefaultInitExpr(Loc, Field);
+
       if (DIE.isInvalid()) {
         hadError = true;
         return;
+      }
+      if (SourceLocExpr::containsSourceLocExpr(
+              Field->getInClassInitializer())) {
+        assert(false);
       }
       if (Init < NumInits)
         ILE->setInit(Init, DIE.get());

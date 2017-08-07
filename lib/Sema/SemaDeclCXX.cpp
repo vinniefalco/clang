@@ -4554,6 +4554,21 @@ static bool isIncompleteOrZeroLengthArrayType(ASTContext &Context, QualType T) {
   return false;
 }
 
+ExprResult rebuildInitWithUnresolvedSourceLocExpr(Sema &S, Expr *Init,
+                                                  SourceLocation Loc);
+
+static MemInitResult rebuildCtorInit(Sema &SemaRef, BaseAndFieldInfo &Info,
+                                     FieldDecl *Field) {
+  assert(!Field->getType()->isDependentType());
+  assert(!Field->getInClassInitializer()->isTypeDependent());
+  SourceLocation Loc = Info.Ctor->getLocation();
+  ExprResult Init = rebuildInitWithUnresolvedSourceLocExpr(
+      SemaRef, Field->getInClassInitializer(), Loc);
+  if (Init.isInvalid())
+    return true;
+  return SemaRef.BuildMemberInitializer(Field, Init.get(), Loc);
+}
+
 static bool CollectFieldInitializer(Sema &SemaRef, BaseAndFieldInfo &Info,
                                     FieldDecl *Field, 
                                     IndirectFieldDecl *Indirect = nullptr) {
@@ -4562,9 +4577,15 @@ static bool CollectFieldInitializer(Sema &SemaRef, BaseAndFieldInfo &Info,
 
   // Overwhelmingly common case: we have a direct initializer for this field.
   if (CXXCtorInitializer *Init =
-          Info.AllBaseFields.lookup(Field->getCanonicalDecl()))
+          Info.AllBaseFields.lookup(Field->getCanonicalDecl())) {
+    if (SourceLocExpr::containsSourceLocExpr(Field->getInClassInitializer())) {
+      MemInitResult InitExpr = rebuildCtorInit(SemaRef, Info, Field);
+      if (InitExpr.isInvalid())
+        return true;
+      Init = InitExpr.get();
+    }
     return Info.addFieldInitializer(Init);
-
+  }
   // C++11 [class.base.init]p8:
   //   if the entity is a non-static data member that has a
   //   brace-or-equal-initializer and either
@@ -4585,6 +4606,12 @@ static bool CollectFieldInitializer(Sema &SemaRef, BaseAndFieldInfo &Info,
         SemaRef.BuildCXXDefaultInitExpr(Info.Ctor->getLocation(), Field);
     if (DIE.isInvalid())
       return true;
+    if (SourceLocExpr::containsSourceLocExpr(Field->getInClassInitializer())) {
+      MemInitResult ME = rebuildCtorInit(SemaRef, Info, Field);
+      if (ME.isInvalid())
+        return true;
+      return Info.addFieldInitializer(ME.get());
+    }
     CXXCtorInitializer *Init;
     if (Indirect)
       Init = new (SemaRef.Context)

@@ -1849,6 +1849,28 @@ const char *SourceLocExpr::GetBuiltinStr(IdentType Type) {
   }
 }
 
+namespace {
+class CheckForSourceLocVisitor
+    : public ConstStmtVisitor<CheckForSourceLocVisitor, bool> {
+
+public:
+  CheckForSourceLocVisitor() {}
+  bool VisitExpr(const Expr *Node) {
+    bool HasSourceLocExpr = false;
+    for (const Stmt *SubStmt : Node->children())
+      HasSourceLocExpr |= Visit(SubStmt);
+    return HasSourceLocExpr;
+  }
+  bool VisitSourceLocExpr(const SourceLocExpr *SLE) {
+    return SLE->isUnresolved();
+  }
+};
+} // namespace
+
+bool SourceLocExpr::containsSourceLocExpr(const Expr *E) {
+  return CheckForSourceLocVisitor{}.Visit(E);
+}
+
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
                            ArrayRef<Expr*> initExprs, SourceLocation rbraceloc)
   : Expr(InitListExprClass, QualType(), VK_RValue, OK_Ordinary, false, false,

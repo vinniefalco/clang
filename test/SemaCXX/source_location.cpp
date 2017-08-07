@@ -34,6 +34,16 @@ public:
 
 using SL = std::experimental::source_location;
 
+constexpr bool is_equal(const char *LHS, const char *RHS) {
+  while (*LHS != 0 && *RHS != 0) {
+    if (*LHS != *RHS)
+      return false;
+    ++LHS;
+    ++RHS;
+  }
+  return *LHS == 0 && *RHS == 0;
+}
+
 namespace test_line {
 
 static_assert(SL::current().line() == __LINE__);
@@ -72,7 +82,42 @@ constexpr bool test_line_fn_template(T Expect, int L = __builtin_LINE()) {
 }
 static_assert(test_line_fn_template(__LINE__));
 
+struct InMemInit {
+  int line = __builtin_LINE();
+  int expect = 0;
+  constexpr InMemInit() : expect(__LINE__) {}
+
+  constexpr bool check() const {
+    return line == expect;
+  }
+};
+
+static_assert(InMemInit{}.check(), "");
 
 } // namespace test_line
+
+namespace test_file {
+constexpr const char *test_file_simple(const char *__f = __builtin_FILE()) {
+  return __f;
+}
+static_assert(is_equal(test_file_simple(), __FILE__));
+static_assert(test_file_simple() != nullptr);
+static_assert(!is_equal(test_file_simple(), "source_location.cpp"));
+} // namespace test_file
+
+namespace test_func {
+constexpr const char *test_func_simple(const char *__f = __builtin_FUNCTION()) {
+  return __f;
+}
+constexpr const char *get_func() {
+  return __func__;
+}
+constexpr bool test_func() {
+  return is_equal(__func__, test_func_simple()) &&
+         !is_equal(get_func(), test_func_simple());
+}
+static_assert(test_func());
+} // namespace test_func
+
 // expected-no-diagnostics
 

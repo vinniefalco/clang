@@ -4512,7 +4512,8 @@ public:
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
-    assert(E->getSubExpr());
+    if (!E->getSubExpr())
+      return Error(E);
     return StmtVisitorTy::Visit(E->getSubExpr());
   }
   // We cannot create any objects for which cleanups are required, so there is

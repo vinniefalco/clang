@@ -1167,6 +1167,8 @@ LValue CodeGenFunction::EmitLValue(const Expr *E) {
     // bitfield lvalue or some other non-simple lvalue?
     return LV;
   }
+  case Expr::SourceLocExprClass:
+    return EmitLValue(cast<SourceLocExpr>(E)->getSubExpr());
 
   case Expr::CXXDefaultArgExprClass:
     return EmitLValue(cast<CXXDefaultArgExpr>(E)->getExpr());

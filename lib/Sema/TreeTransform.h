@@ -9810,7 +9810,7 @@ ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
     return E;
 
   return getDerived().RebuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
-                                           E->getLocEnd(), E->isInDefaultArg(),
+                                           E->getLocEnd(), E->isUnresolved(),
                                            E->getType(), E->getSubExpr());
 }
 
