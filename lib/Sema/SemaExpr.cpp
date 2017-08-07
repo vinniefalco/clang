@@ -4847,8 +4847,6 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
         BuildCXXDefaultArgExpr(CallLoc, FDecl, Param);
       if (!ArgExpr.isInvalid() &&
           SourceLocExpr::containsSourceLocExpr(Param->getDefaultArg())) {
-
-        assert(!Param->getDefaultArgContainsSourceLocExpr());
         ArgExpr = rebuildInitWithUnresolvedSourceLocExpr(
             *this, Param->getDefaultArg(), CallLoc);
         if (ArgExpr.isInvalid())
