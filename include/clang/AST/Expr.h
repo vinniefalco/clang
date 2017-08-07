@@ -3806,19 +3806,25 @@ public:
 class SourceLocExpr final : public Expr {
 public:
   enum IdentType { Function, File, Line, Column };
+  enum ResolvedState { Unresolved, PartiallyResolved, Resolved };
 
-  Stmt *Val;
-  IdentType Type;
+private:
   SourceLocation BuiltinLoc, RParenLoc;
-  bool RequiresTransform : 1;
-
+  union {
+    Stmt *Value;
+    SourceLocation InvocationLoc;
+  };
+  unsigned Type : 2;
+  unsigned State : 2;
   static const char *GetBuiltinStr(IdentType T);
 
 public:
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                bool RequiresTransform, Expr *E);
+                QualType Ty);
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                bool RequiresTransform, QualType Ty);
+                QualType Ty, SourceLocation InvocationLoc);
+  SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
+                Expr *E);
 
   /// \brief Build an empty call expression.
   SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
@@ -3840,22 +3846,30 @@ public:
   SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
   SourceLocation getLocEnd() const LLVM_READONLY { return RParenLoc; }
 
-  const Expr *getSubExpr() const { return cast_or_null<Expr>(Val); }
-  Expr *getSubExpr() { return cast_or_null<Expr>(Val); }
-  void setSubExpr(Expr *E) { Val = E; }
+  const Expr *getSubExpr() const {
+    return isFullyResolved() ? cast<Expr>(Value) : nullptr;
+  }
+  Expr *getSubExpr() { return isFullyResolved() ? cast<Expr>(Value) : nullptr; }
 
-  bool requiresTransform() const { return RequiresTransform; }
-  void setRequiresTransform(bool V = true) { RequiresTransform = V; }
+  SourceLocation getInvocationLoc() const {
+    assert(State == PartiallyResolved);
+    return InvocationLoc;
+  }
 
-  bool isUnresolved() const { return Val == nullptr; }
+  bool isUnresolved() const { return State == Unresolved; }
+  bool isFullyResolved() const { return State == Resolved; }
+  bool isPartiallyResolved() const { return State == PartiallyResolved; }
+
+  ResolvedState getResolvedState() const { return State; }
 
   child_range children() {
-    return Val ? child_range(&Val, &Val + 1)
-               : child_range(child_iterator(), child_iterator());
+    return isFullyResolved() ? child_range(&Value, &Value + 1)
+                             : child_range(child_iterator(), child_iterator());
   }
 
   const_child_range children() const {
-    return Val ? const_child_range(&Val, &Val + 1)
+    return isFullyResolved()
+               ? const_child_range(&Value, &Value + 1)
                : const_child_range(child_iterator(), child_iterator());
   }
 
@@ -3867,6 +3881,15 @@ private:
   friend class ASTStmtReader;
 
   void setIdentType(IdentType T) { Type = T; }
+  void setResolvedState(ResolvedState S) { State = S; }
+  void setSubExpr(Expr *E) {
+    assert(State == Resolved);
+    Value = E;
+  }
+  void setInvocationLoc(SourceLocation Loc) {
+    assert(State == PartiallyResolved);
+    InvocationLoc = Loc;
+  }
   void setLocStart(SourceLocation L) { BuiltinLoc = L; }
   void setLocEnd(SourceLocation L) { RParenLoc = L; }
 };

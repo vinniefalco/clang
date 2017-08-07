@@ -1810,32 +1810,33 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 }
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, bool RequiresTransform,
-                             Expr *E)
-    : Expr(SourceLocExprClass, E->getType(), E->getValueKind(),
-           E->getObjectKind(), E->isTypeDependent(), E->isValueDependent(),
-           E->isInstantiationDependent(), false),
-      Val(E), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
-      RequiresTransform(RequiresTransform) {}
+                             SourceLocation RParenLoc, QualType Ty)
+    : : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
+             Ty->isDependentType(), Ty->isDependentType(), true, false),
+        BuiltinLoc(BLoc),
+        RParenLoc(RParenLoc),
+        Value(nullptr),
+        Type(Type),
+        State(Unresolved) {}
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, bool RequiresTransform,
-                             QualType Ty)
-    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
-           Ty->isDependentType(), Ty->isDependentType(),
-           Ty->isInstantiationDependentType(), false),
-      Val(nullptr), Type(Type), BuiltinLoc(BLoc), RParenLoc(RParenLoc),
-      RequiresTransform(RequiresTransform) {}
+                             SourceLocation RParenLoc, Expr *E)
+    : Expr(SourceLocExprClass, E->getType(), E->getValueKind(),
+           E->getObjectKind(), false, false, false, false),
+      BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(E), Type(Type),
+      State(Resolved) {
+  assert(E->getType()->isDependentType() && !E->isTypeDependent() &&
+         !E->isValueDependent() && !E->isInstantiationDependent());
+}
 
-SourceLocExpr *SourceLocExpr::Create(const ASTContext &Ctx, IdentType Type,
-                                     SourceLocation BLoc,
-                                     SourceLocation RParenLoc,
-                                     bool RequiresTransform, QualType Ty,
-                                     Expr *E) {
-  assert(!E || E->getType() == Ty);
-  if (E)
-    return new (Ctx) SourceLocExpr(Type, BLoc, RParenLoc, RequiresTransform, E);
-  return new (Ctx) SourceLocExpr(Type, BLoc, RParenLoc, RequiresTransform, Ty);
+SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
+                             SourceLocation RParenLoc, QualType Ty,
+                             SourceLocation InvocationLoc)
+    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
+           Ty->isDependentType(), Ty->isDependentType(), true, false),
+      BuiltinLoc(BLoc), RParenLoc(RParenLoc), InvocationLoc(InvocationLoc),
+      Type(Type), State(PartiallyResolved) {
+  assert(!InvocationLoc.isInvalid());
 }
 
 const char *SourceLocExpr::GetBuiltinStr(IdentType Type) {
@@ -1864,14 +1865,14 @@ public:
     return HasSourceLocExpr;
   }
   bool VisitSourceLocExpr(const SourceLocExpr *SLE) {
-    return SLE->requiresTransform() || SLE->isUnresolved();
+    return SLE->isUnresolved();
   }
 };
 } // namespace
 
 bool SourceLocExpr::containsSourceLocExpr(const Expr *E) {
   assert(E);
-  return E && CheckForSourceLocVisitor{}.Visit(E);
+  return CheckForSourceLocVisitor{}.Visit(E);
 }
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,

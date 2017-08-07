@@ -864,11 +864,15 @@ void ASTStmtReader::VisitVAArgExpr(VAArgExpr *E) {
 
 void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
   VisitExpr(E);
-  E->setSubExpr(Record.readSubExpr());
   E->setLocStart(ReadSourceLocation());
   E->setLocEnd(ReadSourceLocation());
   E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
-  E->setRequiresTransform(Record.readInt());
+  E->setResolvedState(
+      static_cast<SourceLocExpr::ResolvedState>(Record.readInt()));
+  if (E->isFullyResolved())
+    E->setSubExpr(Record.readSubExpr());
+  else if (E->isPartiallyResolved())
+    E->setInvocationLoc(ReadSourceLocation());
 }
 
 void ASTStmtReader::VisitAddrLabelExpr(AddrLabelExpr *E) {

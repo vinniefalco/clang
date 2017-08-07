@@ -2072,16 +2072,17 @@ Source location builtins
 
 Clang provides experimental builtins to support C++ standard library implementation
 of `std::experimental::source_location` as specified in  http://wg21.link/N4600.
-The following three builtins are also implemented by GCC.
+With the exception of `__builtin_COLUMN`, these builtins are also implemented by
+GCC.
 
 **Syntax**:
 
 .. code-block:: c
 
-  constexpr unsigned    __builtin_LINE();
-  constexpr const char *__builtin_FILE();
-  constexpr const char *__builtin_FUNCTION();
-
+  const char *__builtin_FILE();
+  const char *__builtin_FUNCTION();
+  unsigned    __builtin_LINE();
+  unsigned    __builtin_COLUMN(); // Clang only
 
 **Example of use**:
 
@@ -2110,7 +2111,7 @@ The following three builtins are also implemented by GCC.
 
 The builtins `__builtin_LINE`, `__builtin_FUNCTION`, and `__builtin_FILE` return
 the values, at the "invocation point", for `__LINE__`, `__FUNCTION__`, and
-`__FILE__` respectively.
+`__FILE__` respectively. These builtins are constant expressions.
 
 When the builtins appears as part of a default function argument the invocation
 point is the location of the caller. When the builtins appear as part of a

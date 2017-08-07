@@ -12878,16 +12878,19 @@ public:
   }
 
   ExprResult TransformSourceLocExpr(SourceLocExpr *E) {
-    if (!E->requiresTransform())
+    if (E->isFullyResolved())
       return E;
+    if (E->isPartiallyResolved()) {
+      assert(E->getInvocationLoc() == CallerLoc);
+      assert(false);
+    }
 
     ExprResult Value =
         SemaRef.BuildSourceLocValue(E->getIdentType(), CallerLoc, CallerDecl);
     if (Value.isInvalid())
       return ExprError();
     return BaseTransform::RebuildSourceLocExpr(
-        E->getIdentType(), E->getLocStart(), E->getLocEnd(),
-        E->requiresTransform(), E->getType(), Value.get());
+        E->getIdentType(), E->getLocStart(), E->getLocEnd(), Value.get());
   }
 };
 } // namespace
@@ -12920,6 +12923,13 @@ ExprResult Sema::TransformInitWithUnresolvedSourceLocExpr(Expr *Init,
   return Result;
 }
 
+static QualType GetTypeForSourceLocExpr(const ASTContext &C,
+                                        SourceLocExpr::IdentType Type) {
+  if (Type == SourceLocExpr::Line || Type == SourceLocExpr::Column)
+    return C.UnsignedIntTy;
+  return C.getPointerType(C.CharTy.withConst());
+}
+
 ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc) {
@@ -12928,34 +12938,40 @@ ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
       S->isFunctionPrototypeScope() ||
       // The expression appears within a NSDMI expression
       S->isClassScope();
-  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, RequiresTransform);
+  if (RequiresTransform) {
+    return BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc);
+  }
+
+  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, BuiltinLoc,
+                            GetCurrentDecl(*this));
 }
 
-static QualType GetTypeForSourceLocExpr(const ASTContext &C,
-                                        SourceLocExpr::IdentType Type) {
-  if (Type == SourceLocExpr::Line || Type == SourceLocExpr::Column)
-    return C.UnsignedIntTy;
-  return C.getPointerType(C.CharTy.withConst());
+ExprResult Sema::BuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
+                                              SourceLocation BuiltinLoc,
+                                              SourceLocation RPLoc) {
+  return new (Context) SourceLocExpr(Type, BuiltinLoc, RPLoc,
+                                     GetTypeForSourceExpr(Context, Type));
 }
 
 ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc,
-                                    bool RequiresTransform) {
-  Decl *currentDecl = GetCurrentDecl(*this);
+                                    SourceLocation InvocationLoc,
+                                    Decl *currentDecl) {
+  if (!currentDecl)
+    currentDecl = GetCurrentDecl(*this);
   bool IsTypeDependent =
       cast<DeclContext>(currentDecl)->isDependentContext() &&
       (Type == SourceLocExpr::Function || Type == SourceLocExpr::File);
-  if (RequiresTransform || IsTypeDependent) {
+  if (IsTypeDependent) {
     return new (Context)
-        SourceLocExpr(Type, BuiltinLoc, RPLoc, RequiresTransform,
-                      GetTypeForSourceLocExpr(Context, Type));
+        SourceLocExpr(Type, BuiltinLoc, RPLoc,
+                      GetTypeForSourceLocExpr(Context, Type), InvocationLoc);
   }
-  ExprResult Val = BuildSourceLocValue(Type, RPLoc, currentDecl);
+  ExprResult Val = BuildSourceLocValue(Type, InvocationLoc, currentDecl);
   if (Val.isInvalid())
     return ExprError();
-  return new (Context)
-      SourceLocExpr(Type, BuiltinLoc, RPLoc, RequiresTransform, Val.get());
+  return new (Context) SourceLocExpr(Type, BuiltinLoc, RPLoc, Val.get());
 }
 
 ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,

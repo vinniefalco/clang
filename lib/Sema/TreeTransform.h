@@ -2928,17 +2928,24 @@ public:
                                   RParenLoc, Length, PartialArgs);
   }
 
-  /// \brief Build a new C++ default-argument expression.
-  ///
-  /// By default, builds a new default-argument expression, which does not
-  /// require any semantic analysis. Subclasses may override this routine to
-  /// provide different behavior.
+  /// \brief FIXME
   ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                   SourceLocation BuiltinLoc,
-                                  SourceLocation RPLoc, bool RequiresTransform,
-                                  QualType Ty, Expr *E) {
-    return SourceLocExpr::Create(getSema().Context, Type, BuiltinLoc, RPLoc,
-                                 RequiresTransform, Ty, E);
+                                  SourceLocation RPLoc, Expr *E) {
+    return new (SemaRef.Context) SourceLocExpr(Type, BuiltinLoc, RPLoc, E);
+  }
+  /// \brief FIXME
+  ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
+                                  SourceLocation BuiltinLoc,
+                                  SourceLocation RPLoc,
+                                  SourceLocation InvocationLoc) {
+    return SemaRef.BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, InvocationLoc);
+  }
+  /// \brief FIXME
+  ExprResult RebuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
+                                            SourceLocation BuiltinLoc,
+                                            SourceLocation RPLoc) {
+    return SemaRef.BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc);
   }
 
   /// \brief Build a new Objective-C boxed expression.
@@ -9806,12 +9813,23 @@ TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
 
 template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
-  if (!E->isTypeDependent() && !E->isUnresolved())
-    return E;
-
-  return getDerived().RebuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
-                                           E->getLocEnd(), E->isUnresolved(),
-                                           E->getType(), E->getSubExpr());
+  if (E->isFullyResolved()) {
+    ExprResult Res = getDerived().TransformExpr(E->getSubExpr());
+    if (Res.isInvalid())
+      return ExprError();
+    if (!getDerived().AlwaysRebuild() && Res.get() == E->getSubExpr())
+      return E;
+    return getDerived().RebuildSourceLocExpr(
+        E->getIdentType(), E->getLocStart(), E->getLocEnd(), Res.get());
+  } else if (E->isPartiallyResolved()) {
+    return getDerived().RebuildSourceLocExpr(E->getIdentType(),
+                                             E->getLocStart(), E->getLocEnd(),
+                                             E->getInvocationLoc());
+  } else {
+    assert(E->isUnresolved());
+    return getDerived().RebuildUnresolvedSourceLocExpr(
+        E->getIdentType(), E->getLocStart(), E->getLocEnd());
+  }
 }
 
 template<typename Derived>

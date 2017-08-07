@@ -3440,7 +3440,17 @@ struct DisableDebugLocationUpdates {
   CodeGenFunction &CGF;
   bool disabledDebugInfo;
   DisableDebugLocationUpdates(CodeGenFunction &CGF, const Expr *E) : CGF(CGF) {
-    if ((disabledDebugInfo = isa<CXXDefaultArgExpr>(E) && CGF.getDebugInfo()))
+    bool ShouldDisable = [&] {
+      if (!CGF.getDebugInfo())
+        return false;
+      if (isa<CXXDefaultArgExpr>(E))
+        return true;
+      if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(E)) {
+        return true;
+      }
+      return false;
+    }();
+    if ((disabledDebugInfo = ShouldDisable))
       CGF.disableDebugInfo();
   }
   ~DisableDebugLocationUpdates() {

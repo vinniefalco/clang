@@ -4396,9 +4396,13 @@ public:
   ExprResult ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc,
                                 SourceLocation RPLoc);
+  ExprResult BuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
+                                          SourceLocation BuiltinLoc,
+                                          SourceLocation RPLoc);
   ExprResult BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc, SourceLocation RPLoc,
-                                bool RequiresReplacement);
+                                SourceLocation InvocationLoc,
+                                Decl *CurContext = nullptr);
 
   /// \brief Build an expression representing the value of the builtin call
   ///
