@@ -83,16 +83,17 @@ constexpr bool test_line_fn_template(T Expect, int L = __builtin_LINE()) {
 static_assert(test_line_fn_template(__LINE__));
 
 struct InMemInit {
-  int line = __builtin_LINE();
-  int expect = 0;
-  constexpr InMemInit() : expect(__LINE__) {}
+  SL info = SL::current();
+  InMemInit() = default;
+  constexpr InMemInit(int) {}
 
-  constexpr bool check() const {
-    return line == expect;
+  constexpr bool check(int expect) const {
+    return info.line() == expect;
   }
 };
 
-static_assert(InMemInit{}.check(), "");
+static_assert(InMemInit{}.check(87), "");
+static_assert(InMemInit{42}.check(88), "");
 
 } // namespace test_line
 

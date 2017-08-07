@@ -1862,7 +1862,7 @@ public:
     return HasSourceLocExpr;
   }
   bool VisitSourceLocExpr(const SourceLocExpr *SLE) {
-    return SLE->isUnresolved();
+    return SLE->isInDefaultArg() || SLE->isUnresolved();
   }
 };
 } // namespace

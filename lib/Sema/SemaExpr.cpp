@@ -12881,7 +12881,7 @@ public:
   }
 
   ExprResult TransformSourceLocExpr(SourceLocExpr *E) {
-    if (!E->isUnresolved())
+    if (!E->isInDefaultArg())
       return E;
 
     ExprResult Value =
