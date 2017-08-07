@@ -12945,7 +12945,7 @@ ExprResult Sema::BuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
                                               SourceLocation BuiltinLoc,
                                               SourceLocation RPLoc) {
   return new (Context) SourceLocExpr(Type, BuiltinLoc, RPLoc,
-                                     GetTypeForSourceExpr(Context, Type));
+                                     GetTypeForSourceLocExpr(Context, Type));
 }
 
 ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,

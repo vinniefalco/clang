@@ -9823,9 +9823,12 @@ ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
     return getDerived().RebuildSourceLocExpr(
         E->getIdentType(), E->getLocStart(), E->getLocEnd(), Res.get());
   } else if (E->isPartiallyResolved()) {
+    Decl *NewD =
+        getDerived().TransformDecl(E->getInvocationLoc(), E->getCurDecl());
+    assert(NewD);
     return getDerived().RebuildSourceLocExpr(E->getIdentType(),
                                              E->getLocStart(), E->getLocEnd(),
-                                             E->getInvocationLoc());
+                                             E->getInvocationLoc(), NewD);
   } else {
     assert(E->isUnresolved());
     return getDerived().RebuildUnresolvedSourceLocExpr(

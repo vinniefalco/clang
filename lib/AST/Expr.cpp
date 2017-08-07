@@ -1831,8 +1831,9 @@ SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation InvocationLoc, Decl *CurDecl)
     : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
            Ty->isDependentType(), Ty->isDependentType(), true, false),
-      BuiltinLoc(BLoc), RParenLoc(RParenLoc), LocationInfo{InvocationLoc, D},
-      Type(Type), State(PartiallyResolved) {
+      BuiltinLoc(BLoc),
+      RParenLoc(RParenLoc), LocationInfo{InvocationLoc, CurDecl}, Type(Type),
+      State(PartiallyResolved) {
   assert(!InvocationLoc.isInvalid());
 }
 
