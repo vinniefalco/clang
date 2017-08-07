@@ -1846,6 +1846,8 @@ const char *SourceLocExpr::GetBuiltinStr(IdentType Type) {
     return "__builtin_FUNCTION";
   case Line:
     return "__builtin_LINE";
+  case Column:
+    return "__builtin_COLUMN";
   }
 }
 

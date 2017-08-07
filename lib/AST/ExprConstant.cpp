@@ -6965,7 +6965,8 @@ public:
   bool VisitOffsetOfExpr(const OffsetOfExpr *E);
   bool VisitUnaryOperator(const UnaryOperator *E);
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
-    if (!E->getSubExpr() || E->getIdentType() != SourceLocExpr::Line)
+    if (!E->getSubExpr() || (E->getIdentType() != SourceLocExpr::Line &&
+                             E->getIdentType() != SourceLocExpr::Column))
       return Error(E);
     return Visit(E->getSubExpr());
   }

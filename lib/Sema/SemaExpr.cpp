@@ -12933,7 +12933,7 @@ ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
 
 static QualType GetTypeForSourceLocExpr(const ASTContext &C,
                                         SourceLocExpr::IdentType Type) {
-  if (Type == SourceLocExpr::Line)
+  if (Type == SourceLocExpr::Line || Type == SourceLocExpr::Column)
     return C.UnsignedIntTy;
   return C.getPointerType(C.CharTy.withConst());
 }
@@ -12977,15 +12977,20 @@ ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,
     return UsualUnaryConversions(Lit);
   };
 
+  auto CreateInt = [&](unsigned Value) {
+    unsigned MaxWidth = Context.getTargetInfo().getIntWidth();
+    llvm::APInt IntVal(MaxWidth, Value);
+    return IntegerLiteral::Create(Context, IntVal, Context.UnsignedIntTy,
+                                  CallerLoc);
+  };
+
   ExprResult Res;
   switch (Type) {
-  case SourceLocExpr::Line: {
-    unsigned MaxWidth = Context.getTargetInfo().getIntWidth();
-    llvm::APInt IntVal(MaxWidth, PLoc.getLine());
-    Res = ExprResult(IntegerLiteral::Create(Context, IntVal,
-                                            Context.UnsignedIntTy, CallerLoc));
+  case SourceLocExpr::Column:
+    Res = CreateInt(PLoc.getColumn());
+  case SourceLocExpr::Line:
+    Res = CreateInt(PLoc.getLine());
     break;
-  }
   case SourceLocExpr::File:
     Res = CreateString(PLoc.getFilename());
     break;

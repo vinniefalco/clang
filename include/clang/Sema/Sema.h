@@ -4392,6 +4392,7 @@ public:
   ExprResult BuildVAArgExpr(SourceLocation BuiltinLoc, Expr *E,
                             TypeSourceInfo *TInfo, SourceLocation RPLoc);
 
+  /// __builtin_LINE(), __builtin_FUNCTION(), __builtin_FILE()
   ExprResult ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc,
                                 SourceLocation RPLoc);
@@ -4399,9 +4400,19 @@ public:
                                 SourceLocation BuiltinLoc, SourceLocation RPLoc,
                                 bool RequiresReplacement);
 
+  /// \brief Build an expression representing the value of the builtin call
+  ///
+  /// \param Type The type of the source location expression to build
+  /// (line, file, function)
+  ///
+  /// \param AtLoc The location at which the builtin should be evaluated.
+  ///
+  /// \param CurContext The context in which the builtin should be evaluated.
   ExprResult BuildSourceLocValue(SourceLocExpr::IdentType Type,
-                                 SourceLocation CallerLoc, Decl *CallerDecl);
+                                 SourceLocation AtLoc, Decl *CurContext);
 
+  /// \brief Transform an expression containing unresolved SourceLocExpr's while
+  /// resolving them to the specified `Loc`
   ExprResult TransformInitWithUnresolvedSourceLocExpr(Expr *Init,
                                                       SourceLocation Loc);
 

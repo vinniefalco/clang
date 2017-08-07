@@ -3801,7 +3801,8 @@ public:
 };
 
 /// BuiltinSourceLocExpr - Represents a function call to one of
-/// __builtin_LINE(), __builtin_FUNCTION(), or __BUILTIN_FILE()
+/// __builtin_LINE(), __builtin_COLUMN(), __builtin_FUNCTION(), or
+/// __BUILTIN_FILE()
 class SourceLocExpr final : public Expr {
 public:
   enum IdentType {

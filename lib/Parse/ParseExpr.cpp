@@ -622,6 +622,7 @@ class CastExpressionIdValidator : public CorrectionCandidateCallback {
 /// [GNU]   '__builtin_FILE' '(' ')'
 /// [GNU]   '__builtin_FUNCTION' '(' ')'
 /// [GNU]   '__builtin_LINE' '(' ')'
+/// [CLANG] '__builtin_COLUMN' '(' ')'
 /// [GNU]   '__builtin_types_compatible_p' '(' type-name ',' type-name ')'
 /// [GNU]   '__null'
 /// [OBJC]  '[' objc-message-expr ']'
@@ -1075,9 +1076,10 @@ ExprResult Parser::ParseCastExpression(bool isUnaryExpression,
   case tok::kw___builtin_choose_expr:
   case tok::kw___builtin_astype: // primary-expression: [OCL] as_type()
   case tok::kw___builtin_convertvector:
+  case tok::kw___builtin_COLUMN:
   case tok::kw___builtin_FILE:
-  case tok::kw___builtin_LINE:
   case tok::kw___builtin_FUNCTION:
+  case tok::kw___builtin_LINE:
     return ParseBuiltinPrimaryExpression();
   case tok::kw___null:
     return Actions.ActOnGNUNullExpr(ConsumeToken());
@@ -2000,6 +2002,7 @@ ExprResult Parser::ParseUnaryExprOrTypeTraitExpression() {
 /// [GNU]   '__builtin_FILE' '(' ')'
 /// [GNU]   '__builtin_FUNCTION' '(' ')'
 /// [GNU]   '__builtin_LINE' '(' ')'
+/// [CLANG] '__builtin_COLUMN' '(' ')'
 /// [OCL]   '__builtin_astype' '(' assignment-expression ',' type-name ')'
 ///
 /// [GNU] offsetof-member-designator:
@@ -2219,9 +2222,10 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
                                          ConsumeParen());
     break;
   }
+  case tok::kw___builtin_COLUMN:
   case tok::kw___builtin_FILE:
-  case tok::kw___builtin_LINE:
-  case tok::kw___builtin_FUNCTION: {
+  case tok::kw___builtin_FUNCTION:
+  case tok::kw___builtin_LINE: {
     // Attempt to consume the r-paren.
     if (Tok.isNot(tok::r_paren)) {
       Diag(Tok, diag::err_expected) << tok::r_paren;
@@ -2229,13 +2233,18 @@ ExprResult Parser::ParseBuiltinPrimaryExpression() {
       return ExprError();
     }
     SourceLocExpr::IdentType Type = [&] {
-      if (T == tok::kw___builtin_FILE)
+      switch (T) {
+      case tok::kw___builtin_FILE:
         return SourceLocExpr::File;
-      if (T == tok::kw___builtin_FUNCTION)
+      case tok::kw___builtin_FUNCTION:
         return SourceLocExpr::Function;
-      if (T == tok::kw___builtin_LINE)
+      case tok::kw___builtin_LINE:
         return SourceLocExpr::Line;
-      llvm_unreachable("invalid keyword");
+      case tok::kw___builtin_COLUMN:
+        return SourceLocExpr::Column;
+      default:
+        llvm_unreachable("invalid keyword");
+      }
     }();
     Res = Actions.ActOnSourceLocExpr(getCurScope(), Type, StartLoc,
                                      ConsumeParen());
