@@ -3007,19 +3007,9 @@ static void ConvertUTF8ToWideString(unsigned CharByteWidth, StringRef Source,
 ExprResult Sema::BuildPredefinedExpr(SourceLocation Loc,
                                      PredefinedExpr::IdentType IT) {
   // Pick the current block, lambda, captured statement or function.
-  Decl *currentDecl = nullptr;
-  if (const BlockScopeInfo *BSI = getCurBlock())
-    currentDecl = BSI->TheDecl;
-  else if (const LambdaScopeInfo *LSI = getCurLambda())
-    currentDecl = LSI->CallOperator;
-  else if (const CapturedRegionScopeInfo *CSI = getCurCapturedRegion())
-    currentDecl = CSI->TheCapturedDecl;
-  else
-    currentDecl = getCurFunctionOrMethodDecl();
-
-  if (!currentDecl) {
+  Decl *currentDecl = getDeclForCurContext();
+  if (currentDecl == Context.getTranslationUnitDecl()) {
     Diag(Loc, diag::ext_predef_outside_function);
-    currentDecl = Context.getTranslationUnitDecl();
   }
 
   QualType ResTy;
@@ -12878,11 +12868,9 @@ public:
   }
 
   ExprResult TransformSourceLocExpr(SourceLocExpr *E) {
-    if (E->isFullyResolved()) {
-      assert(!E->isInDefaultArgOrInit());
+    if (E->isFullyResolved() && !E->isInDefaultArgOrInit())
       return E;
-    }
-    if (E->isPartiallyResolved()) {
+    else if (E->isPartiallyResolved()) {
       assert(E->getInvocationLoc() == CallerLoc);
       assert(false);
     }
@@ -12893,28 +12881,12 @@ public:
 };
 } // namespace
 
-static Decl *GetCurrentDecl(Sema &S) {
-  Decl *currentDecl = nullptr;
-  if (const BlockScopeInfo *BSI = S.getCurBlock())
-    currentDecl = BSI->TheDecl;
-  else if (const LambdaScopeInfo *LSI = S.getCurLambda())
-    currentDecl = LSI->CallOperator;
-  else if (const CapturedRegionScopeInfo *CSI = S.getCurCapturedRegion())
-    currentDecl = CSI->TheCapturedDecl;
-  else
-    currentDecl = S.getCurFunctionOrMethodDecl();
-
-  if (!currentDecl) {
-    currentDecl = S.Context.getTranslationUnitDecl();
-  }
-  return currentDecl;
-}
 
 /// Given a function expression of unknown-any type, try to rebuild it
 /// to have a function type.
 ExprResult Sema::TransformInitWithUnresolvedSourceLocExpr(Expr *Init,
                                                           SourceLocation Loc) {
-  Decl *currentDecl = GetCurrentDecl(*this);
+  Decl *currentDecl = getDeclForCurContext();
   assert(!cast<DeclContext>(currentDecl)->isDependentContext());
   ExprResult Result =
       RebuildSourceLocExprInInit(*this, Loc, currentDecl).TransformExpr(Init);
@@ -12936,15 +12908,13 @@ ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
       S->isFunctionPrototypeScope() ||
       // The expression appears within a NSDMI expression
       S->isClassScope();
-  if (RequiresTransform) {
-    auto *D = GetCurrentDecl(*this);
-    D->dump();
-    S->dump();
+
+  if (RequiresTransform)
     return BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc);
-  }
 
   return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, BuiltinLoc,
-                            GetCurrentDecl(*this));
+                            getDeclForCurContext(),
+                            /*IsInDefaultArgOrInit*/ false);
 }
 
 ExprResult Sema::BuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,

@@ -3440,6 +3440,7 @@ struct DisableDebugLocationUpdates {
   CodeGenFunction &CGF;
   bool disabledDebugInfo;
   DisableDebugLocationUpdates(CodeGenFunction &CGF, const Expr *E) : CGF(CGF) {
+    // FIXME(EricWF)
     bool ShouldDisable = [&] {
       if (!CGF.getDebugInfo())
         return false;

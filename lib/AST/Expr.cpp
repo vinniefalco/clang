@@ -1817,7 +1817,8 @@ SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
       State(Unresolved), IsInDefaultArgOrInit(true) {}
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, Expr *E)
+                             SourceLocation RParenLoc, Expr *E,
+                             bool IsInDefaultArgOrInit)
     : Expr(SourceLocExprClass, E->getType(), E->getValueKind(),
            E->getObjectKind(), false, false, false, false),
       BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(E), Type(Type),

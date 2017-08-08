@@ -2336,6 +2336,10 @@ public:
   /// in a 'block', this returns the containing context.
   NamedDecl *getCurFunctionOrMethodDecl();
 
+  /// getDeclForCurContext - Return the Decl for the current block, lambda,
+  /// captured statement, function, or translation unit.
+  Decl *getDeclForCurContext();
+
   /// Add this decl to the scope shadowed decl chains.
   void PushOnScopeChains(NamedDecl *D, Scope *S, bool AddToContext = true);
 

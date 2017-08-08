@@ -9821,20 +9821,18 @@ ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
     ExprResult Res = getDerived().TransformExpr(E->getSubExpr());
     if (Res.isInvalid())
       return ExprError();
-    if (!getDerived().AlwaysRebuild() && Res.get() == E->getSubExpr())
-      return E;
     return getDerived().RebuildSourceLocExpr(
         E->getIdentType(), E->getLocStart(), E->getLocEnd(), Res.get(),
         E->isInDefaultArgOrInit());
   } else if (E->isPartiallyResolved()) {
-    Decl *NewD =
-        getDerived().TransformDecl(E->getInvocationLoc(), E->getCurDecl());
-    assert(NewD);
-    if (!getDerived().AlwaysRebuild() && E->getCurDecl() == NewD)
-      return E;
+
+    Decl *NewD = getDerived().TransformDecl(E->getLocStart(), E->getCurDecl());
+    assert(NewD == E->getCurDecl());
+
     return getDerived().RebuildSourceLocExpr(
         E->getIdentType(), E->getLocStart(), E->getLocEnd(),
-        E->getInvocationLoc(), NewD, E->isInDefaultArgOrInit());
+        E->getInvocationLoc(), getSema().getDeclForCurContext(),
+        E->isInDefaultArgOrInit());
   } else {
     assert(E->isUnresolved());
     if (!getDerived().AlwaysRebuild())

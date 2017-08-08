@@ -3897,7 +3897,7 @@ private:
 
   void setIdentType(IdentType T) { Type = T; }
   void setResolvedState(ResolvedState S) { State = S; }
-  void setIsInDefaultArgOrInit(bool V = true) { IsInDefaultArgOrInit; }
+  void setIsInDefaultArgOrInit(bool V = true) { IsInDefaultArgOrInit = V; }
   void setSubExpr(Expr *E) {
     assert(State == Resolved);
     Value = E;
