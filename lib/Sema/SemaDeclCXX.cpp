@@ -4545,8 +4545,8 @@ static bool isIncompleteOrZeroLengthArrayType(ASTContext &Context, QualType T) {
 
 static MemInitResult rebuildCtorInit(Sema &SemaRef, BaseAndFieldInfo &Info,
                                      FieldDecl *Field, Expr *Init) {
-  assert(!Field->getType()->isDependentType());
-  assert(!Field->getInClassInitializer()->isTypeDependent());
+  // assert(!Field->getType()->isDependentType());
+  // assert(!Field->getInClassInitializer()->isTypeDependent());
   SourceLocation Loc = Info.Ctor->getLocation();
   ExprResult InitRes =
       SemaRef.TransformInitWithUnresolvedSourceLocExpr(Init, Loc);

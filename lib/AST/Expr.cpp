@@ -1812,7 +1812,8 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, QualType Ty)
     : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
-           Ty->isDependentType(), Ty->isDependentType(), true, false),
+           Ty->isDependentType(), Ty->isDependentType(), Ty->isDependentType(),
+           false),
       BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(nullptr), Type(Type),
       State(Unresolved), IsInDefaultArgOrInit(true) {}
 
@@ -1820,7 +1821,8 @@ SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, Expr *E,
                              bool IsInDefaultArgOrInit)
     : Expr(SourceLocExprClass, E->getType(), E->getValueKind(),
-           E->getObjectKind(), false, false, false, false),
+           E->getObjectKind(), false, false, E->isInstantiationDependent(),
+           false),
       BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(E), Type(Type),
       State(Resolved), IsInDefaultArgOrInit(IsInDefaultArgOrInit) {
   assert(!E->getType()->isDependentType() && !E->isTypeDependent() &&
@@ -1865,7 +1867,8 @@ public:
     return HasSourceLocExpr;
   }
   bool VisitSourceLocExpr(const SourceLocExpr *SLE) {
-    return SLE->isUnresolved() || SLE->isInDefaultArgOrInit();
+    return SLE->isUnresolved() ||
+           (SLE->isFullyResolved() && SLE->isInDefaultArgOrInit());
   }
 };
 } // namespace

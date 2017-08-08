@@ -12887,7 +12887,6 @@ public:
 ExprResult Sema::TransformInitWithUnresolvedSourceLocExpr(Expr *Init,
                                                           SourceLocation Loc) {
   Decl *currentDecl = getDeclForCurContext();
-  assert(!cast<DeclContext>(currentDecl)->isDependentContext());
   ExprResult Result =
       RebuildSourceLocExprInInit(*this, Loc, currentDecl).TransformExpr(Init);
   return Result;
@@ -12932,9 +12931,10 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     bool IsInDefaultArgOrInit) {
   assert(currentDecl);
   bool IsTypeDependent =
-      cast<DeclContext>(currentDecl)->isDependentContext() &&
-      (Type == SourceLocExpr::Function || Type == SourceLocExpr::File);
+      Type == SourceLocExpr::Function && isa<FunctionDecl>(currentDecl) &&
+      cast<FunctionDecl>(currentDecl)->getType()->isDependentType();
   if (IsTypeDependent) {
+    // return BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc);
     return new (Context) SourceLocExpr(
         Type, BuiltinLoc, RPLoc, GetTypeForSourceLocExpr(Context, Type),
         InvocationLoc, currentDecl, IsInDefaultArgOrInit);
@@ -12950,7 +12950,8 @@ ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,
                                      SourceLocation CallerLoc,
                                      Decl *CallerDecl) {
   assert(CallerDecl && "cannot be null");
-  assert(!cast<DeclContext>(CallerDecl)->isDependentContext());
+  assert(Type != SourceLocExpr::Function || !isa<FunctionDecl>(CallerDecl) ||
+         !cast<FunctionDecl>(CallerDecl)->getType()->isDependentType());
   PresumedLoc PLoc =
       SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(CallerLoc).second);
 

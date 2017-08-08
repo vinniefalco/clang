@@ -252,11 +252,13 @@ constexpr Pair<U, U> test_func_template(T, U u = U::current()) {
   static_assert(is_equal(__func__, U::current().func()));
   return {u, U::current()};
 }
+template <class T>
 void func_template_tests() {
   constexpr auto P = test_func_template(42);
   static_assert(is_equal(P.first.func(), __func__), "");
   static_assert(!is_equal(P.second.func(), __func__), "");
 }
+template void func_template_tests<int>();
 
 template <class = int, class T = SL>
 struct TestCtor {
