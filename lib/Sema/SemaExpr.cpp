@@ -12868,12 +12868,8 @@ public:
   }
 
   ExprResult TransformSourceLocExpr(SourceLocExpr *E) {
-    if (E->isFullyResolved() && !E->isInDefaultArgOrInit())
+    if (!E->isUnresolved() && !E->isInDefaultArgOrInit())
       return E;
-    else if (E->isPartiallyResolved()) {
-      assert(E->getInvocationLoc() == CallerLoc);
-      assert(false);
-    }
     return SemaRef.BuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
                                       E->getLocEnd(), CallerLoc, CallerDecl,
                                       E->isInDefaultArgOrInit());
@@ -12930,15 +12926,6 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     Decl *currentDecl,
                                     bool IsInDefaultArgOrInit) {
   assert(currentDecl);
-  bool IsTypeDependent =
-      Type == SourceLocExpr::Function && isa<FunctionDecl>(currentDecl) &&
-      cast<FunctionDecl>(currentDecl)->getType()->isDependentType();
-  if (IsTypeDependent) {
-    // return BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc);
-    return new (Context) SourceLocExpr(
-        Type, BuiltinLoc, RPLoc, GetTypeForSourceLocExpr(Context, Type),
-        InvocationLoc, currentDecl, IsInDefaultArgOrInit);
-  }
   ExprResult Val = BuildSourceLocValue(Type, InvocationLoc, currentDecl);
   if (Val.isInvalid())
     return ExprError();
@@ -12950,8 +12937,6 @@ ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,
                                      SourceLocation CallerLoc,
                                      Decl *CallerDecl) {
   assert(CallerDecl && "cannot be null");
-  assert(Type != SourceLocExpr::Function || !isa<FunctionDecl>(CallerDecl) ||
-         !cast<FunctionDecl>(CallerDecl)->getType()->isDependentType());
   PresumedLoc PLoc =
       SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(CallerLoc).second);
 

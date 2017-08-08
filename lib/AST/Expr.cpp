@@ -1815,31 +1815,19 @@ SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
            Ty->isDependentType(), Ty->isDependentType(), Ty->isDependentType(),
            false),
       BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(nullptr), Type(Type),
-      State(Unresolved), IsInDefaultArgOrInit(true) {}
+      IsInDefaultArgOrInit(true) {}
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, Expr *E,
                              bool IsInDefaultArgOrInit)
     : Expr(SourceLocExprClass, E->getType(), E->getValueKind(),
-           E->getObjectKind(), false, false, E->isInstantiationDependent(),
-           false),
+           E->getObjectKind(), false, false, false, false),
       BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(E), Type(Type),
-      State(Resolved), IsInDefaultArgOrInit(IsInDefaultArgOrInit) {
+      IsInDefaultArgOrInit(IsInDefaultArgOrInit) {
   assert(!E->getType()->isDependentType() && !E->isTypeDependent() &&
          !E->isValueDependent() && !E->isInstantiationDependent());
 }
 
-SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, QualType Ty,
-                             SourceLocation InvocationLoc, Decl *CurDecl,
-                             bool IsInDefaultArgOrInit)
-    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
-           Ty->isDependentType(), Ty->isDependentType(), true, false),
-      BuiltinLoc(BLoc),
-      RParenLoc(RParenLoc), LocationInfo{InvocationLoc, CurDecl}, Type(Type),
-      State(PartiallyResolved), IsInDefaultArgOrInit(IsInDefaultArgOrInit) {
-  assert(!InvocationLoc.isInvalid());
-}
 
 const char *SourceLocExpr::GetBuiltinStr(IdentType Type) {
   switch (Type) {
@@ -1867,8 +1855,7 @@ public:
     return HasSourceLocExpr;
   }
   bool VisitSourceLocExpr(const SourceLocExpr *SLE) {
-    return SLE->isUnresolved() ||
-           (SLE->isFullyResolved() && SLE->isInDefaultArgOrInit());
+    return SLE->isUnresolved() || SLE->isInDefaultArgOrInit();
   }
 };
 } // namespace

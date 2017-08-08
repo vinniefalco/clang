@@ -2936,15 +2936,7 @@ public:
     return new (SemaRef.Context)
         SourceLocExpr(Type, BuiltinLoc, RPLoc, E, IsInDefaultArgOrInit);
   }
-  /// \brief FIXME
-  ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
-                                  SourceLocation BuiltinLoc,
-                                  SourceLocation RPLoc,
-                                  SourceLocation InvocationLoc, Decl *CurDecl,
-                                  bool IsInDefaultArgOrInit) {
-    return SemaRef.BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, InvocationLoc,
-                                      CurDecl, IsInDefaultArgOrInit);
-  }
+
   /// \brief FIXME
   ExprResult RebuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
                                             SourceLocation BuiltinLoc,
@@ -9817,22 +9809,13 @@ TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
 
 template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
-  if (E->isFullyResolved()) {
+  if (!E->isUnresolved()) {
     ExprResult Res = getDerived().TransformExpr(E->getSubExpr());
     if (Res.isInvalid())
       return ExprError();
     return getDerived().RebuildSourceLocExpr(
         E->getIdentType(), E->getLocStart(), E->getLocEnd(), Res.get(),
         E->isInDefaultArgOrInit());
-  } else if (E->isPartiallyResolved()) {
-    // FIXME(EricWF): WTF should we do here.
-    Decl *NewD = getDerived().TransformDecl(E->getLocStart(), E->getCurDecl());
-    assert(NewD == E->getCurDecl());
-    assert(isa<FunctionDecl>(NewD));
-    // assert(!NewD->is)
-    return getDerived().RebuildSourceLocExpr(
-        E->getIdentType(), E->getLocStart(), E->getLocEnd(),
-        E->getInvocationLoc(), NewD, E->isInDefaultArgOrInit());
   } else {
     assert(E->isUnresolved());
     return getDerived().RebuildUnresolvedSourceLocExpr(

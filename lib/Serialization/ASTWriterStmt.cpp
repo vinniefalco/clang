@@ -845,16 +845,11 @@ void ASTStmtWriter::VisitVAArgExpr(VAArgExpr *E) {
 
 void ASTStmtWriter::VisitSourceLocExpr(SourceLocExpr *E) {
   VisitExpr(E);
+  Record.AddStmt(E->getSubExpr());
   Record.AddSourceLocation(E->getLocStart());
   Record.AddSourceLocation(E->getLocEnd());
   Record.push_back(E->getIdentType());
-  Record.push_back(E->getResolvedState());
-  if (E->isFullyResolved())
-    Record.AddStmt(E->getSubExpr());
-  else if (E->isPartiallyResolved()) {
-    Record.AddSourceLocation(E->getInvocationLoc());
-    Record.AddDeclRef(E->getCurDecl());
-  }
+  Record.push_back(E->isInDefaultArgOrInit());
   Code = serialization::EXPR_SOURCE_LOC;
 }
 
