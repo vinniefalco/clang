@@ -3822,15 +3822,21 @@ private:
   };
   unsigned Type : 2;
   unsigned State : 2;
+  unsigned IsInDefaultArgOrInit : 1;
   static const char *GetBuiltinStr(IdentType T);
 
 public:
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
                 QualType Ty);
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                QualType Ty, SourceLocation InvocationLoc, Decl *CurDecl);
+                QualType Ty, SourceLocation InvocationLoc, Decl *CurDecl,
+                bool IsInDefaultArgOrInit);
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                Expr *E);
+                Expr *E, bool IsInDefaultArgOrInit);
+
+  /// \brief Build an empty call expression.
+  explicit SourceLocExpr(EmptyShell Empty)
+      : Expr(SourceLocExprClass, Empty), Value(nullptr) {}
 
   /// \brief Check if an expression contains an unresolved SourceLocExpr.
   static bool containsSourceLocExpr(const Expr *E);
@@ -3869,6 +3875,8 @@ public:
     return static_cast<ResolvedState>(State);
   }
 
+  bool isInDefaultArgOrInit() const { return IsInDefaultArgOrInit; }
+
   child_range children() {
     return isFullyResolved() ? child_range(&Value, &Value + 1)
                              : child_range(child_iterator(), child_iterator());
@@ -3887,12 +3895,9 @@ public:
 private:
   friend class ASTStmtReader;
 
-  /// \brief Build an empty call expression.
-  SourceLocExpr(EmptyShell Empty)
-      : Expr(SourceLocExprClass, Empty), Value(nullptr) {}
-
   void setIdentType(IdentType T) { Type = T; }
   void setResolvedState(ResolvedState S) { State = S; }
+  void setIsInDefaultArgOrInit(bool V = true) { IsInDefaultArgOrInit; }
   void setSubExpr(Expr *E) {
     assert(State == Resolved);
     Value = E;

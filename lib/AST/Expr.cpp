@@ -1814,26 +1814,27 @@ SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
     : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
            Ty->isDependentType(), Ty->isDependentType(), true, false),
       BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(nullptr), Type(Type),
-      State(Unresolved) {}
+      State(Unresolved), IsInDefaultArgOrInit(true) {}
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, Expr *E)
     : Expr(SourceLocExprClass, E->getType(), E->getValueKind(),
            E->getObjectKind(), false, false, false, false),
       BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(E), Type(Type),
-      State(Resolved) {
-  assert(E->getType()->isDependentType() && !E->isTypeDependent() &&
+      State(Resolved), IsInDefaultArgOrInit(IsInDefaultArgOrInit) {
+  assert(!E->getType()->isDependentType() && !E->isTypeDependent() &&
          !E->isValueDependent() && !E->isInstantiationDependent());
 }
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, QualType Ty,
-                             SourceLocation InvocationLoc, Decl *CurDecl)
+                             SourceLocation InvocationLoc, Decl *CurDecl,
+                             bool IsInDefaultArgOrInit)
     : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
            Ty->isDependentType(), Ty->isDependentType(), true, false),
       BuiltinLoc(BLoc),
       RParenLoc(RParenLoc), LocationInfo{InvocationLoc, CurDecl}, Type(Type),
-      State(PartiallyResolved) {
+      State(PartiallyResolved), IsInDefaultArgOrInit(IsInDefaultArgOrInit) {
   assert(!InvocationLoc.isInvalid());
 }
 
@@ -1863,7 +1864,7 @@ public:
     return HasSourceLocExpr;
   }
   bool VisitSourceLocExpr(const SourceLocExpr *SLE) {
-    return SLE->isUnresolved();
+    return SLE->isUnresolved() || SLE->isInDefaultArgOrInit();
   }
 };
 } // namespace

@@ -2931,16 +2931,19 @@ public:
   /// \brief FIXME
   ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                   SourceLocation BuiltinLoc,
-                                  SourceLocation RPLoc, Expr *E) {
-    return new (SemaRef.Context) SourceLocExpr(Type, BuiltinLoc, RPLoc, E);
+                                  SourceLocation RPLoc, Expr *E,
+                                  bool IsInDefaultArgOrInit) {
+    return new (SemaRef.Context)
+        SourceLocExpr(Type, BuiltinLoc, RPLoc, E, IsInDefaultArgOrInit);
   }
   /// \brief FIXME
   ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                   SourceLocation BuiltinLoc,
                                   SourceLocation RPLoc,
-                                  SourceLocation InvocationLoc, Decl *CurDecl) {
+                                  SourceLocation InvocationLoc, Decl *CurDecl,
+                                  bool IsInDefaultArgOrInit) {
     return SemaRef.BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, InvocationLoc,
-                                      CurDecl);
+                                      CurDecl, IsInDefaultArgOrInit);
   }
   /// \brief FIXME
   ExprResult RebuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
@@ -9821,16 +9824,21 @@ ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
     if (!getDerived().AlwaysRebuild() && Res.get() == E->getSubExpr())
       return E;
     return getDerived().RebuildSourceLocExpr(
-        E->getIdentType(), E->getLocStart(), E->getLocEnd(), Res.get());
+        E->getIdentType(), E->getLocStart(), E->getLocEnd(), Res.get(),
+        E->isInDefaultArgOrInit());
   } else if (E->isPartiallyResolved()) {
     Decl *NewD =
         getDerived().TransformDecl(E->getInvocationLoc(), E->getCurDecl());
     assert(NewD);
-    return getDerived().RebuildSourceLocExpr(E->getIdentType(),
-                                             E->getLocStart(), E->getLocEnd(),
-                                             E->getInvocationLoc(), NewD);
+    if (!getDerived().AlwaysRebuild() && E->getCurDecl() == NewD)
+      return E;
+    return getDerived().RebuildSourceLocExpr(
+        E->getIdentType(), E->getLocStart(), E->getLocEnd(),
+        E->getInvocationLoc(), NewD, E->isInDefaultArgOrInit());
   } else {
     assert(E->isUnresolved());
+    if (!getDerived().AlwaysRebuild())
+      return E;
     return getDerived().RebuildUnresolvedSourceLocExpr(
         E->getIdentType(), E->getLocStart(), E->getLocEnd());
   }
