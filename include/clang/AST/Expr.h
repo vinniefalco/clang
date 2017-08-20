@@ -3821,40 +3821,37 @@ public:
 private:
   SourceLocation BuiltinLoc, RParenLoc;
   Stmt *Value;
-  unsigned Type : 2;
-  unsigned IsInDefaultArgOrInit : 1;
-  static const char *GetBuiltinStr(IdentType T);
 
 public:
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                QualType Ty);
-  SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                Expr *E, bool IsInDefaultArgOrInit);
+                QualType Ty, Expr *E = nullptr);
 
   /// \brief Build an empty call expression.
   explicit SourceLocExpr(EmptyShell Empty)
       : Expr(SourceLocExprClass, Empty), Value(nullptr) {}
 
-  /// \brief Check if an expression contains an unresolved SourceLocExpr.
+  /// \brief Check if an expression contains a SourceLocExpr as a subexpression.
   static bool containsSourceLocExpr(const Expr *E);
 
-  const char *getBuiltinStr() const LLVM_READONLY {
-    return GetBuiltinStr(static_cast<IdentType>(Type));
-  }
+  /// \brief Return a string representing the name of the specific builtin
+  /// function.
+  const char *getBuiltinStr() const LLVM_READONLY;
+
   IdentType getIdentType() const LLVM_READONLY {
-    return static_cast<IdentType>(Type);
+    return static_cast<IdentType>(SourceLocExprBits.Type);
   }
-  SourceLocation getLocation() const LLVM_READONLY { return BuiltinLoc; }
 
-  SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
-  SourceLocation getLocEnd() const LLVM_READONLY { return RParenLoc; }
-
+  /// \brief If the SourceLocExpr has been resolved return the subexpression
+  /// representing the resolved value. Otherwise return null.
   const Expr *getSubExpr() const { return cast_or_null<Expr>(Value); }
   Expr *getSubExpr() { return cast_or_null<Expr>(Value); }
 
+  /// \brief True iff the value for the SourceLocExpr has been determined.
   bool isUnresolved() const { return Value == nullptr; }
 
-  bool isInDefaultArgOrInit() const { return IsInDefaultArgOrInit; }
+  SourceLocation getLocation() const LLVM_READONLY { return BuiltinLoc; }
+  SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
+  SourceLocation getLocEnd() const LLVM_READONLY { return RParenLoc; }
 
   child_range children() {
     return Value ? child_range(&Value, &Value + 1)
@@ -3873,13 +3870,8 @@ public:
 private:
   friend class ASTStmtReader;
 
-  void setIdentType(IdentType T) { Type = T; }
-
-  void setIsInDefaultArgOrInit(bool V = true) { IsInDefaultArgOrInit = V; }
-  void setSubExpr(Expr *E) {
-    Value = E;
-  }
-
+  void setIdentType(IdentType T) { SourceLocExprBits.Type = T; }
+  void setSubExpr(Expr *E) { Value = E; }
   void setLocStart(SourceLocation L) { BuiltinLoc = L; }
   void setLocEnd(SourceLocation L) { RParenLoc = L; }
 };

@@ -4549,7 +4549,7 @@ static MemInitResult rebuildCtorInit(Sema &SemaRef, BaseAndFieldInfo &Info,
   // assert(!Field->getInClassInitializer()->isTypeDependent());
   SourceLocation Loc = Info.Ctor->getLocation();
   ExprResult InitRes =
-      SemaRef.TransformInitWithUnresolvedSourceLocExpr(Init, Loc);
+      SemaRef.TransformInitContainingSourceLocExpressions(Init, Loc);
   if (InitRes.isInvalid())
     return true;
   return SemaRef.BuildMemberInitializer(Field, InitRes.get(), Loc);
@@ -4589,27 +4589,31 @@ static bool CollectFieldInitializer(Sema &SemaRef, BaseAndFieldInfo &Info,
     return false;
 
   if (Field->hasInClassInitializer() && !Info.isImplicitCopyOrMove()) {
-    ExprResult DIE =
-        SemaRef.BuildCXXDefaultInitExpr(Info.Ctor->getLocation(), Field);
-    if (DIE.isInvalid())
+    if (SemaRef.CheckCXXDefaultInitExpr(Info.Ctor->getLocation(), Field))
       return true;
-    if (SourceLocExpr::containsSourceLocExpr(Field->getInClassInitializer())) {
-      MemInitResult ME =
+    MemInitResult Init(/*Invalid*/ true);
+
+    if (SourceLocExpr::containsSourceLocExpr(Field->getInClassInitializer()))
+      Init =
           rebuildCtorInit(SemaRef, Info, Field, Field->getInClassInitializer());
-      if (ME.isInvalid())
+    else {
+      ExprResult DIE =
+          SemaRef.BuildCXXDefaultInitExpr(Info.Ctor->getLocation(), Field);
+      if (DIE.isInvalid())
         return true;
-      return Info.addFieldInitializer(ME.get());
+      if (Indirect)
+        Init = new (SemaRef.Context)
+            CXXCtorInitializer(SemaRef.Context, Indirect, SourceLocation(),
+                               SourceLocation(), DIE.get(), SourceLocation());
+      else
+        Init = new (SemaRef.Context)
+            CXXCtorInitializer(SemaRef.Context, Field, SourceLocation(),
+                               SourceLocation(), DIE.get(), SourceLocation());
+      assert(!Init.isInvalid());
     }
-    CXXCtorInitializer *Init;
-    if (Indirect)
-      Init = new (SemaRef.Context)
-          CXXCtorInitializer(SemaRef.Context, Indirect, SourceLocation(),
-                             SourceLocation(), DIE.get(), SourceLocation());
-    else
-      Init = new (SemaRef.Context)
-          CXXCtorInitializer(SemaRef.Context, Field, SourceLocation(),
-                             SourceLocation(), DIE.get(), SourceLocation());
-    return Info.addFieldInitializer(Init);
+    if (Init.isInvalid())
+      return true;
+    return Info.addFieldInitializer(Init.get());
   }
 
   // Don't initialize incomplete or zero-length arrays.
@@ -12424,16 +12428,15 @@ Sema::BuildCXXConstructExpr(SourceLocation ConstructLoc, QualType DeclInitType,
       ParenRange);
 }
 
-ExprResult Sema::BuildCXXDefaultInitExpr(SourceLocation Loc, FieldDecl *Field) {
+bool Sema::CheckCXXDefaultInitExpr(SourceLocation Loc, FieldDecl *Field) {
   assert(Field->hasInClassInitializer());
-
   // If we already have the in-class initializer nothing needs to be done.
   if (Field->getInClassInitializer())
-    return CXXDefaultInitExpr::Create(Context, Loc, Field);
+    return false;
 
   // If we might have already tried and failed to instantiate, don't try again.
   if (Field->isInvalidDecl())
-    return ExprError();
+    return true;
 
   // Maybe we haven't instantiated the in-class initializer. Go check the
   // pattern FieldDecl to see if it has one.
@@ -12467,11 +12470,10 @@ ExprResult Sema::BuildCXXDefaultInitExpr(SourceLocation Loc, FieldDecl *Field) {
                                       getTemplateInstantiationArgs(Field))) {
       // Don't diagnose this again.
       Field->setInvalidDecl();
-      return ExprError();
+      return true;
     }
-    return CXXDefaultInitExpr::Create(Context, Loc, Field);
+    return false;
   }
-
   // DR1351:
   //   If the brace-or-equal-initializer of a non-static data member
   //   invokes a defaulted default constructor of its class or of an
@@ -12493,7 +12495,13 @@ ExprResult Sema::BuildCXXDefaultInitExpr(SourceLocation Loc, FieldDecl *Field) {
   // Recover by marking the field invalid, unless we're in a SFINAE context.
   if (!isSFINAEContext())
     Field->setInvalidDecl();
-  return ExprError();
+  return true;
+}
+
+ExprResult Sema::BuildCXXDefaultInitExpr(SourceLocation Loc, FieldDecl *Field) {
+  if (CheckCXXDefaultInitExpr(Loc, Field))
+    return ExprError();
+  return CXXDefaultInitExpr::Create(Context, Loc, Field);
 }
 
 void Sema::FinalizeVarWithDestructor(VarDecl *VD, const RecordType *Record) {

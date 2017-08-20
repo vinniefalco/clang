@@ -554,18 +554,23 @@ void InitListChecker::FillInEmptyInitForField(unsigned Init, FieldDecl *Field,
     //   members in the aggregate, then each member not explicitly initialized
     //   shall be initialized from its brace-or-equal-initializer [...]
     if (Field->hasInClassInitializer()) {
-      ExprResult DIE = SemaRef.BuildCXXDefaultInitExpr(Loc, Field);
-      if (SourceLocExpr::containsSourceLocExpr(
-              Field->getInClassInitializer())) {
-        ExprResult Res = SemaRef.TransformInitWithUnresolvedSourceLocExpr(
-            Field->getInClassInitializer(), ILE->getLocStart());
-        if (Res.isInvalid()) {
-          hadError = true;
-          return;
-        }
-        DIE = SemaRef.PerformCopyInitialization(MemberEntity, SourceLocation(),
-                                                Res.get(), true, true);
+      if (SemaRef.CheckCXXDefaultInitExpr(Loc, Field)) {
+        hadError = true;
+        return;
       }
+      ExprResult DIE(/*Invalid*/ true);
+      if (SemaRef.CheckCXXDefaultInitExpr(Loc, Field)) {
+        /* nothing todo */
+      } else if (SourceLocExpr::containsSourceLocExpr(
+                     Field->getInClassInitializer())) {
+        DIE = SemaRef.TransformInitContainingSourceLocExpressions(
+            Field->getInClassInitializer(), ILE->getLocStart());
+        if (!DIE.isInvalid())
+          DIE = SemaRef.PerformCopyInitialization(
+              MemberEntity, SourceLocation(), DIE.get(), true, true);
+      } else
+        DIE = SemaRef.BuildCXXDefaultInitExpr(Loc, Field);
+
       if (DIE.isInvalid()) {
         hadError = true;
         return;

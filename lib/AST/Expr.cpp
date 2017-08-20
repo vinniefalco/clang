@@ -1830,27 +1830,25 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 }
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, QualType Ty)
-    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary,
-           Ty->isDependentType(), Ty->isDependentType(), Ty->isDependentType(),
+                             SourceLocation RParenLoc, QualType Ty, Expr *E)
+    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary, false, false, false,
            false),
-      BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(nullptr), Type(Type),
-      IsInDefaultArgOrInit(true) {}
-
-SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, Expr *E,
-                             bool IsInDefaultArgOrInit)
-    : Expr(SourceLocExprClass, E->getType(), E->getValueKind(),
-           E->getObjectKind(), false, false, false, false),
-      BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(E), Type(Type),
-      IsInDefaultArgOrInit(IsInDefaultArgOrInit) {
-  assert(!E->getType()->isDependentType() && !E->isTypeDependent() &&
-         !E->isValueDependent() && !E->isInstantiationDependent());
+      BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(E) {
+  SourceLocExprBits.Type = Type;
+  assert(!Ty->isDependentType());
+  assert(!Ty->isArrayType());
+  if (E) {
+    assert(Ty == E->getType() &&
+           "type of expression must match specified type");
+    assert(!E->isTypeDependent() && !E->isValueDependent() &&
+           !E->isInstantiationDependent() &&
+           "type of expression must not be dependent");
+    assert(E->getValueKind() == VK_RValue);
+  }
 }
 
-
-const char *SourceLocExpr::GetBuiltinStr(IdentType Type) {
-  switch (Type) {
+const char *SourceLocExpr::getBuiltinStr() const {
+  switch (getIdentType()) {
   case File:
     return "__builtin_FILE";
   case Function:
@@ -1869,14 +1867,10 @@ class CheckForSourceLocVisitor
 public:
   CheckForSourceLocVisitor() {}
   bool VisitExpr(const Expr *Node) {
-    bool HasSourceLocExpr = false;
-    for (const Stmt *SubStmt : Node->children())
-      HasSourceLocExpr |= Visit(SubStmt);
-    return HasSourceLocExpr;
+    return std::any_of(Node->child_begin(), Node->child_end(),
+                       [&](const Stmt *SubStmt) { return Visit(SubStmt); });
   }
-  bool VisitSourceLocExpr(const SourceLocExpr *SLE) {
-    return SLE->isUnresolved() || SLE->isInDefaultArgOrInit();
-  }
+  bool VisitSourceLocExpr(const SourceLocExpr *SLE) { return true; }
 };
 } // namespace
 

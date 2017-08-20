@@ -849,7 +849,6 @@ void ASTStmtWriter::VisitSourceLocExpr(SourceLocExpr *E) {
   Record.AddSourceLocation(E->getLocStart());
   Record.AddSourceLocation(E->getLocEnd());
   Record.push_back(E->getIdentType());
-  Record.push_back(E->isInDefaultArgOrInit());
   Code = serialization::EXPR_SOURCE_LOC;
 }
 

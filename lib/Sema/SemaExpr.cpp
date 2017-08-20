@@ -4839,11 +4839,11 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
       Arg = ArgE.getAs<Expr>();
     } else {
       assert(Param && "can't use default arguments without a known callee");
-      ExprResult ArgExpr =
-        BuildCXXDefaultArgExpr(CallLoc, FDecl, Param);
-      if (!ArgExpr.isInvalid() &&
-          SourceLocExpr::containsSourceLocExpr(Param->getDefaultArg())) {
-        ArgExpr = TransformInitWithUnresolvedSourceLocExpr(
+      if (CheckCXXDefaultArgExpr(CallLoc, FDecl, Param))
+        return true;
+      ExprResult ArgExpr = ExprError();
+      if (SourceLocExpr::containsSourceLocExpr(Param->getDefaultArg())) {
+        ArgExpr = TransformInitContainingSourceLocExpressions(
             Param->getDefaultArg(), CallLoc);
         if (ArgExpr.isInvalid())
           return true;
@@ -4852,6 +4852,8 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
                                                          ProtoArgType);
         ArgExpr = PerformCopyInitialization(
           Entity, SourceLocation(), ArgExpr.get(), IsListInitialization, AllowExplicit);
+      } else {
+        ArgExpr = CXXDefaultArgExpr::Create(Context, CallLoc, Param);
       }
       if (ArgExpr.isInvalid())
         return true;
@@ -12883,11 +12885,9 @@ public:
   }
 
   ExprResult TransformSourceLocExpr(SourceLocExpr *E) {
-    if (!E->isUnresolved() && !E->isInDefaultArgOrInit())
-      return E;
-    return SemaRef.BuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
-                                      E->getLocEnd(), CallerLoc, CallerDecl,
-                                      E->isInDefaultArgOrInit());
+    return SemaRef.BuildResolvedSourceLocExpr(E->getIdentType(),
+                                              E->getLocStart(), E->getLocEnd(),
+                                              CallerLoc, CallerDecl);
   }
 };
 } // namespace
@@ -12895,19 +12895,13 @@ public:
 
 /// Given a function expression of unknown-any type, try to rebuild it
 /// to have a function type.
-ExprResult Sema::TransformInitWithUnresolvedSourceLocExpr(Expr *Init,
-                                                          SourceLocation Loc) {
+ExprResult
+Sema::TransformInitContainingSourceLocExpressions(Expr *Init,
+                                                  SourceLocation Loc) {
   Decl *currentDecl = getDeclForCurContext();
   ExprResult Result =
       RebuildSourceLocExprInInit(*this, Loc, currentDecl).TransformExpr(Init);
   return Result;
-}
-
-static QualType GetTypeForSourceLocExpr(const ASTContext &C,
-                                        SourceLocExpr::IdentType Type) {
-  if (Type == SourceLocExpr::Line || Type == SourceLocExpr::Column)
-    return C.UnsignedIntTy;
-  return C.getPointerType(C.CharTy.withConst());
 }
 
 ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
@@ -12915,43 +12909,30 @@ ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                     SourceLocation RPLoc) {
   bool RequiresTransform =
       // The expression appears within a default argument
-      S->isFunctionPrototypeScope() ||
-      // The expression appears within a NSDMI expression
-      S->isClassScope();
+      S->isFunctionPrototypeScope();
 
+  // Check if the expression appears within a NSDMI expression
+  if (S->isClassScope() && !ExprEvalContexts.empty()) {
+    if (auto *VD = dyn_cast_or_null<VarDecl>(
+            ExprEvalContexts.back().ManglingContextDecl))
+      RequiresTransform |= !VD->isStaticDataMember();
+  }
+
+  // SourceLocExpr's appearing in a default function argument or NSDMI can only
+  // be resolved once the location of the caller or constructor which requires
+  // them is known.
   if (RequiresTransform)
-    return BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc);
-
-  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, BuiltinLoc,
-                            getDeclForCurContext(),
-                            /*IsInDefaultArgOrInit*/ false);
+    return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc);
+  return BuildResolvedSourceLocExpr(Type, BuiltinLoc, RPLoc, BuiltinLoc,
+                                    getDeclForCurContext());
 }
 
-ExprResult Sema::BuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
-                                              SourceLocation BuiltinLoc,
-                                              SourceLocation RPLoc) {
-  return new (Context) SourceLocExpr(Type, BuiltinLoc, RPLoc,
-                                     GetTypeForSourceLocExpr(Context, Type));
-}
-
-ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
-                                    SourceLocation BuiltinLoc,
-                                    SourceLocation RPLoc,
-                                    SourceLocation InvocationLoc,
-                                    Decl *currentDecl,
-                                    bool IsInDefaultArgOrInit) {
-  assert(currentDecl);
-  ExprResult Val = BuildSourceLocValue(Type, InvocationLoc, currentDecl);
-  if (Val.isInvalid())
-    return ExprError();
-  return new (Context)
-      SourceLocExpr(Type, BuiltinLoc, RPLoc, Val.get(), IsInDefaultArgOrInit);
-}
-
-ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,
-                                     SourceLocation CallerLoc,
-                                     Decl *CallerDecl) {
-  assert(CallerDecl && "cannot be null");
+ExprResult Sema::BuildResolvedSourceLocExpr(SourceLocExpr::IdentType Type,
+                                            SourceLocation BuiltinLoc,
+                                            SourceLocation RPLoc,
+                                            SourceLocation CallerLoc,
+                                            Decl *CallerDecl) {
+  assert(CallerDecl);
   PresumedLoc PLoc =
       SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(CallerLoc).second);
 
@@ -12963,7 +12944,7 @@ ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,
         StringLiteral::Create(Context, SVal, StringLiteral::Ascii,
                               /*Pascal*/ false, StrTy, CallerLoc);
     assert(Lit && "should not be null");
-    return UsualUnaryConversions(Lit);
+    return Lit;
   };
 
   auto CreateInt = [&](unsigned Value) {
@@ -12992,8 +12973,29 @@ ExprResult Sema::BuildSourceLocValue(SourceLocExpr::IdentType Type,
     break;
   }
   }
-  assert(!Res.isInvalid() && Res.isUsable());
-  return Res.get();
+  if (Res.isInvalid())
+    return ExprError();
+  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, Res.get());
+}
+
+ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
+                                    SourceLocation BuiltinLoc,
+                                    SourceLocation RPLoc, Expr *SubExpr) {
+  // For __builtin_FILE and __builtin_FUNCTION the SubExpr will be a character
+  // array type. Decay this to the pointer type returned by the builtin.
+  // FIXME(EricWF) is this really even needed?
+  if (SubExpr && SubExpr->getType()->isArrayType()) {
+    SubExpr = DefaultFunctionArrayLvalueConversion(SubExpr).get();
+    assert(SubExpr);
+  }
+  assert(!SubExpr || !SubExpr->isLValue());
+  auto getType = [&]() -> QualType {
+    if (Type == SourceLocExpr::Line || Type == SourceLocExpr::Column)
+      return Context.UnsignedIntTy;
+    return Context.getPointerType(Context.CharTy.withConst());
+  };
+  return new (Context)
+      SourceLocExpr(Type, BuiltinLoc, RPLoc, getType(), SubExpr);
 }
 
 bool Sema::ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&Exp,

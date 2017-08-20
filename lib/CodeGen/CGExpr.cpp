@@ -1169,6 +1169,7 @@ LValue CodeGenFunction::EmitLValue(const Expr *E) {
     return LV;
   }
   case Expr::SourceLocExprClass:
+    assert(false && "FIXME");
     return EmitLValue(cast<SourceLocExpr>(E)->getSubExpr());
 
   case Expr::CXXDefaultArgExprClass:

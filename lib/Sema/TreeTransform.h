@@ -2931,17 +2931,9 @@ public:
   /// \brief FIXME
   ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                   SourceLocation BuiltinLoc,
-                                  SourceLocation RPLoc, Expr *E,
-                                  bool IsInDefaultArgOrInit) {
-    return new (SemaRef.Context)
-        SourceLocExpr(Type, BuiltinLoc, RPLoc, E, IsInDefaultArgOrInit);
-  }
-
-  /// \brief FIXME
-  ExprResult RebuildUnresolvedSourceLocExpr(SourceLocExpr::IdentType Type,
-                                            SourceLocation BuiltinLoc,
-                                            SourceLocation RPLoc) {
-    return SemaRef.BuildUnresolvedSourceLocExpr(Type, BuiltinLoc, RPLoc);
+                                  SourceLocation RPLoc,
+                                  Expr *SubExpr = nullptr) {
+    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, SubExpr);
   }
 
   /// \brief Build a new Objective-C boxed expression.
@@ -9809,18 +9801,18 @@ TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
 
 template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
-  if (!E->isUnresolved()) {
-    ExprResult Res = getDerived().TransformExpr(E->getSubExpr());
+  Expr *SubExpr = E->getSubExpr();
+  if (SubExpr) {
+    ExprResult Res = getDerived().TransformExpr(SubExpr);
     if (Res.isInvalid())
       return ExprError();
-    return getDerived().RebuildSourceLocExpr(
-        E->getIdentType(), E->getLocStart(), E->getLocEnd(), Res.get(),
-        E->isInDefaultArgOrInit());
-  } else {
-    assert(E->isUnresolved());
-    return getDerived().RebuildUnresolvedSourceLocExpr(
-        E->getIdentType(), E->getLocStart(), E->getLocEnd());
+    SubExpr = Res.get();
   }
+  bool IsSameSubExpr = !SubExpr || SubExpr == E->getSubExpr()->IgnoreImpCasts();
+  if (!getDerived().AlwaysRebuild() && IsSameSubExpr)
+    return E;
+  return getDerived().RebuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
+                                           E->getLocEnd(), SubExpr);
 }
 
 template<typename Derived>

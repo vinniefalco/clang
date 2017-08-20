@@ -188,6 +188,26 @@ void method_template_tests() {
   static_assert(TestMethodTemplate{}.get(42).line() == __LINE__, "");
 }
 
+struct InStaticInit {
+  static constexpr int LINE = __LINE__;
+  static constexpr const int x1 = __builtin_LINE();
+  static constexpr const int x2 = identity(__builtin_LINE());
+  static const int x3;
+  const int x4 = __builtin_LINE();
+  int x5 = __builtin_LINE();
+};
+const int InStaticInit::x3 = __builtin_LINE();
+static_assert(InStaticInit::x1 == InStaticInit::LINE + 1, "");
+static_assert(InStaticInit::x2 == InStaticInit::LINE + 2, "");
+
+template <class T, int N = __builtin_LINE(), int Expect = -1>
+constexpr void check_fn_template_param(T) {
+  constexpr int RealExpect = Expect == -1 ? __LINE__ - 2 : Expect;
+  static_assert(N == RealExpect);
+}
+template void check_fn_template_param(int);
+template void check_fn_template_param<long, 42, 42>(long);
+
 } // namespace test_line
 
 //===----------------------------------------------------------------------===//
