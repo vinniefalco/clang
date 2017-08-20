@@ -1311,6 +1311,10 @@ def fopenmp_targets_EQ : CommaJoined<["-"], "fopenmp-targets=">, Flags<[DriverOp
   HelpText<"Specify comma-separated list of triples OpenMP offloading targets to be supported">;
 def fopenmp_dump_offload_linker_script : Flag<["-"], "fopenmp-dump-offload-linker-script">, Group<f_Group>, 
   Flags<[NoArgumentUnused]>;
+def fopenmp_relocatable_target : Flag<["-"], "fopenmp-relocatable-target">, Group<f_Group>, Flags<[CC1Option, NoArgumentUnused]>,
+  HelpText<"OpenMP target code is compiled as relocatable using the -c flag. For OpenMP targets the code is relocatable by default.">;
+def fnoopenmp_relocatable_target : Flag<["-"], "fnoopenmp-relocatable-target">, Group<f_Group>, Flags<[CC1Option, NoArgumentUnused]>,
+  HelpText<"Do not compile OpenMP target code as relocatable.">;
 def fno_optimize_sibling_calls : Flag<["-"], "fno-optimize-sibling-calls">, Group<f_Group>;
 def foptimize_sibling_calls : Flag<["-"], "foptimize-sibling-calls">, Group<f_Group>;
 def force__cpusubtype__ALL : Flag<["-"], "force_cpusubtype_ALL">;
@@ -2023,6 +2027,10 @@ def mdspr2 : Flag<["-"], "mdspr2">, Group<m_Group>;
 def mno_dspr2 : Flag<["-"], "mno-dspr2">, Group<m_Group>;
 def msingle_float : Flag<["-"], "msingle-float">, Group<m_Group>;
 def mdouble_float : Flag<["-"], "mdouble-float">, Group<m_Group>;
+def mmadd4 : Flag<["-"], "mmadd4">, Group<m_Group>,
+  HelpText<"Enable the generation of 4-operand madd.s, madd.d and related instructions.">;
+def mno_madd4 : Flag<["-"], "mno-madd4">, Group<m_Group>,
+  HelpText<"Disable the generation of 4-operand madd.s, madd.d and related instructions.">;
 def mmsa : Flag<["-"], "mmsa">, Group<m_Group>,
   HelpText<"Enable MSA ASE (MIPS only)">;
 def mno_msa : Flag<["-"], "mno-msa">, Group<m_Group>,

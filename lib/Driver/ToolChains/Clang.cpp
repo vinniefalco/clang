@@ -1473,8 +1473,21 @@ void Clang::AddMIPSTargetArgs(const ArgList &Args,
   // NOTE: We need a warning here or in the backend to warn when -mgpopt is
   //       passed explicitly when compiling something with -mabicalls
   //       (implictly) in affect. Currently the warning is in the backend.
+  //
+  // When the ABI in use is  N64, we also need to determine the PIC mode that
+  // is in use, as -fno-pic for N64 implies -mno-abicalls.
   bool NoABICalls =
       ABICalls && ABICalls->getOption().matches(options::OPT_mno_abicalls);
+
+  llvm::Reloc::Model RelocationModel;
+  unsigned PICLevel;
+  bool IsPIE;
+  std::tie(RelocationModel, PICLevel, IsPIE) =
+      ParsePICArgs(getToolChain(), Args);
+
+  NoABICalls = NoABICalls ||
+               (RelocationModel == llvm::Reloc::Static && ABIName == "n64");
+
   bool WantGPOpt = GPOpt && GPOpt->getOption().matches(options::OPT_mgpopt);
   // We quietly ignore -mno-gpopt as the backend defaults to -mno-gpopt.
   if (NoABICalls && (!GPOpt || WantGPOpt)) {
@@ -4248,10 +4261,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(A->getValue());
     } else {
       SmallString<128> F;
-      if (Output.isFilename() && (Args.hasArg(options::OPT_c) ||
-                                  Args.hasArg(options::OPT_S))) {
-        F = Output.getFilename();
-      } else {
+
+      if (Args.hasArg(options::OPT_c) || Args.hasArg(options::OPT_S)) {
+        if (Arg *FinalOutput = Args.getLastArg(options::OPT_o))
+          F = FinalOutput->getValue();
+      }
+
+      if (F.empty()) {
         // Use the input filename.
         F = llvm::sys::path::stem(Input.getBaseInput());
 

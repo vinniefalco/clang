@@ -75,7 +75,7 @@ Non-comprehensive list of changes in this release
 New Compiler Flags
 ------------------
 
-The option ....
+- --autocomplete was implemented to obtain a list of flags and its arguments. This is used for shell autocompletion.
 
 Deprecated Compiler Flags
 -------------------------
@@ -93,6 +93,9 @@ Clang now supports the ...
 
 Attribute Changes in Clang
 --------------------------
+
+- The presence of __attribute__((availability(...))) on a declaration no longer
+  implies default visibility for that declaration on macOS.
 
 - ...
 
@@ -183,6 +186,9 @@ clang-format
 ------------
 
 ...
+
+* Option -verbose added to the command line.
+  Shows the list of processed files.
 
 libclang
 --------

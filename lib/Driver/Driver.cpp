@@ -579,7 +579,7 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
                   C.getSingleOffloadToolChain<Action::OFK_Host>();
               assert(HostTC && "Host toolchain should be always defined.");
               auto &CudaTC =
-                  ToolChains[TT.str() + "/" + HostTC->getTriple().str()];
+                  ToolChains[TT.str() + "/" + HostTC->getTriple().normalize()];
               if (!CudaTC)
                 CudaTC = llvm::make_unique<toolchains::CudaToolChain>(
                     *this, TT, *HostTC, C.getInputArgs(), Action::OFK_OpenMP);
@@ -3224,6 +3224,12 @@ InputInfo Driver::BuildJobsForActionNoCache(
   InputInfoList OffloadDependencesInputInfo;
   bool BuildingForOffloadDevice = TargetDeviceOffloadKind != Action::OFK_None;
   if (const OffloadAction *OA = dyn_cast<OffloadAction>(A)) {
+    // The 'Darwin' toolchain is initialized only when its arguments are
+    // computed. Get the default arguments for OFK_None to ensure that
+    // initialization is performed before processing the offload action.
+    // FIXME: Remove when darwin's toolchain is initialized during construction.
+    C.getArgsForToolChain(TC, BoundArch, Action::OFK_None);
+
     // The offload action is expected to be used in four different situations.
     //
     // a) Set a toolchain/architecture/kind for a host action:
@@ -3401,7 +3407,7 @@ InputInfo Driver::BuildJobsForActionNoCache(
       // Get the unique string identifier for this dependence and cache the
       // result.
       CachedResults[{A, GetTriplePlusArchString(
-                            UI.DependentToolChain, UI.DependentBoundArch,
+                            UI.DependentToolChain, BoundArch,
                             UI.DependentOffloadKind)}] = CurI;
     }
 
@@ -3676,7 +3682,12 @@ std::string Driver::GetFilePath(StringRef Name, const ToolChain &TC) const {
       return P.str();
   }
 
-  SmallString<128> P(ResourceDir);
+  SmallString<128> R(ResourceDir);
+  llvm::sys::path::append(R, Name);
+  if (llvm::sys::fs::exists(Twine(R)))
+    return R.str();
+
+  SmallString<128> P(TC.getCompilerRTPath());
   llvm::sys::path::append(P, Name);
   if (llvm::sys::fs::exists(Twine(P)))
     return P.str();
