@@ -49,7 +49,7 @@ macro(add_clang_library name)
     "ADDITIONAL_HEADERS"
     ${ARGN})
   set(srcs)
-  if(MSVC_IDE OR XCODE)
+  if(MSVC_IDE OR XCODE OR LLVM_ENABLE_IDE)
     # Add public headers
     file(RELATIVE_PATH lib_path
       ${CLANG_SOURCE_DIR}/lib/
@@ -65,14 +65,20 @@ macro(add_clang_library name)
       file( GLOB_RECURSE tds
         ${CLANG_SOURCE_DIR}/include/clang/${lib_path}/*.td
       )
+      file(GLOB_RECURSE tds_inc
+        ${CMAKE_BINARY_DIR}/include/clang/${lib_path}/*.inc)
+
+      source_group("TableGen outputs" FILES ${tds_inc})
+      set_source_files_properties(${${tds_inc}} PROPERTIES HEADER_FILE_ONLY ON)
+
       source_group("TableGen descriptions" FILES ${tds})
       set_source_files_properties(${tds}} PROPERTIES HEADER_FILE_ONLY ON)
 
-      if(headers OR tds)
-        set(srcs ${headers} ${tds})
+      if(headers OR tds OR tds_inc)
+        set(srcs ${headers} ${tds} ${tds_inc})
       endif()
     endif()
-  endif(MSVC_IDE OR XCODE)
+  endif(MSVC_IDE OR XCODE OR LLVM_ENABLE_IDE)
   if(srcs OR ARG_ADDITIONAL_HEADERS)
     set(srcs
       ADDITIONAL_HEADERS

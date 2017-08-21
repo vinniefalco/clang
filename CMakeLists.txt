@@ -82,6 +82,14 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
     set(LLVM_SHLIB_OUTPUT_INTDIR ${LLVM_LIBRARY_OUTPUT_INTDIR})
   endif()
 
+
+  set(LLVM_ENABLE_IDE_default OFF)
+  if (MSVC_IDE OR XCODE)
+    set(LLVM_ENABLE_IDE_default ON)
+  endif()
+  option(LLVM_ENABLE_IDE "Generate the build targets for use within an IDE."
+        ${LLVM_ENABLE_IDE_default})
+
   option(LLVM_ENABLE_WARNINGS "Enable compiler warnings." ON)
   option(LLVM_INSTALL_TOOLCHAIN_ONLY
     "Only include toolchain files in the 'install' target." OFF)
