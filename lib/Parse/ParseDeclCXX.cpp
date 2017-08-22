@@ -3829,6 +3829,26 @@ static bool IsBuiltInOrStandardCXX11Attribute(IdentifierInfo *AttrName,
   }
 }
 
+static bool IsContractAttrKeyword(StringRef Name) {
+  constexpr const char *KeyWords[] = {"expects", "ensures", "assert"};
+  const auto End = std::end(KeyWords);
+  return std::find(KeyWords, End, Name) != End;
+}
+
+static bool IsContractAttrKeyword(IdentifierInfo *II) {
+  return II && IsContractAttrKeyword(II->getName());
+}
+
+static bool IsContractLevelKeyword(StringRef Name) {
+  constexpr const char *KeyWords[] = {"default", "audit", "axiom"};
+  const auto End = std::end(KeyWords);
+  return std::find(KeyWords, End, Name) != End;
+}
+
+static bool IsContractLevelKeyword(IdentifierInfo *II) {
+  return II && IsContractLevelKeyword(II->getName());
+}
+
 /// ParseCXX11AttributeArgs -- Parse a C++11 attribute-argument-clause.
 ///
 /// [C++11] attribute-argument-clause:
@@ -3905,10 +3925,42 @@ bool Parser::ParseCXX11AttributeArgs(IdentifierInfo *AttrName,
   return true;
 }
 
+/// ParseCXX11AttributeArgs -- Parse a C++11 attribute-argument-clause.
+///
+/// [C++11] attribute-argument-clause:
+///         '(' balanced-token-seq ')'
+///
+/// [C++11] balanced-token-seq:
+///         balanced-token
+///         balanced-token-seq balanced-token
+///
+/// [C++11] balanced-token:
+///         '(' balanced-token-seq ')'
+///         '[' balanced-token-seq ']'
+///         '{' balanced-token-seq '}'
+///         any token but '(', ')', '[', ']', '{', or '}'
+bool Parser::ParseContractAttributeArgs(
+    IdentifierInfo *AttrName, SourceLocation AttrNameLoc,
+    ParsedAttributes &Attrs, SourceLocation *EndLoc, IdentifierInfo *LevelName,
+    SourceLocation LevelLoc, IdentifierInfo *OptIdentName,
+    SourceLocation OptIdentLoc) {
+  assert(getLangOpts().ContractsTS);
+
+  unsigned NumArgs;
+
+  NumArgs =
+      ParseContractAttributeArgs(AttrName, AttrNameLoc, Attrs, EndLoc,
+                                 ScopeName, ScopeLoc, AttributeList::AS_CXX11);
+
+  return true;
+}
+
 /// ParseCXX11AttributeSpecifier - Parse a C++11 attribute-specifier.
 ///
 /// [C++11] attribute-specifier:
 ///         '[' '[' attribute-list ']' ']'
+///         '[' '[' contract-attribute contract-level[opt] identifier[opt]:
+///                                                     conditional-expr ']' ']'
 ///         alignment-specifier
 ///
 /// [C++11] attribute-list:
@@ -3947,10 +3999,13 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
 
   SourceLocation CommonScopeLoc;
   IdentifierInfo *CommonScopeName = nullptr;
-  if (Tok.is(tok::kw_using)) {
-    Diag(Tok.getLocation(), getLangOpts().CPlusPlus1z
-                                ? diag::warn_cxx14_compat_using_attribute_ns
-                                : diag::ext_using_attribute_ns);
+  bool IsContract = getLangOpts().ContractsTS &&
+                    IsContractAttrKeyword(Tok.getIdentifierInfo());
+  if (Tok.is(tok::kw_using) || IsContract) {
+    if (Tok.is(tok::kw_using))
+      Diag(Tok.getLocation(), getLangOpts().CPlusPlus1z
+                                  ? diag::warn_cxx14_compat_using_attribute_ns
+                                  : diag::ext_using_attribute_ns);
     ConsumeToken();
 
     CommonScopeName = TryParseCXX11AttributeIdentifier(CommonScopeLoc);
@@ -3958,12 +4013,36 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
       Diag(Tok.getLocation(), diag::err_expected) << tok::identifier;
       SkipUntil(tok::r_square, tok::colon, StopBeforeMatch);
     }
+
+    IdentifierInfo *ContractLevel, *OptID;
+    SourceLocation ContractLevelLoc, OptIDLoc;
+    ContractLevel = OptID = nullptr;
+    if (IsContract) {
+      OptID = TryParseCXX11AttributeIdentifier(OptIDLoc);
+      if (OptID && IsContractLevelKeyword(OptID)) {
+        ContractLevel = OptID;
+        ContractLevelLoc = OptIDLoc;
+        OptIDLoc = SourceLocation();
+        OptID = TryParseCXX11AttributeIdentifier(OptIDLoc);
+      }
+    }
     if (!TryConsumeToken(tok::colon) && CommonScopeName)
       Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
+    if (IsContract) {
+      bool ParsedContract = ParseContractAttributeArgs(
+          CommonScopeName, CommonScopeLoc, attrs, ContractLevel,
+          ContractLevelLoc, OptID, OptIDLoc);
+      if (!ParsedContract) {
+        // FIXME(EricWF): Not sure what to do here.
+      }
+      if (!Tok.is(tok::r_square)) {
+        Diag(Tok.getLocation(), diag::err_expected) << tok::r_brace;
+        SkipUntil(tok::r_square);
+      }
+    }
   }
 
   llvm::SmallDenseMap<IdentifierInfo*, SourceLocation, 4> SeenAttrs;
-
   while (Tok.isNot(tok::r_square)) {
     // attribute not present
     if (TryConsumeToken(tok::comma))
@@ -3988,17 +4067,17 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
         SkipUntil(tok::r_square, tok::comma, StopAtSemi | StopBeforeMatch);
         continue;
       }
-    }
-
-    if (CommonScopeName) {
-      if (ScopeName) {
-        Diag(ScopeLoc, diag::err_using_attribute_ns_conflict)
-            << SourceRange(CommonScopeLoc);
-      } else {
-        ScopeName = CommonScopeName;
-        ScopeLoc = CommonScopeLoc;
       }
-    }
+
+      if (CommonScopeName) {
+        if (ScopeName) {
+          Diag(ScopeLoc, diag::err_using_attribute_ns_conflict)
+              << SourceRange(CommonScopeLoc);
+        } else {
+          ScopeName = CommonScopeName;
+          ScopeLoc = CommonScopeLoc;
+        }
+      }
 
     bool StandardAttr = IsBuiltInOrStandardCXX11Attribute(AttrName, ScopeName);
     bool AttrParsed = false;

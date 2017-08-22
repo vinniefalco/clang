@@ -615,6 +615,13 @@ def fcoroutines_ts : Flag <["-"], "fcoroutines-ts">, Group<f_Group>,
   HelpText<"Enable support for the C++ Coroutines TS">;
 def fno_coroutines_ts : Flag <["-"], "fno-coroutines-ts">, Group<f_Group>,
   Flags<[DriverOption]>;
+  
+// C++ Contracts TS
+def fcontracts_ts : Flag <["-"], "fcontracts-ts">, Group<f_Group>,
+  Flags<[DriverOption, CC1Option]>,
+  HelpText<"Enable support for the C++ Contracts TS">;
+def fno_contracts_ts : Flag <["-"], "fno-contracts-ts">, Group<f_Group>,
+  Flags<[DriverOption]>;
 
 def fembed_bitcode_EQ : Joined<["-"], "fembed-bitcode=">,
     Group<f_Group>, Flags<[DriverOption, CC1Option]>, MetaVarName<"<option>">,

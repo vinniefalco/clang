@@ -939,6 +939,7 @@ enum AttributeDeclKind {
   ExpectedForMaybeUnused,
   ExpectedEnumOrClass,
   ExpectedNamedDecl,
+  ExpectedNullStmt,
 };
 
 }  // end namespace clang

@@ -121,6 +121,7 @@ def OpenCLKernelFunction : SubsetSubject<Function, [{
   S->hasAttr<OpenCLKernelAttr>()
 }]>;
 
+
 // HasFunctionProto is a more strict version of FunctionLike, so it should
 // never be specified in a Subjects list along with FunctionLike (due to the
 // inclusive nature of subject testing).
@@ -139,7 +140,6 @@ class Argument<string name, bit optional, bit fake = 0> {
   /// in an attribute without actually changing its parsing or pretty-printing.
   bit Fake = fake;
 }
-
 class BoolArgument<string name, bit opt = 0, bit fake = 0> : Argument<name, opt,
                                                                       fake>;
 class IdentifierArgument<string name, bit opt = 0> : Argument<name, opt>;
@@ -1897,6 +1897,64 @@ def DiagnoseIf : InheritableAttr {
   }];
   let TemplateDependent = 1;
   let Documentation = [DiagnoseIfDocs];
+}
+
+def Contract : InheritableAttr {
+  let Spellings = [CXX11<"", "ensures", 201103>, CXX11<"", "expects", 201103>,
+                   CXX11<"", "asserts", 201103>];
+  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty /* FIXME ,NullStmt */]>;
+  let Args = [EnumArgument<"ContractType",
+                           "ContractType",
+                           ["", "", ""],
+                           ["CT_Ensures", "CT_Expects", "CT_Asserts"], /* fake*/ 1>,
+              EnumArgument<"ContractLevel",
+                           "ContractLevel",
+                           ["", "", ""],
+                           ["CL_Default", "CL_Audit", "CL_Axiom"], /* fake*/ 1>,
+              IdentifierArgument<"OptIdent", /*fake*/1>,
+              ExprArgument<"Cond", /* fake */1>,
+              BoolArgument<"ArgDependent", 0, /*fake*/ 1>,
+              NamedArgument<"Parent", 0, /*fake*/ 1>];
+  let DuplicatesAllowedWhileMerging = 1;
+  let HasCustomParsing = 1;
+  let LateParsed = 1;
+  let AdditionalMembers = [{
+    private:
+      static int getContractTypeImp(StringRef Name) {
+        llvm::StringSwitch<int>(Name)
+          .Case("expects", CT_Expects)
+          .Case("ensures", CT_Ensures)
+          .Case("asserts", CT_Asserts)
+          .Default(-1);
+      }
+      static int getContractLevelImp(StringRef Name) {
+        llvm::StringSwitch<int>(Name)
+          .Case("default", CL_Default)
+          .Case("audit", CL_Audit)
+          .Case("axiom", CL_Axiom)
+          .Default(-1);
+      }
+    public:
+    // bool isError() const { return diagnosticType == DT_Error; }
+    static bool isContractKeyword(StringRef S) {
+      return getContractTypeImp(S) != -1;
+    }
+    static bool isContractLevel(StringRef S) {
+      return getContactLevelImp(S);
+    }
+    static ContractType getContractTypeForString(StringRef S) {
+      auto Res = getContractTypeImp(S);
+      assert(Res != -1);
+      return static_cast<ContractType>(Res);
+    }
+    static ContractType getContractLevelForString(StringRef S) {
+      auto Res = getContractLevelImp(S);
+      assert(Res != -1);
+      return static_cast<ContractLevel>(Res);
+    }
+  }];
+  let TemplateDependent = 1;
+  let Documentation = [Undocumented]; // [ContractDocs];
 }
 
 def ArcWeakrefUnavailable : InheritableAttr {

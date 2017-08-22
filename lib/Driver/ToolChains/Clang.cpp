@@ -3573,7 +3573,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       types::isCXX(InputType)) {
     CmdArgs.push_back("-fcoroutines-ts");
   }
-
+  if (Args.hasFlag(options::OPT_fcontracts_ts, options::OPT_fno_contracts_ts,
+                   false) &&
+      types::isCXX(InputType)) {
+    CmdArgs.push_back("-fcontracts-ts");
+  }
   // -fmodules enables the use of precompiled modules (off by default).
   // Users can pass -fno-cxx-modules to turn off modules support for
   // C++/Objective-C++ programs.

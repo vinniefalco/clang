@@ -244,6 +244,7 @@ PUNCTUATOR(caretcaret,            "^^")
 //                 are enabled.
 //   KEYMODULES - This is a keyword if the C++ extensions for modules
 //                are enabled.
+//   KEYCONTRACTS - This is a keyword if C++ extensions for contracts are enabled.
 //   KEYGNU   - This is a keyword if GNU extensions are enabled
 //   KEYMS    - This is a keyword if Microsoft extensions are enabled
 //   KEYNOMS18 - This is a keyword that must never be enabled under
