@@ -261,6 +261,16 @@ protected:
     unsigned IsImplicit : 1;
   };
 
+  class SourceLocExprBitfields {
+    friend class SourceLocExpr;
+
+    unsigned : NumExprBits;
+
+    /// \brief The type of source location builtin represented by the
+    /// SourceLocExpr. Ex. __builtin_LINE, __builtin_FUNCTION, ect.
+    unsigned Type : 2;
+  };
+
   union {
     StmtBitfields StmtBits;
     CompoundStmtBitfields CompoundStmtBits;
@@ -278,6 +288,7 @@ protected:
     InitListExprBitfields InitListExprBits;
     TypeTraitExprBitfields TypeTraitExprBits;
     CoawaitExprBitfields CoawaitBits;
+    SourceLocExprBitfields SourceLocExprBits;
   };
 
   friend class ASTStmtReader;

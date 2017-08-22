@@ -1829,6 +1829,29 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
   return OverOps[Opc];
 }
 
+SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
+                             SourceLocation RParenLoc, QualType Ty, Expr *E)
+    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary, false, false, false,
+           false),
+      BuiltinLoc(BLoc), RParenLoc(RParenLoc), Value(E) {
+  SourceLocExprBits.Type = Type;
+  assert(!Ty->isDependentType() && "Type should never be dependent");
+  assert(!Ty->isArrayType() && "Type should never be an array");
+}
+
+StringRef SourceLocExpr::getBuiltinStr() const {
+  switch (getIdentType()) {
+  case File:
+    return "__builtin_FILE";
+  case Function:
+    return "__builtin_FUNCTION";
+  case Line:
+    return "__builtin_LINE";
+  case Column:
+    return "__builtin_COLUMN";
+  }
+}
+
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
                            ArrayRef<Expr*> initExprs, SourceLocation rbraceloc)
   : Expr(InitListExprClass, QualType(), VK_RValue, OK_Ordinary, false, false,
@@ -2954,6 +2977,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case ObjCAvailabilityCheckExprClass:
   case CXXUuidofExprClass:
   case OpaqueValueExprClass:
+  case SourceLocExprClass:
     // These never have a side-effect.
     return false;
 

@@ -810,6 +810,10 @@ public:
     llvm_unreachable("Invalid CastKind");
   }
 
+  llvm::Constant *VisitSourceLocExpr(SourceLocExpr *SLE, QualType T) {
+    return Visit(SLE->getSubExpr(), T);
+  }
+
   llvm::Constant *VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE, QualType T) {
     return Visit(DAE->getExpr(), T);
   }

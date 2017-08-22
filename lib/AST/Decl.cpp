@@ -25,6 +25,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/Stmt.h"
+#include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/IdentifierTable.h"
@@ -2437,9 +2438,33 @@ Expr *ParmVarDecl::getDefaultArg() {
   return Arg;
 }
 
+namespace {
+class CheckForSourceLocVisitor
+    : public ConstStmtVisitor<CheckForSourceLocVisitor, bool> {
+
+public:
+  CheckForSourceLocVisitor() {}
+  bool VisitExpr(const Expr *Node) {
+    return llvm::any_of(Node->children(),
+                        [&](const Stmt *SubStmt) { return Visit(SubStmt); });
+  }
+  bool VisitSourceLocExpr(const SourceLocExpr *SLE) { return true; }
+};
+
+inline bool containsSourceLocExpr(const Expr *E) {
+  return CheckForSourceLocVisitor{}.Visit(E);
+}
+} // namespace
+
 void ParmVarDecl::setDefaultArg(Expr *defarg) {
   ParmVarDeclBits.DefaultArgKind = DAK_Normal;
+  ParmVarDeclBits.DefaultArgContainsSourceLocExpr =
+      defarg && containsSourceLocExpr(defarg);
   Init = defarg;
+}
+
+bool ParmVarDecl::hasDefaultArgWithSourceLocExpr() const {
+  return ParmVarDeclBits.DefaultArgContainsSourceLocExpr;
 }
 
 SourceRange ParmVarDecl::getDefaultArgRange() const {
@@ -3600,6 +3625,13 @@ void FieldDecl::setCapturedVLAType(const VariableArrayType *VLAType) {
          "bit width, initializer or captured type already set");
   InitStorage.setPointerAndInt(const_cast<VariableArrayType *>(VLAType),
                                ISK_CapturedVLAType);
+}
+
+void FieldDecl::setInClassInitializer(Expr *Init) {
+  assert(hasInClassInitializer() && InitStorage.getPointer() == nullptr &&
+         "bit width, initializer or captured type already set");
+  InClassInitContainsSourceLocExpr = containsSourceLocExpr(Init);
+  InitStorage.setPointer(Init);
 }
 
 //===----------------------------------------------------------------------===//

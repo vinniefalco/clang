@@ -843,6 +843,15 @@ void ASTStmtWriter::VisitVAArgExpr(VAArgExpr *E) {
   Code = serialization::EXPR_VA_ARG;
 }
 
+void ASTStmtWriter::VisitSourceLocExpr(SourceLocExpr *E) {
+  VisitExpr(E);
+  Record.AddStmt(E->getSubExpr());
+  Record.AddSourceLocation(E->getLocStart());
+  Record.AddSourceLocation(E->getLocEnd());
+  Record.push_back(E->getIdentType());
+  Code = serialization::EXPR_SOURCE_LOC;
+}
+
 void ASTStmtWriter::VisitAddrLabelExpr(AddrLabelExpr *E) {
   VisitExpr(E);
   Record.AddSourceLocation(E->getAmpAmpLoc());

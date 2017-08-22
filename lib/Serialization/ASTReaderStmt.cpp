@@ -862,6 +862,14 @@ void ASTStmtReader::VisitVAArgExpr(VAArgExpr *E) {
   E->setIsMicrosoftABI(Record.readInt());
 }
 
+void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
+  VisitExpr(E);
+  E->setSubExpr(Record.readSubExpr());
+  E->setLocStart(ReadSourceLocation());
+  E->setLocEnd(ReadSourceLocation());
+  E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
+}
+
 void ASTStmtReader::VisitAddrLabelExpr(AddrLabelExpr *E) {
   VisitExpr(E);
   E->setAmpAmpLoc(ReadSourceLocation());
@@ -3340,6 +3348,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case EXPR_VA_ARG:
       S = new (Context) VAArgExpr(Empty);
+      break;
+
+    case EXPR_SOURCE_LOC:
+      S = new (Context) SourceLocExpr(Empty);
       break;
 
     case EXPR_ADDR_LABEL:

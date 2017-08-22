@@ -2928,6 +2928,18 @@ public:
                                   RParenLoc, Length, PartialArgs);
   }
 
+  /// \brief Build a new expression representing a call to a source location
+  ///  builtin.
+  ///
+  /// By default, performs semantic analysis to build the new expression.
+  /// Subclasses may override this routine to provide different behavior.
+  ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
+                                  SourceLocation BuiltinLoc,
+                                  SourceLocation RPLoc,
+                                  Expr *SubExpr = nullptr) {
+    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, SubExpr);
+  }
+
   /// \brief Build a new Objective-C boxed expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -9790,6 +9802,22 @@ template<typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
   return getDerived().TransformCallExpr(E);
+}
+
+template <typename Derived>
+ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
+  Expr *SubExpr = E->getSubExpr();
+  if (SubExpr) {
+    ExprResult Res = getDerived().TransformExpr(SubExpr);
+    if (Res.isInvalid())
+      return ExprError();
+    SubExpr = Res.get();
+  }
+  bool SubExprChanged = SubExpr && SubExpr != E->getSubExpr()->IgnoreImpCasts();
+  if (!getDerived().AlwaysRebuild() && !SubExprChanged)
+    return E;
+  return getDerived().RebuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
+                                           E->getLocEnd(), SubExpr);
 }
 
 template<typename Derived>

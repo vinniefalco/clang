@@ -577,7 +577,9 @@ public:
   Value *VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *E) {
     return EmitLoadOfLValue(E);
   }
-
+  Value *VisitSourceLocExpr(SourceLocExpr *SLE) {
+    return Visit(SLE->getSubExpr());
+  }
   Value *VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE) {
     return Visit(DAE->getExpr());
   }

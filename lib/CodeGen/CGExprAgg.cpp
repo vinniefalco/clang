@@ -165,6 +165,7 @@ public:
     CodeGenFunction::CXXDefaultInitExprScope Scope(CGF);
     Visit(DIE->getExpr());
   }
+  void VisitSourceLocExpr(SourceLocExpr *SLE) { Visit(SLE->getSubExpr()); }
   void VisitCXXBindTemporaryExpr(CXXBindTemporaryExpr *E);
   void VisitCXXConstructExpr(const CXXConstructExpr *E);
   void VisitCXXInheritedCtorInitExpr(const CXXInheritedCtorInitExpr *E);

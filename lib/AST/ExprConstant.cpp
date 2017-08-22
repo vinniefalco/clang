@@ -4510,6 +4510,11 @@ public:
       return Error(E);
     return StmtVisitorTy::Visit(E->getExpr());
   }
+  bool VisitSourceLocExpr(const SourceLocExpr *E) {
+    if (auto *SubE = E->getSubExpr())
+      return StmtVisitorTy::Visit(E->getSubExpr());
+    return Error(E);
+  }
   // We cannot create any objects for which cleanups are required, so there is
   // nothing to do here; all cleanups must come from unevaluated subexpressions.
   bool VisitExprWithCleanups(const ExprWithCleanups *E)
@@ -10280,6 +10285,9 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::GNUNullExprClass:
     // GCC considers the GNU __null value to be an integral constant expression.
     return NoDiag();
+
+  case Expr::SourceLocExprClass:
+    return CheckEvalInICE(cast<SourceLocExpr>(E)->getSubExpr(), Ctx);
 
   case Expr::SubstNonTypeTemplateParmExprClass:
     return

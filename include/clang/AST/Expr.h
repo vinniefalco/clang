@@ -3811,6 +3811,68 @@ public:
   }
 };
 
+/// SourceLocExpr - Represents a function call to one of
+/// __builtin_LINE(), __builtin_COLUMN(), __builtin_FUNCTION(), or
+/// __builtin_FILE()
+class SourceLocExpr final : public Expr {
+public:
+  enum IdentType { Function, File, Line, Column };
+
+private:
+  SourceLocation BuiltinLoc, RParenLoc;
+  Stmt *Value;
+
+public:
+  SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
+                QualType Ty, Expr *E = nullptr);
+
+  /// \brief Build an empty call expression.
+  explicit SourceLocExpr(EmptyShell Empty)
+      : Expr(SourceLocExprClass, Empty), Value(nullptr) {}
+
+  /// \brief Return a string representing the name of the specific builtin
+  /// function.
+  StringRef getBuiltinStr() const LLVM_READONLY;
+
+  IdentType getIdentType() const LLVM_READONLY {
+    return static_cast<IdentType>(SourceLocExprBits.Type);
+  }
+
+  /// \brief If the SourceLocExpr has been resolved return the subexpression
+  /// representing the resolved value. Otherwise return null.
+  const Expr *getSubExpr() const { return cast_or_null<Expr>(Value); }
+  Expr *getSubExpr() { return cast_or_null<Expr>(Value); }
+
+  /// \brief True iff the value for the SourceLocExpr has been determined.
+  bool isUnresolved() const { return Value == nullptr; }
+
+  SourceLocation getLocation() const LLVM_READONLY { return BuiltinLoc; }
+  SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
+  SourceLocation getLocEnd() const LLVM_READONLY { return RParenLoc; }
+
+  child_range children() {
+    return Value ? child_range(&Value, &Value + 1)
+                 : child_range(child_iterator(), child_iterator());
+  }
+
+  const_child_range children() const {
+    return Value ? const_child_range(&Value, &Value + 1)
+                 : const_child_range(child_iterator(), child_iterator());
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == SourceLocExprClass;
+  }
+
+private:
+  friend class ASTStmtReader;
+
+  void setIdentType(IdentType T) { SourceLocExprBits.Type = T; }
+  void setSubExpr(Expr *E) { Value = E; }
+  void setLocStart(SourceLocation L) { BuiltinLoc = L; }
+  void setLocEnd(SourceLocation L) { RParenLoc = L; }
+};
+
 /// @brief Describes an C or C++ initializer list.
 ///
 /// InitListExpr describes an initializer list, which can be used to
