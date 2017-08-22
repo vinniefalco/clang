@@ -1940,7 +1940,7 @@ def Contract : InheritableAttr {
       return getContractTypeImp(S) != -1;
     }
     static bool isContractLevel(StringRef S) {
-      return getContactLevelImp(S);
+      return getContractLevelImp(S);
     }
     static ContractType getContractTypeForString(StringRef S) {
       auto Res = getContractTypeImp(S);
