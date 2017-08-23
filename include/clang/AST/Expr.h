@@ -3840,12 +3840,18 @@ public:
     return static_cast<IdentType>(SourceLocExprBits.Type);
   }
 
-  bool isLineOrColumn() {
+  bool isLineOrColumn() const LLVM_READONLY {
     return getIdentType() == Line || getIdentType() == Column;
   }
-  llvm::APSInt getIntValue(const ASTContext &Ctx, SourceLocation Loc) const;
+  IntegerLiteral *getIntValue(const ASTContext &Ctx, SourceLocation Loc) const;
   StringLiteral *getStringValue(const ASTContext &Ctx, SourceLocation Loc,
                                 DeclarationName Name) const;
+  Expr *getValue(const ASTContext &Ctx, SourceLocation Loc,
+                 DeclarationName Name) const {
+    if (isLineOrColumn())
+      return getIntValue(Ctx, Loc);
+    return getStringValue(Ctx, Loc, Name);
+  }
 
   /// \brief If the SourceLocExpr has been resolved return the subexpression
   /// representing the resolved value. Otherwise return null.

@@ -4546,17 +4546,20 @@ public:
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
-    assert() Expr *Value = nullptr;
+    Expr *Value = nullptr;
     if (Info.IsEvaluatingDefaultMemberInit) {
       assert(!Info.EvaluatingDecl.isNull());
-      Value = E->evaluate(Info.Ctx); // FIXME(EricWF)
+      // FIXME(EricWF)
+      assert(Info.CurrentCall);
+      Value = E->getValue(Info.Ctx, Info.CurrentCall->CallLoc,
+                          Info.CurrentCall->Callee->getDeclName());
     } else if (Info.IsEvaluatingDefaultArg) {
       if (!Info.CurrentCall)
         return Error(E); // FIXME
-      Value = E->evaluateAt(Info.Ctx, Info.CurrentCall->CallLoc,
-                            Info.CurrentCall->Callee->getDeclName());
+      Value = E->getValue(Info.Ctx, Info.CurrentCall->CallLoc,
+                          Info.CurrentCall->Callee->getDeclName());
     } else {
-      Value = E->evaluate(Info.Ctx);
+      Value = E->getValue(Info.Ctx, E->getLocStart(), E->getParentDeclName());
     }
     if (!Value)
       return Error(E);

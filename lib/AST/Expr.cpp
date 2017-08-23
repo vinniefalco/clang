@@ -1862,8 +1862,8 @@ static PresumedLoc getPresumedSourceLoc(const ASTContext &Ctx,
   return PLoc;
 }
 
-llvm::APSInt SourceLocExpr::getIntValue(const ASTContext &Ctx,
-                                        SourceLocation Loc) const {
+IntegerLiteral *SourceLocExpr::getIntValue(const ASTContext &Ctx,
+                                           SourceLocation Loc) const {
   auto PLoc = getPresumedSourceLoc(Ctx, Loc);
   unsigned Value = [&]() {
     switch (getIdentType()) {
@@ -1876,8 +1876,8 @@ llvm::APSInt SourceLocExpr::getIntValue(const ASTContext &Ctx,
     }
   }();
   unsigned MaxWidth = Ctx.getTargetInfo().getIntWidth();
-  llvm::APInt IntVal(MaxWidth, Value);
-  return IntVal;
+  return IntegerLiteral::Create(Ctx, llvm::APInt(MaxWidth, Value),
+                                Ctx.UnsignedIntTy, Loc);
 }
 
 StringLiteral *SourceLocExpr::getStringValue(const ASTContext &Ctx,
