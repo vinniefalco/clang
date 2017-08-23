@@ -166,25 +166,26 @@ public:
     Visit(DIE->getExpr());
   }
   void VisitSourceLocExpr(SourceLocExpr *SLE) {
-    assert(false); // FIXME(EricWF) }
-    void VisitCXXBindTemporaryExpr(CXXBindTemporaryExpr * E);
-    void VisitCXXConstructExpr(const CXXConstructExpr *E);
-    void VisitCXXInheritedCtorInitExpr(const CXXInheritedCtorInitExpr *E);
-    void VisitLambdaExpr(LambdaExpr * E);
-    void VisitCXXStdInitializerListExpr(CXXStdInitializerListExpr * E);
-    void VisitExprWithCleanups(ExprWithCleanups * E);
-    void VisitCXXScalarValueInitExpr(CXXScalarValueInitExpr * E);
-    void VisitCXXTypeidExpr(CXXTypeidExpr * E) { EmitAggLoadOfLValue(E); }
-    void VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr * E);
-    void VisitOpaqueValueExpr(OpaqueValueExpr * E);
+    assert(false); // FIXME(EricWF)
+  }
+  void VisitCXXBindTemporaryExpr(CXXBindTemporaryExpr *E);
+  void VisitCXXConstructExpr(const CXXConstructExpr *E);
+  void VisitCXXInheritedCtorInitExpr(const CXXInheritedCtorInitExpr *E);
+  void VisitLambdaExpr(LambdaExpr *E);
+  void VisitCXXStdInitializerListExpr(CXXStdInitializerListExpr *E);
+  void VisitExprWithCleanups(ExprWithCleanups *E);
+  void VisitCXXScalarValueInitExpr(CXXScalarValueInitExpr *E);
+  void VisitCXXTypeidExpr(CXXTypeidExpr *E) { EmitAggLoadOfLValue(E); }
+  void VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr *E);
+  void VisitOpaqueValueExpr(OpaqueValueExpr *E);
 
-    void VisitPseudoObjectExpr(PseudoObjectExpr * E) {
-      if (E->isGLValue()) {
-        LValue LV = CGF.EmitPseudoObjectLValue(E);
-        return EmitFinalDestCopy(E->getType(), LV);
-      }
+  void VisitPseudoObjectExpr(PseudoObjectExpr *E) {
+    if (E->isGLValue()) {
+      LValue LV = CGF.EmitPseudoObjectLValue(E);
+      return EmitFinalDestCopy(E->getType(), LV);
+    }
 
-      CGF.EmitPseudoObjectRValue(E, EnsureSlot(E->getType()));
+    CGF.EmitPseudoObjectRValue(E, EnsureSlot(E->getType()));
     }
 
     void VisitVAArgExpr(VAArgExpr * E);

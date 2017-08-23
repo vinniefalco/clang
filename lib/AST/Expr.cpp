@@ -1853,6 +1853,55 @@ StringRef SourceLocExpr::getBuiltinStr() const {
   }
 }
 
+static PresumedLoc getPresumedSourceLoc(const ASTContext &Ctx,
+                                        SourceLocation Loc) {
+  auto &SourceMgr = Ctx.getSourceManager();
+  PresumedLoc PLoc =
+      SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(Loc).second);
+  assert(PLoc.isValid()); // FIXME: Learn how to handle this.
+  return PLoc;
+}
+
+llvm::APSInt SourceLocExpr::getIntValue(const ASTContext &Ctx,
+                                        SourceLocation Loc) const {
+  auto PLoc = getPresumedSourceLoc(Ctx, Loc);
+  unsigned Value = [&]() {
+    switch (getIdentType()) {
+    default:
+      llvm_unreachable("should not be here");
+    case Line:
+      return PLoc.getLine();
+    case Column:
+      return PLoc.getColumn();
+    }
+  }();
+  unsigned MaxWidth = Ctx.getTargetInfo().getIntWidth();
+  llvm::APInt IntVal(MaxWidth, Value);
+  return IntVal;
+}
+
+StringLiteral *SourceLocExpr::getStringValue(const ASTContext &Ctx,
+                                             SourceLocation Loc,
+                                             DeclarationName Name) const {
+  auto PLoc = getPresumedSourceLoc(Ctx, Loc);
+  auto CreateString = [&](StringRef SVal) {
+    QualType StrTy = BuildSourceLocExprType(Ctx, getIdentType(),
+                                            /*IsArray*/ true, SVal.size() + 1);
+    StringLiteral *Lit = StringLiteral::Create(Ctx, SVal, StringLiteral::Ascii,
+                                               /*Pascal*/ false, StrTy, Loc);
+    assert(Lit && "should not be null");
+    return Lit;
+  };
+  switch (getIdentType()) {
+  default:
+    llvm_unreachable("should not be here");
+  case SourceLocExpr::File:
+    return CreateString(PLoc.getFilename());
+  case SourceLocExpr::Function:
+    return CreateString(Name ? Name.getAsString() : "");
+  }
+}
+
 QualType SourceLocExpr::BuildSourceLocExprType(const ASTContext &Ctx,
                                                IdentType Type, bool MakeArray,
                                                int ArraySize) {
@@ -1871,65 +1920,25 @@ QualType SourceLocExpr::BuildSourceLocExprType(const ASTContext &Ctx,
                                   ArrayType::Normal, 0);
 }
 
-Expr *SourceLocExpr::evaluate(const ASTContext &Ctx) const {
-  return evaluateAt(Ctx, BuiltinLoc, DeclName);
-}
-
-Expr *SourceLocExpr::evaluateAt(const ASTContext &Ctx, SourceLocation Loc,
-                                DeclarationName Name) const {
-    auto &SourceMgr = Ctx.getSourceManager();
-    PresumedLoc PLoc =
-        SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(Loc).second);
-    assert(PLoc.isValid()); // FIXME: Learn how to handle this.
-
-    auto CreateString = [&](StringRef SVal) {
-      QualType StrTy =
-          BuildSourceLocExprType(Ctx, getIdentType(),
-                                 /*IsArray*/ true, SVal.size() + 1);
-      StringLiteral *Lit =
-          StringLiteral::Create(Ctx, SVal, StringLiteral::Ascii,
-                                /*Pascal*/ false, StrTy, Loc);
-      assert(Lit && "should not be null");
-      return Lit;
-    };
-
-    switch (getIdentType()) {
-    case SourceLocExpr::Column:
-    case SourceLocExpr::Line: {
-      unsigned Value = getIdentType() == SourceLocExpr::Line ? PLoc.getLine()
-                                                             : PLoc.getColumn();
-      unsigned MaxWidth = Ctx.getTargetInfo().getIntWidth();
-      llvm::APInt IntVal(MaxWidth, Value);
-      return IntegerLiteral::Create(Ctx, IntVal, Ctx.UnsignedIntTy, Loc);
-    }
-    case SourceLocExpr::File:
-      return CreateString(PLoc.getFilename());
-    case SourceLocExpr::Function:
-      return CreateString(Name ? Name.getAsString() : "");
-    }
-    llvm_unreachable("should have returned");
+InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
+                           ArrayRef<Expr *> initExprs, SourceLocation rbraceloc)
+    : Expr(InitListExprClass, QualType(), VK_RValue, OK_Ordinary, false, false,
+           false, false),
+      InitExprs(C, initExprs.size()), LBraceLoc(lbraceloc),
+      RBraceLoc(rbraceloc), AltForm(nullptr, true) {
+  sawArrayRangeDesignator(false);
+  for (unsigned I = 0; I != initExprs.size(); ++I) {
+    if (initExprs[I]->isTypeDependent())
+      ExprBits.TypeDependent = true;
+    if (initExprs[I]->isValueDependent())
+      ExprBits.ValueDependent = true;
+    if (initExprs[I]->isInstantiationDependent())
+      ExprBits.InstantiationDependent = true;
+    if (initExprs[I]->containsUnexpandedParameterPack())
+      ExprBits.ContainsUnexpandedParameterPack = true;
   }
 
-  InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
-                             ArrayRef<Expr *> initExprs,
-                             SourceLocation rbraceloc)
-      : Expr(InitListExprClass, QualType(), VK_RValue, OK_Ordinary, false,
-             false, false, false),
-        InitExprs(C, initExprs.size()), LBraceLoc(lbraceloc),
-        RBraceLoc(rbraceloc), AltForm(nullptr, true) {
-    sawArrayRangeDesignator(false);
-    for (unsigned I = 0; I != initExprs.size(); ++I) {
-      if (initExprs[I]->isTypeDependent())
-        ExprBits.TypeDependent = true;
-      if (initExprs[I]->isValueDependent())
-        ExprBits.ValueDependent = true;
-      if (initExprs[I]->isInstantiationDependent())
-        ExprBits.InstantiationDependent = true;
-      if (initExprs[I]->containsUnexpandedParameterPack())
-        ExprBits.ContainsUnexpandedParameterPack = true;
-    }
-
-    InitExprs.insert(C, InitExprs.end(), initExprs.begin(), initExprs.end());
+  InitExprs.insert(C, InitExprs.end(), initExprs.begin(), initExprs.end());
   }
 
   void InitListExpr::reserveInits(const ASTContext &C, unsigned NumInits) {

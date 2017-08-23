@@ -578,7 +578,8 @@ public:
     return EmitLoadOfLValue(E);
   }
   Value *VisitSourceLocExpr(SourceLocExpr *SLE) {
-    return Visit(SLE->getSubExpr());
+    assert(false && "FIXME(EricWF)");
+    return nullptr;
   }
   Value *VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE) {
     return Visit(DAE->getExpr());

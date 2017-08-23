@@ -4546,13 +4546,21 @@ public:
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
+    assert() Expr *Value = nullptr;
     if (Info.IsEvaluatingDefaultMemberInit) {
-
+      assert(!Info.EvaluatingDecl.isNull());
+      Value = E->evaluate(Info.Ctx); // FIXME(EricWF)
     } else if (Info.IsEvaluatingDefaultArg) {
-
+      if (!Info.CurrentCall)
+        return Error(E); // FIXME
+      Value = E->evaluateAt(Info.Ctx, Info.CurrentCall->CallLoc,
+                            Info.CurrentCall->Callee->getDeclName());
     } else {
+      Value = E->evaluate(Info.Ctx);
     }
-    return true;
+    if (!Value)
+      return Error(E);
+    return StmtVisitorTy::Visit(Value);
   }
   // We cannot create any objects for which cleanups are required, so there is
   // nothing to do here; all cleanups must come from unevaluated subexpressions.
@@ -10322,11 +10330,9 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
 
   case Expr::SizeOfPackExprClass:
   case Expr::GNUNullExprClass:
+  case Expr::SourceLocExprClass:
     // GCC considers the GNU __null value to be an integral constant expression.
     return NoDiag();
-
-  case Expr::SourceLocExprClass:
-    return ICEDiag(IK_NotICE, E->getLocStart()); // FIXME(EricWD)
 
   case Expr::SubstNonTypeTemplateParmExprClass:
     return

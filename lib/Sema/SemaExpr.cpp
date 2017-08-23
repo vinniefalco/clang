@@ -3011,7 +3011,6 @@ ExprResult Sema::BuildPredefinedExpr(SourceLocation Loc,
                                      PredefinedExpr::IdentType IT) {
   // Pick the current block, lambda, captured statement or function.
   Decl *currentDecl = nullptr;
-
   if (const BlockScopeInfo *BSI = getCurBlock())
     currentDecl = BSI->TheDecl;
   else if (const LambdaScopeInfo *LSI = getCurLambda())
@@ -3022,8 +3021,8 @@ ExprResult Sema::BuildPredefinedExpr(SourceLocation Loc,
     currentDecl = getCurFunctionOrMethodDecl();
 
   if (!currentDecl) {
-    currentDecl = Context.getTranslationUnitDecl();
     Diag(Loc, diag::ext_predef_outside_function);
+    currentDecl = Context.getTranslationUnitDecl();
   }
 
   QualType ResTy;
@@ -4850,24 +4849,11 @@ bool Sema::GatherArgumentsForCall(SourceLocation CallLoc, FunctionDecl *FDecl,
       Arg = ArgE.getAs<Expr>();
     } else {
       assert(Param && "can't use default arguments without a known callee");
-      if (CheckCXXDefaultArgExpr(CallLoc, FDecl, Param))
-        return true;
-      ExprResult ArgExpr = ExprError();
-      if (Param->hasDefaultArgWithSourceLocExpr()) {
-        ArgExpr = TransformInitContainingSourceLocExpressions(
-            Param->getDefaultArg(), CallLoc);
-        if (ArgExpr.isInvalid())
-          return true;
-        InitializedEntity Entity =  InitializedEntity::InitializeParameter(Context,
-                                                                           Param,
-                                                         ProtoArgType);
-        ArgExpr = PerformCopyInitialization(
-          Entity, SourceLocation(), ArgExpr.get(), IsListInitialization, AllowExplicit);
-      } else {
-        ArgExpr = CXXDefaultArgExpr::Create(Context, CallLoc, Param);
-      }
+
+      ExprResult ArgExpr = BuildCXXDefaultArgExpr(CallLoc, FDecl, Param);
       if (ArgExpr.isInvalid())
         return true;
+
       Arg = ArgExpr.getAs<Expr>();
     }
 
@@ -12882,7 +12868,7 @@ ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
                                     SourceLocation RPLoc) {
   DeclarationName Name;
   if (auto *FD = dyn_cast<FunctionDecl>(CurContext))
-    Name = FD->getName();
+    Name = FD->getDeclName();
 
   return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, Name);
 }

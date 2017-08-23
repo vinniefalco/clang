@@ -13047,36 +13047,14 @@ Sema::BuildCallToObjectOfClassType(Scope *S, Expr *Obj,
       IsError |= InputInit.isInvalid();
       Arg = InputInit.getAs<Expr>();
     } else {
-      auto *PV = Method->getParamDecl(i);
-      if (CheckCXXDefaultArgExpr(LParenLoc, Method, PV)) {
+      ExprResult DefArg
+        = BuildCXXDefaultArgExpr(LParenLoc, Method, Method->getParamDecl(i));
+      if (DefArg.isInvalid()) {
         IsError = true;
         break;
       }
-      if (PV->hasDefaultArgWithSourceLocExpr()) {
-        ExprResult ArgExpr = TransformInitContainingSourceLocExpressions(
-            PV->getDefaultArg(), LParenLoc);
-        if (ArgExpr.isInvalid()) {
-          IsError = true;
-          break;
-        }
-        InitializedEntity Entity = InitializedEntity::InitializeParameter(
-            Context, PV, Proto->getParamType(i));
-        ArgExpr =
-            PerformCopyInitialization(Entity, SourceLocation(), ArgExpr.get());
-        if (ArgExpr.isInvalid()) {
-          IsError = true;
-          break;
-        }
-        Arg = ArgExpr.getAs<Expr>();
-      } else {
-        ExprResult DefArg =
-            BuildCXXDefaultArgExpr(LParenLoc, Method, Method->getParamDecl(i));
-        if (DefArg.isInvalid()) {
-          IsError = true;
-          break;
-        }
-        Arg = DefArg.getAs<Expr>();
-      }
+
+      Arg = DefArg.getAs<Expr>();
     }
 
     TheCall->setArg(i + 1, Arg);
