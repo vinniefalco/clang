@@ -413,9 +413,6 @@ namespace {
     /// parameters' function scope indices.
     APValue *Arguments;
 
-    bool EvaluatingDefaultArgExpr;
-    bool EvaluatingDefaultMemberInit;
-
     // Note that we intentionally use std::map here so that references to
     // values are stable.
     typedef std::map<const void*, APValue> MapTy;
@@ -549,10 +546,6 @@ namespace {
     /// CurrentCall - The top of the constexpr call stack.
     CallStackFrame *CurrentCall;
 
-    /// CurrentSourceLocContext - The call stack in which SourceLocExpr's
-    /// should be evaluated.
-    CallStackFrame *CurrentSourceLocContext;
-
     /// CallStackDepth - The number of calls in the call stack right now.
     unsigned CallStackDepth;
 
@@ -665,7 +658,7 @@ namespace {
 
     EvalInfo(const ASTContext &C, Expr::EvalStatus &S, EvaluationMode Mode)
         : Ctx(const_cast<ASTContext &>(C)), EvalStatus(S), CurrentCall(nullptr),
-          CurrentSourceLocContext(nullptr), CallStackDepth(0), NextCallIndex(1),
+          CallStackDepth(0), NextCallIndex(1),
           StepsLeft(getLangOpts().ConstexprStepLimit),
           BottomFrame(*this, SourceLocation(), nullptr, nullptr, nullptr),
           EvaluatingDecl((const ValueDecl *)nullptr),
@@ -978,7 +971,7 @@ namespace {
         : Info(Info), ValuePtr(ValuePtr), OldValue(*ValuePtr) {
       *ValuePtr = NewVal;
     }
-    ~SourceLocExprContextRAII() { *ValuePtr = OldValue; }
+    ~SourceLocContextRAIIBase() { *ValuePtr = OldValue; }
     EvalInfo &Info;
 
   private:
@@ -1128,9 +1121,7 @@ CallStackFrame::CallStackFrame(EvalInfo &Info, SourceLocation CallLoc,
                                const FunctionDecl *Callee, const LValue *This,
                                APValue *Arguments)
     : Info(Info), Caller(Info.CurrentCall), Callee(Callee), This(This),
-      Arguments(Arguments), EvaluatingDefaultArgExpr(false),
-      EvaluatingDefaultMemberInit(false), CallLoc(CallLoc),
-      Index(Info.NextCallIndex++) {
+      Arguments(Arguments), CallLoc(CallLoc), Index(Info.NextCallIndex++) {
   Info.CurrentCall = this;
   ++Info.CallStackDepth;
 }
@@ -4551,6 +4542,7 @@ public:
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
       return Error(E);
+    SourceLocDefaultMemberInitContextRAII Guard(Info);
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
@@ -4560,9 +4552,7 @@ public:
 
     } else {
     }
-    if (auto *SubE = E->getSubExpr())
-      return StmtVisitorTy::Visit(E->getSubExpr());
-    return Error(E);
+    return true;
   }
   // We cannot create any objects for which cleanups are required, so there is
   // nothing to do here; all cleanups must come from unevaluated subexpressions.
@@ -10336,7 +10326,7 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
     return NoDiag();
 
   case Expr::SourceLocExprClass:
-    return CheckEvalInICE(cast<SourceLocExpr>(E)->getSubExpr(), Ctx);
+    return ICEDiag(IK_NotICE, E->getLocStart()); // FIXME(EricWD)
 
   case Expr::SubstNonTypeTemplateParmExprClass:
     return

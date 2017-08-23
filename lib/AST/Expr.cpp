@@ -1854,9 +1854,8 @@ StringRef SourceLocExpr::getBuiltinStr() const {
 }
 
 QualType SourceLocExpr::BuildSourceLocExprType(const ASTContext &Ctx,
-                                               IdentType Type,
-                                               bool MakeArray = false,
-                                               int ArraySize = -1) {
+                                               IdentType Type, bool MakeArray,
+                                               int ArraySize) {
   assert(MakeArray == (ArraySize != -1));
   bool IsIntType = Type == SourceLocExpr::Line || Type == SourceLocExpr::Column;
   assert(!IsIntType || (IsIntType && !MakeArray));
@@ -1873,12 +1872,11 @@ QualType SourceLocExpr::BuildSourceLocExprType(const ASTContext &Ctx,
 }
 
 Expr *SourceLocExpr::evaluate(const ASTContext &Ctx) const {
-  return evaluateAt(Ctx, BuiltinLoc, Parent);
+  return evaluateAt(Ctx, BuiltinLoc, DeclName);
 }
 
 Expr *SourceLocExpr::evaluateAt(const ASTContext &Ctx, SourceLocation Loc,
                                 DeclarationName Name) const {
-  {
     auto &SourceMgr = Ctx.getSourceManager();
     PresumedLoc PLoc =
         SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(Loc).second);
@@ -1886,7 +1884,7 @@ Expr *SourceLocExpr::evaluateAt(const ASTContext &Ctx, SourceLocation Loc,
 
     auto CreateString = [&](StringRef SVal) {
       QualType StrTy =
-          BuildSourceLocExprType(Ctx, Type,
+          BuildSourceLocExprType(Ctx, getIdentType(),
                                  /*IsArray*/ true, SVal.size() + 1);
       StringLiteral *Lit =
           StringLiteral::Create(Ctx, SVal, StringLiteral::Ascii,
@@ -1895,25 +1893,23 @@ Expr *SourceLocExpr::evaluateAt(const ASTContext &Ctx, SourceLocation Loc,
       return Lit;
     };
 
-    switch (Type) {
+    switch (getIdentType()) {
     case SourceLocExpr::Column:
     case SourceLocExpr::Line: {
-      unsigned Value =
-          Type == SourceLocExpr::Line ? PLoc.getLine() : PLoc.getColumn();
+      unsigned Value = getIdentType() == SourceLocExpr::Line ? PLoc.getLine()
+                                                             : PLoc.getColumn();
       unsigned MaxWidth = Ctx.getTargetInfo().getIntWidth();
       llvm::APInt IntVal(MaxWidth, Value);
       return IntegerLiteral::Create(Ctx, IntVal, Ctx.UnsignedIntTy, Loc);
     }
     case SourceLocExpr::File:
       return CreateString(PLoc.getFilename());
-    case SourceLocExpr::Function: {
-      if (Name)
-        return CreateString(Name);
-      return CreateString("");
-    }
+    case SourceLocExpr::Function:
+      return CreateString(Name ? Name.getAsString() : "");
     }
     llvm_unreachable("should have returned");
   }
+
   InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
                              ArrayRef<Expr *> initExprs,
                              SourceLocation rbraceloc)
