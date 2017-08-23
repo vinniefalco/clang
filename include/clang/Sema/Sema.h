@@ -2336,10 +2336,6 @@ public:
   /// in a 'block', this returns the containing context.
   NamedDecl *getCurFunctionOrMethodDecl();
 
-  /// getDeclForCurContext - Return the Decl for the current block, lambda,
-  /// captured statement, function, or translation unit.
-  Decl *getDeclForCurContext();
-
   /// Add this decl to the scope shadowed decl chains.
   void PushOnScopeChains(NamedDecl *D, Scope *S, bool AddToContext = true);
 
@@ -4412,24 +4408,7 @@ public:
   /// builtin call.
   ExprResult BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc, SourceLocation RPLoc,
-                                Expr *SubExpr = nullptr);
-
-  /// \brief Build a SourceLocExpr with a value representing source information
-  /// at the SourceLocation specified by 'AtLoc' and in the context specified
-  /// by 'CurContext'.
-  ///
-  /// \param AtLoc The location at which the builtin should be evaluated.
-  ///
-  /// \param CurContext The context in which the builtin should be evaluated.
-  ExprResult BuildResolvedSourceLocExpr(SourceLocExpr::IdentType Type,
-                                        SourceLocation BuiltinLoc,
-                                        SourceLocation RPLoc,
-                                        SourceLocation AtLoc, Decl *CurContext);
-
-  /// \brief Transform an expression containing unresolved SourceLocExpr's while
-  /// resolving them to the specified `Loc`
-  ExprResult TransformInitContainingSourceLocExpressions(Expr *E,
-                                                         SourceLocation Loc);
+                                DeclarationName ParentName);
 
   // __null
   ExprResult ActOnGNUNullExpr(SourceLocation TokenLoc);
@@ -4649,12 +4628,6 @@ public:
                         bool IsStdInitListInitialization, bool RequiresZeroInit,
                         unsigned ConstructKind, SourceRange ParenRange);
 
-  /// Instantiate or parse a C++ default init expression as necessary.
-  /// Return true on error.
-  bool CheckCXXDefaultInitExpr(SourceLocation Loc, FieldDecl *Field);
-
-  /// BuildCXXDefaultInitExpr - Creates a CXXDefaultInitExpr, instantiating
-  /// the default expr if needed.
   ExprResult BuildCXXDefaultInitExpr(SourceLocation Loc, FieldDecl *Field);
 
 

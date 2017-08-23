@@ -3820,15 +3820,17 @@ public:
 
 private:
   SourceLocation BuiltinLoc, RParenLoc;
-  Stmt *Value;
+  DeclarationName DeclName;
 
 public:
+  static QualType BuildSourceLocExprType(const ASTContext &Ctx, IdentType Type,
+                                         bool MakeArray = false,
+                                         int ArraySize = -1);
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                QualType Ty, Expr *E = nullptr);
+                QualType Ty, DeclarationName DeclName);
 
   /// \brief Build an empty call expression.
-  explicit SourceLocExpr(EmptyShell Empty)
-      : Expr(SourceLocExprClass, Empty), Value(nullptr) {}
+  explicit SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
 
   /// \brief Return a string representing the name of the specific builtin
   /// function.
@@ -3838,26 +3840,24 @@ public:
     return static_cast<IdentType>(SourceLocExprBits.Type);
   }
 
+  Expr *evaluate(const ASTContext &Ctx) const;
+  Expr *evaluateAt(const ASTContext &Ctx, SourceLocation Loc,
+                   DeclarationName Name) const;
+
   /// \brief If the SourceLocExpr has been resolved return the subexpression
   /// representing the resolved value. Otherwise return null.
-  const Expr *getSubExpr() const { return cast_or_null<Expr>(Value); }
-  Expr *getSubExpr() { return cast_or_null<Expr>(Value); }
-
-  /// \brief True iff the value for the SourceLocExpr has been determined.
-  bool isUnresolved() const { return Value == nullptr; }
+  DeclarationName getParentDeclName() const { return DeclName; }
 
   SourceLocation getLocation() const LLVM_READONLY { return BuiltinLoc; }
   SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
   SourceLocation getLocEnd() const LLVM_READONLY { return RParenLoc; }
 
   child_range children() {
-    return Value ? child_range(&Value, &Value + 1)
-                 : child_range(child_iterator(), child_iterator());
+    return child_range(child_iterator(), child_iterator());
   }
 
   const_child_range children() const {
-    return Value ? const_child_range(&Value, &Value + 1)
-                 : const_child_range(child_iterator(), child_iterator());
+    return const_child_range(child_iterator(), child_iterator());
   }
 
   static bool classof(const Stmt *T) {
@@ -3868,7 +3868,7 @@ private:
   friend class ASTStmtReader;
 
   void setIdentType(IdentType T) { SourceLocExprBits.Type = T; }
-  void setSubExpr(Expr *E) { Value = E; }
+  void setParentDeclName(DeclarationName N) { DeclName = N; }
   void setLocStart(SourceLocation L) { BuiltinLoc = L; }
   void setLocEnd(SourceLocation L) { RParenLoc = L; }
 };

@@ -148,6 +148,7 @@ struct CallExpr {
 };
 constexpr CallExpr get_call() { return CallExpr{}; }
 static_assert(get_call()() == __LINE__, "");
+
 template <class T>
 constexpr bool test_line_fn_template(T Expect, int L = __builtin_LINE()) {
   return Expect == L;

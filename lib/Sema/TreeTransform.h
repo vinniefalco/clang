@@ -2936,8 +2936,8 @@ public:
   ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                   SourceLocation BuiltinLoc,
                                   SourceLocation RPLoc,
-                                  Expr *SubExpr = nullptr) {
-    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, SubExpr);
+                                  DeclarationName ParentName) {
+    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, ParentName);
   }
 
   /// \brief Build a new Objective-C boxed expression.
@@ -9806,18 +9806,11 @@ TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
 
 template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
-  Expr *SubExpr = E->getSubExpr();
-  if (SubExpr) {
-    ExprResult Res = getDerived().TransformExpr(SubExpr);
-    if (Res.isInvalid())
-      return ExprError();
-    SubExpr = Res.get();
-  }
-  bool SubExprChanged = SubExpr && SubExpr != E->getSubExpr()->IgnoreImpCasts();
-  if (!getDerived().AlwaysRebuild() && !SubExprChanged)
+  if (!getDerived().AlwaysRebuild())
     return E;
   return getDerived().RebuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
-                                           E->getLocEnd(), SubExpr);
+                                           E->getLocEnd(),
+                                           E->getParentDeclName());
 }
 
 template<typename Derived>

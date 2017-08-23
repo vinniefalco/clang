@@ -165,37 +165,38 @@ public:
     CodeGenFunction::CXXDefaultInitExprScope Scope(CGF);
     Visit(DIE->getExpr());
   }
-  void VisitSourceLocExpr(SourceLocExpr *SLE) { Visit(SLE->getSubExpr()); }
-  void VisitCXXBindTemporaryExpr(CXXBindTemporaryExpr *E);
-  void VisitCXXConstructExpr(const CXXConstructExpr *E);
-  void VisitCXXInheritedCtorInitExpr(const CXXInheritedCtorInitExpr *E);
-  void VisitLambdaExpr(LambdaExpr *E);
-  void VisitCXXStdInitializerListExpr(CXXStdInitializerListExpr *E);
-  void VisitExprWithCleanups(ExprWithCleanups *E);
-  void VisitCXXScalarValueInitExpr(CXXScalarValueInitExpr *E);
-  void VisitCXXTypeidExpr(CXXTypeidExpr *E) { EmitAggLoadOfLValue(E); }
-  void VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr *E);
-  void VisitOpaqueValueExpr(OpaqueValueExpr *E);
+  void VisitSourceLocExpr(SourceLocExpr *SLE) {
+    assert(false); // FIXME(EricWF) }
+    void VisitCXXBindTemporaryExpr(CXXBindTemporaryExpr * E);
+    void VisitCXXConstructExpr(const CXXConstructExpr *E);
+    void VisitCXXInheritedCtorInitExpr(const CXXInheritedCtorInitExpr *E);
+    void VisitLambdaExpr(LambdaExpr * E);
+    void VisitCXXStdInitializerListExpr(CXXStdInitializerListExpr * E);
+    void VisitExprWithCleanups(ExprWithCleanups * E);
+    void VisitCXXScalarValueInitExpr(CXXScalarValueInitExpr * E);
+    void VisitCXXTypeidExpr(CXXTypeidExpr * E) { EmitAggLoadOfLValue(E); }
+    void VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr * E);
+    void VisitOpaqueValueExpr(OpaqueValueExpr * E);
 
-  void VisitPseudoObjectExpr(PseudoObjectExpr *E) {
-    if (E->isGLValue()) {
-      LValue LV = CGF.EmitPseudoObjectLValue(E);
-      return EmitFinalDestCopy(E->getType(), LV);
+    void VisitPseudoObjectExpr(PseudoObjectExpr * E) {
+      if (E->isGLValue()) {
+        LValue LV = CGF.EmitPseudoObjectLValue(E);
+        return EmitFinalDestCopy(E->getType(), LV);
+      }
+
+      CGF.EmitPseudoObjectRValue(E, EnsureSlot(E->getType()));
     }
 
-    CGF.EmitPseudoObjectRValue(E, EnsureSlot(E->getType()));
-  }
+    void VisitVAArgExpr(VAArgExpr * E);
 
-  void VisitVAArgExpr(VAArgExpr *E);
-
-  void EmitInitializationToLValue(Expr *E, LValue Address);
-  void EmitNullInitializationToLValue(LValue Address);
-  //  case Expr::ChooseExprClass:
-  void VisitCXXThrowExpr(const CXXThrowExpr *E) { CGF.EmitCXXThrowExpr(E); }
-  void VisitAtomicExpr(AtomicExpr *E) {
-    RValue Res = CGF.EmitAtomicExpr(E);
-    EmitFinalDestCopy(E->getType(), Res);
-  }
+    void EmitInitializationToLValue(Expr * E, LValue Address);
+    void EmitNullInitializationToLValue(LValue Address);
+    //  case Expr::ChooseExprClass:
+    void VisitCXXThrowExpr(const CXXThrowExpr *E) { CGF.EmitCXXThrowExpr(E); }
+    void VisitAtomicExpr(AtomicExpr * E) {
+      RValue Res = CGF.EmitAtomicExpr(E);
+      EmitFinalDestCopy(E->getType(), Res);
+    }
 };
 }  // end anonymous namespace.
 

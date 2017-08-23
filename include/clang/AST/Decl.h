@@ -832,10 +832,6 @@ protected:
     /// (even an invalid) expression for the default argument.
     unsigned DefaultArgKind : 2;
 
-    /// Whether the default argument for this parameter contains a call to
-    /// a source location builtin such as __builtin_LINE
-    unsigned DefaultArgContainsSourceLocExpr : 1;
-
     /// Whether this parameter undergoes K&R argument promotion.
     unsigned IsKNRPromoted : 1;
 
@@ -1447,7 +1443,6 @@ protected:
       : VarDecl(DK, C, DC, StartLoc, IdLoc, Id, T, TInfo, S) {
     assert(ParmVarDeclBits.HasInheritedDefaultArg == false);
     assert(ParmVarDeclBits.DefaultArgKind == DAK_None);
-    assert(ParmVarDeclBits.DefaultArgContainsSourceLocExpr == false);
     assert(ParmVarDeclBits.IsKNRPromoted == false);
     assert(ParmVarDeclBits.IsObjCMethodParam == false);
     setDefaultArg(DefArg);
@@ -1536,11 +1531,6 @@ public:
   /// hasDefaultArg - Determines whether this parameter has a default argument,
   /// either parsed or not.
   bool hasDefaultArg() const;
-
-  /// hasDefaultArgContainingSourceLocExpr - Determines whether this parameter
-  /// has a default argument and that argument contains a source location
-  /// builtin.
-  bool hasDefaultArgWithSourceLocExpr() const;
 
   /// hasUnparsedDefaultArg - Determines whether this parameter has a
   /// default argument that has not yet been parsed. This will occur
@@ -2377,7 +2367,6 @@ class FieldDecl : public DeclaratorDecl, public Mergeable<FieldDecl> {
   // FIXME: This can be packed into the bitfields in Decl.
   unsigned Mutable : 1;
   mutable unsigned CachedFieldIndex : 31;
-  unsigned InClassInitContainsSourceLocExpr : 1;
 
   /// The kinds of value we can store in InitializerOrBitWidth.
   ///
@@ -2420,8 +2409,7 @@ protected:
             TypeSourceInfo *TInfo, Expr *BW, bool Mutable,
             InClassInitStyle InitStyle)
       : DeclaratorDecl(DK, DC, IdLoc, Id, T, TInfo, StartLoc), Mutable(Mutable),
-        CachedFieldIndex(0), InClassInitContainsSourceLocExpr(false),
-        InitStorage(BW, (InitStorageKind)InitStyle) {
+        CachedFieldIndex(0), InitStorage(BW, (InitStorageKind)InitStyle) {
     assert((!BW || InitStyle == ICIS_NoInit) && "got initializer for bitfield");
   }
 
@@ -2503,20 +2491,19 @@ public:
                : nullptr;
   }
 
-  bool hasInClassInitializerWithSourceLocExpr() const {
-    return InClassInitContainsSourceLocExpr;
-  }
-
   /// setInClassInitializer - Set the C++11 in-class initializer for this
   /// member.
-  void setInClassInitializer(Expr *Init);
+  void setInClassInitializer(Expr *Init) {
+    assert(hasInClassInitializer() && InitStorage.getPointer() == nullptr &&
+           "bit width, initializer or captured type already set");
+    InitStorage.setPointer(Init);
+  }
 
   /// removeInClassInitializer - Remove the C++11 in-class initializer from this
   /// member.
   void removeInClassInitializer() {
     assert(hasInClassInitializer() && "no initializer to remove");
     InitStorage.setPointerAndInt(nullptr, ISK_BitWidthOrNothing);
-    InClassInitContainsSourceLocExpr = false;
   }
 
   /// \brief Determine whether this member captures the variable length array

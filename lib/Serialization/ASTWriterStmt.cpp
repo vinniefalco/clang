@@ -845,7 +845,7 @@ void ASTStmtWriter::VisitVAArgExpr(VAArgExpr *E) {
 
 void ASTStmtWriter::VisitSourceLocExpr(SourceLocExpr *E) {
   VisitExpr(E);
-  Record.AddStmt(E->getSubExpr());
+  Record.AddDeclarationName(E->getParentDeclName());
   Record.AddSourceLocation(E->getLocStart());
   Record.AddSourceLocation(E->getLocEnd());
   Record.push_back(E->getIdentType());

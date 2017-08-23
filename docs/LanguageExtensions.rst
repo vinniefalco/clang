@@ -2115,9 +2115,9 @@ the values, at the "invocation point", for `__LINE__`, `__FUNCTION__`, and
 
 When the builtins appears as part of a default function argument the invocation
 point is the location of the caller. When the builtins appear as part of a
-NSDMI the invocation point is the location of the constructor or
-aggregate initialization used to create the object. Otherwise the invocation
-point is the same as the location of the builtin.
+default member initializer, the invocation point is the location of the
+constructor or aggregate initialization used to create the object. Otherwise
+the invocation point is the same as the location of the builtin.
 
 When the invocation point of `__builtin_FUNCTION` is not a function scope the
 empty string is returned.

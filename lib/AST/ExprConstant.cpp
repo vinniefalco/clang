@@ -413,6 +413,9 @@ namespace {
     /// parameters' function scope indices.
     APValue *Arguments;
 
+    bool EvaluatingDefaultArgExpr;
+    bool EvaluatingDefaultMemberInit;
+
     // Note that we intentionally use std::map here so that references to
     // values are stable.
     typedef std::map<const void*, APValue> MapTy;
@@ -546,6 +549,10 @@ namespace {
     /// CurrentCall - The top of the constexpr call stack.
     CallStackFrame *CurrentCall;
 
+    /// CurrentSourceLocContext - The call stack in which SourceLocExpr's
+    /// should be evaluated.
+    CallStackFrame *CurrentSourceLocContext;
+
     /// CallStackDepth - The number of calls in the call stack right now.
     unsigned CallStackDepth;
 
@@ -587,6 +594,9 @@ namespace {
 
     /// \brief Whether or not we're currently speculatively evaluating.
     bool IsSpeculativelyEvaluating;
+
+    bool IsEvaluatingDefaultArg;
+    bool IsEvaluatingDefaultMemberInit;
 
     enum EvaluationMode {
       /// Evaluate as a constant expression. Stop if we find that the expression
@@ -654,14 +664,15 @@ namespace {
     bool checkingForOverflow() { return EvalMode == EM_EvaluateForOverflow; }
 
     EvalInfo(const ASTContext &C, Expr::EvalStatus &S, EvaluationMode Mode)
-      : Ctx(const_cast<ASTContext &>(C)), EvalStatus(S), CurrentCall(nullptr),
-        CallStackDepth(0), NextCallIndex(1),
-        StepsLeft(getLangOpts().ConstexprStepLimit),
-        BottomFrame(*this, SourceLocation(), nullptr, nullptr, nullptr),
-        EvaluatingDecl((const ValueDecl *)nullptr),
-        EvaluatingDeclValue(nullptr), HasActiveDiagnostic(false),
-        HasFoldFailureDiagnostic(false), IsSpeculativelyEvaluating(false),
-        EvalMode(Mode) {}
+        : Ctx(const_cast<ASTContext &>(C)), EvalStatus(S), CurrentCall(nullptr),
+          CurrentSourceLocContext(nullptr), CallStackDepth(0), NextCallIndex(1),
+          StepsLeft(getLangOpts().ConstexprStepLimit),
+          BottomFrame(*this, SourceLocation(), nullptr, nullptr, nullptr),
+          EvaluatingDecl((const ValueDecl *)nullptr),
+          EvaluatingDeclValue(nullptr), HasActiveDiagnostic(false),
+          HasFoldFailureDiagnostic(false), IsSpeculativelyEvaluating(false),
+          IsEvaluatingDefaultArg(false), IsEvaluatingDefaultMemberInit(false),
+          EvalMode(Mode) {}
 
     void setEvaluatingDecl(APValue::LValueBase Base, APValue &Value) {
       EvaluatingDecl = Base;
@@ -960,6 +971,33 @@ namespace {
     }
   };
 
+  /// Temporarily override 'this'.
+  class SourceLocContextRAIIBase {
+  protected:
+    SourceLocContextRAIIBase(EvalInfo &Info, bool *ValuePtr, bool NewVal)
+        : Info(Info), ValuePtr(ValuePtr), OldValue(*ValuePtr) {
+      *ValuePtr = NewVal;
+    }
+    ~SourceLocExprContextRAII() { *ValuePtr = OldValue; }
+    EvalInfo &Info;
+
+  private:
+    bool *ValuePtr;
+    bool OldValue;
+  };
+  class SourceLocDefaultArgContextRAII : private SourceLocContextRAIIBase {
+  public:
+    SourceLocDefaultArgContextRAII(EvalInfo &Info, bool NewVal = true)
+        : SourceLocContextRAIIBase(Info, &Info.IsEvaluatingDefaultArg, NewVal) {
+    }
+  };
+  class SourceLocDefaultMemberInitContextRAII
+      : private SourceLocContextRAIIBase {
+  public:
+    SourceLocDefaultMemberInitContextRAII(EvalInfo &Info, bool NewVal = true)
+        : SourceLocContextRAIIBase(Info, &Info.IsEvaluatingDefaultMemberInit,
+                                   NewVal) {}
+  };
   /// RAII object used to treat the current evaluation as the correct pointer
   /// offset fold for the current EvalMode
   struct FoldOffsetRAII {
@@ -1090,7 +1128,9 @@ CallStackFrame::CallStackFrame(EvalInfo &Info, SourceLocation CallLoc,
                                const FunctionDecl *Callee, const LValue *This,
                                APValue *Arguments)
     : Info(Info), Caller(Info.CurrentCall), Callee(Callee), This(This),
-      Arguments(Arguments), CallLoc(CallLoc), Index(Info.NextCallIndex++) {
+      Arguments(Arguments), EvaluatingDefaultArgExpr(false),
+      EvaluatingDefaultMemberInit(false), CallLoc(CallLoc),
+      Index(Info.NextCallIndex++) {
   Info.CurrentCall = this;
   ++Info.CallStackDepth;
 }
@@ -4245,6 +4285,7 @@ static bool HandleConstructorCall(const Expr *E, const LValue &This,
                                   const CXXConstructorDecl *Definition,
                                   EvalInfo &Info, APValue &Result) {
   SourceLocation CallLoc = E->getExprLoc();
+
   if (!Info.CheckCallLimit(CallLoc))
     return false;
 
@@ -4502,8 +4543,10 @@ public:
     { return StmtVisitorTy::Visit(E->getResultExpr()); }
   bool VisitSubstNonTypeTemplateParmExpr(const SubstNonTypeTemplateParmExpr *E)
     { return StmtVisitorTy::Visit(E->getReplacement()); }
-  bool VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *E)
-    { return StmtVisitorTy::Visit(E->getExpr()); }
+  bool VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *E) {
+    SourceLocDefaultArgContextRAII Guard(Info);
+    return StmtVisitorTy::Visit(E->getExpr());
+  }
   bool VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *E) {
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
@@ -4511,6 +4554,12 @@ public:
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
+    if (Info.IsEvaluatingDefaultMemberInit) {
+
+    } else if (Info.IsEvaluatingDefaultArg) {
+
+    } else {
+    }
     if (auto *SubE = E->getSubExpr())
       return StmtVisitorTy::Visit(E->getSubExpr());
     return Error(E);

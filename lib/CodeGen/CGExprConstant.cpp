@@ -811,7 +811,8 @@ public:
   }
 
   llvm::Constant *VisitSourceLocExpr(SourceLocExpr *SLE, QualType T) {
-    return Visit(SLE->getSubExpr(), T);
+    assert(false && "FIXME(EricWF)");
+    return nullptr;
   }
 
   llvm::Constant *VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE, QualType T) {

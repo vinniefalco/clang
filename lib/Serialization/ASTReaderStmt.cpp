@@ -864,7 +864,7 @@ void ASTStmtReader::VisitVAArgExpr(VAArgExpr *E) {
 
 void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
   VisitExpr(E);
-  E->setSubExpr(Record.readSubExpr());
+  E->setParentDeclName(Record.readDeclarationName());
   E->setLocStart(ReadSourceLocation());
   E->setLocEnd(ReadSourceLocation());
   E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
