@@ -12869,7 +12869,8 @@ ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
   DeclarationName Name;
   if (auto *FD = dyn_cast<FunctionDecl>(CurContext))
     Name = FD->getDeclName();
-
+  else if (auto *FTD = dyn_cast<FunctionTemplateDecl>(CurContext))
+    Name = FTD->getDeclName();
   return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, Name);
 }
 

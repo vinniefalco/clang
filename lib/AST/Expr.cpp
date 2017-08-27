@@ -1862,7 +1862,8 @@ static PresumedLoc getPresumedSourceLoc(const ASTContext &Ctx,
   return PLoc;
 }
 
-IntegerLiteral *SourceLocExpr::getIntValue(const ASTContext &Ctx,
+
+llvm::APInt SourceLocExpr::getIntValue(const ASTContext &Ctx,
                                            SourceLocation Loc) const {
   auto PLoc = getPresumedSourceLoc(Ctx, Loc);
   unsigned Value = [&]() {
@@ -1876,8 +1877,7 @@ IntegerLiteral *SourceLocExpr::getIntValue(const ASTContext &Ctx,
     }
   }();
   unsigned MaxWidth = Ctx.getTargetInfo().getIntWidth();
-  return IntegerLiteral::Create(Ctx, llvm::APInt(MaxWidth, Value),
-                                Ctx.UnsignedIntTy, Loc);
+  return llvm::APInt(MaxWidth, Value);
 }
 
 StringLiteral *SourceLocExpr::getStringValue(const ASTContext &Ctx,
@@ -1918,6 +1918,16 @@ QualType SourceLocExpr::BuildSourceLocExprType(const ASTContext &Ctx,
     return Ctx.getPointerType(Ty);
   return Ctx.getConstantArrayType(Ty, llvm::APInt(32, ArraySize),
                                   ArrayType::Normal, 0);
+}
+
+Expr *SourceLocExpr::getValue(const ASTContext &Ctx, SourceLocation Loc,
+                 DeclarationName Name) const {
+    if (isLineOrColumn()) {
+
+      return IntegerLiteral::Create(Ctx, getIntValue(Ctx, Loc),
+                                Ctx.UnsignedIntTy, Loc);
+    }
+    return getStringValue(Ctx, Loc, Name);
 }
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,

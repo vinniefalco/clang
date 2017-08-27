@@ -3843,15 +3843,11 @@ public:
   bool isLineOrColumn() const LLVM_READONLY {
     return getIdentType() == Line || getIdentType() == Column;
   }
-  IntegerLiteral *getIntValue(const ASTContext &Ctx, SourceLocation Loc) const;
+  llvm::APInt getIntValue(const ASTContext &Ctx, SourceLocation Loc) const;
   StringLiteral *getStringValue(const ASTContext &Ctx, SourceLocation Loc,
                                 DeclarationName Name) const;
   Expr *getValue(const ASTContext &Ctx, SourceLocation Loc,
-                 DeclarationName Name) const {
-    if (isLineOrColumn())
-      return getIntValue(Ctx, Loc);
-    return getStringValue(Ctx, Loc, Name);
-  }
+                 DeclarationName Name) const;
 
   /// \brief If the SourceLocExpr has been resolved return the subexpression
   /// representing the resolved value. Otherwise return null.

@@ -58,7 +58,7 @@ namespace {
   struct LValue;
   struct CallStackFrame;
   struct EvalInfo;
-
+  struct SourceLocContextRAIIBase;
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>())
@@ -588,8 +588,8 @@ namespace {
     /// \brief Whether or not we're currently speculatively evaluating.
     bool IsSpeculativelyEvaluating;
 
-    bool IsEvaluatingDefaultArg;
-    bool IsEvaluatingDefaultMemberInit;
+    SourceLocContextRAIIBase *EvaluatingDefaultArg;
+    SourceLocContextRAIIBase *EvaluatingDefaultMemberInit;
 
     enum EvaluationMode {
       /// Evaluate as a constant expression. Stop if we find that the expression
@@ -664,7 +664,7 @@ namespace {
           EvaluatingDecl((const ValueDecl *)nullptr),
           EvaluatingDeclValue(nullptr), HasActiveDiagnostic(false),
           HasFoldFailureDiagnostic(false), IsSpeculativelyEvaluating(false),
-          IsEvaluatingDefaultArg(false), IsEvaluatingDefaultMemberInit(false),
+          EvaluatingDefaultArg(nullptr), EvaluatingDefaultMemberInit(nullptr),
           EvalMode(Mode) {}
 
     void setEvaluatingDecl(APValue::LValueBase Base, APValue &Value) {
@@ -965,31 +965,54 @@ namespace {
   };
 
   /// Temporarily override 'this'.
-  class SourceLocContextRAIIBase {
+  struct SourceLocContextRAIIBase {
   protected:
-    SourceLocContextRAIIBase(EvalInfo &Info, bool *ValuePtr, bool NewVal)
-        : Info(Info), ValuePtr(ValuePtr), OldValue(*ValuePtr) {
-      *ValuePtr = NewVal;
+    SourceLocContextRAIIBase(EvalInfo &Info, SourceLocation NewLoc,
+                             DeclarationName NewName,
+                             SourceLocContextRAIIBase **Dest,
+                             bool Enable)
+        : Info(Info), Loc(NewLoc), Name(NewName), CurrentCall(Info.CurrentCall),
+          Dest(Dest), OldVal(*Dest), Enable(Enable) {
+      if (Enable)
+        *Dest = this;
     }
-    ~SourceLocContextRAIIBase() { *ValuePtr = OldValue; }
-    EvalInfo &Info;
+    ~SourceLocContextRAIIBase() { if (Enable) *Dest = OldVal; }
 
-  private:
-    bool *ValuePtr;
-    bool OldValue;
-  };
-  class SourceLocDefaultArgContextRAII : private SourceLocContextRAIIBase {
   public:
-    SourceLocDefaultArgContextRAII(EvalInfo &Info, bool NewVal = true)
-        : SourceLocContextRAIIBase(Info, &Info.IsEvaluatingDefaultArg, NewVal) {
+    EvalInfo &Info;
+    SourceLocation Loc;
+    DeclarationName Name;
+    CallStackFrame *CurrentCall;
+
+    bool isInSameCurrentCall() const { return CurrentCall == Info.CurrentCall;}
+  private:
+
+    SourceLocContextRAIIBase **Dest;
+    SourceLocContextRAIIBase *OldVal;
+    bool Enable;
+  };
+  class SourceLocDefaultArgContextRAII : public SourceLocContextRAIIBase {
+    static bool ShouldEnable(EvalInfo &Info) {
+      return !Info.EvaluatingDefaultArg ||
+              !Info.EvaluatingDefaultArg->isInSameCurrentCall();
+    }
+  public:
+    SourceLocDefaultArgContextRAII(EvalInfo &Info, SourceLocation Loc,
+                                   DeclarationName Name)
+        : SourceLocContextRAIIBase(Info, Loc, Name,
+                                   &Info.EvaluatingDefaultArg,
+                                   ShouldEnable(Info)) {
     }
   };
   class SourceLocDefaultMemberInitContextRAII
-      : private SourceLocContextRAIIBase {
+      : public SourceLocContextRAIIBase {
   public:
-    SourceLocDefaultMemberInitContextRAII(EvalInfo &Info, bool NewVal = true)
-        : SourceLocContextRAIIBase(Info, &Info.IsEvaluatingDefaultMemberInit,
-                                   NewVal) {}
+    SourceLocDefaultMemberInitContextRAII(EvalInfo &Info, SourceLocation Loc,
+                                          DeclarationName Name,
+                                          bool Enable = true)
+        : SourceLocContextRAIIBase(Info, Loc, Name,
+                                   &Info.EvaluatingDefaultMemberInit,
+                                   Enable) {}
   };
   /// RAII object used to treat the current evaluation as the correct pointer
   /// offset fold for the current EvalMode
@@ -4535,36 +4558,32 @@ public:
   bool VisitSubstNonTypeTemplateParmExpr(const SubstNonTypeTemplateParmExpr *E)
     { return StmtVisitorTy::Visit(E->getReplacement()); }
   bool VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *E) {
-    SourceLocDefaultArgContextRAII Guard(Info);
+    SourceLocation Loc = E->getUsedLocation();
+    DeclarationName Name;
+    if (Info.CurrentCall && Info.CurrentCall->Callee) {
+      assert(false);
+      Name = Info.CurrentCall->Callee->getDeclName();
+      Name.dump();
+    } else if (Info.CurrentCall) {
+      assert(Info.CurrentCall->Caller->Callee);
+      assert(false);
+    }
+    SourceLocDefaultArgContextRAII Guard(Info, Loc, Name);
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *E) {
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
       return Error(E);
-    SourceLocDefaultMemberInitContextRAII Guard(Info);
+    SourceLocation Loc = E->getLocStart();
+    DeclarationName Name;
+    if (Info.CurrentCall && Info.CurrentCall->Callee) {
+      Name = Info.CurrentCall->Callee->getDeclName();
+    }
+    SourceLocDefaultMemberInitContextRAII Guard(Info, Loc, Name);
     return StmtVisitorTy::Visit(E->getExpr());
   }
-  bool VisitSourceLocExpr(const SourceLocExpr *E) {
-    Expr *Value = nullptr;
-    if (Info.IsEvaluatingDefaultMemberInit) {
-      assert(!Info.EvaluatingDecl.isNull());
-      // FIXME(EricWF)
-      assert(Info.CurrentCall);
-      Value = E->getValue(Info.Ctx, Info.CurrentCall->CallLoc,
-                          Info.CurrentCall->Callee->getDeclName());
-    } else if (Info.IsEvaluatingDefaultArg) {
-      if (!Info.CurrentCall)
-        return Error(E); // FIXME
-      Value = E->getValue(Info.Ctx, Info.CurrentCall->CallLoc,
-                          Info.CurrentCall->Callee->getDeclName());
-    } else {
-      Value = E->getValue(Info.Ctx, E->getLocStart(), E->getParentDeclName());
-    }
-    if (!Value)
-      return Error(E);
-    return StmtVisitorTy::Visit(Value);
-  }
+
   // We cannot create any objects for which cleanups are required, so there is
   // nothing to do here; all cleanups must come from unevaluated subexpressions.
   bool VisitExprWithCleanups(const ExprWithCleanups *E)
@@ -5540,7 +5559,6 @@ class PointerExprEvaluator
 
   bool visitNonBuiltinCallExpr(const CallExpr *E);
 public:
-
   PointerExprEvaluator(EvalInfo &info, LValue &Result, bool InvalidBaseOK)
       : ExprEvaluatorBaseTy(info), Result(Result),
         InvalidBaseOK(InvalidBaseOK) {}
@@ -5607,6 +5625,41 @@ public:
         Result.setFrom(Info.Ctx, RVal);
       }
     }
+    return true;
+  }
+
+  bool VisitSourceLocExpr(const SourceLocExpr *E) {
+    assert(E && !E->isLineOrColumn());
+    Expr *Value = nullptr;
+    SourceLocContextRAIIBase *ArgCtx = Info.EvaluatingDefaultMemberInit;
+    if (!ArgCtx && Info.EvaluatingDefaultArg
+     && Info.EvaluatingDefaultArg->isInSameCurrentCall())
+      ArgCtx = Info.EvaluatingDefaultArg;
+    if (ArgCtx) {
+      assert(ArgCtx->Name);
+      Value = E->getValue(Info.Ctx, ArgCtx->Loc, ArgCtx->Name);
+    } else if (Info.CurrentCall && Info.CurrentCall->Caller)
+      Value = E->getValue(Info.Ctx, E->getLocStart(),
+                          Info.CurrentCall->Callee->getDeclName());
+    else
+      Value = E->getValue(Info.Ctx, E->getLocStart(), E->getParentDeclName());
+
+    if (!Value)
+      return Error(E);
+
+    LValue Obj;
+    assert(Value->isGLValue());
+
+    if (!evaluateLValue(Value, Result))
+      return Error(E);
+    // The result is a pointer to the first element of the array.
+    if (const ConstantArrayType *CAT
+          = Info.Ctx.getAsConstantArrayType(Value->getType()))
+      Result.addArray(Info, Value, CAT);
+    else
+      Result.Designator.setInvalid();
+
+    assert(Result.Designator.Invalid == false);
     return true;
   }
 
@@ -6241,9 +6294,10 @@ bool RecordExprEvaluator::VisitInitListExpr(const InitListExpr *E) {
     if (!HandleLValueMember(Info, InitExpr, Subobject, Field, &Layout))
       return false;
 
+    const auto *DIE = dyn_cast<CXXDefaultInitExpr>(InitExpr);
     // Temporarily override This, in case there's a CXXDefaultInitExpr in here.
     ThisOverrideRAII ThisOverride(*Info.CurrentCall, &This,
-                                  isa<CXXDefaultInitExpr>(InitExpr));
+                                  DIE != nullptr);
 
     return EvaluateInPlace(Result.getUnionValue(), Info, Subobject, InitExpr);
   }
@@ -6985,7 +7039,6 @@ public:
   //===--------------------------------------------------------------------===//
   //                            Visitor Methods
   //===--------------------------------------------------------------------===//
-
   bool VisitIntegerLiteral(const IntegerLiteral *E) {
     return Success(E->getValue(), E);
   }
@@ -7058,7 +7111,7 @@ public:
 
   bool VisitCXXNoexceptExpr(const CXXNoexceptExpr *E);
   bool VisitSizeOfPackExpr(const SizeOfPackExpr *E);
-
+  bool VisitSourceLocExpr(const SourceLocExpr *E);
   // FIXME: Missing: array subscript of vector, member of vector
 };
 } // end anonymous namespace
@@ -7090,7 +7143,17 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
   Result = Val.getInt();
   return true;
 }
-
+bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
+    assert(E && E->isLineOrColumn());
+    llvm::APInt Result;
+    SourceLocation Loc = E->getLocStart();
+    if (Info.EvaluatingDefaultMemberInit)
+      Loc = Info.EvaluatingDefaultMemberInit->Loc;
+    else if (Info.EvaluatingDefaultArg && Info.EvaluatingDefaultArg->isInSameCurrentCall())
+      Loc = Info.EvaluatingDefaultArg->Loc;
+    Result = E->getIntValue(Info.Ctx, Loc);
+    return Success(Result, E);
+}
 /// Check whether the given declaration can be directly converted to an integral
 /// rvalue. If not, no diagnostic is produced; there are other things we can
 /// try.

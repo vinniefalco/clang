@@ -9806,11 +9806,18 @@ TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
 
 template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
-  if (!getDerived().AlwaysRebuild())
+  bool NeedRebuildFunc = E->getIdentType() == SourceLocExpr::Function
+          && isa<FunctionDecl>(getSema().CurContext);
+
+
+  if (!getDerived().AlwaysRebuild() && !NeedRebuildFunc)
     return E;
+  DeclarationName DN = E->getParentDeclName();
+  if (auto *FD = dyn_cast<FunctionDecl>(getSema().CurContext))
+    DN = FD->getDeclName();
   return getDerived().RebuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
                                            E->getLocEnd(),
-                                           E->getParentDeclName());
+                                           DN);
 }
 
 template<typename Derived>

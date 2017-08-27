@@ -811,6 +811,17 @@ public:
   }
 
   llvm::Constant *VisitSourceLocExpr(SourceLocExpr *SLE, QualType T) {
+    auto &Ctx = CGM.getContext();
+    if (SLE->isLineOrColumn()) {
+      Expr *E = SLE->getValue(Ctx, SLE->getLocStart(), SLE->getParentDeclName());
+      return Visit(E, T);
+    } else {
+      Expr *Str = SLE->getValue(Ctx, SLE->getLocStart(),
+                                SLE->getParentDeclName());
+      ConstantAddress C = CGM.GetAddrOfConstantStringFromLiteral(cast<StringLiteral>(Str));
+      return C.getPointer();
+      //return CGM.GetConstantArrayFromStringLiteral(cast<StringLiteral>(Str));
+    }
     assert(false && "FIXME(EricWF)");
     return nullptr;
   }
@@ -1564,7 +1575,7 @@ private:
   ConstantLValue VisitCXXUuidofExpr(const CXXUuidofExpr *E);
   ConstantLValue VisitMaterializeTemporaryExpr(
                                          const MaterializeTemporaryExpr *E);
-
+  ConstantLValue VisitSourceLocExpr(const SourceLocExpr *E);
   bool hasNonZeroOffset() const {
     return !Value.getLValueOffset().isZero();
   }
@@ -1791,6 +1802,11 @@ ConstantLValueEmitter::VisitCXXTypeidExpr(const CXXTypeidExpr *E) {
 ConstantLValue
 ConstantLValueEmitter::VisitCXXUuidofExpr(const CXXUuidofExpr *E) {
   return CGM.GetAddrOfUuidDescriptor(E);
+}
+
+ConstantLValue
+ConstantLValueEmitter::VisitSourceLocExpr(const SourceLocExpr *E) {
+  assert(false);
 }
 
 ConstantLValue
