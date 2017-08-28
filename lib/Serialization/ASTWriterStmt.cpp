@@ -845,7 +845,7 @@ void ASTStmtWriter::VisitVAArgExpr(VAArgExpr *E) {
 
 void ASTStmtWriter::VisitSourceLocExpr(SourceLocExpr *E) {
   VisitExpr(E);
-  Record.AddDeclarationName(E->getParentDeclName());
+  Record.AddDeclRef(cast_or_null<Decl>(E->getParentContext()));
   Record.AddSourceLocation(E->getLocStart());
   Record.AddSourceLocation(E->getLocEnd());
   Record.push_back(E->getIdentType());
@@ -1395,6 +1395,7 @@ void ASTStmtWriter::VisitCXXThrowExpr(CXXThrowExpr *E) {
 void ASTStmtWriter::VisitCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
   VisitExpr(E);
   Record.AddDeclRef(E->getParam());
+  Record.AddDeclRef(cast_or_null<Decl>(E->getUsedContext()));
   Record.AddSourceLocation(E->getUsedLocation());
   Code = serialization::EXPR_CXX_DEFAULT_ARG;
 }
@@ -1402,6 +1403,7 @@ void ASTStmtWriter::VisitCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
 void ASTStmtWriter::VisitCXXDefaultInitExpr(CXXDefaultInitExpr *E) {
   VisitExpr(E);
   Record.AddDeclRef(E->getField());
+  Record.AddDeclRef(cast_or_null<Decl>(E->getUsedContext()));
   Record.AddSourceLocation(E->getExprLoc());
   Code = serialization::EXPR_CXX_DEFAULT_INIT;
 }

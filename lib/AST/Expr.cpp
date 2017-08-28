@@ -1831,10 +1831,10 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
 
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, QualType Ty,
-                             DeclarationName Name)
+                             DeclContext *ParentContext)
     : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary, false, false, false,
            false),
-      BuiltinLoc(BLoc), RParenLoc(RParenLoc), DeclName(Name) {
+      BuiltinLoc(BLoc), RParenLoc(RParenLoc), ParentContext(ParentContext) {
   SourceLocExprBits.Type = Type;
   assert(!Ty->isDependentType() && "Type should never be dependent");
   assert(!Ty->isArrayType() && "Type should never be an array");
@@ -1862,9 +1862,8 @@ static PresumedLoc getPresumedSourceLoc(const ASTContext &Ctx,
   return PLoc;
 }
 
-
 llvm::APInt SourceLocExpr::getIntValue(const ASTContext &Ctx,
-                                           SourceLocation Loc) const {
+                                       SourceLocation Loc) const {
   auto PLoc = getPresumedSourceLoc(Ctx, Loc);
   unsigned Value = [&]() {
     switch (getIdentType()) {
@@ -1880,9 +1879,9 @@ llvm::APInt SourceLocExpr::getIntValue(const ASTContext &Ctx,
   return llvm::APInt(MaxWidth, Value);
 }
 
-StringLiteral *SourceLocExpr::getStringValue(const ASTContext &Ctx,
-                                             SourceLocation Loc,
-                                             DeclarationName Name) const {
+StringLiteral *
+SourceLocExpr::getStringValue(const ASTContext &Ctx, SourceLocation Loc,
+                              const DeclContext *CurContext) const {
   auto PLoc = getPresumedSourceLoc(Ctx, Loc);
   auto CreateString = [&](StringRef SVal) {
     QualType StrTy = BuildSourceLocExprType(Ctx, getIdentType(),
@@ -1897,8 +1896,12 @@ StringLiteral *SourceLocExpr::getStringValue(const ASTContext &Ctx,
     llvm_unreachable("should not be here");
   case SourceLocExpr::File:
     return CreateString(PLoc.getFilename());
-  case SourceLocExpr::Function:
+  case SourceLocExpr::Function: {
+    DeclarationName Name;
+    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(CurContext))
+      Name = FD->getDeclName();
     return CreateString(Name ? Name.getAsString() : "");
+  }
   }
 }
 
@@ -1921,13 +1924,13 @@ QualType SourceLocExpr::BuildSourceLocExprType(const ASTContext &Ctx,
 }
 
 Expr *SourceLocExpr::getValue(const ASTContext &Ctx, SourceLocation Loc,
-                 DeclarationName Name) const {
-    if (isLineOrColumn()) {
+                              const DeclContext *CurContext) const {
+  if (isLineOrColumn()) {
 
-      return IntegerLiteral::Create(Ctx, getIntValue(Ctx, Loc),
-                                Ctx.UnsignedIntTy, Loc);
-    }
-    return getStringValue(Ctx, Loc, Name);
+    return IntegerLiteral::Create(Ctx, getIntValue(Ctx, Loc), Ctx.UnsignedIntTy,
+                                  Loc);
+  }
+  return getStringValue(Ctx, Loc, CurContext);
 }
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,

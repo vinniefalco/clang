@@ -864,7 +864,7 @@ void ASTStmtReader::VisitVAArgExpr(VAArgExpr *E) {
 
 void ASTStmtReader::VisitSourceLocExpr(SourceLocExpr *E) {
   VisitExpr(E);
-  E->setParentDeclName(Record.readDeclarationName());
+  E->setParentContext(ReadDeclAs<DeclContext>());
   E->setLocStart(ReadSourceLocation());
   E->setLocEnd(ReadSourceLocation());
   E->setIdentType(static_cast<SourceLocExpr::IdentType>(Record.readInt()));
@@ -1384,12 +1384,14 @@ void ASTStmtReader::VisitCXXThrowExpr(CXXThrowExpr *E) {
 void ASTStmtReader::VisitCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
   VisitExpr(E);
   E->Param = ReadDeclAs<ParmVarDecl>();
+  E->UsedContext = ReadDeclAs<DeclContext>();
   E->Loc = ReadSourceLocation();
 }
 
 void ASTStmtReader::VisitCXXDefaultInitExpr(CXXDefaultInitExpr *E) {
   VisitExpr(E);
   E->Field = ReadDeclAs<FieldDecl>();
+  E->UsedContext = ReadDeclAs<DeclContext>();
   E->Loc = ReadSourceLocation();
 }
 

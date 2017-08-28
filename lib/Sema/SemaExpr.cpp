@@ -4592,7 +4592,7 @@ ExprResult Sema::BuildCXXDefaultArgExpr(SourceLocation CallLoc,
                                         FunctionDecl *FD, ParmVarDecl *Param) {
   if (CheckCXXDefaultArgExpr(CallLoc, FD, Param))
     return ExprError();
-  return CXXDefaultArgExpr::Create(Context, CallLoc, Param);
+  return CXXDefaultArgExpr::Create(Context, CallLoc, Param, CurContext);
 }
 
 Sema::VariadicCallType
@@ -12863,25 +12863,20 @@ ExprResult Sema::ActOnGNUNullExpr(SourceLocation TokenLoc) {
   return new (Context) GNUNullExpr(Ty, TokenLoc);
 }
 
-ExprResult Sema::ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
+ExprResult Sema::ActOnSourceLocExpr(SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc) {
-  DeclarationName Name;
-  if (auto *FD = dyn_cast<FunctionDecl>(CurContext))
-    Name = FD->getDeclName();
-  else if (auto *FTD = dyn_cast<FunctionTemplateDecl>(CurContext))
-    Name = FTD->getDeclName();
-  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, Name);
+  return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, CurContext);
 }
 
 ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc,
-                                    DeclarationName ParentName) {
+                                    DeclContext *ParentContext) {
 
   return new (Context) SourceLocExpr(
       Type, BuiltinLoc, RPLoc,
-      SourceLocExpr::BuildSourceLocExprType(Context, Type), ParentName);
+      SourceLocExpr::BuildSourceLocExprType(Context, Type), ParentContext);
 }
 
 bool Sema::ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&Exp,

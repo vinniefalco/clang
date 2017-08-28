@@ -5077,8 +5077,13 @@ Expr *ASTNodeImporter::VisitCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
   if (!Param)
     return nullptr;
 
-  return CXXDefaultArgExpr::Create(
-        Importer.getToContext(), Importer.Import(E->getUsedLocation()), Param);
+  DeclContext *DC = Importer.ImportContext(E->getUsedContext());
+  if (!DC)
+    return nullptr;
+
+  return CXXDefaultArgExpr::Create(Importer.getToContext(),
+                                   Importer.Import(E->getUsedLocation()), Param,
+                                   DC);
 }
 
 Expr *ASTNodeImporter::VisitCXXScalarValueInitExpr(CXXScalarValueInitExpr *E) {
@@ -5451,8 +5456,13 @@ Expr *ASTNodeImporter::VisitCXXDefaultInitExpr(CXXDefaultInitExpr *DIE) {
   if (!ToField && DIE->getField())
     return nullptr;
 
-  return CXXDefaultInitExpr::Create(
-      Importer.getToContext(), Importer.Import(DIE->getLocStart()), ToField);
+  DeclContext *DC = Importer.ImportContext(DIE->getUsedContext());
+  if (!DC)
+    return nullptr;
+
+  return CXXDefaultInitExpr::Create(Importer.getToContext(),
+                                    Importer.Import(DIE->getLocStart()),
+                                    ToField, DC);
 }
 
 Expr *ASTNodeImporter::VisitCXXNamedCastExpr(CXXNamedCastExpr *E) {

@@ -2660,9 +2660,9 @@ public:
   /// By default, builds a new default-argument expression, which does not
   /// require any semantic analysis. Subclasses may override this routine to
   /// provide different behavior.
-  ExprResult RebuildCXXDefaultArgExpr(SourceLocation Loc,
-                                            ParmVarDecl *Param) {
-    return CXXDefaultArgExpr::Create(getSema().Context, Loc, Param);
+  ExprResult RebuildCXXDefaultArgExpr(SourceLocation Loc, ParmVarDecl *Param) {
+    return CXXDefaultArgExpr::Create(getSema().Context, Loc, Param,
+                                     getSema().CurContext);
   }
 
   /// \brief Build a new C++11 default-initialization expression.
@@ -2672,7 +2672,8 @@ public:
   /// routine to provide different behavior.
   ExprResult RebuildCXXDefaultInitExpr(SourceLocation Loc,
                                        FieldDecl *Field) {
-    return CXXDefaultInitExpr::Create(getSema().Context, Loc, Field);
+    return CXXDefaultInitExpr::Create(getSema().Context, Loc, Field,
+                                      getSema().CurContext);
   }
 
   /// \brief Build a new C++ zero-initialization expression.
@@ -2936,8 +2937,8 @@ public:
   ExprResult RebuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                   SourceLocation BuiltinLoc,
                                   SourceLocation RPLoc,
-                                  DeclarationName ParentName) {
-    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, ParentName);
+                                  DeclContext *ParentContext) {
+    return getSema().BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, ParentContext);
   }
 
   /// \brief Build a new Objective-C boxed expression.
@@ -9806,18 +9807,16 @@ TreeTransform<Derived>::TransformCXXMemberCallExpr(CXXMemberCallExpr *E) {
 
 template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformSourceLocExpr(SourceLocExpr *E) {
-  bool NeedRebuildFunc = E->getIdentType() == SourceLocExpr::Function
-          && isa<FunctionDecl>(getSema().CurContext);
-
+  bool NeedRebuildFunc = E->getIdentType() == SourceLocExpr::Function &&
+                         isa<FunctionDecl>(getSema().CurContext) &&
+                         getSema().CurContext != E->getParentContext();
 
   if (!getDerived().AlwaysRebuild() && !NeedRebuildFunc)
     return E;
-  DeclarationName DN = E->getParentDeclName();
-  if (auto *FD = dyn_cast<FunctionDecl>(getSema().CurContext))
-    DN = FD->getDeclName();
+
   return getDerived().RebuildSourceLocExpr(E->getIdentType(), E->getLocStart(),
                                            E->getLocEnd(),
-                                           DN);
+                                           getSema().CurContext);
 }
 
 template<typename Derived>
@@ -10054,8 +10053,8 @@ TreeTransform<Derived>::TransformCXXDefaultArgExpr(CXXDefaultArgExpr *E) {
   if (!Param)
     return ExprError();
 
-  if (!getDerived().AlwaysRebuild() &&
-      Param == E->getParam())
+  if (!getDerived().AlwaysRebuild() && Param == E->getParam() &&
+      E->getUsedContext() == SemaRef.CurContext)
     return E;
 
   return getDerived().RebuildCXXDefaultArgExpr(E->getUsedLocation(), Param);
@@ -10070,7 +10069,8 @@ TreeTransform<Derived>::TransformCXXDefaultInitExpr(CXXDefaultInitExpr *E) {
   if (!Field)
     return ExprError();
 
-  if (!getDerived().AlwaysRebuild() && Field == E->getField())
+  if (!getDerived().AlwaysRebuild() && Field == E->getField() &&
+      E->getUsedContext() == SemaRef.CurContext)
     return E;
 
   return getDerived().RebuildCXXDefaultInitExpr(E->getExprLoc(), Field);

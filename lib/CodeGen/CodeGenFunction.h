@@ -1247,6 +1247,55 @@ private:
   SourceLocation LastStopPoint;
 
 public:
+public:
+  class SourceLocExprScopeBase;
+
+  SourceLocExprScopeBase *CurCXXDefaultArgScope = nullptr;
+  SourceLocExprScopeBase *CurCXXDefaultInitScope = nullptr;
+
+  class SourceLocExprScopeBase {
+    bool isSameCurCodeDecl() const { return CGF.CurCodeDecl == CurCodeDecl; }
+
+    static bool ShouldEnable(CodeGenFunction &CGF) {
+      return CGF.CurCXXDefaultArgScope == nullptr ||
+             !CGF.CurCXXDefaultArgScope->isSameCurCodeDecl();
+    }
+
+    SourceLocExprScopeBase(CodeGenFunction &CGF, SourceLocation Loc,
+                           const DeclContext *CurContext,
+                           SourceLocExprScopeBase **Dest, bool Enable)
+        : CGF(CGF), Loc(Loc), CurContext(CurContext), Dest(Dest), OldVal(*Dest),
+          CurCodeDecl(CGF.CurCodeDecl), Enable(Enable) {
+      if (Enable)
+        *Dest = this;
+    }
+
+  protected:
+    SourceLocExprScopeBase(CodeGenFunction &CGF, const CXXDefaultArgExpr *E)
+        : SourceLocExprScopeBase(CGF, E->getUsedLocation(), E->getUsedContext(),
+                                 &CGF.CurCXXDefaultArgScope,
+                                 ShouldEnable(CGF)) {}
+
+    SourceLocExprScopeBase(CodeGenFunction &CGF, const CXXDefaultInitExpr *E)
+        : SourceLocExprScopeBase(CGF, E->getLocStart(), E->getUsedContext(),
+                                 &CGF.CurCXXDefaultInitScope, true) {}
+    ~SourceLocExprScopeBase() {
+      if (Enable)
+        *Dest = OldVal;
+    }
+
+  public:
+    CodeGenFunction &CGF;
+    SourceLocation Loc;
+    const DeclContext *CurContext;
+
+  private:
+    SourceLocExprScopeBase **Dest;
+    SourceLocExprScopeBase *OldVal;
+    const Decl *CurCodeDecl;
+    bool Enable;
+  };
+
   /// A scope within which we are constructing the fields of an object which
   /// might use a CXXDefaultInitExpr. This stashes away a 'this' value to use
   /// if we need to evaluate a CXXDefaultInitExpr within the evaluation.
@@ -1267,11 +1316,13 @@ public:
 
   /// The scope of a CXXDefaultInitExpr. Within this scope, the value of 'this'
   /// is overridden to be the object under construction.
-  class CXXDefaultInitExprScope {
+  class CXXDefaultInitExprScope : public SourceLocExprScopeBase {
+    using Base = SourceLocExprScopeBase;
+
   public:
-    CXXDefaultInitExprScope(CodeGenFunction &CGF)
-      : CGF(CGF), OldCXXThisValue(CGF.CXXThisValue),
-        OldCXXThisAlignment(CGF.CXXThisAlignment) {
+    CXXDefaultInitExprScope(CodeGenFunction &CGF, const CXXDefaultInitExpr *E)
+        : Base(CGF, E), OldCXXThisValue(CGF.CXXThisValue),
+          OldCXXThisAlignment(CGF.CXXThisAlignment) {
       CGF.CXXThisValue = CGF.CXXDefaultInitExprThis.getPointer();
       CGF.CXXThisAlignment = CGF.CXXDefaultInitExprThis.getAlignment();
     }
@@ -1281,9 +1332,16 @@ public:
     }
 
   public:
-    CodeGenFunction &CGF;
     llvm::Value *OldCXXThisValue;
     CharUnits OldCXXThisAlignment;
+  };
+
+  class CXXDefaultArgExprScope : public SourceLocExprScopeBase {
+    using Base = SourceLocExprScopeBase;
+
+  public:
+    CXXDefaultArgExprScope(CodeGenFunction &CGF, const CXXDefaultArgExpr *E)
+        : Base(CGF, E) {}
   };
 
   /// The scope of an ArrayInitLoopExpr. Within this scope, the value of the

@@ -983,17 +983,22 @@ class CXXDefaultArgExpr final : public Expr {
   /// \brief The parameter whose default is being used.
   ParmVarDecl *Param;
 
+  /// \brief The context where the default argument expression was used.
+  DeclContext *UsedContext;
+
   /// \brief The location where the default argument expression was used.
   SourceLocation Loc;
 
-  CXXDefaultArgExpr(StmtClass SC, SourceLocation Loc, ParmVarDecl *param)
-    : Expr(SC,
-           param->hasUnparsedDefaultArg()
-             ? param->getType().getNonReferenceType()
-             : param->getDefaultArg()->getType(),
-           param->getDefaultArg()->getValueKind(),
-           param->getDefaultArg()->getObjectKind(), false, false, false, false),
-      Param(param), Loc(Loc) { }
+  CXXDefaultArgExpr(StmtClass SC, SourceLocation Loc, ParmVarDecl *param,
+                    DeclContext *UsedContext)
+      : Expr(SC,
+             param->hasUnparsedDefaultArg()
+                 ? param->getType().getNonReferenceType()
+                 : param->getDefaultArg()->getType(),
+             param->getDefaultArg()->getValueKind(),
+             param->getDefaultArg()->getObjectKind(), false, false, false,
+             false),
+        Param(param), UsedContext(UsedContext), Loc(Loc) {}
 
 public:
   CXXDefaultArgExpr(EmptyShell Empty) : Expr(CXXDefaultArgExprClass, Empty) {}
@@ -1001,8 +1006,10 @@ public:
   // \p Param is the parameter whose default argument is used by this
   // expression.
   static CXXDefaultArgExpr *Create(const ASTContext &C, SourceLocation Loc,
-                                   ParmVarDecl *Param) {
-    return new (C) CXXDefaultArgExpr(CXXDefaultArgExprClass, Loc, Param);
+                                   ParmVarDecl *Param,
+                                   DeclContext *UsedContext) {
+    return new (C)
+        CXXDefaultArgExpr(CXXDefaultArgExprClass, Loc, Param, UsedContext);
   }
 
   // Retrieve the parameter that the argument was created from.
@@ -1017,6 +1024,8 @@ public:
     return getParam()->getDefaultArg();
   }
 
+  const DeclContext *getUsedContext() const { return UsedContext; }
+  DeclContext *getUsedContext() { return UsedContext; }
   /// \brief Retrieve the location where this default argument was actually
   /// used.
   SourceLocation getUsedLocation() const { return Loc; }
@@ -1053,11 +1062,14 @@ class CXXDefaultInitExpr : public Expr {
   /// \brief The field whose default is being used.
   FieldDecl *Field;
 
+  /// \brief The context where the default initializer expression was used.
+  DeclContext *UsedContext;
+
   /// \brief The location where the default initializer expression was used.
   SourceLocation Loc;
 
   CXXDefaultInitExpr(const ASTContext &C, SourceLocation Loc, FieldDecl *Field,
-                     QualType T);
+                     QualType T, DeclContext *UsedContext);
 
   CXXDefaultInitExpr(EmptyShell Empty) : Expr(CXXDefaultInitExprClass, Empty) {}
 
@@ -1065,8 +1077,10 @@ public:
   /// \p Field is the non-static data member whose default initializer is used
   /// by this expression.
   static CXXDefaultInitExpr *Create(const ASTContext &C, SourceLocation Loc,
-                                    FieldDecl *Field) {
-    return new (C) CXXDefaultInitExpr(C, Loc, Field, Field->getType());
+                                    FieldDecl *Field,
+                                    DeclContext *UsedContext) {
+    return new (C)
+        CXXDefaultInitExpr(C, Loc, Field, Field->getType(), UsedContext);
   }
 
   /// \brief Get the field whose initializer will be used.
@@ -1082,6 +1096,9 @@ public:
     assert(Field->getInClassInitializer() && "initializer hasn't been parsed");
     return Field->getInClassInitializer();
   }
+
+  const DeclContext *getUsedContext() const { return UsedContext; }
+  DeclContext *getUsedContext() { return UsedContext; }
 
   SourceLocation getLocStart() const LLVM_READONLY { return Loc; }
   SourceLocation getLocEnd() const LLVM_READONLY { return Loc; }

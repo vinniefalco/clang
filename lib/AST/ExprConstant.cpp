@@ -968,11 +968,11 @@ namespace {
   struct SourceLocContextRAIIBase {
   protected:
     SourceLocContextRAIIBase(EvalInfo &Info, SourceLocation NewLoc,
-                             DeclarationName NewName,
-                             SourceLocContextRAIIBase **Dest,
-                             bool Enable)
-        : Info(Info), Loc(NewLoc), Name(NewName), CurrentCall(Info.CurrentCall),
-          Dest(Dest), OldVal(*Dest), Enable(Enable) {
+                             const DeclContext *CurContext,
+                             SourceLocContextRAIIBase **Dest, bool Enable)
+        : Info(Info), Loc(NewLoc), CurContext(CurContext),
+          CurrentCall(Info.CurrentCall), Dest(Dest), OldVal(*Dest),
+          Enable(Enable) {
       if (Enable)
         *Dest = this;
     }
@@ -981,7 +981,7 @@ namespace {
   public:
     EvalInfo &Info;
     SourceLocation Loc;
-    DeclarationName Name;
+    const DeclContext *CurContext;
     CallStackFrame *CurrentCall;
 
     bool isInSameCurrentCall() const { return CurrentCall == Info.CurrentCall;}
@@ -998,21 +998,19 @@ namespace {
     }
   public:
     SourceLocDefaultArgContextRAII(EvalInfo &Info, SourceLocation Loc,
-                                   DeclarationName Name)
-        : SourceLocContextRAIIBase(Info, Loc, Name,
+                                   const DeclContext *CurContext)
+        : SourceLocContextRAIIBase(Info, Loc, CurContext,
                                    &Info.EvaluatingDefaultArg,
-                                   ShouldEnable(Info)) {
-    }
+                                   ShouldEnable(Info)) {}
   };
   class SourceLocDefaultMemberInitContextRAII
       : public SourceLocContextRAIIBase {
   public:
     SourceLocDefaultMemberInitContextRAII(EvalInfo &Info, SourceLocation Loc,
-                                          DeclarationName Name,
+                                          const DeclContext *CurContext,
                                           bool Enable = true)
-        : SourceLocContextRAIIBase(Info, Loc, Name,
-                                   &Info.EvaluatingDefaultMemberInit,
-                                   Enable) {}
+        : SourceLocContextRAIIBase(Info, Loc, CurContext,
+                                   &Info.EvaluatingDefaultMemberInit, Enable) {}
   };
   /// RAII object used to treat the current evaluation as the correct pointer
   /// offset fold for the current EvalMode
@@ -4558,29 +4556,16 @@ public:
   bool VisitSubstNonTypeTemplateParmExpr(const SubstNonTypeTemplateParmExpr *E)
     { return StmtVisitorTy::Visit(E->getReplacement()); }
   bool VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *E) {
-    SourceLocation Loc = E->getUsedLocation();
-    DeclarationName Name;
-    if (Info.CurrentCall && Info.CurrentCall->Callee) {
-      assert(false);
-      Name = Info.CurrentCall->Callee->getDeclName();
-      Name.dump();
-    } else if (Info.CurrentCall) {
-      assert(Info.CurrentCall->Caller->Callee);
-      assert(false);
-    }
-    SourceLocDefaultArgContextRAII Guard(Info, Loc, Name);
+    SourceLocDefaultArgContextRAII Guard(Info, E->getUsedLocation(),
+                                         E->getUsedContext());
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *E) {
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
       return Error(E);
-    SourceLocation Loc = E->getLocStart();
-    DeclarationName Name;
-    if (Info.CurrentCall && Info.CurrentCall->Callee) {
-      Name = Info.CurrentCall->Callee->getDeclName();
-    }
-    SourceLocDefaultMemberInitContextRAII Guard(Info, Loc, Name);
+    SourceLocDefaultMemberInitContextRAII Guard(Info, E->getLocStart(),
+                                                E->getUsedContext());
     return StmtVisitorTy::Visit(E->getExpr());
   }
 
@@ -5636,13 +5621,10 @@ public:
      && Info.EvaluatingDefaultArg->isInSameCurrentCall())
       ArgCtx = Info.EvaluatingDefaultArg;
     if (ArgCtx) {
-      assert(ArgCtx->Name);
-      Value = E->getValue(Info.Ctx, ArgCtx->Loc, ArgCtx->Name);
-    } else if (Info.CurrentCall && Info.CurrentCall->Caller)
-      Value = E->getValue(Info.Ctx, E->getLocStart(),
-                          Info.CurrentCall->Callee->getDeclName());
-    else
-      Value = E->getValue(Info.Ctx, E->getLocStart(), E->getParentDeclName());
+      assert(ArgCtx->CurContext);
+      Value = E->getValue(Info.Ctx, ArgCtx->Loc, ArgCtx->CurContext);
+    } else
+      Value = E->getValue(Info.Ctx);
 
     if (!Value)
       return Error(E);

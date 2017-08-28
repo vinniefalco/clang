@@ -3820,14 +3820,14 @@ public:
 
 private:
   SourceLocation BuiltinLoc, RParenLoc;
-  DeclarationName DeclName;
+  DeclContext *ParentContext;
 
 public:
   static QualType BuildSourceLocExprType(const ASTContext &Ctx, IdentType Type,
                                          bool MakeArray = false,
                                          int ArraySize = -1);
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                QualType Ty, DeclarationName DeclName);
+                QualType Ty, DeclContext *Context);
 
   /// \brief Build an empty call expression.
   explicit SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
@@ -3843,15 +3843,27 @@ public:
   bool isLineOrColumn() const LLVM_READONLY {
     return getIdentType() == Line || getIdentType() == Column;
   }
+
   llvm::APInt getIntValue(const ASTContext &Ctx, SourceLocation Loc) const;
+  llvm::APInt getIntValue(const ASTContext &Ctx) const {
+    return getIntValue(Ctx, BuiltinLoc);
+  }
+
   StringLiteral *getStringValue(const ASTContext &Ctx, SourceLocation Loc,
-                                DeclarationName Name) const;
+                                const DeclContext *UsedContext) const;
+  StringLiteral *getStringValue(const ASTContext &Ctx) const {
+    return getStringValue(Ctx, BuiltinLoc, ParentContext);
+  }
   Expr *getValue(const ASTContext &Ctx, SourceLocation Loc,
-                 DeclarationName Name) const;
+                 const DeclContext *UsedContext) const;
+  Expr *getValue(const ASTContext &Ctx) const {
+    return getValue(Ctx, BuiltinLoc, ParentContext);
+  }
 
   /// \brief If the SourceLocExpr has been resolved return the subexpression
   /// representing the resolved value. Otherwise return null.
-  DeclarationName getParentDeclName() const { return DeclName; }
+  const DeclContext *getParentContext() const { return ParentContext; }
+  DeclContext *getParentContext() { return ParentContext; }
 
   SourceLocation getLocation() const LLVM_READONLY { return BuiltinLoc; }
   SourceLocation getLocStart() const LLVM_READONLY { return BuiltinLoc; }
@@ -3873,7 +3885,7 @@ private:
   friend class ASTStmtReader;
 
   void setIdentType(IdentType T) { SourceLocExprBits.Type = T; }
-  void setParentDeclName(DeclarationName N) { DeclName = N; }
+  void setParentContext(DeclContext *DC) { ParentContext = DC; }
   void setLocStart(SourceLocation L) { BuiltinLoc = L; }
   void setLocEnd(SourceLocation L) { RParenLoc = L; }
 };

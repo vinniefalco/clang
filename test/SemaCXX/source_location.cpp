@@ -444,12 +444,12 @@ constexpr bool test_class() {
     check(t1.x, "TestClass t"); // Start of variable being constructed.
   }
   {
-    TestAggClass t  {};
-    check(t.x, "TestAggClass t  {");
+    TestAggClass t  { };
+    check(t.x, "TestAggClass t  { }");
   }
   {
-    TestAggClass t = {};
-    check(t.x, "TestAggClass t = {");
+    TestAggClass t = { };
+    check(t.x, "TestAggClass t = { }");
   }
   return true;
 }

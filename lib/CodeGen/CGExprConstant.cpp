@@ -813,11 +813,10 @@ public:
   llvm::Constant *VisitSourceLocExpr(SourceLocExpr *SLE, QualType T) {
     auto &Ctx = CGM.getContext();
     if (SLE->isLineOrColumn()) {
-      Expr *E = SLE->getValue(Ctx, SLE->getLocStart(), SLE->getParentDeclName());
+      Expr *E = SLE->getValue(Ctx);
       return Visit(E, T);
     } else {
-      Expr *Str = SLE->getValue(Ctx, SLE->getLocStart(),
-                                SLE->getParentDeclName());
+      Expr *Str = SLE->getValue(Ctx);
       ConstantAddress C = CGM.GetAddrOfConstantStringFromLiteral(cast<StringLiteral>(Str));
       return C.getPointer();
       //return CGM.GetConstantArrayFromStringLiteral(cast<StringLiteral>(Str));

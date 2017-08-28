@@ -4397,7 +4397,7 @@ public:
 
   // __builtin_LINE(), __builtin_FUNCTION(), __builtin_FILE(),
   // __builtin_COLUMN()
-  ExprResult ActOnSourceLocExpr(Scope *S, SourceLocExpr::IdentType Type,
+  ExprResult ActOnSourceLocExpr(SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc,
                                 SourceLocation RPLoc);
 
@@ -4408,7 +4408,7 @@ public:
   /// builtin call.
   ExprResult BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                 SourceLocation BuiltinLoc, SourceLocation RPLoc,
-                                DeclarationName ParentName);
+                                DeclContext *ParentContext);
 
   // __null
   ExprResult ActOnGNUNullExpr(SourceLocation TokenLoc);
