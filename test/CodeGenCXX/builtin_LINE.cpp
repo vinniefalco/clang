@@ -1,6 +1,8 @@
 // RUN: %clang_cc1 -std=c++1z -fblocks %s -triple %itanium_abi_triple -emit-llvm -o - | FileCheck %s
 
 extern "C" int sink;
+extern "C" const volatile void* volatile ptr_sink = nullptr;
+
 struct Tag1 {};
 struct Tag2 {};
 struct Tag3 {};
@@ -10,10 +12,20 @@ constexpr int get_line_constexpr(int l = __builtin_LINE()) {
   return l;
 }
 
+int get_line_nonconstexpr(int l = __builtin_LINE()) {
+  return l;
+}
+
 // CHECK: @global_one = global i32 [[@LINE+1]], align 4
 int global_one = __builtin_LINE();
 // CHECK-NEXT: @global_two = global i32 [[@LINE+1]], align 4
 int global_two = get_line_constexpr();
+// CHECK: @_ZL12global_three = internal constant i32 [[@LINE+1]], align 4
+const int global_three = get_line_constexpr();
+// CHECK-LABEL: define internal void @__cxx_global_var_init
+// CHECK: %call = call i32 @_Z21get_line_nonconstexpri(i32 [[@LINE+2]])
+// CHECK-NEXT: store i32 %call, i32* @global_four, align 4
+int global_four = get_line_nonconstexpr();
 
 struct InClassInit {
   int Init = __builtin_LINE();
@@ -50,4 +62,5 @@ void get_line_test() {
   sink = get_line();
   // CHECK-NEXT:  store i32 [[@LINE+1]], i32* @sink, align 4
   sink = __builtin_LINE();
+  ptr_sink = &global_three;
 }

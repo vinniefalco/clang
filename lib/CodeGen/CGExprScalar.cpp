@@ -594,8 +594,7 @@ public:
       return Builder.getInt(Val);
     } else {
       StringLiteral *Str = SLE->getStringValue(Ctx, Loc, DC);
-      ConstantAddress C = CGF.CGM.GetAddrOfConstantStringFromLiteral(Str);
-      return C.getPointer();
+      return CGF.EmitArrayToPointerDecay(Str).getPointer();
     }
     llvm_unreachable("missing return");
   }

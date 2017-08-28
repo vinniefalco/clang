@@ -811,6 +811,7 @@ public:
   }
 
   llvm::Constant *VisitSourceLocExpr(SourceLocExpr *SLE, QualType T) {
+    assert(false && "FIXME(EricWF)");
     auto &Ctx = CGM.getContext();
     if (SLE->isLineOrColumn()) {
       Expr *E = SLE->getValue(Ctx);
@@ -822,7 +823,7 @@ public:
       return C.getPointer();
       //return CGM.GetConstantArrayFromStringLiteral(cast<StringLiteral>(Str));
     }
-    assert(false && "FIXME(EricWF)");
+
     return nullptr;
   }
 
