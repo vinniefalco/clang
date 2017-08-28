@@ -817,7 +817,8 @@ public:
       return Visit(E, T);
     } else {
       Expr *Str = SLE->getValue(Ctx);
-      ConstantAddress C = CGM.GetAddrOfConstantStringFromLiteral(cast<StringLiteral>(Str));
+      ConstantAddress C = CGM.GetAddrOfConstantStringFromLiteral(
+              cast<StringLiteral>(Str));
       return C.getPointer();
       //return CGM.GetConstantArrayFromStringLiteral(cast<StringLiteral>(Str));
     }

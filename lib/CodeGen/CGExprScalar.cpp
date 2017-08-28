@@ -578,8 +578,20 @@ public:
     return EmitLoadOfLValue(E);
   }
   Value *VisitSourceLocExpr(SourceLocExpr *SLE) {
-    assert(false && "FIXME(EricWF)");
-    return nullptr;
+    auto &Ctx = CGF.getContext();
+    SourceLocation Loc = SLE->getLocation();
+    const DeclContext *DC = SLE->getParentContext();
+
+    if (SLE->isLineOrColumn()) {
+      auto Val = SLE->getIntValue(Ctx, Loc);
+      return Builder.getInt(Val);
+    } else {
+      Expr *Str = SLE->getValue(Ctx);
+      ConstantAddress C = CGF.CGM.GetAddrOfConstantStringFromLiteral(cast<StringLiteral>(Str));
+      return C.getPointer();
+      //return CGM.GetConstantArrayFromStringLiteral(cast<StringLiteral>(Str));
+    }
+    llvm_unreachable("missing return");
   }
   Value *VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE) {
     CodeGenFunction::CXXDefaultArgExprScope Scope(CGF, DAE);
