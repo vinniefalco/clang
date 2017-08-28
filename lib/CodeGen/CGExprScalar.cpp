@@ -581,15 +581,21 @@ public:
     auto &Ctx = CGF.getContext();
     SourceLocation Loc = SLE->getLocation();
     const DeclContext *DC = SLE->getParentContext();
-
+    if (auto *DIS = CGF.CurCXXDefaultInitScope) {
+      Loc = DIS->Loc;
+      DC = DIS->CurContext;
+    }
+    else if (auto *DAS = CGF.CurCXXDefaultArgScope) {
+      Loc = DAS->Loc;
+      DC = DAS->CurContext;
+    }
     if (SLE->isLineOrColumn()) {
       auto Val = SLE->getIntValue(Ctx, Loc);
       return Builder.getInt(Val);
     } else {
-      Expr *Str = SLE->getValue(Ctx);
-      ConstantAddress C = CGF.CGM.GetAddrOfConstantStringFromLiteral(cast<StringLiteral>(Str));
+      StringLiteral *Str = SLE->getStringValue(Ctx, Loc, DC);
+      ConstantAddress C = CGF.CGM.GetAddrOfConstantStringFromLiteral(Str);
       return C.getPointer();
-      //return CGM.GetConstantArrayFromStringLiteral(cast<StringLiteral>(Str));
     }
     llvm_unreachable("missing return");
   }
