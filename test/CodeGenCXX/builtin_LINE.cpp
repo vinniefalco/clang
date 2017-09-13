@@ -21,7 +21,8 @@ int global_one = __builtin_LINE();
 // CHECK-NEXT: @global_two = global i32 [[@LINE+1]], align 4
 int global_two = get_line_constexpr();
 // CHECK: @_ZL12global_three = internal constant i32 [[@LINE+1]], align 4
-const int global_three = get_line_constexpr();
+const int global_three(get_line_constexpr());
+
 // CHECK-LABEL: define internal void @__cxx_global_var_init
 // CHECK: %call = call i32 @_Z21get_line_nonconstexpri(i32 [[@LINE+2]])
 // CHECK-NEXT: store i32 %call, i32* @global_four, align 4
@@ -63,4 +64,8 @@ void get_line_test() {
   // CHECK-NEXT:  store i32 [[@LINE+1]], i32* @sink, align 4
   sink = __builtin_LINE();
   ptr_sink = &global_three;
+}
+
+void foo() {
+  const int N[] = {__builtin_LINE(), get_line_constexpr()};
 }
