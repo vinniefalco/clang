@@ -1086,8 +1086,8 @@ public:
   getUBSanFunctionSignature(CodeGen::CodeGenModule &CGM) const override {
     unsigned Sig = (0xeb << 0) |  // jmp rel8
                    (0x06 << 8) |  //           .+0x08
-                   ('F' << 16) |
-                   ('T' << 24);
+                   ('v' << 16) |
+                   ('2' << 24);
     return llvm::ConstantInt::get(CGM.Int32Ty, Sig);
   }
 
@@ -2277,17 +2277,10 @@ public:
 
   llvm::Constant *
   getUBSanFunctionSignature(CodeGen::CodeGenModule &CGM) const override {
-    unsigned Sig;
-    if (getABIInfo().has64BitPointers())
-      Sig = (0xeb << 0) |  // jmp rel8
-            (0x0a << 8) |  //           .+0x0c
-            ('F' << 16) |
-            ('T' << 24);
-    else
-      Sig = (0xeb << 0) |  // jmp rel8
-            (0x06 << 8) |  //           .+0x08
-            ('F' << 16) |
-            ('T' << 24);
+    unsigned Sig = (0xeb << 0) | // jmp rel8
+                   (0x06 << 8) | //           .+0x08
+                   ('v' << 16) |
+                   ('2' << 24);
     return llvm::ConstantInt::get(CGM.Int32Ty, Sig);
   }
 
@@ -2297,6 +2290,15 @@ public:
     if (!IsForDefinition)
       return;
     if (const FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(D)) {
+      if (FD->hasAttr<X86ForceAlignArgPointerAttr>()) {
+        // Get the LLVM function.
+        auto *Fn = cast<llvm::Function>(GV);
+
+        // Now add the 'alignstack' attribute with a value of 16.
+        llvm::AttrBuilder B;
+        B.addStackAlignmentAttr(16);
+        Fn->addAttributes(llvm::AttributeList::FunctionIndex, B);
+      }
       if (FD->hasAttr<AnyX86InterruptAttr>()) {
         llvm::Function *Fn = cast<llvm::Function>(GV);
         Fn->setCallingConv(llvm::CallingConv::X86_INTR);
@@ -2425,6 +2427,15 @@ void WinX86_64TargetCodeGenInfo::setTargetAttributes(
   if (!IsForDefinition)
     return;
   if (const FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(D)) {
+    if (FD->hasAttr<X86ForceAlignArgPointerAttr>()) {
+      // Get the LLVM function.
+      auto *Fn = cast<llvm::Function>(GV);
+
+      // Now add the 'alignstack' attribute with a value of 16.
+      llvm::AttrBuilder B;
+      B.addStackAlignmentAttr(16);
+      Fn->addAttributes(llvm::AttributeList::FunctionIndex, B);
+    }
     if (FD->hasAttr<AnyX86InterruptAttr>()) {
       llvm::Function *Fn = cast<llvm::Function>(GV);
       Fn->setCallingConv(llvm::CallingConv::X86_INTR);

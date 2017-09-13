@@ -2451,11 +2451,31 @@ CodeGenModule::GetOrCreateLLVMGlobal(StringRef MangledName,
         const VarDecl *InitDecl;
         const Expr *InitExpr = D->getAnyInitializer(InitDecl);
         if (InitExpr) {
-          GV->setConstant(true);
-          GV->setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
           ConstantEmitter emitter(*this);
-          GV->setInitializer(emitter.tryEmitForInitializer(*InitDecl));
-          emitter.finalize(GV);
+          llvm::Constant *Init = emitter.tryEmitForInitializer(*InitDecl);
+          if (Init) {
+            auto *InitType = Init->getType();
+            if (GV->getType()->getElementType() != InitType) {
+              // The type of the initializer does not match the definition.
+              // This happens when an initializer has a different type from
+              // the type of the global (because of padding at the end of a
+              // structure for instance).
+              GV->setName(StringRef());
+              // Make a new global with the correct type, this is now guaranteed
+              // to work.
+              auto *NewGV = cast<llvm::GlobalVariable>(
+                  GetAddrOfGlobalVar(D, InitType, IsForDefinition));
+
+              // Erase the old global, since it is no longer used.
+              cast<llvm::GlobalValue>(GV)->eraseFromParent();
+              GV = NewGV;
+            } else {
+              GV->setInitializer(Init);
+              GV->setConstant(true);
+              GV->setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
+            }
+            emitter.finalize(GV);
+          }
         }
       }
     }
@@ -3531,6 +3551,10 @@ CodeGenModule::GetAddrOfConstantCFString(const StringLiteral *Literal) {
   Entry.second = GV;
 
   return ConstantAddress(GV, Alignment);
+}
+
+bool CodeGenModule::getExpressionLocationsEnabled() const {
+  return !CodeGenOpts.EmitCodeView || CodeGenOpts.DebugColumnInfo;
 }
 
 QualType CodeGenModule::getObjCFastEnumerationStateType() {

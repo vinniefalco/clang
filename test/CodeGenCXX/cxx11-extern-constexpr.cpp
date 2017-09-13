@@ -8,6 +8,19 @@ struct A {
 const int *p = &A::Foo; // emit available_externally
 const int A::Foo;       // convert to full definition
 
+struct PODWithInit {
+  int g = 42;
+  char h = 43;
+};
+struct CreatePOD {
+  // Deferred initialization of the structure here requires changing
+  // the type of the global variable: the initializer list does not include
+  // the tail padding.
+  // CXX11: @_ZN9CreatePOD3podE = available_externally constant { i32, i8 } { i32 42, i8 43 },
+  static constexpr PODWithInit pod{};
+};
+const int *p_pod = &CreatePOD::pod.g;
+
 struct Bar {
   int b;
 };
