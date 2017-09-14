@@ -1813,7 +1813,6 @@ void StmtProfiler::VisitTypoExpr(const TypoExpr *E) {
 
 void StmtProfiler::VisitSourceLocExpr(const SourceLocExpr *E) {
   VisitExpr(E);
-  // FIXME(EricWF) Something to do?
 }
 
 void StmtProfiler::VisitObjCStringLiteral(const ObjCStringLiteral *S) {
