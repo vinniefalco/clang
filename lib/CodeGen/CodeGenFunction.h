@@ -26,6 +26,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprOpenMP.h"
+#include "clang/AST/SourceLocExprScope.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/ABI.h"
 #include "clang/Basic/CapturedStmt.h"
@@ -91,6 +92,7 @@ class RegionCodeGenTy;
 class TargetCodeGenInfo;
 struct OMPTaskDataTy;
 struct CGCoroData;
+using SourceLocExprScope = SourceLocExprScopeBase<const Decl>;
 
 /// The kind of evaluation to perform on values of a particular
 /// type.  Basically, is the code in CGExprScalar, CGExprComplex, or
@@ -1247,64 +1249,14 @@ private:
   SourceLocation LastStopPoint;
 
 public:
-  class SourceLocExprScopeBase;
 
   /// \brief Source location information about the default argument expression
   /// we're evaluating, if any.
-  SourceLocExprScopeBase *CurCXXDefaultArgScope = nullptr;
+  SourceLocExprScope *CurCXXDefaultArgScope = nullptr;
 
   /// \brief Source location information about the default member initializer
   /// we're evaluating, if any.
-  SourceLocExprScopeBase *CurCXXDefaultInitScope = nullptr;
-
-  class SourceLocExprScopeBase {
-    bool isSameCurCodeDecl() const { return CGF.CurCodeDecl == CurCodeDecl; }
-
-    static bool ShouldEnable(CodeGenFunction &CGF) {
-      // Only update the default argument scope if we've entered a new
-      // evaluation context, and not when it's nested within another default
-      // argument. Example:
-      //    int bar(int x = __builtin_LINE()) { return x; }
-      //    int foo(int x = bar())  { return x; }
-      //    static_assert(foo() == __LINE__);
-      return CGF.CurCXXDefaultArgScope == nullptr ||
-             !CGF.CurCXXDefaultArgScope->isSameCurCodeDecl();
-    }
-
-    SourceLocExprScopeBase(CodeGenFunction &CGF, SourceLocation Loc,
-                           const DeclContext *CurContext,
-                           SourceLocExprScopeBase **Dest, bool Enable)
-        : CGF(CGF), Loc(Loc), CurContext(CurContext), Dest(Dest), OldVal(*Dest),
-          CurCodeDecl(CGF.CurCodeDecl), Enable(Enable) {
-      if (Enable)
-        *Dest = this;
-    }
-
-  protected:
-    SourceLocExprScopeBase(CodeGenFunction &CGF, const CXXDefaultArgExpr *E)
-        : SourceLocExprScopeBase(CGF, E->getUsedLocation(), E->getUsedContext(),
-                                 &CGF.CurCXXDefaultArgScope,
-                                 ShouldEnable(CGF)) {}
-
-    SourceLocExprScopeBase(CodeGenFunction &CGF, const CXXDefaultInitExpr *E)
-        : SourceLocExprScopeBase(CGF, E->getLocStart(), E->getUsedContext(),
-                                 &CGF.CurCXXDefaultInitScope, true) {}
-    ~SourceLocExprScopeBase() {
-      if (Enable)
-        *Dest = OldVal;
-    }
-
-  public:
-    CodeGenFunction &CGF;
-    SourceLocation Loc;
-    const DeclContext *CurContext;
-
-  private:
-    SourceLocExprScopeBase **Dest;
-    SourceLocExprScopeBase *OldVal;
-    const Decl *CurCodeDecl;
-    bool Enable;
-  };
+  SourceLocExprScope *CurCXXDefaultInitScope = nullptr;
 
   /// A scope within which we are constructing the fields of an object which
   /// might use a CXXDefaultInitExpr. This stashes away a 'this' value to use
@@ -1326,13 +1278,12 @@ public:
 
   /// The scope of a CXXDefaultInitExpr. Within this scope, the value of 'this'
   /// is overridden to be the object under construction.
-  class CXXDefaultInitExprScope : public SourceLocExprScopeBase {
-    using Base = SourceLocExprScopeBase;
-
+  class CXXDefaultInitExprScope  {
   public:
     CXXDefaultInitExprScope(CodeGenFunction &CGF, const CXXDefaultInitExpr *E)
-        : Base(CGF, E), OldCXXThisValue(CGF.CXXThisValue),
-          OldCXXThisAlignment(CGF.CXXThisAlignment) {
+        : CGF(CGF), OldCXXThisValue(CGF.CXXThisValue),
+          OldCXXThisAlignment(CGF.CXXThisAlignment),
+          SourceLocScope(E, &CGF.CurCXXDefaultInitScope, CGF.CurCodeDecl) {
       CGF.CXXThisValue = CGF.CXXDefaultInitExprThis.getPointer();
       CGF.CXXThisAlignment = CGF.CXXDefaultInitExprThis.getAlignment();
     }
@@ -1342,17 +1293,19 @@ public:
     }
 
   public:
+    CodeGenFunction &CGF;
     llvm::Value *OldCXXThisValue;
     CharUnits OldCXXThisAlignment;
+    SourceLocExprScope SourceLocScope;
   };
 
   /// The scope of a CXXDefaultArgExpr.
-  class CXXDefaultArgExprScope : public SourceLocExprScopeBase {
-    using Base = SourceLocExprScopeBase;
+  class CXXDefaultArgExprScope : public SourceLocExprScope {
+    using Base = SourceLocExprScope;
 
   public:
     CXXDefaultArgExprScope(CodeGenFunction &CGF, const CXXDefaultArgExpr *E)
-        : Base(CGF, E) {}
+        : Base(E, &CGF.CurCXXDefaultArgScope, CGF.CurCodeDecl) {}
   };
 
   /// The scope of an ArrayInitLoopExpr. Within this scope, the value of the

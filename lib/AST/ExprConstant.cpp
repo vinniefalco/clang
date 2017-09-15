@@ -40,6 +40,7 @@
 #include "clang/AST/CharUnits.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/RecordLayout.h"
+#include "clang/AST/SourceLocExprScope.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/Builtins.h"
@@ -58,7 +59,8 @@ namespace {
   struct LValue;
   struct CallStackFrame;
   struct EvalInfo;
-  struct SourceLocContextRAIIBase;
+  using SourceLocExprScope = SourceLocExprScopeBase<CallStackFrame>;
+
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>())
@@ -590,11 +592,11 @@ namespace {
 
     /// \brief Source location information about the default argument expression
     /// we're evaluating, if any.
-    SourceLocContextRAIIBase *EvaluatingDefaultArg;
+    SourceLocExprScope *CurCXXDefaultArgScope = nullptr;
 
     /// \brief Source location information about the default member initializer
     /// we're evaluating, if any.
-    SourceLocContextRAIIBase *EvaluatingDefaultMemberInit;
+    SourceLocExprScope *CurCXXDefaultInitScope = nullptr;
 
     enum EvaluationMode {
       /// Evaluate as a constant expression. Stop if we find that the expression
@@ -669,7 +671,6 @@ namespace {
           EvaluatingDecl((const ValueDecl *)nullptr),
           EvaluatingDeclValue(nullptr), HasActiveDiagnostic(false),
           HasFoldFailureDiagnostic(false), IsSpeculativelyEvaluating(false),
-          EvaluatingDefaultArg(nullptr), EvaluatingDefaultMemberInit(nullptr),
           EvalMode(Mode) {}
 
     void setEvaluatingDecl(APValue::LValueBase Base, APValue &Value) {
@@ -969,54 +970,6 @@ namespace {
     }
   };
 
-  /// Temporarily override 'this'.
-  struct SourceLocContextRAIIBase {
-  protected:
-    SourceLocContextRAIIBase(EvalInfo &Info, SourceLocation NewLoc,
-                             const DeclContext *CurContext,
-                             SourceLocContextRAIIBase **Dest, bool Enable)
-        : Info(Info), Loc(NewLoc), CurContext(CurContext),
-          CurrentCall(Info.CurrentCall), Dest(Dest), OldVal(*Dest),
-          Enable(Enable) {
-      if (Enable)
-        *Dest = this;
-    }
-    ~SourceLocContextRAIIBase() { if (Enable) *Dest = OldVal; }
-
-  public:
-    EvalInfo &Info;
-    SourceLocation Loc;
-    const DeclContext *CurContext;
-    CallStackFrame *CurrentCall;
-
-    bool isInSameCurrentCall() const { return CurrentCall == Info.CurrentCall;}
-  private:
-
-    SourceLocContextRAIIBase **Dest;
-    SourceLocContextRAIIBase *OldVal;
-    bool Enable;
-  };
-  class SourceLocDefaultArgContextRAII : public SourceLocContextRAIIBase {
-    static bool ShouldEnable(EvalInfo &Info) {
-      return !Info.EvaluatingDefaultArg ||
-              !Info.EvaluatingDefaultArg->isInSameCurrentCall();
-    }
-  public:
-    SourceLocDefaultArgContextRAII(EvalInfo &Info, SourceLocation Loc,
-                                   const DeclContext *CurContext)
-        : SourceLocContextRAIIBase(Info, Loc, CurContext,
-                                   &Info.EvaluatingDefaultArg,
-                                   ShouldEnable(Info)) {}
-  };
-  class SourceLocDefaultMemberInitContextRAII
-      : public SourceLocContextRAIIBase {
-  public:
-    SourceLocDefaultMemberInitContextRAII(EvalInfo &Info, SourceLocation Loc,
-                                          const DeclContext *CurContext,
-                                          bool Enable = true)
-        : SourceLocContextRAIIBase(Info, Loc, CurContext,
-                                   &Info.EvaluatingDefaultMemberInit, Enable) {}
-  };
   /// RAII object used to treat the current evaluation as the correct pointer
   /// offset fold for the current EvalMode
   struct FoldOffsetRAII {
@@ -4561,16 +4514,14 @@ public:
   bool VisitSubstNonTypeTemplateParmExpr(const SubstNonTypeTemplateParmExpr *E)
     { return StmtVisitorTy::Visit(E->getReplacement()); }
   bool VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *E) {
-    SourceLocDefaultArgContextRAII Guard(Info, E->getUsedLocation(),
-                                         E->getUsedContext());
+    SourceLocExprScope Guard(E, &Info.CurCXXDefaultArgScope, Info.CurrentCall);
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *E) {
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
       return Error(E);
-    SourceLocDefaultMemberInitContextRAII Guard(Info, E->getUsedLocation(),
-                                                E->getUsedContext());
+    SourceLocExprScope Guard(E, &Info.CurCXXDefaultInitScope, Info.CurrentCall);
     return StmtVisitorTy::Visit(E->getExpr());
   }
 
@@ -5621,13 +5572,12 @@ public:
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
     assert(E && !E->isLineOrColumn());
     Expr *Value = nullptr;
-    SourceLocContextRAIIBase *ArgCtx = Info.EvaluatingDefaultMemberInit;
-    if (!ArgCtx && Info.EvaluatingDefaultArg
-     && Info.EvaluatingDefaultArg->isInSameCurrentCall())
-      ArgCtx = Info.EvaluatingDefaultArg;
+    SourceLocExprScope *ArgCtx = Info.CurCXXDefaultInitScope;
+    if (!ArgCtx && Info.CurCXXDefaultArgScope &&
+        Info.CurCXXDefaultArgScope->isInSameContext(Info.CurrentCall))
+      ArgCtx = Info.CurCXXDefaultArgScope;
     if (ArgCtx) {
-      assert(ArgCtx->CurContext);
-      Value = E->getValue(Info.Ctx, ArgCtx->Loc, ArgCtx->CurContext);
+      Value = E->getValue(Info.Ctx, ArgCtx->getLoc(), ArgCtx->getContext());
     } else
       Value = E->getValue(Info.Ctx);
 
@@ -7133,10 +7083,11 @@ bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
     assert(E && E->isLineOrColumn());
     llvm::APInt Result;
     SourceLocation Loc = E->getLocStart();
-    if (Info.EvaluatingDefaultMemberInit)
-      Loc = Info.EvaluatingDefaultMemberInit->Loc;
-    else if (Info.EvaluatingDefaultArg && Info.EvaluatingDefaultArg->isInSameCurrentCall())
-      Loc = Info.EvaluatingDefaultArg->Loc;
+    if (Info.CurCXXDefaultInitScope)
+      Loc = Info.CurCXXDefaultInitScope->getLoc();
+    else if (Info.CurCXXDefaultArgScope &&
+             Info.CurCXXDefaultArgScope->isInSameContext(Info.CurrentCall))
+      Loc = Info.CurCXXDefaultArgScope->getLoc();
     Result = E->getIntValue(Info.Ctx, Loc);
     return Success(Result, E);
 }

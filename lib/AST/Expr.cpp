@@ -1926,11 +1926,9 @@ QualType SourceLocExpr::BuildSourceLocExprType(const ASTContext &Ctx,
 
 Expr *SourceLocExpr::getValue(const ASTContext &Ctx, SourceLocation Loc,
                               const DeclContext *CurContext) const {
-  if (isLineOrColumn()) {
-
+  if (isLineOrColumn())
     return IntegerLiteral::Create(Ctx, getIntValue(Ctx, Loc), Ctx.UnsignedIntTy,
                                   Loc);
-  }
   return getStringValue(Ctx, Loc, CurContext);
 }
 
