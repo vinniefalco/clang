@@ -1261,6 +1261,12 @@ public:
     bool isSameCurCodeDecl() const { return CGF.CurCodeDecl == CurCodeDecl; }
 
     static bool ShouldEnable(CodeGenFunction &CGF) {
+      // Only update the default argument scope if we've entered a new
+      // evaluation context, and not when it's nested within another default
+      // argument. Example:
+      //    int bar(int x = __builtin_LINE()) { return x; }
+      //    int foo(int x = bar())  { return x; }
+      //    static_assert(foo() == __LINE__);
       return CGF.CurCXXDefaultArgScope == nullptr ||
              !CGF.CurCXXDefaultArgScope->isSameCurCodeDecl();
     }
@@ -1340,6 +1346,7 @@ public:
     CharUnits OldCXXThisAlignment;
   };
 
+  /// The scope of a CXXDefaultArgExpr.
   class CXXDefaultArgExprScope : public SourceLocExprScopeBase {
     using Base = SourceLocExprScopeBase;
 
