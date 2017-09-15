@@ -1247,10 +1247,14 @@ private:
   SourceLocation LastStopPoint;
 
 public:
-public:
   class SourceLocExprScopeBase;
 
+  /// \brief Source location information about the default argument expression
+  /// we're evaluating, if any.
   SourceLocExprScopeBase *CurCXXDefaultArgScope = nullptr;
+
+  /// \brief Source location information about the default member initializer
+  /// we're evaluating, if any.
   SourceLocExprScopeBase *CurCXXDefaultInitScope = nullptr;
 
   class SourceLocExprScopeBase {

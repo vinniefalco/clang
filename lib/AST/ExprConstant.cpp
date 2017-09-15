@@ -588,7 +588,12 @@ namespace {
     /// \brief Whether or not we're currently speculatively evaluating.
     bool IsSpeculativelyEvaluating;
 
+    /// \brief Source location information about the default argument expression
+    /// we're evaluating, if any.
     SourceLocContextRAIIBase *EvaluatingDefaultArg;
+
+    /// \brief Source location information about the default member initializer
+    /// we're evaluating, if any.
     SourceLocContextRAIIBase *EvaluatingDefaultMemberInit;
 
     enum EvaluationMode {
@@ -4564,7 +4569,7 @@ public:
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
       return Error(E);
-    SourceLocDefaultMemberInitContextRAII Guard(Info, E->getLocStart(),
+    SourceLocDefaultMemberInitContextRAII Guard(Info, E->getUsedLocation(),
                                                 E->getUsedContext());
     return StmtVisitorTy::Visit(E->getExpr());
   }
@@ -6276,10 +6281,9 @@ bool RecordExprEvaluator::VisitInitListExpr(const InitListExpr *E) {
     if (!HandleLValueMember(Info, InitExpr, Subobject, Field, &Layout))
       return false;
 
-    const auto *DIE = dyn_cast<CXXDefaultInitExpr>(InitExpr);
     // Temporarily override This, in case there's a CXXDefaultInitExpr in here.
     ThisOverrideRAII ThisOverride(*Info.CurrentCall, &This,
-                                  DIE != nullptr);
+                                  isa<CXXDefaultInitExpr>(InitExpr));
 
     return EvaluateInPlace(Result.getUnionValue(), Info, Subobject, InitExpr);
   }

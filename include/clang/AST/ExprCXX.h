@@ -1099,6 +1099,9 @@ public:
 
   const DeclContext *getUsedContext() const { return UsedContext; }
   DeclContext *getUsedContext() { return UsedContext; }
+  /// \brief Retrieve the location where this default initializer expression
+  /// was actually used.
+  SourceLocation getUsedLocation() const { return Loc; }
 
   SourceLocation getLocStart() const LLVM_READONLY { return Loc; }
   SourceLocation getLocEnd() const LLVM_READONLY { return Loc; }
