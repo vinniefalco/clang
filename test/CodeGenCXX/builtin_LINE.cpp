@@ -16,6 +16,14 @@ int get_line_nonconstexpr(int l = __builtin_LINE()) {
   return l;
 }
 
+
+int get_line(int l = __builtin_LINE()) {
+  return l;
+}
+
+int get_line2(int l = get_line()) { return l; }
+
+
 // CHECK: @global_one = global i32 [[@LINE+1]], align 4
 int global_one = __builtin_LINE();
 // CHECK-NEXT: @global_two = global i32 [[@LINE+1]], align 4
@@ -30,11 +38,12 @@ int global_four = get_line_nonconstexpr();
 
 struct InClassInit {
   int Init = __builtin_LINE();
-  InClassInit() = default;
-  constexpr InClassInit(Tag1, int l = __builtin_LINE()) : Init(l) {}
-  constexpr InClassInit(Tag2) : Init(__builtin_LINE()) {}
-  InClassInit(Tag3, int l = __builtin_LINE()) : Init(l) {}
-  InClassInit(Tag4) : Init(__builtin_LINE()) {}
+  int Init2 = get_line2();
+  InClassInit();
+  constexpr InClassInit(Tag1, int l = __builtin_LINE()) : Init(l), Init2(l) {}
+  constexpr InClassInit(Tag2) : Init(__builtin_LINE()), Init2(__builtin_LINE()) {}
+  InClassInit(Tag3, int l = __builtin_LINE());
+  InClassInit(Tag4);
 
   static void test_class();
 };
@@ -48,13 +57,23 @@ void InClassInit::test_class() {
   InClassInit test_three{Tag2{}};
   // CHECK-NEXT: call void @_ZN11InClassInitC1E4Tag3i(%struct.InClassInit* %test_four, i32 [[@LINE+1]])
   InClassInit test_four(Tag3{});
-  // CHECK-NEXT: call void @_ZN11InClassInitC1E4Tag4(%struct.InClassInit* %test_five)
-  InClassInit test_five{Tag4{}};
-}
 
-int get_line(int l = __builtin_LINE()) {
-  return l;
 }
+// CHECK-LABEL: define void @_ZN11InClassInitC2Ev
+// CHECK: store i32 [[@LINE+4]], i32* %Init, align 4
+// CHECK: %call = call i32 @_Z8get_linei(i32 [[@LINE+3]])
+// CHECK-NEXT: %call2 = call i32 @_Z9get_line2i(i32 %call)
+// CHECK-NEXT: store i32 %call2, i32* %Init2, align 4
+InClassInit::InClassInit() = default;
+
+InClassInit::InClassInit(Tag3, int l) : Init(l) {}
+
+// CHECK-LABEL: define void @_ZN11InClassInitC2E4Tag4
+// CHECK: store i32 [[@LINE+4]], i32* %Init, align 4
+// CHECK: %call = call i32 @_Z8get_linei(i32 [[@LINE+3]])
+// CHECK-NEXT: %call2 = call i32 @_Z9get_line2i(i32 %call)
+// CHECK-NEXT: store i32 %call2, i32* %Init2, align 4
+InClassInit::InClassInit(Tag4) : Init(__builtin_LINE()) {}
 
 // CHECK-LABEL: define void @_Z13get_line_testv()
 void get_line_test() {
