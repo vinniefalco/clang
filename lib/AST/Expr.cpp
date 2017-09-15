@@ -1829,6 +1829,7 @@ OverloadedOperatorKind BinaryOperator::getOverloadedOperator(Opcode Opc) {
   return OverOps[Opc];
 }
 
+
 SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
                              SourceLocation RParenLoc, QualType Ty,
                              DeclContext *ParentContext)
@@ -1934,11 +1935,12 @@ Expr *SourceLocExpr::getValue(const ASTContext &Ctx, SourceLocation Loc,
 }
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
-                           ArrayRef<Expr *> initExprs, SourceLocation rbraceloc)
-    : Expr(InitListExprClass, QualType(), VK_RValue, OK_Ordinary, false, false,
-           false, false),
-      InitExprs(C, initExprs.size()), LBraceLoc(lbraceloc),
-      RBraceLoc(rbraceloc), AltForm(nullptr, true) {
+                           ArrayRef<Expr*> initExprs, SourceLocation rbraceloc)
+  : Expr(InitListExprClass, QualType(), VK_RValue, OK_Ordinary, false, false,
+         false, false),
+    InitExprs(C, initExprs.size()),
+    LBraceLoc(lbraceloc), RBraceLoc(rbraceloc), AltForm(nullptr, true)
+{
   sawArrayRangeDesignator(false);
   for (unsigned I = 0; I != initExprs.size(); ++I) {
     if (initExprs[I]->isTypeDependent())
@@ -1950,203 +1952,203 @@ InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
     if (initExprs[I]->containsUnexpandedParameterPack())
       ExprBits.ContainsUnexpandedParameterPack = true;
   }
-
+      
   InitExprs.insert(C, InitExprs.end(), initExprs.begin(), initExprs.end());
-  }
+}
 
-  void InitListExpr::reserveInits(const ASTContext &C, unsigned NumInits) {
-    if (NumInits > InitExprs.size())
-      InitExprs.reserve(C, NumInits);
-  }
+void InitListExpr::reserveInits(const ASTContext &C, unsigned NumInits) {
+  if (NumInits > InitExprs.size())
+    InitExprs.reserve(C, NumInits);
+}
 
-  void InitListExpr::resizeInits(const ASTContext &C, unsigned NumInits) {
-    InitExprs.resize(C, NumInits, nullptr);
-  }
+void InitListExpr::resizeInits(const ASTContext &C, unsigned NumInits) {
+  InitExprs.resize(C, NumInits, nullptr);
+}
 
-  Expr *InitListExpr::updateInit(const ASTContext &C, unsigned Init,
-                                 Expr *expr) {
-    if (Init >= InitExprs.size()) {
-      InitExprs.insert(C, InitExprs.end(), Init - InitExprs.size() + 1,
-                       nullptr);
-      setInit(Init, expr);
-      return nullptr;
-    }
-
-    Expr *Result = cast_or_null<Expr>(InitExprs[Init]);
+Expr *InitListExpr::updateInit(const ASTContext &C, unsigned Init, Expr *expr) {
+  if (Init >= InitExprs.size()) {
+    InitExprs.insert(C, InitExprs.end(), Init - InitExprs.size() + 1, nullptr);
     setInit(Init, expr);
-    return Result;
+    return nullptr;
   }
 
-  void InitListExpr::setArrayFiller(Expr * filler) {
-    assert(!hasArrayFiller() && "Filler already set!");
-    ArrayFillerOrUnionFieldInit = filler;
-    // Fill out any "holes" in the array due to designated initializers.
-    Expr **inits = getInits();
-    for (unsigned i = 0, e = getNumInits(); i != e; ++i)
-      if (inits[i] == nullptr)
-        inits[i] = filler;
+  Expr *Result = cast_or_null<Expr>(InitExprs[Init]);
+  setInit(Init, expr);
+  return Result;
+}
+
+void InitListExpr::setArrayFiller(Expr *filler) {
+  assert(!hasArrayFiller() && "Filler already set!");
+  ArrayFillerOrUnionFieldInit = filler;
+  // Fill out any "holes" in the array due to designated initializers.
+  Expr **inits = getInits();
+  for (unsigned i = 0, e = getNumInits(); i != e; ++i)
+    if (inits[i] == nullptr)
+      inits[i] = filler;
+}
+
+bool InitListExpr::isStringLiteralInit() const {
+  if (getNumInits() != 1)
+    return false;
+  const ArrayType *AT = getType()->getAsArrayTypeUnsafe();
+  if (!AT || !AT->getElementType()->isIntegerType())
+    return false;
+  // It is possible for getInit() to return null.
+  const Expr *Init = getInit(0);
+  if (!Init)
+    return false;
+  Init = Init->IgnoreParens();
+  return isa<StringLiteral>(Init) || isa<ObjCEncodeExpr>(Init);
+}
+
+bool InitListExpr::isTransparent() const {
+  assert(isSemanticForm() && "syntactic form never semantically transparent");
+
+  // A glvalue InitListExpr is always just sugar.
+  if (isGLValue()) {
+    assert(getNumInits() == 1 && "multiple inits in glvalue init list");
+    return true;
   }
 
-  bool InitListExpr::isStringLiteralInit() const {
-    if (getNumInits() != 1)
-      return false;
-    const ArrayType *AT = getType()->getAsArrayTypeUnsafe();
-    if (!AT || !AT->getElementType()->isIntegerType())
-      return false;
-    // It is possible for getInit() to return null.
-    const Expr *Init = getInit(0);
-    if (!Init)
-      return false;
-    Init = Init->IgnoreParens();
-    return isa<StringLiteral>(Init) || isa<ObjCEncodeExpr>(Init);
-  }
+  // Otherwise, we're sugar if and only if we have exactly one initializer that
+  // is of the same type.
+  if (getNumInits() != 1 || !getInit(0))
+    return false;
 
-  bool InitListExpr::isTransparent() const {
-    assert(isSemanticForm() && "syntactic form never semantically transparent");
+  // Don't confuse aggregate initialization of a struct X { X &x; }; with a
+  // transparent struct copy.
+  if (!getInit(0)->isRValue() && getType()->isRecordType())
+    return false;
 
-    // A glvalue InitListExpr is always just sugar.
-    if (isGLValue()) {
-      assert(getNumInits() == 1 && "multiple inits in glvalue init list");
-      return true;
+  return getType().getCanonicalType() ==
+         getInit(0)->getType().getCanonicalType();
+}
+
+SourceLocation InitListExpr::getLocStart() const {
+  if (InitListExpr *SyntacticForm = getSyntacticForm())
+    return SyntacticForm->getLocStart();
+  SourceLocation Beg = LBraceLoc;
+  if (Beg.isInvalid()) {
+    // Find the first non-null initializer.
+    for (InitExprsTy::const_iterator I = InitExprs.begin(),
+                                     E = InitExprs.end(); 
+      I != E; ++I) {
+      if (Stmt *S = *I) {
+        Beg = S->getLocStart();
+        break;
+      }  
     }
-
-    // Otherwise, we're sugar if and only if we have exactly one initializer
-    // that is of the same type.
-    if (getNumInits() != 1 || !getInit(0))
-      return false;
-
-    // Don't confuse aggregate initialization of a struct X { X &x; }; with a
-    // transparent struct copy.
-    if (!getInit(0)->isRValue() && getType()->isRecordType())
-      return false;
-
-    return getType().getCanonicalType() ==
-           getInit(0)->getType().getCanonicalType();
   }
+  return Beg;
+}
 
-  SourceLocation InitListExpr::getLocStart() const {
-    if (InitListExpr *SyntacticForm = getSyntacticForm())
-      return SyntacticForm->getLocStart();
-    SourceLocation Beg = LBraceLoc;
-    if (Beg.isInvalid()) {
-      // Find the first non-null initializer.
-      for (InitExprsTy::const_iterator I = InitExprs.begin(),
-                                       E = InitExprs.end();
-           I != E; ++I) {
-        if (Stmt *S = *I) {
-          Beg = S->getLocStart();
-          break;
-        }
+SourceLocation InitListExpr::getLocEnd() const {
+  if (InitListExpr *SyntacticForm = getSyntacticForm())
+    return SyntacticForm->getLocEnd();
+  SourceLocation End = RBraceLoc;
+  if (End.isInvalid()) {
+    // Find the first non-null initializer from the end.
+    for (InitExprsTy::const_reverse_iterator I = InitExprs.rbegin(),
+         E = InitExprs.rend();
+         I != E; ++I) {
+      if (Stmt *S = *I) {
+        End = S->getLocEnd();
+        break;
       }
     }
-    return Beg;
   }
+  return End;
+}
 
-  SourceLocation InitListExpr::getLocEnd() const {
-    if (InitListExpr *SyntacticForm = getSyntacticForm())
-      return SyntacticForm->getLocEnd();
-    SourceLocation End = RBraceLoc;
-    if (End.isInvalid()) {
-      // Find the first non-null initializer from the end.
-      for (InitExprsTy::const_reverse_iterator I = InitExprs.rbegin(),
-                                               E = InitExprs.rend();
-           I != E; ++I) {
-        if (Stmt *S = *I) {
-          End = S->getLocEnd();
-          break;
-        }
-      }
-    }
-    return End;
-  }
+/// getFunctionType - Return the underlying function type for this block.
+///
+const FunctionProtoType *BlockExpr::getFunctionType() const {
+  // The block pointer is never sugared, but the function type might be.
+  return cast<BlockPointerType>(getType())
+           ->getPointeeType()->castAs<FunctionProtoType>();
+}
 
-  /// getFunctionType - Return the underlying function type for this block.
-  ///
-  const FunctionProtoType *BlockExpr::getFunctionType() const {
-    // The block pointer is never sugared, but the function type might be.
-    return cast<BlockPointerType>(getType())
-        ->getPointeeType()
-        ->castAs<FunctionProtoType>();
-  }
+SourceLocation BlockExpr::getCaretLocation() const {
+  return TheBlock->getCaretLocation();
+}
+const Stmt *BlockExpr::getBody() const {
+  return TheBlock->getBody();
+}
+Stmt *BlockExpr::getBody() {
+  return TheBlock->getBody();
+}
 
-  SourceLocation BlockExpr::getCaretLocation() const {
-    return TheBlock->getCaretLocation();
-  }
-  const Stmt *BlockExpr::getBody() const { return TheBlock->getBody(); }
-  Stmt *BlockExpr::getBody() { return TheBlock->getBody(); }
 
-  //===----------------------------------------------------------------------===//
-  // Generic Expression Routines
-  //===----------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+// Generic Expression Routines
+//===----------------------------------------------------------------------===//
 
-  /// isUnusedResultAWarning - Return true if this immediate expression should
-  /// be warned about if the result is unused.  If so, fill in Loc and Ranges
-  /// with location to warn on and the source range[s] to report with the
-  /// warning.
-  bool Expr::isUnusedResultAWarning(const Expr *&WarnE, SourceLocation &Loc,
-                                    SourceRange &R1, SourceRange &R2,
-                                    ASTContext &Ctx) const {
-    // Don't warn if the expr is type dependent. The type could end up
-    // instantiating to void.
-    if (isTypeDependent())
+/// isUnusedResultAWarning - Return true if this immediate expression should
+/// be warned about if the result is unused.  If so, fill in Loc and Ranges
+/// with location to warn on and the source range[s] to report with the
+/// warning.
+bool Expr::isUnusedResultAWarning(const Expr *&WarnE, SourceLocation &Loc, 
+                                  SourceRange &R1, SourceRange &R2,
+                                  ASTContext &Ctx) const {
+  // Don't warn if the expr is type dependent. The type could end up
+  // instantiating to void.
+  if (isTypeDependent())
+    return false;
+
+  switch (getStmtClass()) {
+  default:
+    if (getType()->isVoidType())
       return false;
+    WarnE = this;
+    Loc = getExprLoc();
+    R1 = getSourceRange();
+    return true;
+  case ParenExprClass:
+    return cast<ParenExpr>(this)->getSubExpr()->
+      isUnusedResultAWarning(WarnE, Loc, R1, R2, Ctx);
+  case GenericSelectionExprClass:
+    return cast<GenericSelectionExpr>(this)->getResultExpr()->
+      isUnusedResultAWarning(WarnE, Loc, R1, R2, Ctx);
+  case ChooseExprClass:
+    return cast<ChooseExpr>(this)->getChosenSubExpr()->
+      isUnusedResultAWarning(WarnE, Loc, R1, R2, Ctx);
+  case UnaryOperatorClass: {
+    const UnaryOperator *UO = cast<UnaryOperator>(this);
 
-    switch (getStmtClass()) {
-    default:
-      if (getType()->isVoidType())
+    switch (UO->getOpcode()) {
+    case UO_Plus:
+    case UO_Minus:
+    case UO_AddrOf:
+    case UO_Not:
+    case UO_LNot:
+    case UO_Deref:
+      break;
+    case UO_Coawait:
+      // This is just the 'operator co_await' call inside the guts of a
+      // dependent co_await call.
+    case UO_PostInc:
+    case UO_PostDec:
+    case UO_PreInc:
+    case UO_PreDec:                 // ++/--
+      return false;  // Not a warning.
+    case UO_Real:
+    case UO_Imag:
+      // accessing a piece of a volatile complex is a side-effect.
+      if (Ctx.getCanonicalType(UO->getSubExpr()->getType())
+          .isVolatileQualified())
         return false;
-      WarnE = this;
-      Loc = getExprLoc();
-      R1 = getSourceRange();
-      return true;
-    case ParenExprClass:
-      return cast<ParenExpr>(this)->getSubExpr()->isUnusedResultAWarning(
-          WarnE, Loc, R1, R2, Ctx);
-    case GenericSelectionExprClass:
-      return cast<GenericSelectionExpr>(this)
-          ->getResultExpr()
-          ->isUnusedResultAWarning(WarnE, Loc, R1, R2, Ctx);
-    case ChooseExprClass:
-      return cast<ChooseExpr>(this)->getChosenSubExpr()->isUnusedResultAWarning(
-          WarnE, Loc, R1, R2, Ctx);
-    case UnaryOperatorClass: {
-      const UnaryOperator *UO = cast<UnaryOperator>(this);
-
-      switch (UO->getOpcode()) {
-      case UO_Plus:
-      case UO_Minus:
-      case UO_AddrOf:
-      case UO_Not:
-      case UO_LNot:
-      case UO_Deref:
-        break;
-      case UO_Coawait:
-        // This is just the 'operator co_await' call inside the guts of a
-        // dependent co_await call.
-      case UO_PostInc:
-      case UO_PostDec:
-      case UO_PreInc:
-      case UO_PreDec: // ++/--
-        return false; // Not a warning.
-      case UO_Real:
-      case UO_Imag:
-        // accessing a piece of a volatile complex is a side-effect.
-        if (Ctx.getCanonicalType(UO->getSubExpr()->getType())
-                .isVolatileQualified())
-          return false;
-        break;
-      case UO_Extension:
-        return UO->getSubExpr()->isUnusedResultAWarning(WarnE, Loc, R1, R2,
-                                                        Ctx);
-      }
-      WarnE = this;
-      Loc = UO->getOperatorLoc();
-      R1 = UO->getSubExpr()->getSourceRange();
-      return true;
+      break;
+    case UO_Extension:
+      return UO->getSubExpr()->isUnusedResultAWarning(WarnE, Loc, R1, R2, Ctx);
     }
-    case BinaryOperatorClass: {
-      const BinaryOperator *BO = cast<BinaryOperator>(this);
-      switch (BO->getOpcode()) {
+    WarnE = this;
+    Loc = UO->getOperatorLoc();
+    R1 = UO->getSubExpr()->getSourceRange();
+    return true;
+  }
+  case BinaryOperatorClass: {
+    const BinaryOperator *BO = cast<BinaryOperator>(this);
+    switch (BO->getOpcode()) {
       default:
         break;
       // Consider the RHS of comma for side effects. LHS was checked by
