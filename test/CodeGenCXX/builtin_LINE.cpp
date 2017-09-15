@@ -43,7 +43,7 @@ struct InClassInit {
   constexpr InClassInit(Tag1, int l = __builtin_LINE()) : Init(l), Init2(l) {}
   constexpr InClassInit(Tag2) : Init(__builtin_LINE()), Init2(__builtin_LINE()) {}
   InClassInit(Tag3, int l = __builtin_LINE());
-  InClassInit(Tag4);
+  InClassInit(Tag4, int l = get_line2());
 
   static void test_class();
 };
@@ -57,6 +57,10 @@ void InClassInit::test_class() {
   InClassInit test_three{Tag2{}};
   // CHECK-NEXT: call void @_ZN11InClassInitC1E4Tag3i(%struct.InClassInit* %test_four, i32 [[@LINE+1]])
   InClassInit test_four(Tag3{});
+  // CHECK-NEXT: %[[CALL:.+]] = call i32 @_Z8get_linei(i32 [[@LINE+3]])
+  // CHECK-NEXT: %[[CALL2:.+]] = call i32 @_Z9get_line2i(i32 %[[CALL]])
+  // CHECK-NEXT: call void @_ZN11InClassInitC1E4Tag4i(%struct.InClassInit* %test_five, i32 %[[CALL2]])
+  InClassInit test_five(Tag4{});
 
 }
 // CHECK-LABEL: define void @_ZN11InClassInitC2Ev
@@ -68,12 +72,13 @@ InClassInit::InClassInit() = default;
 
 InClassInit::InClassInit(Tag3, int l) : Init(l) {}
 
-// CHECK-LABEL: define void @_ZN11InClassInitC2E4Tag4
-// CHECK: store i32 [[@LINE+4]], i32* %Init, align 4
-// CHECK: %call = call i32 @_Z8get_linei(i32 [[@LINE+3]])
-// CHECK-NEXT: %call2 = call i32 @_Z9get_line2i(i32 %call)
-// CHECK-NEXT: store i32 %call2, i32* %Init2, align 4
-InClassInit::InClassInit(Tag4) : Init(__builtin_LINE()) {}
+// CHECK-LABEL: define void @_ZN11InClassInitC2E4Tag4i(%struct.InClassInit* %this, i32 %arg)
+// CHECK:  %[[TEMP:.+]] = load i32, i32* %arg.addr, align 4
+// CHECK-NEXT: store i32 %[[TEMP]], i32* %Init, align 4
+// CHECK: %[[CALL:.+]] = call i32 @_Z8get_linei(i32 [[@LINE+3]])
+// CHECK-NEXT: %[[CALL2:.+]] = call i32 @_Z9get_line2i(i32 %[[CALL]])
+// CHECK-NEXT: store i32 %[[CALL2]], i32* %Init2, align 4
+InClassInit::InClassInit(Tag4, int arg) : Init(arg) {}
 
 // CHECK-LABEL: define void @_Z13get_line_testv()
 void get_line_test() {
