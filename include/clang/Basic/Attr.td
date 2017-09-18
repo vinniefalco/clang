@@ -2100,12 +2100,12 @@ def AnyX86NoCallerSavedRegisters : InheritableAttr,
   let Documentation = [AnyX86NoCallerSavedRegistersDocs];
 }
 
-def X86ForceAlignArgPointer : InheritableAttr, TargetSpecificAttr<TargetX86> {
-  let Spellings = [GNU<"force_align_arg_pointer">];
+def X86ForceAlignArgPointer : InheritableAttr, TargetSpecificAttr<TargetAnyX86> {
+  let Spellings = [GCC<"force_align_arg_pointer">];
   // Technically, this appertains to a FunctionDecl, but the target-specific
   // code silently allows anything function-like (such as typedefs or function
   // pointers), but does not apply the attribute to them.
-  let Documentation = [Undocumented];
+  let Documentation = [X86ForceAlignArgPointerDocs];
 }
 
 def NoSanitize : InheritableAttr {
@@ -2530,9 +2530,9 @@ def DLLImport : InheritableAttr, TargetSpecificAttr<TargetWindows> {
   let Documentation = [DLLImportDocs];
 }
 
-def SelectAny : InheritableAttr, TargetSpecificAttr<TargetWindows> {
+def SelectAny : InheritableAttr {
   let Spellings = [Declspec<"selectany">, GCC<"selectany">];
-  let Documentation = [Undocumented];
+  let Documentation = [SelectAnyDocs];
 }
 
 def Thread : Attr {
