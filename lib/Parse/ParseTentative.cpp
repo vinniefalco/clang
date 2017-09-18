@@ -553,6 +553,26 @@ bool Parser::isCXXTypeId(TentativeCXXTypeIdContext Context, bool &isAmbiguous) {
   return TPR == TPResult::True;
 }
 
+static bool IsContractAttrKeyword(StringRef Name) {
+  constexpr const char *KeyWords[] = {"expects", "ensures", "assert"};
+  const auto End = std::end(KeyWords);
+  return std::find(KeyWords, End, Name) != End;
+}
+
+static bool IsContractAttrKeyword(IdentifierInfo *II) {
+  return II && IsContractAttrKeyword(II->getName());
+}
+
+static bool IsContractLevelKeyword(StringRef Name) {
+  constexpr const char *KeyWords[] = {"default", "audit", "axiom"};
+  const auto End = std::end(KeyWords);
+  return std::find(KeyWords, End, Name) != End;
+}
+
+static bool IsContractLevelKeyword(IdentifierInfo *II) {
+  return II && IsContractLevelKeyword(II->getName());
+}
+
 /// \brief Returns true if this is a C++11 attribute-specifier. Per
 /// C++11 [dcl.attr.grammar]p6, two consecutive left square bracket tokens
 /// always introduce an attribute. In Objective-C++11, this rule does not

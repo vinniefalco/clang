@@ -1902,7 +1902,7 @@ def DiagnoseIf : InheritableAttr {
 def Contract : InheritableAttr {
   let Spellings = [CXX11<"", "ensures", 201103>, CXX11<"", "expects", 201103>,
                    CXX11<"", "asserts", 201103>];
-  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty /* FIXME ,NullStmt */]>;
+  //let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty /* FIXME ,NullStmt */]>;
   let Args = [EnumArgument<"ContractType",
                            "ContractType",
                            ["", "", ""],
@@ -1921,21 +1921,21 @@ def Contract : InheritableAttr {
   let AdditionalMembers = [{
     private:
       static int getContractTypeImp(StringRef Name) {
-        llvm::StringSwitch<int>(Name)
+        return llvm::StringSwitch<int>(Name)
           .Case("expects", CT_Expects)
           .Case("ensures", CT_Ensures)
           .Case("asserts", CT_Asserts)
           .Default(-1);
       }
       static int getContractLevelImp(StringRef Name) {
-        llvm::StringSwitch<int>(Name)
+        return llvm::StringSwitch<int>(Name)
           .Case("default", CL_Default)
           .Case("audit", CL_Audit)
           .Case("axiom", CL_Axiom)
           .Default(-1);
       }
     public:
-    // bool isError() const { return diagnosticType == DT_Error; }
+    //bool isError() const { return diagnosticType == DT_Error; }
     static bool isContractKeyword(StringRef S) {
       return getContractTypeImp(S) != -1;
     }
@@ -1947,7 +1947,7 @@ def Contract : InheritableAttr {
       assert(Res != -1);
       return static_cast<ContractType>(Res);
     }
-    static ContractType getContractLevelForString(StringRef S) {
+    static ContractLevel getContractLevelForString(StringRef S) {
       auto Res = getContractLevelImp(S);
       assert(Res != -1);
       return static_cast<ContractLevel>(Res);

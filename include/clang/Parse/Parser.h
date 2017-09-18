@@ -2253,12 +2253,9 @@ private:
                           ParsedAttributes &Attrs, SourceLocation *EndLoc,
                           IdentifierInfo *ScopeName, SourceLocation ScopeLoc,
                           AttributeList::Syntax Syntax);
-  unsigned ParseContractAttributeArgs(IdentifierInfo *AttrName,
-                                      SourceLocation AttrNameLoc,
-                                      ParsedAttributes &Attrs,
-                                      SourceLocation *EndLoc, );
 
-  void MaybeParseCXX11Attributes(Declarator &D) {
+  void MaybeParseCXX11Attributes(Declarator &D,
+                                 LateParsedAttrList *LateAttrs = nullptr) {
     if (getLangOpts().CPlusPlus11 && isCXX11AttributeSpecifier()) {
       ParsedAttributesWithRange attrs(AttrFactory);
       SourceLocation endLoc;
@@ -2294,6 +2291,11 @@ private:
                                IdentifierInfo *ScopeName,
                                SourceLocation ScopeLoc);
   IdentifierInfo *TryParseCXX11AttributeIdentifier(SourceLocation &Loc);
+  bool ParseContractAttributeArgs(
+      IdentifierInfo *AttrName, SourceLocation AttrNameLoc,
+      ParsedAttributes &Attrs, SourceLocation *EndLoc,
+      IdentifierInfo *LevelName, SourceLocation LevelLoc,
+      IdentifierInfo *OptIdentName, SourceLocation OptIdentLoc);
   void MaybeParseMicrosoftAttributes(ParsedAttributes &attrs,
                                      SourceLocation *endLoc = nullptr) {
     if (getLangOpts().MicrosoftExt && Tok.is(tok::l_square))

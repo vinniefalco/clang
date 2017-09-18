@@ -414,24 +414,6 @@ unsigned Parser::ParseClangAttributeArgs(
                                   ScopeName, ScopeLoc, Syntax);
 }
 
-unsigned Parser::ParseContractAttributeArgs(
-    IdentifierInfo *AttrName, SourceLocation AttrNameLoc,
-    ParsedAttributes &Attrs, SourceLocation *EndLoc, IdentifierInfo *ScopeName,
-    SourceLocation ScopeLoc, AttributeList::Syntax Syntax) {
-  assert(Tok.is(tok::l_paren) && "Attribute arg list not starting with '('");
-
-  AttributeList::Kind AttrKind =
-      AttributeList::getKind(AttrName, ScopeName, Syntax);
-
-  if (AttrKind == AttributeList::AT_ExternalSourceSymbol) {
-    ParseExternalSourceSymbolAttribute(*AttrName, AttrNameLoc, Attrs, EndLoc,
-                                       ScopeName, ScopeLoc, Syntax);
-    return Attrs.getList() ? Attrs.getList()->getNumArgs() : 0;
-  }
-
-  return ParseAttributeArgsCommon(AttrName, AttrNameLoc, Attrs, EndLoc,
-                                  ScopeName, ScopeLoc, Syntax);
-}
 
 bool Parser::ParseMicrosoftDeclSpecArgs(IdentifierInfo *AttrName,
                                         SourceLocation AttrNameLoc,
@@ -1934,7 +1916,7 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
   LateParsedAttrList LateParsedAttrs(true);
   if (D.isFunctionDeclarator()) {
     MaybeParseGNUAttributes(D, &LateParsedAttrs);
-
+    MaybeParseCXX11Attributes(D, &LateParsedAttrs);
     // The _Noreturn keyword can't appear here, unlike the GNU noreturn
     // attribute. If we find the keyword here, tell the user to put it
     // at the start instead.

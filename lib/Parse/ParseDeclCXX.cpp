@@ -3926,7 +3926,7 @@ bool Parser::ParseCXX11AttributeArgs(IdentifierInfo *AttrName,
   return true;
 }
 
-/// ParseCXX11AttributeArgs -- Parse a C++11 attribute-argument-clause.
+/// ParseContractAttributeArgs -- Parse a C++11 attribute-argument-clause.
 ///
 /// [C++11] attribute-argument-clause:
 ///         '(' balanced-token-seq ')'
@@ -3947,12 +3947,32 @@ bool Parser::ParseContractAttributeArgs(
     SourceLocation OptIdentLoc) {
   assert(getLangOpts().ContractsTS);
 
-  unsigned NumArgs;
+  ArgsVector ArgExprs;
+  ArgExprs.push_back(
+      IdentifierLoc::create(Actions.Context, LevelLoc, LevelName));
+  ArgExprs.push_back(
+      IdentifierLoc::create(Actions.Context, OptIdentLoc, LevelName));
+  do {
+    bool Uneval = false; // FIXME: Should this parse as unevaluated
+    EnterExpressionEvaluationContext Unevaluated(
+        Actions,
+        Uneval ? Sema::ExpressionEvaluationContext::Unevaluated
+               : Sema::ExpressionEvaluationContext::ConstantEvaluated,
+        /*LambdaContextDecl=*/nullptr,
+        /*IsDecltype=*/false);
 
-  NumArgs =
-      ParseContractAttributeArgs(AttrName, AttrNameLoc, Attrs, EndLoc,
-                                 ScopeName, ScopeLoc, AttributeList::AS_CXX11);
+    ExprResult ArgExpr =
+        Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
+    if (ArgExpr.isInvalid()) {
+      SkipUntil(tok::r_square, StopAtSemi);
+      return false;
+    }
+    ArgExprs.push_back(ArgExpr.get());
+    // Eat the comma, move to the next argument
+  } while (false);
 
+  Attrs.addNew(AttrName, SourceRange(AttrNameLoc, Tok.getLocation()), nullptr,
+               SourceLocation(), ArgExprs.data(), 3, AttributeList::AS_CXX11);
   return true;
 }
 
@@ -4031,7 +4051,7 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
       Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
     if (IsContract) {
       bool ParsedContract = ParseContractAttributeArgs(
-          CommonScopeName, CommonScopeLoc, attrs, ContractLevel,
+          CommonScopeName, CommonScopeLoc, attrs, endLoc, ContractLevel,
           ContractLevelLoc, OptID, OptIDLoc);
       if (!ParsedContract) {
         // FIXME(EricWF): Not sure what to do here.
