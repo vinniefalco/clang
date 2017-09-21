@@ -15,6 +15,13 @@ let Component = "Common" in {
 
 // Basic.
 
+
+def err_diagnose_if_succeeded2 : Error<"%0">;
+def warn_diagnose_if_succeeded2 : Warning<"%0">, InGroup<UserDefinedWarnings>,
+    ShowInSystemHeader;
+    def note_from_diagnose_if2 : Note<"from 'diagnose_if' attribute on %0:">;
+
+
 def fatal_too_many_errors
   : Error<"too many errors emitted, stopping now">, DefaultFatal; 
 

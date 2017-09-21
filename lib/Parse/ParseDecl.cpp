@@ -6066,7 +6066,7 @@ void Parser::ParseFunctionDeclarator(Declarator &D,
 
       // Parse attribute-specifier-seq[opt]. Per DR 979 and DR 1297, this goes
       // after the exception-specification.
-      MaybeParseCXX11Attributes(FnAttrs);
+      MaybeParseCXX11Attributes(D);
 
       // Parse trailing-return-type[opt].
       LocalEndLoc = EndLoc;

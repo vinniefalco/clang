@@ -1880,7 +1880,7 @@ def Unavailable : InheritableAttr {
 }
 
 def DiagnoseIf : InheritableAttr {
-  let Spellings = [GNU<"diagnose_if">];
+  let Spellings = [GNU<"diagnose_if">, CXX11<"clang", "diagnose_if">];
   let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty]>;
   let Args = [ExprArgument<"Cond">, StringArgument<"Message">,
               EnumArgument<"DiagnosticType",

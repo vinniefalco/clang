@@ -4185,6 +4185,52 @@ static bool EvaluateArgs(ArrayRef<const Expr*> Args, ArgVector &ArgValues,
   return Success;
 }
 
+
+template <typename CheckFn>
+static bool diagnoseDiagnoseIfAttrsWith(SourceLocation CallLoc,
+                               const FunctionDecl *Callee,
+                               EvalInfo &Info,
+                                        CheckFn &&IsSuccessful) {
+  SmallVector<const DiagnoseIfAttr *, 8> Attrs;
+  for (const auto *DIA : Callee->specific_attrs<DiagnoseIfAttr>()) {
+    if (DIA->getArgDependent())
+      Attrs.push_back(DIA);
+  }
+
+  // Common case: No diagnose_if attributes, so we can quit early.
+  if (Attrs.empty())
+    return false;
+
+  auto WarningBegin = std::stable_partition(
+      Attrs.begin(), Attrs.end(),
+      [](const DiagnoseIfAttr *DIA) { return DIA->isError(); });
+
+  auto Diag = [&](SourceLocation Loc, unsigned ID) {
+    return Info.Ctx.getDiagnostics().Report(Loc, ID);
+  };
+  // Note that diagnose_if attributes are late-parsed, so they appear in the
+  // correct order (unlike enable_if attributes).
+  auto ErrAttr = llvm::find_if(llvm::make_range(Attrs.begin(), WarningBegin),
+                               IsSuccessful);
+  if (ErrAttr != WarningBegin) {
+    const DiagnoseIfAttr *DIA = *ErrAttr;
+
+    Diag(CallLoc, diag::err_diagnose_if_succeeded2) << DIA->getMessage();
+    Diag(DIA->getLocation(), diag::note_from_diagnose_if2)
+        << DIA->getParent() << DIA->getCond()->getSourceRange();
+    return true;
+  }
+
+  for (const auto *DIA : llvm::make_range(WarningBegin, Attrs.end()))
+    if (IsSuccessful(DIA)) {
+      Diag(CallLoc, diag::warn_diagnose_if_succeeded2) << DIA->getMessage();
+      Diag(DIA->getLocation(), diag::note_from_diagnose_if2)
+          << DIA->getParent() << DIA->getCond()->getSourceRange();
+    }
+
+  return false;
+}
+
 /// Evaluate a function call.
 static bool HandleFunctionCall(SourceLocation CallLoc,
                                const FunctionDecl *Callee, const LValue *This,
@@ -4199,6 +4245,8 @@ static bool HandleFunctionCall(SourceLocation CallLoc,
     return false;
 
   CallStackFrame Frame(Info, CallLoc, Callee, This, ArgValues.data());
+
+
 
   // For a trivial copy or move assignment, perform an APValue copy. This is
   // essential for unions, where the operations performed by the assignment
