@@ -3984,6 +3984,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-fcoroutines-ts");
   }
 
+  if (Args.hasFlag(options::OPT_fcontracts_ts) &&
+      types::isCXX(InputType)) {
+    CmdArgs.push_back("-fcontracts-ts");
+  }
+
   bool HaveModules = false;
   RenderModulesOptions(C, D, Args, Input, Output, CmdArgs, HaveModules);
 

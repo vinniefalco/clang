@@ -1899,6 +1899,37 @@ def DiagnoseIf : InheritableAttr {
   let Documentation = [DiagnoseIfDocs];
 }
 
+
+def Contract : InheritableAttr {
+  let Spellings = [CXX11<"", "ensures", 201103>, CXX11<"", "expects", 201103>,
+                   CXX11<"", "assert", 201103>];
+  //let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty]>;
+  let Args = [ExprArgument<"Cond">,
+              EnumArgument<"ContractType",
+                           "ContractType",
+                           ["", "", ""],
+                           ["CT_Expects", "CT_Ensures", "CT_Assert"],
+                           /*opt*/ 0, /*fake*/1>,
+              EnumArgument<"ContractLevel",
+                           "ContractLevel",
+                           ["", "", ""],
+                           ["CL_Default", "CL_Audit", "CL_Axiom"],
+                           /*opt*/ 0, /*fake*/1>,
+              NamedArgument<"ReturnIdent", 0, /*fake*/ 1>,
+              BoolArgument<"ArgDependent", 0, /*fake*/ 1>
+              ];
+  let DuplicatesAllowedWhileMerging = 1;
+  let LateParsed = 1;
+  let HasCustomParsing = 1;
+  let AdditionalMembers = [{
+    // FIXME
+  }];
+
+  let TemplateDependent = 1;
+  // FIXME
+  let Documentation = [Undocumented];
+}
+
 def ArcWeakrefUnavailable : InheritableAttr {
   let Spellings = [GNU<"objc_arc_weak_reference_unavailable">];
   let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;

@@ -553,6 +553,22 @@ bool Parser::isCXXTypeId(TentativeCXXTypeIdContext Context, bool &isAmbiguous) {
   return TPR == TPResult::True;
 }
 
+static bool isContractAttribute(const IdentifierInfo *II) {
+  if (!II)
+    return false;
+  return llvm::StringSwitch<bool>(II->getName())
+      .Cases("ensures", "expects", "assert", true)
+      .Default(false);
+}
+
+static bool isContractLevel(const IdentifierInfo *II) {
+  if (!II)
+    return false;
+  return llvm::StringSwitch<bool>(II->getName())
+      .Cases("default", "axiom", "audit", true)
+      .Default(false);
+}
+
 /// \brief Returns true if this is a C++11 attribute-specifier. Per
 /// C++11 [dcl.attr.grammar]p6, two consecutive left square bracket tokens
 /// always introduce an attribute. In Objective-C++11, this rule does not
@@ -569,6 +585,7 @@ bool Parser::isCXXTypeId(TentativeCXXTypeIdContext Context, bool &isAmbiguous) {
 ///
 ///     attribute-specifier:
 ///         '[' '[' attribute-list ']' ']'
+///         '[' '[' contract  ']' ']'
 ///         alignment-specifier
 ///
 ///     attribute-list:
@@ -586,6 +603,12 @@ bool Parser::isCXXTypeId(TentativeCXXTypeIdContext Context, bool &isAmbiguous) {
 ///
 ///     attribute-argument-clause:
 ///         '(' balanced-token-seq ')'
+///
+///     contract:
+///         contract-introducer ':' conditional-expr
+///
+///     contract-introducer:
+///          contract-attribute contract-level[opt] ident[opt]
 Parser::CXX11AttributeKind
 Parser::isCXX11AttributeSpecifier(bool Disambiguate,
                                   bool OuterMightBeMessageSend) {
@@ -648,6 +671,13 @@ Parser::isCXX11AttributeSpecifier(bool Disambiguate,
   // If we don't have a lambda-introducer, then we have an attribute or a
   // message-send.
   bool IsAttribute = true;
+
+  // FIXME: Do better parsing
+  SourceLocation Loc;
+  if (TryParseCXXContractAttributeIdentifier(Loc)) {
+      return CAK_AttributeSpecifier;
+  }
+
   while (Tok.isNot(tok::r_square)) {
     if (Tok.is(tok::comma)) {
       // Case 1: Stray commas can only occur in attributes.

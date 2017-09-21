@@ -3812,6 +3812,63 @@ IdentifierInfo *Parser::TryParseCXX11AttributeIdentifier(SourceLocation &Loc) {
   }
 }
 
+static bool isContractAttribute(StringRef S) {
+  return llvm::StringSwitch<bool>(S)
+      .Cases("ensures", "expects", "assert", true)
+      .Default(false);
+}
+
+
+/// \brief Try to parse an 'identifier' which appears within an attribute-token.
+///
+/// \return the parsed identifier on success, and 0 if the next token is not an
+/// attribute-token.
+///
+/// C++11 [dcl.attr.grammar]p3:
+///   If a keyword or an alternative token that satisfies the syntactic
+///   requirements of an identifier is contained in an attribute-token,
+///   it is considered an identifier.
+IdentifierInfo *Parser::TryParseCXXContractAttributeIdentifier(SourceLocation &Loc) {
+  if (!getLangOpts().ContractsTS)
+    return nullptr;
+  switch (Tok.getKind()) {
+  default:
+    // Identifiers and keywords have identifier info attached.
+    if (!Tok.isAnnotation()) {
+      if (IdentifierInfo *II = Tok.getIdentifierInfo()) {
+        if (isContractAttribute(II->getName())) {
+          Loc = ConsumeToken();
+          return II;
+        }
+      }
+    }
+    return nullptr;
+
+  case tok::ampamp:       // 'and'
+  case tok::pipe:         // 'bitor'
+  case tok::pipepipe:     // 'or'
+  case tok::caret:        // 'xor'
+  case tok::tilde:        // 'compl'
+  case tok::amp:          // 'bitand'
+  case tok::ampequal:     // 'and_eq'
+  case tok::pipeequal:    // 'or_eq'
+  case tok::caretequal:   // 'xor_eq'
+  case tok::exclaim:      // 'not'
+  case tok::exclaimequal: // 'not_eq'
+    // Alternative tokens do not have identifier info, but their spelling
+    // starts with an alphabetical character.
+    SmallString<8> SpellingBuf;
+    SourceLocation SpellingLoc =
+        PP.getSourceManager().getSpellingLoc(Tok.getLocation());
+    StringRef Spelling = PP.getSpelling(SpellingLoc, SpellingBuf);
+    if (isContractAttribute(Spelling)) {
+      Loc = ConsumeToken();
+      return &PP.getIdentifierTable().get(Spelling);
+    }
+    return nullptr;
+  }
+}
+
 static bool IsBuiltInOrStandardCXX11Attribute(IdentifierInfo *AttrName,
                                                IdentifierInfo *ScopeName) {
   switch (AttributeList::getKind(AttrName, ScopeName,

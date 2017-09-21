@@ -543,6 +543,8 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
     Builder.defineMacro("__cpp_experimental_concepts", "1");
   if (LangOpts.CoroutinesTS)
     Builder.defineMacro("__cpp_coroutines", "201703L");
+  if (LangOpts.CoroutinesTS)
+    Builder.defineMacro("__cpp_experimental_contracts", "1");
 }
 
 static void InitializePredefinedMacros(const TargetInfo &TI,
