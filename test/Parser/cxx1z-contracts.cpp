@@ -19,3 +19,10 @@ static_assert(foo(0), "");
 static_assert(foo(1), ""); // expected-error {{static_assert expression is not an integral constant expression}}
 
 } // namespace test_constexpr_eval
+
+namespace test_parsing_stmt {
+bool foo(int x) {
+  [[assert: x == 0]];
+  return true;
+}
+}

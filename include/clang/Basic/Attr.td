@@ -1900,7 +1900,7 @@ def DiagnoseIf : InheritableAttr {
 }
 
 
-def Contract : InheritableAttr {
+def Contract : Attr {
   let Spellings = [CXX11<"", "ensures", 201103>, CXX11<"", "expects", 201103>,
                    CXX11<"", "assert", 201103>];
   //let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty]>;
