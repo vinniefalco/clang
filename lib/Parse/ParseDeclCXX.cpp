@@ -3975,52 +3975,33 @@ void Parser::ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
   if (OptName == nullptr)
     OptName = TryParseCXX11AttributeIdentifier(OptIdentLoc);
 
-  auto &Ctx = Actions.getASTContext();
-
-  NamedDecl *RetDecl = nullptr;
+  bool IsValid = true;
+  if (!TryConsumeToken(tok::colon)) {
+    Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
+    IsValid = false;
+  }
   ExprResult Res = ExprError();
-  do {
-    if (!TryConsumeToken(tok::colon)) {
-      Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
-      break;
-    }
-    EnterExpressionEvaluationContext Unevaluated(
+  if (IsValid) {
+    EnterExpressionEvaluationContext ContractScope(
         Actions, Sema::ExpressionEvaluationContext::PotentiallyEvaluated,
         /*LambdaContextDecl*/ nullptr,
         /*IsDeclType*/ false);
-#if 0
-    if (OptName) {
-      VarDecl::Create(Ctx, FD, FD->getLocation(), FD->getLocation(),
-                             &PP.getIdentifierTable().get("__promise"),
-                      Ctx.AutoDeductTy,
-                      Ctx.getTrivialTypeSourceInfo(T, Loc), SC_None);
-    }
-    llvm::Optional<ParseScope> PrototypeScope;
-    if (OptName) {
-      PrototypeScope.emplace(this,
-                                Scope::FunctionPrototypeScope|Scope::DeclScope|
-                                (D && D->isFunctionDeclaratorAFunctionDeclaration()
-                                   ? Scope::FunctionDeclarationScope : 0));
-      TentativelyDeclaredIdentifiers.push_back(OptName);
-    }
-#endif
     Res = Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
-
-    if (!Res.isInvalid()) {
-      auto &Ctx = Actions.getASTContext();
-      ArgsVector Args;
-      Args.push_back(Res.get());
-      Args.push_back(IdentifierLoc::create(Ctx, LevelLoc, LevelName));
-      Args.push_back(IdentifierLoc::create(Ctx, OptIdentLoc, OptName));
-      attrs.addNew(AttrName, SourceRange(AttrNameLoc, Tok.getLocation()),
-                   /*ScopeName*/ nullptr, SourceLocation(), Args.data(),
-                   Args.size(), AttributeList::AS_CXX11);
-    }
-  } while (false);
+  }
   if (ExpectAndConsume(tok::r_square))
     SkipUntil(tok::r_square);
   if (endLoc)
     *endLoc = Tok.getLocation();
+  if (!Res.isInvalid()) {
+    auto &Ctx = Actions.getASTContext();
+    ArgsVector Args;
+    Args.push_back(Res.get());
+    Args.push_back(IdentifierLoc::create(Ctx, LevelLoc, LevelName));
+    Args.push_back(IdentifierLoc::create(Ctx, OptIdentLoc, OptName));
+    attrs.addNew(AttrName, SourceRange(AttrNameLoc, Tok.getLocation()),
+                 /*ScopeName*/ nullptr, SourceLocation(), Args.data(),
+                 Args.size(), AttributeList::AS_CXX11);
+  }
   if (ExpectAndConsume(tok::r_square))
     SkipUntil(tok::r_square);
 }
