@@ -4214,7 +4214,6 @@ static bool diagnoseContractAttrsWith(SourceLocation CallLoc,
     return true;
   }
 
-
   return false;
 }
 

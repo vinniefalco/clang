@@ -8,6 +8,8 @@ void bar(int z)[[expects axiom:z != 1]];
 
 namespace test_parsing_bad {
 void foo(int z)[[expects]]; // expected-error {{expected ':'}}
+void bar(int z)[[expects axiom]]; // expected-error {{expected ':'}}
+void baz(int z)[[expects ret]];   // expected-error {{expected ':'}}
 }
 
 namespace test_constexpr_eval {
