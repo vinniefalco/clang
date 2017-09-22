@@ -3984,7 +3984,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-fcoroutines-ts");
   }
 
-  if (Args.hasFlag(options::OPT_fcontracts_ts) &&
+  if (Args.hasFlag(options::OPT_fcontracts_ts, options::OPT_fno_contracts_ts,
+                   false) &&
       types::isCXX(InputType)) {
     CmdArgs.push_back("-fcontracts-ts");
   }

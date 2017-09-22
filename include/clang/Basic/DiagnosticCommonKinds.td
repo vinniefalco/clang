@@ -15,13 +15,6 @@ let Component = "Common" in {
 
 // Basic.
 
-
-def err_diagnose_if_succeeded2 : Error<"%0">;
-def warn_diagnose_if_succeeded2 : Warning<"%0">, InGroup<UserDefinedWarnings>,
-    ShowInSystemHeader;
-    def note_from_diagnose_if2 : Note<"from 'diagnose_if' attribute on %0:">;
-
-
 def fatal_too_many_errors
   : Error<"too many errors emitted, stopping now">, DefaultFatal; 
 
@@ -234,4 +227,9 @@ def err_arcmt_nsinvocation_ownership : Error<"NSInvocation's %0 is not safe to b
 // OpenMP
 def err_omp_more_one_clause : Error<
   "directive '#pragma omp %0' cannot contain more than one '%1' clause%select{| with '%3' name modifier| with 'source' dependence}2">;
+
+// C++ Contracts
+def err_contract_failed : Error<"FIXME contract failed">;
+def note_from_contract : Note<"from contract attribute on %0:">;
+
 }

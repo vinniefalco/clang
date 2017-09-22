@@ -2290,6 +2290,10 @@ private:
                                ParsedAttributes &Attrs, SourceLocation *EndLoc,
                                IdentifierInfo *ScopeName,
                                SourceLocation ScopeLoc);
+  void ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
+                                          SourceLocation *endLoc,
+                                          IdentifierInfo *AttrName,
+                                          SourceLocation AttrNameLoc);
   IdentifierInfo *TryParseCXXContractAttributeIdentifier(
       SourceLocation &Loc);
   IdentifierInfo *TryParseCXX11AttributeIdentifier(SourceLocation &Loc);

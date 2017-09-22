@@ -49,7 +49,7 @@ macro(add_clang_library name)
     "ADDITIONAL_HEADERS"
     ${ARGN})
   set(srcs)
-  if(MSVC_IDE OR XCODE)
+  if(MSVC_IDE OR XCODE OR LLVM_ENABLE_IDE)
     # Add public headers
     file(RELATIVE_PATH lib_path
       ${CLANG_SOURCE_DIR}/lib/
@@ -72,7 +72,7 @@ macro(add_clang_library name)
         set(srcs ${headers} ${tds})
       endif()
     endif()
-  endif(MSVC_IDE OR XCODE)
+  endif(MSVC_IDE OR XCODE OR LLVM_ENABLE_IDE)
   if(srcs OR ARG_ADDITIONAL_HEADERS)
     set(srcs
       ADDITIONAL_HEADERS

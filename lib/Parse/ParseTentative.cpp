@@ -553,22 +553,6 @@ bool Parser::isCXXTypeId(TentativeCXXTypeIdContext Context, bool &isAmbiguous) {
   return TPR == TPResult::True;
 }
 
-static bool isContractAttribute(const IdentifierInfo *II) {
-  if (!II)
-    return false;
-  return llvm::StringSwitch<bool>(II->getName())
-      .Cases("ensures", "expects", "assert", true)
-      .Default(false);
-}
-
-static bool isContractLevel(const IdentifierInfo *II) {
-  if (!II)
-    return false;
-  return llvm::StringSwitch<bool>(II->getName())
-      .Cases("default", "axiom", "audit", true)
-      .Default(false);
-}
-
 /// \brief Returns true if this is a C++11 attribute-specifier. Per
 /// C++11 [dcl.attr.grammar]p6, two consecutive left square bracket tokens
 /// always introduce an attribute. In Objective-C++11, this rule does not

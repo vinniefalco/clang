@@ -4185,14 +4185,12 @@ static bool EvaluateArgs(ArrayRef<const Expr*> Args, ArgVector &ArgValues,
   return Success;
 }
 
-
 template <typename CheckFn>
-static bool diagnoseDiagnoseIfAttrsWith(SourceLocation CallLoc,
-                               const FunctionDecl *Callee,
-                               EvalInfo &Info,
-                                        CheckFn &&IsSuccessful) {
-  SmallVector<const DiagnoseIfAttr *, 8> Attrs;
-  for (const auto *DIA : Callee->specific_attrs<DiagnoseIfAttr>()) {
+static bool diagnoseContractAttrsWith(SourceLocation CallLoc,
+                                      const FunctionDecl *Callee,
+                                      EvalInfo &Info, CheckFn &&IsFailure) {
+  SmallVector<const ContractAttr *, 8> Attrs;
+  for (const auto *DIA : Callee->specific_attrs<ContractAttr>()) {
     if (DIA->getArgDependent())
       Attrs.push_back(DIA);
   }
@@ -4201,32 +4199,21 @@ static bool diagnoseDiagnoseIfAttrsWith(SourceLocation CallLoc,
   if (Attrs.empty())
     return false;
 
-  auto WarningBegin = std::stable_partition(
-      Attrs.begin(), Attrs.end(),
-      [](const DiagnoseIfAttr *DIA) { return DIA->isError(); });
-
   auto Diag = [&](SourceLocation Loc, unsigned ID) {
     return Info.Ctx.getDiagnostics().Report(Loc, ID);
   };
   // Note that diagnose_if attributes are late-parsed, so they appear in the
   // correct order (unlike enable_if attributes).
-  auto ErrAttr = llvm::find_if(llvm::make_range(Attrs.begin(), WarningBegin),
-                               IsSuccessful);
-  if (ErrAttr != WarningBegin) {
-    const DiagnoseIfAttr *DIA = *ErrAttr;
-
-    Diag(CallLoc, diag::err_diagnose_if_succeeded2) << DIA->getMessage();
-    Diag(DIA->getLocation(), diag::note_from_diagnose_if2)
+  auto ErrAttr =
+      llvm::find_if(llvm::make_range(Attrs.begin(), Attrs.end()), IsFailure);
+  if (ErrAttr != Attrs.end()) {
+    const ContractAttr *DIA = *ErrAttr;
+    Diag(CallLoc, diag::err_contract_failed);
+    Diag(DIA->getLocation(), diag::note_from_contract)
         << DIA->getParent() << DIA->getCond()->getSourceRange();
     return true;
   }
 
-  for (const auto *DIA : llvm::make_range(WarningBegin, Attrs.end()))
-    if (IsSuccessful(DIA)) {
-      Diag(CallLoc, diag::warn_diagnose_if_succeeded2) << DIA->getMessage();
-      Diag(DIA->getLocation(), diag::note_from_diagnose_if2)
-          << DIA->getParent() << DIA->getCond()->getSourceRange();
-    }
 
   return false;
 }
@@ -4246,7 +4233,7 @@ static bool HandleFunctionCall(SourceLocation CallLoc,
 
   CallStackFrame Frame(Info, CallLoc, Callee, This, ArgValues.data());
 
-
+  // FIXME: Add contract check
 
   // For a trivial copy or move assignment, perform an APValue copy. This is
   // essential for unions, where the operations performed by the assignment

@@ -1916,13 +1916,43 @@ def Contract : InheritableAttr {
                            ["CL_Default", "CL_Audit", "CL_Axiom"],
                            /*opt*/ 0, /*fake*/1>,
               NamedArgument<"ReturnIdent", 0, /*fake*/ 1>,
-              BoolArgument<"ArgDependent", 0, /*fake*/ 1>
+              BoolArgument<"ArgDependent", 0, /*fake*/ 1>,
+              NamedArgument<"Parent", 0, /*fake*/ 1>
               ];
   let DuplicatesAllowedWhileMerging = 1;
   let LateParsed = 1;
   let HasCustomParsing = 1;
   let AdditionalMembers = [{
-    // FIXME
+  private:
+    static int getContractTypeImp(StringRef Name) {
+      return llvm::StringSwitch<int>(Name)
+        .Case("ensures", CT_Ensures)
+        .Case("expects", CT_Expects)
+        .Case("assert", CT_Assert)
+        .Default(-1);
+    }
+    static int getContractLevelImp(StringRef Name) {
+      return llvm::StringSwitch<int>(Name)
+        .Case("default", CL_Default)
+        .Case("audit", CL_Audit)
+        .Case("axiom", CL_Axiom)
+        .Default(-1);
+    }
+  public:
+    static bool isContractTypeKeyword(StringRef S) {
+      return getContractTypeImp(S) != -1;
+    }
+    static bool isContractLevelKeyword(StringRef S) {
+      return getContractLevelImp(S) != -1;
+    }
+    static ContractType getContractTypeForString(StringRef S) {
+      assert(isContractTypeKeyword(S));
+      return static_cast<ContractType>(getContractTypeImp(S));
+    }
+    static ContractLevel getContractLevelForString(StringRef S) {
+      assert(isContractLevelKeyword(S));
+      return static_cast<ContractLevel>(getContractLevelImp(S));
+    }
   }];
 
   let TemplateDependent = 1;

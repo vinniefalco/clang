@@ -3812,13 +3812,6 @@ IdentifierInfo *Parser::TryParseCXX11AttributeIdentifier(SourceLocation &Loc) {
   }
 }
 
-static bool isContractAttribute(StringRef S) {
-  return llvm::StringSwitch<bool>(S)
-      .Cases("ensures", "expects", "assert", true)
-      .Default(false);
-}
-
-
 /// \brief Try to parse an 'identifier' which appears within an attribute-token.
 ///
 /// \return the parsed identifier on success, and 0 if the next token is not an
@@ -3836,7 +3829,7 @@ IdentifierInfo *Parser::TryParseCXXContractAttributeIdentifier(SourceLocation &L
     // Identifiers and keywords have identifier info attached.
     if (!Tok.isAnnotation()) {
       if (IdentifierInfo *II = Tok.getIdentifierInfo()) {
-        if (isContractAttribute(II->getName())) {
+        if (ContractAttr::isContractTypeKeyword(II->getName())) {
           Loc = ConsumeToken();
           return II;
         }
@@ -3861,7 +3854,7 @@ IdentifierInfo *Parser::TryParseCXXContractAttributeIdentifier(SourceLocation &L
     SourceLocation SpellingLoc =
         PP.getSourceManager().getSpellingLoc(Tok.getLocation());
     StringRef Spelling = PP.getSpelling(SpellingLoc, SpellingBuf);
-    if (isContractAttribute(Spelling)) {
+    if (ContractAttr::isContractTypeKeyword(Spelling)) {
       Loc = ConsumeToken();
       return &PP.getIdentifierTable().get(Spelling);
     }
@@ -3963,6 +3956,48 @@ bool Parser::ParseCXX11AttributeArgs(IdentifierInfo *AttrName,
   return true;
 }
 
+void Parser::ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
+                                                SourceLocation *endLoc,
+                                                IdentifierInfo *AttrName,
+                                                SourceLocation AttrNameLoc) {
+  assert(AttrName && ContractAttr::isContractTypeKeyword(AttrName->getName()));
+
+  SourceLocation LevelLoc, OptIdentLoc;
+  IdentifierInfo *LevelName(nullptr), *OptName(nullptr);
+  if (OptName = TryParseCXX11AttributeIdentifier(OptIdentLoc)) {
+    if (ContractAttr::isContractLevelKeyword(LevelName->getName())) {
+      using std::swap;
+      swap(LevelLoc, OptIdentLoc);
+      swap(LevelName, OptName);
+    }
+  }
+  if (OptName == nullptr)
+    OptName = TryParseCXX11AttributeIdentifier(OptIdentLoc);
+
+  ExprResult Res;
+  if (!TryConsumeToken(tok::colon))
+    Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
+  else
+    Res = ParseAssignmentExpression();
+
+  if (!Res.isInvalid()) {
+    auto &Ctx = Actions.getASTContext();
+    ArgsVector Args;
+    Args.push_back(Res.get());
+    Args.push_back(IdentifierLoc::create(Ctx, LevelLoc, LevelName));
+    Args.push_back(IdentifierLoc::create(Ctx, OptIdentLoc, OptName));
+    attrs.addNew(AttrName, SourceRange(AttrNameLoc, Tok.getLocation()),
+                 /*ScopeName*/ nullptr, SourceLocation(), Args.data(),
+                 Args.size(), AttributeList::AS_CXX11);
+  }
+  if (ExpectAndConsume(tok::r_square))
+    SkipUntil(tok::r_square);
+  if (endLoc)
+    *endLoc = Tok.getLocation();
+  if (ExpectAndConsume(tok::r_square))
+    SkipUntil(tok::r_square);
+}
+
 /// ParseCXX11AttributeSpecifier - Parse a C++11 attribute-specifier.
 ///
 /// [C++11] attribute-specifier:
@@ -4003,20 +4038,25 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
   ConsumeBracket();
   ConsumeBracket();
 
-  SourceLocation CommonScopeLoc;
-  IdentifierInfo *CommonScopeName = nullptr;
+  SourceLocation InitialIDLoc;
+  IdentifierInfo *InitialIDName = nullptr;
+  if (InitialIDName = TryParseCXXContractAttributeIdentifier(InitialIDLoc)) {
+    ParseCXXContractAttributeSpecifier(attrs, endLoc, InitialIDName,
+                                       InitialIDLoc);
+    return;
+  }
   if (Tok.is(tok::kw_using)) {
     Diag(Tok.getLocation(), getLangOpts().CPlusPlus1z
                                 ? diag::warn_cxx14_compat_using_attribute_ns
                                 : diag::ext_using_attribute_ns);
     ConsumeToken();
 
-    CommonScopeName = TryParseCXX11AttributeIdentifier(CommonScopeLoc);
-    if (!CommonScopeName) {
+    InitialIDName = TryParseCXX11AttributeIdentifier(InitialIDLoc);
+    if (!InitialIDName) {
       Diag(Tok.getLocation(), diag::err_expected) << tok::identifier;
       SkipUntil(tok::r_square, tok::colon, StopBeforeMatch);
     }
-    if (!TryConsumeToken(tok::colon) && CommonScopeName)
+    if (!TryConsumeToken(tok::colon) && InitialIDName)
       Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
   }
 
@@ -4048,13 +4088,13 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
       }
     }
 
-    if (CommonScopeName) {
+    if (InitialIDName) {
       if (ScopeName) {
         Diag(ScopeLoc, diag::err_using_attribute_ns_conflict)
-            << SourceRange(CommonScopeLoc);
+            << SourceRange(InitialIDLoc);
       } else {
-        ScopeName = CommonScopeName;
-        ScopeLoc = CommonScopeLoc;
+        ScopeName = InitialIDName;
+        ScopeLoc = InitialIDLoc;
       }
     }
 
