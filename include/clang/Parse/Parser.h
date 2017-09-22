@@ -2259,7 +2259,7 @@ private:
     if (getLangOpts().CPlusPlus11 && isCXX11AttributeSpecifier()) {
       ParsedAttributesWithRange attrs(AttrFactory);
       SourceLocation endLoc;
-      ParseCXX11Attributes(attrs, &endLoc);
+      ParseCXX11Attributes(attrs, &endLoc, &D);
       D.takeAttributes(attrs, endLoc);
     }
   }
@@ -2280,9 +2280,11 @@ private:
   }
 
   void ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
-                                    SourceLocation *EndLoc = nullptr);
+                                    SourceLocation *EndLoc = nullptr,
+                                    Declarator *D = nullptr);
   void ParseCXX11Attributes(ParsedAttributesWithRange &attrs,
-                            SourceLocation *EndLoc = nullptr);
+                            SourceLocation *EndLoc = nullptr,
+                            Declarator *D = nullptr);
   /// \brief Parses a C++-style attribute argument list. Returns true if this
   /// results in adding an attribute to the ParsedAttributes list.
   bool ParseCXX11AttributeArgs(IdentifierInfo *AttrName,
@@ -2293,7 +2295,8 @@ private:
   void ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
                                           SourceLocation *endLoc,
                                           IdentifierInfo *AttrName,
-                                          SourceLocation AttrNameLoc);
+                                          SourceLocation AttrNameLoc,
+                                          Declarator *D = nullptr);
   IdentifierInfo *TryParseCXXContractAttributeIdentifier(
       SourceLocation &Loc);
   IdentifierInfo *TryParseCXX11AttributeIdentifier(SourceLocation &Loc);

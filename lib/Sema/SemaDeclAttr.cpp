@@ -1045,6 +1045,35 @@ static void handleDiagnoseIfAttr(Sema &S, Decl *D, const AttributeList &Attr) {
       Attr.getAttributeSpellingListIndex()));
 }
 
+static void handleContractAttr(Sema &S, Decl *D, const AttributeList &Attr) {
+  // S.Diag(Attr.getLoc(), diag::ext_clang_diagnose_if);
+
+  Expr *Cond = Attr.getArgAsExpr(0);
+  if (!Cond->isTypeDependent()) {
+    ExprResult Converted = S.PerformContextuallyConvertToBool(Cond);
+    if (Converted.isInvalid())
+      return;
+    Cond = Converted.get();
+  }
+
+  IdentifierLoc *LevelLoc(Attr.getArgAsIdent(1)),
+      *OptNameLoc(Attr.getArgAsIdent(2));
+  ContractAttr::ContractType CT =
+      ContractAttr::getContractTypeForString(Attr.getName()->getName());
+  ContractAttr::ContractLevel CL =
+      LevelLoc->Ident
+          ? ContractAttr::getContractLevelForString(LevelLoc->Ident->getName())
+          : ContractAttr::CL_Default;
+
+  bool ArgDependent = false;
+  if (const auto *FD = dyn_cast<FunctionDecl>(D))
+    ArgDependent = ArgumentDependenceChecker(FD).referencesArgs(Cond);
+
+  D->addAttr(::new (S.Context) ContractAttr(
+      Attr.getRange(), S.Context, Cond, CT, CL, nullptr, ArgDependent,
+      cast<NamedDecl>(D), Attr.getAttributeSpellingListIndex()));
+}
+
 static void handlePassObjectSizeAttr(Sema &S, Decl *D,
                                      const AttributeList &Attr) {
   if (D->hasAttr<PassObjectSizeAttr>()) {
@@ -6095,6 +6124,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case AttributeList::AT_DiagnoseIf:
     handleDiagnoseIfAttr(S, D, Attr);
+    break;
+  case AttributeList::AT_Contract:
+    handleContractAttr(S, D, Attr);
     break;
   case AttributeList::AT_ExtVectorType:
     handleExtVectorTypeAttr(S, scope, D, Attr);

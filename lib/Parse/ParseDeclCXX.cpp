@@ -3959,13 +3959,14 @@ bool Parser::ParseCXX11AttributeArgs(IdentifierInfo *AttrName,
 void Parser::ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
                                                 SourceLocation *endLoc,
                                                 IdentifierInfo *AttrName,
-                                                SourceLocation AttrNameLoc) {
+                                                SourceLocation AttrNameLoc,
+                                                Declarator *D) {
   assert(AttrName && ContractAttr::isContractTypeKeyword(AttrName->getName()));
 
   SourceLocation LevelLoc, OptIdentLoc;
   IdentifierInfo *LevelName(nullptr), *OptName(nullptr);
-  if (OptName = TryParseCXX11AttributeIdentifier(OptIdentLoc)) {
-    if (ContractAttr::isContractLevelKeyword(LevelName->getName())) {
+  if ((LevelName = TryParseCXX11AttributeIdentifier(LevelLoc))) {
+    if (!ContractAttr::isContractLevelKeyword(LevelName->getName())) {
       using std::swap;
       swap(LevelLoc, OptIdentLoc);
       swap(LevelName, OptName);
@@ -3974,22 +3975,48 @@ void Parser::ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
   if (OptName == nullptr)
     OptName = TryParseCXX11AttributeIdentifier(OptIdentLoc);
 
-  ExprResult Res;
-  if (!TryConsumeToken(tok::colon))
-    Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
-  else
-    Res = ParseAssignmentExpression();
+  auto &Ctx = Actions.getASTContext();
 
-  if (!Res.isInvalid()) {
-    auto &Ctx = Actions.getASTContext();
-    ArgsVector Args;
-    Args.push_back(Res.get());
-    Args.push_back(IdentifierLoc::create(Ctx, LevelLoc, LevelName));
-    Args.push_back(IdentifierLoc::create(Ctx, OptIdentLoc, OptName));
-    attrs.addNew(AttrName, SourceRange(AttrNameLoc, Tok.getLocation()),
-                 /*ScopeName*/ nullptr, SourceLocation(), Args.data(),
-                 Args.size(), AttributeList::AS_CXX11);
-  }
+  NamedDecl *RetDecl = nullptr;
+  ExprResult Res = ExprError();
+  do {
+    if (!TryConsumeToken(tok::colon)) {
+      Diag(Tok.getLocation(), diag::err_expected) << tok::colon;
+      break;
+    }
+    EnterExpressionEvaluationContext Unevaluated(
+        Actions, Sema::ExpressionEvaluationContext::PotentiallyEvaluated,
+        /*LambdaContextDecl*/ nullptr,
+        /*IsDeclType*/ false);
+#if 0
+    if (OptName) {
+      VarDecl::Create(Ctx, FD, FD->getLocation(), FD->getLocation(),
+                             &PP.getIdentifierTable().get("__promise"),
+                      Ctx.AutoDeductTy,
+                      Ctx.getTrivialTypeSourceInfo(T, Loc), SC_None);
+    }
+    llvm::Optional<ParseScope> PrototypeScope;
+    if (OptName) {
+      PrototypeScope.emplace(this,
+                                Scope::FunctionPrototypeScope|Scope::DeclScope|
+                                (D && D->isFunctionDeclaratorAFunctionDeclaration()
+                                   ? Scope::FunctionDeclarationScope : 0));
+      TentativelyDeclaredIdentifiers.push_back(OptName);
+    }
+#endif
+    Res = Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
+
+    if (!Res.isInvalid()) {
+      auto &Ctx = Actions.getASTContext();
+      ArgsVector Args;
+      Args.push_back(Res.get());
+      Args.push_back(IdentifierLoc::create(Ctx, LevelLoc, LevelName));
+      Args.push_back(IdentifierLoc::create(Ctx, OptIdentLoc, OptName));
+      attrs.addNew(AttrName, SourceRange(AttrNameLoc, Tok.getLocation()),
+                   /*ScopeName*/ nullptr, SourceLocation(), Args.data(),
+                   Args.size(), AttributeList::AS_CXX11);
+    }
+  } while (false);
   if (ExpectAndConsume(tok::r_square))
     SkipUntil(tok::r_square);
   if (endLoc)
@@ -4023,7 +4050,8 @@ void Parser::ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
 /// [C++11] attribute-namespace:
 ///         identifier
 void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
-                                          SourceLocation *endLoc) {
+                                          SourceLocation *endLoc,
+                                          Declarator *D) {
   if (Tok.is(tok::kw_alignas)) {
     Diag(Tok.getLocation(), diag::warn_cxx98_compat_alignas);
     ParseAlignmentSpecifier(attrs, endLoc);
@@ -4040,9 +4068,9 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
 
   SourceLocation InitialIDLoc;
   IdentifierInfo *InitialIDName = nullptr;
-  if (InitialIDName = TryParseCXXContractAttributeIdentifier(InitialIDLoc)) {
+  if ((InitialIDName = TryParseCXXContractAttributeIdentifier(InitialIDLoc))) {
     ParseCXXContractAttributeSpecifier(attrs, endLoc, InitialIDName,
-                                       InitialIDLoc);
+                                       InitialIDLoc, D);
     return;
   }
   if (Tok.is(tok::kw_using)) {
@@ -4135,7 +4163,7 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
 /// attribute-specifier-seq:
 ///       attribute-specifier-seq[opt] attribute-specifier
 void Parser::ParseCXX11Attributes(ParsedAttributesWithRange &attrs,
-                                  SourceLocation *endLoc) {
+                                  SourceLocation *endLoc, Declarator *D) {
   assert(getLangOpts().CPlusPlus11);
 
   SourceLocation StartLoc = Tok.getLocation(), Loc;
@@ -4143,7 +4171,7 @@ void Parser::ParseCXX11Attributes(ParsedAttributesWithRange &attrs,
     endLoc = &Loc;
 
   do {
-    ParseCXX11AttributeSpecifier(attrs, endLoc);
+    ParseCXX11AttributeSpecifier(attrs, endLoc, D);
   } while (isCXX11AttributeSpecifier());
 
   attrs.Range = SourceRange(StartLoc, *endLoc);

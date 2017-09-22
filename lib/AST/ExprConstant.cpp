@@ -4233,7 +4233,16 @@ static bool HandleFunctionCall(SourceLocation CallLoc,
 
   CallStackFrame Frame(Info, CallLoc, Callee, This, ArgValues.data());
 
-  // FIXME: Add contract check
+  auto ContractEvaluator = [&](const ContractAttr *CA) {
+    APValue Result;
+    if (!Evaluate(Result, Info, CA->getCond()) ||
+        Info.EvalStatus.HasSideEffects)
+      return false;
+    return Result.isInt() && Result.getInt().getBoolValue();
+  };
+
+  if (diagnoseContractAttrsWith(CallLoc, Callee, Info, ContractEvaluator))
+    return false;
 
   // For a trivial copy or move assignment, perform an APValue copy. This is
   // essential for unions, where the operations performed by the assignment
