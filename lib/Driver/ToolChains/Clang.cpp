@@ -3998,6 +3998,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       types::isCXX(InputType)) {
     CmdArgs.push_back("-fcontracts-ts");
   }
+  Args.AddLastArg(CmdArgs, options::OPT_fcontracts_ts_level_EQ);
 
   bool HaveModules = false;
   RenderModulesOptions(C, D, Args, Input, Output, CmdArgs, HaveModules);

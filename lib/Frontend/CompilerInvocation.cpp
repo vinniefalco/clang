@@ -2139,6 +2139,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.BlocksRuntimeOptional = Args.hasArg(OPT_fblocks_runtime_optional);
   Opts.CoroutinesTS = Args.hasArg(OPT_fcoroutines_ts);
   Opts.ContractsTS = Args.hasArg(OPT_fcontracts_ts);
+  Opts.ContractsLevel = ContractAttr::getContractLevelForString(
+      Args.getLastArgValue(OPT_fcontracts_ts_level_EQ, "default"));
   Opts.ModulesTS = Args.hasArg(OPT_fmodules_ts);
   Opts.Modules = Args.hasArg(OPT_fmodules) || Opts.ModulesTS;
   Opts.ModulesStrictDeclUse = Args.hasArg(OPT_fmodules_strict_decluse);

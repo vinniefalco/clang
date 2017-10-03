@@ -9294,4 +9294,9 @@ def warn_shadow_field :
   InGroup<ShadowField>, DefaultIgnore;
 def note_shadow_field : Note<"declared here">;
 
+def err_contract_invalid_decl_attribute : Error<
+  "'assert' attribute cannot be applied to declarations">;
+def err_contract_invalid_stmt_attribute: Error<
+  "'%0' attribute cannot be applied to statements">;
+
 } // end of sema component.

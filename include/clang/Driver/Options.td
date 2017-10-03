@@ -622,6 +622,9 @@ def fcontracts_ts : Flag<["-"], "fcontracts-ts">, Group<f_Group>,
   HelpText<"Enable support for C++ Contracts">;
 def fno_contracts_ts : Flag <["-"], "fno-contracts-ts">, Group<f_Group>,
   Flags<[DriverOption]>;
+def fcontracts_ts_level_EQ : Joined<["-"], "fcontracts-ts-level=">, Group<f_clang_Group>,
+  Flags<[DriverOption]>, MetaVarName<"<level>">, Values<"default,audit,axiom">,
+  HelpText<"Change the assertion level of C++ Contracts">;
 
 def fembed_bitcode_EQ : Joined<["-"], "fembed-bitcode=">,
     Group<f_Group>, Flags<[DriverOption, CC1Option]>, MetaVarName<"<option>">,

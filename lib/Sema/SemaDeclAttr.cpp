@@ -1060,6 +1060,10 @@ static void handleContractAttr(Sema &S, Decl *D, const AttributeList &Attr) {
       *OptNameLoc(Attr.getArgAsIdent(2));
   ContractAttr::ContractType CT =
       ContractAttr::getContractTypeForString(Attr.getName()->getName());
+  if (CT == ContractAttr::CT_Assert) {
+    S.Diag(Attr.getLoc(), diag::err_contract_invalid_decl_attribute);
+    return;
+  }
   ContractAttr::ContractLevel CL =
       LevelLoc->Ident
           ? ContractAttr::getContractLevelForString(LevelLoc->Ident->getName())

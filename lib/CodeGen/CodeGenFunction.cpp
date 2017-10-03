@@ -1135,15 +1135,22 @@ void CodeGenFunction::EmitContractAttribute(const ContractAttr *CA) {
 void CodeGenFunction::EmitFunctionBody(FunctionArgList &Args,
                                        const Stmt *Body) {
   incrementProfileCounter(Body);
-  if (CurFuncDecl && CurFuncDecl->hasAttr<ContractAttr>()) {
-    for (const auto *DIA : CurFuncDecl->specific_attrs<ContractAttr>()) {
-      EmitContractAttribute(DIA);
-    }
+  bool HasContracts = CurFuncDecl && CurFuncDecl->hasAttr<ContractAttr>();
+
+  if (HasContracts) {
+    for (const auto *DIA : CurFuncDecl->specific_attrs<ContractAttr>())
+      if (DIA->getContractType() == ContractAttr::CT_Expects)
+        EmitContractAttribute(DIA);
   }
   if (const CompoundStmt *S = dyn_cast<CompoundStmt>(Body))
     EmitCompoundStmtWithoutScope(*S);
   else
     EmitStmt(Body);
+  if (HasContracts) {
+    for (const auto *DIA : CurFuncDecl->specific_attrs<ContractAttr>())
+      if (DIA->getContractType() == ContractAttr::CT_Ensures)
+        EmitContractAttribute(DIA);
+  }
 }
 
 /// When instrumenting to collect profile data, the counts for some blocks
