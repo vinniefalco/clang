@@ -229,7 +229,7 @@ def err_omp_more_one_clause : Error<
   "directive '#pragma omp %0' cannot contain more than one '%1' clause%select{| with '%3' name modifier| with 'source' dependence}2">;
 
 // C++ Contracts
-def err_contract_failed : Error<"FIXME contract failed">;
+def err_contract_failed : Error<"Assertion '%select{expects|ensures|assert}0%1 : %2' failed">;
 def note_from_contract : Note<"from contract attribute on %0:">;
 
 }

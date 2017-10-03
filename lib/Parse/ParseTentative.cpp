@@ -658,8 +658,9 @@ Parser::isCXX11AttributeSpecifier(bool Disambiguate,
 
   // FIXME: Do better parsing
   SourceLocation Loc;
-  if (TryParseCXXContractAttributeIdentifier(Loc)) {
-      return CAK_AttributeSpecifier;
+  if (getLangOpts().ContractsTS &&
+      TryParseCXXContractAttributeIdentifier(Loc)) {
+    return CAK_AttributeSpecifier;
   }
 
   while (Tok.isNot(tok::r_square)) {

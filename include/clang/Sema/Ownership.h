@@ -253,6 +253,7 @@ namespace clang {
   typedef ActionResult<ParsedType> TypeResult;
   typedef ActionResult<CXXBaseSpecifier*> BaseResult;
   typedef ActionResult<CXXCtorInitializer*> MemInitResult;
+  typedef ActionResult<Attr *> AttrResult;
 
   typedef ActionResult<Decl*> DeclResult;
   typedef OpaquePtr<TemplateName> ParsedTemplateTy;
@@ -266,6 +267,7 @@ namespace clang {
 
   inline ExprResult ExprError() { return ExprResult(true); }
   inline StmtResult StmtError() { return StmtResult(true); }
+  inline AttrResult AttrError() { return AttrResult(true); }
 
   inline ExprResult ExprError(const DiagnosticBuilder&) { return ExprError(); }
   inline StmtResult StmtError(const DiagnosticBuilder&) { return StmtError(); }

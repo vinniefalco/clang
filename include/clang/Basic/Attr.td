@@ -1919,8 +1919,8 @@ def Contract : Attr {
                            /*opt*/ 0, /*fake*/1>,
               EnumArgument<"ContractLevel",
                            "ContractLevel",
-                           ["", "", ""],
-                           ["CL_Default", "CL_Audit", "CL_Axiom"],
+                           ["", "", "", ""],
+                           ["CL_Off", "CL_Axiom", "CL_Default", "CL_Audit"],
                            /*opt*/ 0, /*fake*/1>,
               NamedArgument<"ReturnIdent", 0, /*fake*/ 1>,
               BoolArgument<"ArgDependent", 0, /*fake*/ 1>,
@@ -1938,11 +1938,13 @@ def Contract : Attr {
         .Case("assert", CT_Assert)
         .Default(-1);
     }
+
     static int getContractLevelImp(StringRef Name) {
       return llvm::StringSwitch<int>(Name)
         .Case("default", CL_Default)
         .Case("audit", CL_Audit)
         .Case("axiom", CL_Axiom)
+        .Case("off", CL_Off)
         .Default(-1);
     }
   public:
@@ -1950,15 +1952,47 @@ def Contract : Attr {
       return getContractTypeImp(S) != -1;
     }
     static bool isContractLevelKeyword(StringRef S) {
-      return getContractLevelImp(S) != -1;
+      int Res = getContractLevelImp(S);
+      return Res != -1 && Res != static_cast<int>(CL_Off);
     }
     static ContractType getContractTypeForString(StringRef S) {
       assert(isContractTypeKeyword(S));
       return static_cast<ContractType>(getContractTypeImp(S));
     }
     static ContractLevel getContractLevelForString(StringRef S) {
-      assert(isContractLevelKeyword(S));
+      assert(S == "off" || isContractLevelKeyword(S));
       return static_cast<ContractLevel>(getContractLevelImp(S));
+    }
+    static StringRef getStringForContractType(ContractType Ty) {
+      switch (Ty) {
+      case CT_Ensures:
+        return "ensures";
+      case CT_Expects:
+        return "expects";
+      case CT_Assert:
+        return "assert";
+      }
+    }
+    static StringRef getStringForContractLevel(ContractLevel Lv) {
+      switch (Lv) {
+      case CL_Off:
+        return "off";
+      case CL_Default:
+        return "default";
+      case CL_Axiom:
+        return "axiom";
+      case CL_Audit:
+        return "audit";
+      }
+    }
+    bool isAssert() const { return getContractType() == CT_Assert; }
+    bool isEnsures() const { return getContractType() == CT_Ensures; }
+    bool isExpects() const { return getContractType() == CT_Expects; }
+
+    bool isEnabled(int LangContractLevel) const {
+      auto CL = static_cast<ContractLevel>(LangContractLevel);
+      auto MyCL = getContractLevel();
+      return CL != CL_Off && MyCL != CL_Audit && CL >= MyCL;
     }
   }];
 

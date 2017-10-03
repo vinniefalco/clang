@@ -162,39 +162,6 @@ static Attr *handleLoopHintAttr(Sema &S, Stmt *St, const AttributeList &A,
                                       ValueExpr, A.getRange());
 }
 
-static Attr *handleContractAttr(Sema &S, Stmt *St, const AttributeList &Attr,
-                                SourceRange Range) {
-  Expr *Cond = Attr.getArgAsExpr(0);
-  if (!Cond->isTypeDependent()) {
-    ExprResult Converted = S.PerformContextuallyConvertToBool(Cond);
-    if (Converted.isInvalid())
-      return nullptr;
-    Cond = Converted.get();
-  }
-
-  IdentifierLoc *LevelLoc(Attr.getArgAsIdent(1)),
-      *OptNameLoc(Attr.getArgAsIdent(2));
-  ContractAttr::ContractType CT =
-      ContractAttr::getContractTypeForString(Attr.getName()->getName());
-  if (CT != ContractAttr::CT_Assert) {
-    S.Diag(Attr.getLoc(), diag::err_contract_invalid_stmt_attribute)
-        << (CT == ContractAttr::CT_Ensures ? "ensures" : "expects");
-    return nullptr;
-  }
-  ContractAttr::ContractLevel CL =
-      LevelLoc->Ident
-          ? ContractAttr::getContractLevelForString(LevelLoc->Ident->getName())
-          : ContractAttr::CL_Default;
-
-  bool ArgDependent = false;
-  // FIXME(EricWF)
-  // if (const auto *FD = dyn_cast<FunctionDecl>(D))
-  //  ArgDependent = ArgumentDependenceChecker(FD).referencesArgs(Cond);
-
-  return ::new (S.Context) ContractAttr(
-      Attr.getRange(), S.Context, Cond, CT, CL, nullptr, ArgDependent,
-      /*NamedDecl*/ nullptr, Attr.getAttributeSpellingListIndex());
-}
 static void
 CheckForIncompatibleAttributes(Sema &S,
                                const SmallVectorImpl<const Attr *> &Attrs) {
@@ -338,7 +305,7 @@ static Attr *ProcessStmtAttribute(Sema &S, Stmt *St, const AttributeList &A,
   case AttributeList::AT_Suppress:
     return handleSuppressAttr(S, St, A, Range);
   case AttributeList::AT_Contract:
-    return handleContractAttr(S, St, A, Range);
+    return S.ActOnContractAttribute(A, St).get();
   default:
     // if we're here, then we parsed a known attribute, but didn't recognize
     // it as a statement attribute => it is declaration attribute

@@ -9298,5 +9298,10 @@ def err_contract_invalid_decl_attribute : Error<
   "'assert' attribute cannot be applied to declarations">;
 def err_contract_invalid_stmt_attribute: Error<
   "'%0' attribute cannot be applied to statements">;
-
+def err_contract_opt_identifier_only_allowed_on_ensures : Error<
+  "optional identifiers are not allowed on a '%0' attribute">;
+def err_contract_assert_only_allowed_on_null_stmt : Error<
+  "'assert' attribute can only be applied to null statements">;
+def err_contract_only_allowed_on_function_decl : Error<
+  "'%0' attribute can only be applied to a function declaration">;
 } // end of sema component.

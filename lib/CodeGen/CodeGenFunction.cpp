@@ -1116,9 +1116,7 @@ void CodeGenFunction::StartFunction(GlobalDecl GD,
 
 void CodeGenFunction::EmitContractAttribute(const ContractAttr *CA) {
   auto CL = CA->getContractLevel();
-  if (CL == ContractAttr::CL_Axiom ||
-      (CL == ContractAttr::CL_Audit &&
-       getLangOpts().ContractsLevel != ContractAttr::CL_Audit)) {
+  if (!CA->isEnabled(getLangOpts().ContractsLevel)) {
     // FIXME(EricWF)
     return;
   }

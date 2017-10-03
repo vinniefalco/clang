@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "ArgumentDependenceChecker.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Expr.h"
@@ -19,6 +20,7 @@
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/SemaInternal.h"
+
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
@@ -812,4 +814,79 @@ void Sema::PopPragmaVisibility(bool IsNamespaceEnd, SourceLocation EndLoc) {
   // To simplify the implementation, never keep around an empty stack.
   if (Stack->empty())
     FreeVisContext();
+}
+
+static AttrResult actOnContractAttributeCommon(Sema &S,
+                                               const AttributeList &Attr,
+                                               Decl *D, Stmt *St) {
+  bool IsOnDecl = D != nullptr;
+  assert(IsOnDecl == (St == nullptr));
+
+  if (St) {
+    D = dyn_cast<Decl>(S.CurContext);
+    assert(S.CurContext->isFunctionOrMethod());
+  }
+  Expr *Cond = Attr.getArgAsExpr(0);
+  if (!Cond->isTypeDependent()) {
+    ExprResult Converted = S.PerformContextuallyConvertToBool(Cond);
+    if (Converted.isInvalid())
+      return AttrError();
+    Cond = Converted.get();
+  }
+
+  IdentifierLoc *LevelLoc(Attr.getArgAsIdent(1)),
+      *OptNameLoc(Attr.getArgAsIdent(2));
+  ContractAttr::ContractType CT =
+      ContractAttr::getContractTypeForString(Attr.getName()->getName());
+  StringRef CTStr = ContractAttr::getStringForContractType(CT);
+  if (IsOnDecl) {
+    if (CT == ContractAttr::CT_Assert) {
+      S.Diag(Attr.getLoc(), diag::err_contract_invalid_decl_attribute);
+      return AttrError();
+    }
+    if (D->isFunctionOrFunctionTemplate()) {
+      S.Diag(Attr.getLoc(), diag::err_contract_only_allowed_on_function_decl)
+          << CTStr;
+      return AttrError();
+    }
+  } else {
+    if (CT != ContractAttr::CT_Assert) {
+      S.Diag(Attr.getLoc(), diag::err_contract_invalid_stmt_attribute) << CTStr;
+      return AttrError();
+    }
+    if (!isa<NullStmt>(St)) {
+      S.Diag(Attr.getLoc(),
+             diag::err_contract_assert_only_allowed_on_null_stmt);
+      return AttrError();
+    }
+  }
+  if (OptNameLoc && CT != ContractAttr::CT_Ensures) {
+    S.Diag(Attr.getLoc(),
+           diag::err_contract_opt_identifier_only_allowed_on_ensures)
+        << CTStr;
+    return AttrError();
+  }
+  ContractAttr::ContractLevel CL =
+      LevelLoc->Ident
+          ? ContractAttr::getContractLevelForString(LevelLoc->Ident->getName())
+          : ContractAttr::CL_Default;
+  bool ArgDependent = false;
+  if (const auto *FD = dyn_cast_or_null<FunctionDecl>(D))
+    ArgDependent = ArgumentDependenceChecker(FD).referencesArgs(Cond);
+
+  AttrResult Res = ::new (S.Context) ContractAttr(
+      Attr.getRange(), S.Context, Cond, CT, CL, nullptr, ArgDependent,
+      cast_or_null<NamedDecl>(D), Attr.getAttributeSpellingListIndex());
+  return Res;
+}
+
+AttrResult Sema::ActOnContractAttribute(const AttributeList &Attr, Scope *scope,
+                                        Decl *D) {
+  AttrResult Res = actOnContractAttributeCommon(*this, Attr, D, nullptr);
+
+  return Res;
+}
+AttrResult Sema::ActOnContractAttribute(const AttributeList &Attr, Stmt *S) {
+  AttrResult Res = actOnContractAttributeCommon(*this, Attr, nullptr, S);
+  return Res;
 }

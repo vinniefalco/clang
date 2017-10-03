@@ -3700,6 +3700,56 @@ struct StmtResult {
 };
 }
 
+static bool diagnoseContractAttrsWith(SourceLocation CallLoc,
+                                      ArrayRef<Attr const *> AllAttrs,
+                                      EvalInfo &Info,
+                                      ContractAttr::ContractType EvalType) {
+  // if (Info.EvalMode == EvalInfo::EM_ConstantFold ||
+  //    Info.EvalMode == EvalInfo::EM_EvaluateForOverflow ||
+  //    Info.EvalMode == EvalInfo::EM_IgnoreSideEffects)
+  if (Info.checkingPotentialConstantExpression())
+    return false;
+
+  SmallVector<const ContractAttr *, 8> Attrs;
+  for (const auto *A : AllAttrs) {
+    if (const auto *DIA = dyn_cast<ContractAttr>(A))
+      if (DIA->getArgDependent() && DIA->getContractType() == EvalType)
+        Attrs.push_back(DIA);
+  }
+
+  // Common case: No diagnose_if attributes, so we can quit early.
+  if (Attrs.empty())
+    return false;
+  auto IsSuccess = [&](const ContractAttr *CA) {
+    assert(!Info.EvalStatus.HasSideEffects);
+    if (!CA->isEnabled(Info.getLangOpts().ContractsLevel))
+      return true;
+    APValue Result;
+    if (!Evaluate(Result, Info, CA->getCond()) ||
+        Info.EvalStatus.HasSideEffects)
+      return false;
+    return Result.isInt() && Result.getInt().getBoolValue();
+  };
+  auto Diag = [&](SourceLocation Loc, unsigned ID) {
+    return Info.Ctx.getDiagnostics().Report(Loc, ID);
+  };
+  // Note that diagnose_if attributes are late-parsed, so they appear in the
+  // correct order (unlike enable_if attributes).
+  for (auto *DIA : Attrs) {
+    if (!IsSuccess(DIA)) {
+      Diag(CallLoc, diag::err_contract_failed)
+          << static_cast<int>(DIA->getContractType())
+          << (DIA->getReturnIdent() ? DIA->getReturnIdent()->getName() : "")
+          << DIA->getCond();
+      if (DIA->getContractType() != ContractAttr::CT_Assert)
+        Diag(DIA->getLocation(), diag::note_from_contract)
+            << DIA->getParent() << DIA->getCond()->getSourceRange();
+      return true;
+    }
+  }
+  return false;
+}
+
 static EvalStmtResult EvaluateStmt(StmtResult &Result, EvalInfo &Info,
                                    const Stmt *S,
                                    const SwitchCase *SC = nullptr);
@@ -4059,12 +4109,15 @@ static EvalStmtResult EvaluateStmt(StmtResult &Result, EvalInfo &Info,
   case Stmt::LabelStmtClass:
     return EvaluateStmt(Result, Info, cast<LabelStmt>(S)->getSubStmt(), Case);
 
-  case Stmt::AttributedStmtClass:
+  case Stmt::AttributedStmtClass: {
     // As a general principle, C++11 attributes can be ignored without
     // any semantic impact.
-    return EvaluateStmt(Result, Info, cast<AttributedStmt>(S)->getSubStmt(),
-                        Case);
-
+    auto *AT = cast<AttributedStmt>(S);
+    if (diagnoseContractAttrsWith(AT->getAttrLoc(), AT->getAttrs(), Info,
+                                  ContractAttr::CT_Assert))
+      return ESR_Failed;
+    return EvaluateStmt(Result, Info, AT->getSubStmt(), Case);
+  }
   case Stmt::CaseStmtClass:
   case Stmt::DefaultStmtClass:
     return EvaluateStmt(Result, Info, cast<SwitchCase>(S)->getSubStmt(), Case);
@@ -4185,45 +4238,6 @@ static bool EvaluateArgs(ArrayRef<const Expr*> Args, ArgVector &ArgValues,
   return Success;
 }
 
-static bool diagnoseContractAttrsWith(SourceLocation CallLoc,
-                                      const FunctionDecl *Callee,
-                                      EvalInfo &Info,
-                                      ContractAttr::ContractType EvalType) {
-  if (Info.EvalMode != EvalInfo::EM_ConstantExpression)
-    return false;
-
-  SmallVector<const ContractAttr *, 8> Attrs;
-  for (const auto *DIA : Callee->specific_attrs<ContractAttr>()) {
-    if (DIA->getArgDependent() && DIA->getContractType() == EvalType)
-      Attrs.push_back(DIA);
-  }
-
-  // Common case: No diagnose_if attributes, so we can quit early.
-  if (Attrs.empty())
-    return false;
-  auto IsSuccess = [&](const ContractAttr *CA) {
-    assert(!Info.EvalStatus.HasSideEffects);
-    APValue Result;
-    if (!Evaluate(Result, Info, CA->getCond()) ||
-        Info.EvalStatus.HasSideEffects)
-      return false;
-    return Result.isInt() && Result.getInt().getBoolValue();
-  };
-  auto Diag = [&](SourceLocation Loc, unsigned ID) {
-    return Info.Ctx.getDiagnostics().Report(Loc, ID);
-  };
-  // Note that diagnose_if attributes are late-parsed, so they appear in the
-  // correct order (unlike enable_if attributes).
-  for (auto *DIA : Attrs) {
-    if (!IsSuccess(DIA)) {
-      Diag(CallLoc, diag::err_contract_failed);
-      Diag(DIA->getLocation(), diag::note_from_contract)
-          << DIA->getParent() << DIA->getCond()->getSourceRange();
-      return true;
-    }
-  }
-  return false;
-}
 
 /// Evaluate a function call.
 static bool HandleFunctionCall(SourceLocation CallLoc,
@@ -4240,7 +4254,11 @@ static bool HandleFunctionCall(SourceLocation CallLoc,
 
   CallStackFrame Frame(Info, CallLoc, Callee, This, ArgValues.data());
 
-  if (diagnoseContractAttrsWith(CallLoc, Callee, Info,
+  ArrayRef<const Attr *> FuncAttrs;
+  if (Callee->hasAttrs())
+    FuncAttrs = Callee->getAttrs();
+
+  if (diagnoseContractAttrsWith(CallLoc, FuncAttrs, Info,
                                 ContractAttr::CT_Expects))
     return false;
 
@@ -4281,7 +4299,7 @@ static bool HandleFunctionCall(SourceLocation CallLoc,
     Info.FFDiag(Callee->getLocEnd(), diag::note_constexpr_no_return);
   }
   if (ESR == ESR_Returned) {
-    if (diagnoseContractAttrsWith(CallLoc, Callee, Info,
+    if (diagnoseContractAttrsWith(CallLoc, FuncAttrs, Info,
                                   ContractAttr::CT_Ensures))
       return false;
   }

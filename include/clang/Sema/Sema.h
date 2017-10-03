@@ -8352,6 +8352,10 @@ public:
   /// the appropriate attribute.
   void AddCFAuditedAttribute(Decl *D);
 
+  AttrResult ActOnContractAttribute(const AttributeList &Attr, Scope *scope,
+                                    Decl *D);
+  AttrResult ActOnContractAttribute(const AttributeList &Attr, Stmt *S);
+
   /// \brief Called on well-formed '\#pragma clang attribute push'.
   void ActOnPragmaAttributePush(AttributeList &Attribute,
                                 SourceLocation PragmaLoc,

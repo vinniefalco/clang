@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "ArgumentDependenceChecker.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTMutationListener.h"
@@ -972,52 +973,6 @@ static void handleEnableIfAttr(Sema &S, Decl *D, const AttributeList &Attr) {
                                 Attr.getAttributeSpellingListIndex()));
 }
 
-namespace {
-/// Determines if a given Expr references any of the given function's
-/// ParmVarDecls, or the function's implicit `this` parameter (if applicable).
-class ArgumentDependenceChecker
-    : public RecursiveASTVisitor<ArgumentDependenceChecker> {
-#ifndef NDEBUG
-  const CXXRecordDecl *ClassType;
-#endif
-  llvm::SmallPtrSet<const ParmVarDecl *, 16> Parms;
-  bool Result;
-
-public:
-  ArgumentDependenceChecker(const FunctionDecl *FD) {
-#ifndef NDEBUG
-    if (const auto *MD = dyn_cast<CXXMethodDecl>(FD))
-      ClassType = MD->getParent();
-    else
-      ClassType = nullptr;
-#endif
-    Parms.insert(FD->param_begin(), FD->param_end());
-  }
-
-  bool referencesArgs(Expr *E) {
-    Result = false;
-    TraverseStmt(E);
-    return Result;
-  }
-
-  bool VisitCXXThisExpr(CXXThisExpr *E) {
-    assert(E->getType()->getPointeeCXXRecordDecl() == ClassType &&
-           "`this` doesn't refer to the enclosing class?");
-    Result = true;
-    return false;
-  }
-
-  bool VisitDeclRefExpr(DeclRefExpr *DRE) {
-    if (const auto *PVD = dyn_cast<ParmVarDecl>(DRE->getDecl()))
-      if (Parms.count(PVD)) {
-        Result = true;
-        return false;
-      }
-    return true;
-  }
-};
-}
-
 static void handleDiagnoseIfAttr(Sema &S, Decl *D, const AttributeList &Attr) {
   S.Diag(Attr.getLoc(), diag::ext_clang_diagnose_if);
 
@@ -1043,39 +998,6 @@ static void handleDiagnoseIfAttr(Sema &S, Decl *D, const AttributeList &Attr) {
   D->addAttr(::new (S.Context) DiagnoseIfAttr(
       Attr.getRange(), S.Context, Cond, Msg, DiagType, ArgDependent, cast<NamedDecl>(D),
       Attr.getAttributeSpellingListIndex()));
-}
-
-static void handleContractAttr(Sema &S, Decl *D, const AttributeList &Attr) {
-  // S.Diag(Attr.getLoc(), diag::ext_clang_diagnose_if);
-
-  Expr *Cond = Attr.getArgAsExpr(0);
-  if (!Cond->isTypeDependent()) {
-    ExprResult Converted = S.PerformContextuallyConvertToBool(Cond);
-    if (Converted.isInvalid())
-      return;
-    Cond = Converted.get();
-  }
-
-  IdentifierLoc *LevelLoc(Attr.getArgAsIdent(1)),
-      *OptNameLoc(Attr.getArgAsIdent(2));
-  ContractAttr::ContractType CT =
-      ContractAttr::getContractTypeForString(Attr.getName()->getName());
-  if (CT == ContractAttr::CT_Assert) {
-    S.Diag(Attr.getLoc(), diag::err_contract_invalid_decl_attribute);
-    return;
-  }
-  ContractAttr::ContractLevel CL =
-      LevelLoc->Ident
-          ? ContractAttr::getContractLevelForString(LevelLoc->Ident->getName())
-          : ContractAttr::CL_Default;
-
-  bool ArgDependent = false;
-  if (const auto *FD = dyn_cast<FunctionDecl>(D))
-    ArgDependent = ArgumentDependenceChecker(FD).referencesArgs(Cond);
-
-  D->addAttr(::new (S.Context) ContractAttr(
-      Attr.getRange(), S.Context, Cond, CT, CL, nullptr, ArgDependent,
-      cast<NamedDecl>(D), Attr.getAttributeSpellingListIndex()));
 }
 
 static void handlePassObjectSizeAttr(Sema &S, Decl *D,
@@ -6145,9 +6067,12 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
   case AttributeList::AT_DiagnoseIf:
     handleDiagnoseIfAttr(S, D, Attr);
     break;
-  case AttributeList::AT_Contract:
-    handleContractAttr(S, D, Attr);
+  case AttributeList::AT_Contract: {
+    AttrResult Res = S.ActOnContractAttribute(Attr, scope, D);
+    if (!Res.isInvalid())
+      D->addAttr(Res.get());
     break;
+  }
   case AttributeList::AT_ExtVectorType:
     handleExtVectorTypeAttr(S, scope, D, Attr);
     break;
