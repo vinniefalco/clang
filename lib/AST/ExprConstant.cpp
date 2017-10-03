@@ -4185,35 +4185,43 @@ static bool EvaluateArgs(ArrayRef<const Expr*> Args, ArgVector &ArgValues,
   return Success;
 }
 
-template <typename CheckFn>
 static bool diagnoseContractAttrsWith(SourceLocation CallLoc,
                                       const FunctionDecl *Callee,
-                                      EvalInfo &Info, CheckFn &&IsFailure) {
+                                      EvalInfo &Info,
+                                      ContractAttr::ContractType EvalType) {
+  if (Info.EvalMode != EvalInfo::EM_ConstantExpression)
+    return false;
+
   SmallVector<const ContractAttr *, 8> Attrs;
   for (const auto *DIA : Callee->specific_attrs<ContractAttr>()) {
-    if (DIA->getArgDependent())
+    if (DIA->getArgDependent() && DIA->getContractType() == EvalType)
       Attrs.push_back(DIA);
   }
 
   // Common case: No diagnose_if attributes, so we can quit early.
   if (Attrs.empty())
     return false;
-
+  auto IsSuccess = [&](const ContractAttr *CA) {
+    assert(!Info.EvalStatus.HasSideEffects);
+    APValue Result;
+    if (!Evaluate(Result, Info, CA->getCond()) ||
+        Info.EvalStatus.HasSideEffects)
+      return false;
+    return Result.isInt() && Result.getInt().getBoolValue();
+  };
   auto Diag = [&](SourceLocation Loc, unsigned ID) {
     return Info.Ctx.getDiagnostics().Report(Loc, ID);
   };
   // Note that diagnose_if attributes are late-parsed, so they appear in the
   // correct order (unlike enable_if attributes).
-  auto ErrAttr =
-      llvm::find_if(llvm::make_range(Attrs.begin(), Attrs.end()), IsFailure);
-  if (ErrAttr != Attrs.end()) {
-    const ContractAttr *DIA = *ErrAttr;
-    Diag(CallLoc, diag::err_contract_failed);
-    Diag(DIA->getLocation(), diag::note_from_contract)
-        << DIA->getParent() << DIA->getCond()->getSourceRange();
-    return true;
+  for (auto *DIA : Attrs) {
+    if (!IsSuccess(DIA)) {
+      Diag(CallLoc, diag::err_contract_failed);
+      Diag(DIA->getLocation(), diag::note_from_contract)
+          << DIA->getParent() << DIA->getCond()->getSourceRange();
+      return true;
+    }
   }
-
   return false;
 }
 
@@ -4232,15 +4240,8 @@ static bool HandleFunctionCall(SourceLocation CallLoc,
 
   CallStackFrame Frame(Info, CallLoc, Callee, This, ArgValues.data());
 
-  auto ContractEvaluator = [&](const ContractAttr *CA) {
-    APValue Result;
-    if (!Evaluate(Result, Info, CA->getCond()) ||
-        Info.EvalStatus.HasSideEffects)
-      return false;
-    return Result.isInt() && Result.getInt().getBoolValue();
-  };
-
-  if (diagnoseContractAttrsWith(CallLoc, Callee, Info, ContractEvaluator))
+  if (diagnoseContractAttrsWith(CallLoc, Callee, Info,
+                                ContractAttr::CT_Expects))
     return false;
 
   // For a trivial copy or move assignment, perform an APValue copy. This is
@@ -4278,6 +4279,11 @@ static bool HandleFunctionCall(SourceLocation CallLoc,
     if (Callee->getReturnType()->isVoidType())
       return true;
     Info.FFDiag(Callee->getLocEnd(), diag::note_constexpr_no_return);
+  }
+  if (ESR == ESR_Returned) {
+    if (diagnoseContractAttrsWith(CallLoc, Callee, Info,
+                                  ContractAttr::CT_Ensures))
+      return false;
   }
   return ESR == ESR_Returned;
 }

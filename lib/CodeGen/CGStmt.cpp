@@ -49,6 +49,11 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
   assert(S && "Null statement?");
   PGO.setCurrentStmt(S);
 
+  // FIXME(EricWF):
+  for (auto *A : Attrs) {
+    if (auto *CA = dyn_cast<ContractAttr>(A))
+      EmitContractAttribute(CA);
+  }
   // These statements have their own debug info handling.
   if (EmitSimpleStmt(S))
     return;

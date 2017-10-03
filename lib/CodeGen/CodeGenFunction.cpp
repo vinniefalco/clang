@@ -1115,6 +1115,14 @@ void CodeGenFunction::StartFunction(GlobalDecl GD,
 }
 
 void CodeGenFunction::EmitContractAttribute(const ContractAttr *CA) {
+  auto CL = CA->getContractLevel();
+  if (CL == ContractAttr::CL_Axiom ||
+      (CL == ContractAttr::CL_Audit &&
+       getLangOpts().ContractsLevel != ContractAttr::CL_Audit)) {
+    // FIXME(EricWF)
+    return;
+  }
+  // Otherwise emit the attribute as a runtime check.
   llvm::BasicBlock *ThenBlock = createBasicBlock("if.then");
   llvm::BasicBlock *ContBlock = createBasicBlock("if.end");
   EmitBranchOnBoolExpr(CA->getCond(), ThenBlock, ContBlock,
@@ -1128,7 +1136,6 @@ void CodeGenFunction::EmitContractAttribute(const ContractAttr *CA) {
     //EmitStmt(S.getThen());
   }
   EmitBranch(ContBlock);
-  // FIXME(EricWF)
   EmitBlock(ContBlock, true);
 }
 
