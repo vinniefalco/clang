@@ -3981,9 +3981,10 @@ void Parser::ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
     IsValid = false;
   }
   ExprResult Res = ExprError();
-  if (IsValid) {
 
-    VarDecl *OptD = nullptr;
+  VarDecl *OptD = nullptr;
+
+  if (IsValid) {
 
     llvm::Optional<ParseScope> PrototypeScope;
     if (D && (D->isFunctionDeclaratorAFunctionDeclaration() ||
@@ -4011,44 +4012,6 @@ void Parser::ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
       getCurScope()->AddDecl(OptD);
       Actions.IdResolver.AddDecl(OptD);
     }
-#if 0
-    D->getD
-    if (LA.Decls.size() > 0) {
-    Decl *D = LA.Decls[0];
-    NamedDecl *ND  = dyn_cast<NamedDecl>(D);
-    RecordDecl *RD = dyn_cast_or_null<RecordDecl>(D->getDeclContext());
-
-    // Allow 'this' within late-parsed attributes.
-    Sema::CXXThisScopeRAII ThisScope(Actions, RD, /*TypeQuals=*/0,
-                                     ND && ND->isCXXInstanceMember());
-
-    if (LA.Decls.size() == 1) {
-      // If the Decl is templatized, add template parameters to scope.
-      bool HasTemplateScope = EnterScope && D->isTemplateDecl();
-      ParseScope TempScope(this, Scope::TemplateParamScope, HasTemplateScope);
-      if (HasTemplateScope)
-        Actions.ActOnReenterTemplateScope(Actions.CurScope, D);
-
-      // If the Decl is on a function, add function parameters to the scope.
-      bool HasFunScope = EnterScope && D->isFunctionOrFunctionTemplate();
-      ParseScope FnScope(
-          this, Scope::FnScope | Scope::DeclScope | Scope::CompoundStmtScope,
-          HasFunScope);
-      if (HasFunScope)
-        Actions.ActOnReenterFunctionContext(Actions.CurScope, D);
-
-      ParseGNUAttributeArgs(&LA.AttrName, LA.AttrNameLoc, Attrs, &endLoc,
-                            nullptr, SourceLocation(), AttributeList::AS_GNU,
-                            nullptr);
-
-      if (HasFunScope) {
-        Actions.ActOnExitFunctionContext();
-        FnScope.Exit();  // Pop scope, and remove Decls from IdResolver
-      }
-      if (HasTemplateScope) {
-        TempScope.Exit();
-      }
-#endif
     {
       EnterExpressionEvaluationContext ContractScope(
           Actions, Sema::ExpressionEvaluationContext::PotentiallyEvaluated,
@@ -4056,8 +4019,6 @@ void Parser::ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
           /*IsDeclType*/ false);
       Res = Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
     }
-    if (PrototypeScope)
-      PrototypeScope->Exit();
   }
   if (ExpectAndConsume(tok::r_square))
     SkipUntil(tok::r_square);
@@ -4071,7 +4032,7 @@ void Parser::ParseCXXContractAttributeSpecifier(ParsedAttributes &attrs,
     Args.push_back(IdentifierLoc::create(Ctx, OptIdentLoc, OptName));
     attrs.addNew(AttrName, SourceRange(AttrNameLoc, Tok.getLocation()),
                  /*ScopeName*/ nullptr, SourceLocation(), Args.data(),
-                 Args.size(), AttributeList::AS_CXX11);
+                 Args.size(), OptD, AttributeList::AS_CXX11);
   }
   if (ExpectAndConsume(tok::r_square))
     SkipUntil(tok::r_square);

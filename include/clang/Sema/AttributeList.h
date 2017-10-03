@@ -163,6 +163,8 @@ private:
   
   const Expr *MessageExpr;
 
+  NamedDecl *OptDecl;
+
   /// The next attribute in the current position.
   AttributeList *NextInPosition;
 
@@ -241,14 +243,14 @@ private:
   /// Constructor for attributes with expression arguments.
   AttributeList(IdentifierInfo *attrName, SourceRange attrRange,
                 IdentifierInfo *scopeName, SourceLocation scopeLoc,
-                ArgsUnion *args, unsigned numArgs,
+                ArgsUnion *args, unsigned numArgs, NamedDecl *RetDecl,
                 Syntax syntaxUsed, SourceLocation ellipsisLoc)
-    : AttrName(attrName), ScopeName(scopeName), AttrRange(attrRange),
-      ScopeLoc(scopeLoc), EllipsisLoc(ellipsisLoc), NumArgs(numArgs),
-      SyntaxUsed(syntaxUsed), Invalid(false), UsedAsTypeAttr(false),
-      IsAvailability(false), IsTypeTagForDatatype(false), IsProperty(false),
-      HasParsedType(false), HasProcessingCache(false),
-      NextInPosition(nullptr), NextInPool(nullptr) {
+      : AttrName(attrName), ScopeName(scopeName), AttrRange(attrRange),
+        ScopeLoc(scopeLoc), EllipsisLoc(ellipsisLoc), NumArgs(numArgs),
+        SyntaxUsed(syntaxUsed), Invalid(false), UsedAsTypeAttr(false),
+        IsAvailability(false), IsTypeTagForDatatype(false), IsProperty(false),
+        HasParsedType(false), HasProcessingCache(false), OptDecl(RetDecl),
+        NextInPosition(nullptr), NextInPool(nullptr) {
     if (numArgs) memcpy(getArgsBuffer(), args, numArgs * sizeof(ArgsUnion));
     AttrKind = getKind(getName(), getScopeName(), syntaxUsed);
   }
@@ -411,6 +413,8 @@ public:
 
   AttributeList *getNext() const { return NextInPosition; }
   void setNext(AttributeList *N) { NextInPosition = N; }
+  bool hasOptDecl() const { return OptDecl != nullptr; }
+  NamedDecl *getOptDecl() const { return OptDecl; }
 
   /// getNumArgs - Return the number of actual arguments to this attribute.
   unsigned getNumArgs() const { return NumArgs; }
@@ -645,10 +649,21 @@ public:
                         SourceLocation ellipsisLoc = SourceLocation()) {
     void *memory = allocate(sizeof(AttributeList)
                             + numArgs * sizeof(ArgsUnion));
-    return add(new (memory) AttributeList(attrName, attrRange,
-                                          scopeName, scopeLoc,
-                                          args, numArgs, syntax,
-                                          ellipsisLoc));
+    return add(new (memory) AttributeList(
+        attrName, attrRange, scopeName, scopeLoc, args, numArgs,
+        /*OptDecl*/ nullptr, syntax, ellipsisLoc));
+  }
+
+  AttributeList *create(IdentifierInfo *attrName, SourceRange attrRange,
+                        IdentifierInfo *scopeName, SourceLocation scopeLoc,
+                        ArgsUnion *args, unsigned numArgs, NamedDecl *RetDecl,
+                        AttributeList::Syntax syntax,
+                        SourceLocation ellipsisLoc = SourceLocation()) {
+    void *memory =
+        allocate(sizeof(AttributeList) + numArgs * sizeof(ArgsUnion));
+    return add(new (memory)
+                   AttributeList(attrName, attrRange, scopeName, scopeLoc, args,
+                                 numArgs, RetDecl, syntax, ellipsisLoc));
   }
 
   AttributeList *create(IdentifierInfo *attrName, SourceRange attrRange,
@@ -797,6 +812,19 @@ public:
     AttributeList *attr =
       pool.create(attrName, attrRange, scopeName, scopeLoc, args, numArgs,
                   syntax, ellipsisLoc);
+    add(attr);
+    return attr;
+  }
+
+  /// Add attribute with expression arguments.
+  AttributeList *addNew(IdentifierInfo *attrName, SourceRange attrRange,
+                        IdentifierInfo *scopeName, SourceLocation scopeLoc,
+                        ArgsUnion *args, unsigned numArgs, NamedDecl *RetDecl,
+                        AttributeList::Syntax syntax,
+                        SourceLocation ellipsisLoc = SourceLocation()) {
+    AttributeList *attr =
+        pool.create(attrName, attrRange, scopeName, scopeLoc, args, numArgs,
+                    RetDecl, syntax, ellipsisLoc);
     add(attr);
     return attr;
   }

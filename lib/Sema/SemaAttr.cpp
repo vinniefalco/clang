@@ -816,6 +816,34 @@ void Sema::PopPragmaVisibility(bool IsNamespaceEnd, SourceLocation EndLoc) {
     FreeVisContext();
 }
 
+namespace {
+class ContractReturnRebuilder : public TreeTransform<ContractReturnRebuilder> {
+  NamedDecl *RetDecl;
+  Decl *FunDecl;
+  Expr *Cond;
+
+public:
+  using Base = TreeTransform<ContractReturnRebuilder>;
+  ContractReturnRebuilder(Sema &SemaRef, NamedDecl *RetDecl, Decl *FunDecl,
+                          Expr *Cond)
+      : Base(SemaRef), RetDecl(RetDecl), FunDecl(FunDecl), Cond(Cond) {}
+
+  ExprResult RebuildCond() {
+    auto &S = getSema();
+    auto &Ctx = S.Context;
+    auto *FT = FunDecl->getFunctionType(false);
+    QualType Ty = Ctx.DependentTy;
+    if (FT)
+      QualType Ty = FT->getReturnType();
+    VarDecl *NewD = VarDecl::Create(
+        Ctx, S.CurContext, RetDecl->getLocStart(), RetDecl->getLocEnd(),
+        RetDecl->getIdentifier(), Ty,
+        Ctx.getTrivialTypeSourceInfo(Ty, RetDecl->getLocation()), SC_None);
+    getDerived().TransformDecl(RetDecl, NewD);
+  }
+};
+} // namespace
+
 static AttrResult actOnContractAttributeCommon(Sema &S,
                                                const AttributeList &Attr,
                                                Decl *D, Stmt *St) {
@@ -875,7 +903,7 @@ static AttrResult actOnContractAttributeCommon(Sema &S,
     ArgDependent = ArgumentDependenceChecker(FD).referencesArgs(Cond);
 
   AttrResult Res = ::new (S.Context) ContractAttr(
-      Attr.getRange(), S.Context, Cond, CT, CL, nullptr, ArgDependent,
+      Attr.getRange(), S.Context, Cond, CT, CL, Attr.getOptDecl(), ArgDependent,
       cast_or_null<NamedDecl>(D), Attr.getAttributeSpellingListIndex());
   return Res;
 }
