@@ -204,6 +204,9 @@ void Scope::dumpImpl(raw_ostream &OS) const {
     } else if (Flags & OpenMPSimdDirectiveScope) {
       OS << "OpenMPSimdDirectiveScope";
       Flags &= ~OpenMPSimdDirectiveScope;
+    } else if (Flags & CompoundStmtScope) {
+      OS << "CompoundStmtScope";
+      Flags &= ~CompoundStmtScope;
     }
 
     if (Flags)

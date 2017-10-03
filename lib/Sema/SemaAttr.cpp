@@ -844,7 +844,7 @@ static AttrResult actOnContractAttributeCommon(Sema &S,
       S.Diag(Attr.getLoc(), diag::err_contract_invalid_decl_attribute);
       return AttrError();
     }
-    if (D->isFunctionOrFunctionTemplate()) {
+    if (!D->isFunctionOrFunctionTemplate()) {
       S.Diag(Attr.getLoc(), diag::err_contract_only_allowed_on_function_decl)
           << CTStr;
       return AttrError();
@@ -860,7 +860,7 @@ static AttrResult actOnContractAttributeCommon(Sema &S,
       return AttrError();
     }
   }
-  if (OptNameLoc && CT != ContractAttr::CT_Ensures) {
+  if (OptNameLoc->Ident && CT != ContractAttr::CT_Ensures) {
     S.Diag(Attr.getLoc(),
            diag::err_contract_opt_identifier_only_allowed_on_ensures)
         << CTStr;

@@ -25,3 +25,8 @@ static_assert(baz2(2, 1)); // expected-error {{Assertion 'expects : x == 1' fail
 static_assert(baz2(1, 0)); // expected-error {{Assertion 'ensures : x == 2' failed}}
 // expected-error@+1 {{not an integral constant expression}}
 static_assert(baz2(1, 1, 2));
+
+constexpr bool baz3(int x)
+    [[ensures ret:ret == true]] {
+  return true;
+}
