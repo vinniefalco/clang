@@ -1114,9 +1114,32 @@ void CodeGenFunction::StartFunction(GlobalDecl GD,
     DI->EmitLocation(Builder, StartLoc);
 }
 
+void CodeGenFunction::EmitContractAttribute(const ContractAttr *CA) {
+  llvm::BasicBlock *ThenBlock = createBasicBlock("if.then");
+  llvm::BasicBlock *ContBlock = createBasicBlock("if.end");
+  EmitBranchOnBoolExpr(CA->getCond(), ThenBlock, ContBlock,
+    getProfileCount(CA->getCond()));
+  // Emit the 'then' code.
+  EmitBlock(ThenBlock);
+  incrementProfileCounter(CA->getCond());
+  {
+    RunCleanupsScope ThenScope(*this);
+    EmitNounwindRuntimeCall(CGM.getTerminateFn());
+    //EmitStmt(S.getThen());
+  }
+  EmitBranch(ContBlock);
+  // FIXME(EricWF)
+  EmitBlock(ContBlock, true);
+}
+
 void CodeGenFunction::EmitFunctionBody(FunctionArgList &Args,
                                        const Stmt *Body) {
   incrementProfileCounter(Body);
+  if (CurFuncDecl && CurFuncDecl->hasAttr<ContractAttr>()) {
+    for (const auto *DIA : CurFuncDecl->specific_attrs<ContractAttr>()) {
+      EmitContractAttribute(DIA);
+    }
+  }
   if (const CompoundStmt *S = dyn_cast<CompoundStmt>(Body))
     EmitCompoundStmtWithoutScope(*S);
   else

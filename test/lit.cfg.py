@@ -65,7 +65,7 @@ if platform.system() != 'Windows':
 llvm_config.clear_environment(possibly_dangerous_env_vars)
 
 # Tweak the PATH to include the tools dir and the scripts dir.
-llvm_config.with_environment('PATH', [config.llvm_tools_dir, config.clang_tools_dir], append_path=True)
+llvm_config.with_environment('PATH', [config.clang_tools_dir, config.llvm_tools_dir], append_path=True)
 
 llvm_config.with_environment('LD_LIBRARY_PATH', [config.llvm_shlib_dir, config.llvm_libs_dir], append_path=True)
 

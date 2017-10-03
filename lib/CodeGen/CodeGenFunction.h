@@ -1651,6 +1651,8 @@ public:
   void EmitLambdaStaticInvokeBody(const CXXMethodDecl *MD);
   void EmitAsanPrologueOrEpilogue(bool Prologue);
 
+  void EmitContractAttribute(const ContractAttr *Contract);
+
   /// \brief Emit the unified return block, trying to avoid its emission when
   /// possible.
   /// \return The debug location of the user written return statement if the
