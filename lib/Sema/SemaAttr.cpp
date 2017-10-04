@@ -835,12 +835,13 @@ public:
     auto *FT = FunDecl->getFunctionType(false);
     QualType Ty = Ctx.DependentTy;
     if (FT)
-      QualType Ty = FT->getReturnType();
+      Ty = FT->getReturnType();
     VarDecl *NewD = VarDecl::Create(
         Ctx, S.CurContext, RetDecl->getLocStart(), RetDecl->getLocEnd(),
         RetDecl->getIdentifier(), Ty,
         Ctx.getTrivialTypeSourceInfo(Ty, RetDecl->getLocation()), SC_None);
-    getDerived().TransformDecl(RetDecl, NewD);
+    getDerived().TransformDecl(RetDecl->getLocation(), NewD);
+    return getDerived().TransformExpr(Cond);
   }
 };
 } // namespace
@@ -903,10 +904,9 @@ static AttrResult actOnContractAttributeCommon(Sema &S,
   if (const auto *FD = dyn_cast_or_null<FunctionDecl>(D))
     ArgDependent = ArgumentDependenceChecker(FD).referencesArgs(Cond);
 
-  AttrResult Res = ::new (S.Context) ContractAttr(
+  return ::new (S.Context) ContractAttr(
       Attr.getRange(), S.Context, Cond, CT, CL, Attr.getOptDecl(), ArgDependent,
       cast_or_null<NamedDecl>(D), Attr.getAttributeSpellingListIndex());
-  return Res;
 }
 
 AttrResult Sema::ActOnContractAttribute(const AttributeList &Attr, Scope *scope,

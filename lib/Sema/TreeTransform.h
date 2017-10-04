@@ -6575,29 +6575,30 @@ const Attr *TreeTransform<Derived>::TransformAttr(const Attr *R) {
 template <typename Derived>
 const ContractAttr *
 TreeTransform<Derived>::TransformContractAttr(const ContractAttr *R) {
+  // FIXME(EricWF)
+  return R;
+}
+template <typename Derived>
+StmtResult TreeTransform<Derived>::TransformAttributedStmt(AttributedStmt *S) {
+  bool AttrsChanged = false;
+  SmallVector<const Attr *, 1> Attrs;
 
-  template <typename Derived>
-  StmtResult TreeTransform<Derived>::TransformAttributedStmt(AttributedStmt *
-                                                             S) {
-    bool AttrsChanged = false;
-    SmallVector<const Attr *, 1> Attrs;
+  // Visit attributes and keep track if any are transformed.
+  for (const auto *I : S->getAttrs()) {
+    const Attr *R = getDerived().TransformAttr(I);
+    AttrsChanged |= (I != R);
+    Attrs.push_back(R);
+  }
 
-    // Visit attributes and keep track if any are transformed.
-    for (const auto *I : S->getAttrs()) {
-      const Attr *R = getDerived().TransformAttr(I);
-      AttrsChanged |= (I != R);
-      Attrs.push_back(R);
-    }
+  StmtResult SubStmt = getDerived().TransformStmt(S->getSubStmt());
+  if (SubStmt.isInvalid())
+    return StmtError();
 
-    StmtResult SubStmt = getDerived().TransformStmt(S->getSubStmt());
-    if (SubStmt.isInvalid())
-      return StmtError();
+  if (SubStmt.get() == S->getSubStmt() && !AttrsChanged)
+    return S;
 
-    if (SubStmt.get() == S->getSubStmt() && !AttrsChanged)
-      return S;
-
-    return getDerived().RebuildAttributedStmt(S->getAttrLoc(), Attrs,
-                                              SubStmt.get());
+  return getDerived().RebuildAttributedStmt(S->getAttrLoc(), Attrs,
+                                            SubStmt.get());
   }
 
   template <typename Derived>
