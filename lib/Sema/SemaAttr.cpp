@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ArgumentDependenceChecker.h"
+#include "TreeTransform.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Expr.h"
