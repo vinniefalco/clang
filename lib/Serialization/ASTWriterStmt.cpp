@@ -313,11 +313,6 @@ void ASTStmtWriter::VisitCopromiseStmt(CopromiseStmt *S) {
   llvm_unreachable("unimplemented");
 }
 
-void ASTStmtWriter::VisitCopromiseStmt(CopromiseStmt *S) {
-  // FIXME: Implement coroutine serialization.
-  llvm_unreachable("unimplemented");
-}
-
 void ASTStmtWriter::VisitCoreturnStmt(CoreturnStmt *S) {
   VisitStmt(S);
   Record.AddSourceLocation(S->getKeywordLoc());
