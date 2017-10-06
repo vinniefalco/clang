@@ -1981,16 +1981,16 @@ StmtResult Parser::ParsePragmaLoopHint(StmtVector &Stmts,
   return S;
 }
 
-Decl *Parser::ParseFunctionStatementBody(Decl *Decl, ParseScope &BodyScope) {
+Decl *Parser::ParseFunctionStatementBody(Decl *Dcl, ParseScope &BodyScope) {
   assert(Tok.is(tok::l_brace));
   SourceLocation LBraceLoc = Tok.getLocation();
 
-  PrettyDeclStackTraceEntry CrashInfo(Actions, Decl, LBraceLoc,
+  PrettyDeclStackTraceEntry CrashInfo(Actions, Dcl, LBraceLoc,
                                       "parsing function body");
 
   // Save and reset current vtordisp stack if we have entered a C++ method body.
   bool IsCXXMethod =
-      getLangOpts().CPlusPlus && Decl && isa<CXXMethodDecl>(Decl);
+      getLangOpts().CPlusPlus && Dcl && isa<CXXMethodDecl>(Dcl);
   Sema::PragmaStackSentinelRAII
     PragmaStackSentinel(Actions, "InternalPragmaState", IsCXXMethod);
 
@@ -2006,7 +2006,7 @@ Decl *Parser::ParseFunctionStatementBody(Decl *Decl, ParseScope &BodyScope) {
   }
 
   BodyScope.Exit();
-  return Actions.ActOnFinishFunctionBody(Decl, FnBody.get());
+  return Actions.ActOnFinishFunctionBody(Dcl, FnBody.get());
 }
 
 /// ParseFunctionTryBlock - Parse a C++ function-try-block.
@@ -2014,22 +2014,22 @@ Decl *Parser::ParseFunctionStatementBody(Decl *Decl, ParseScope &BodyScope) {
 ///       function-try-block:
 ///         'try' ctor-initializer[opt] compound-statement handler-seq
 ///
-Decl *Parser::ParseFunctionTryBlock(Decl *Decl, ParseScope &BodyScope) {
+Decl *Parser::ParseFunctionTryBlock(Decl *Dcl, ParseScope &BodyScope) {
   assert(Tok.is(tok::kw_try) && "Expected 'try'");
   SourceLocation TryLoc = ConsumeToken();
 
-  PrettyDeclStackTraceEntry CrashInfo(Actions, Decl, TryLoc,
+  PrettyDeclStackTraceEntry CrashInfo(Actions, Dcl, TryLoc,
                                       "parsing function try block");
 
   // Constructor initializer list?
   if (Tok.is(tok::colon))
-    ParseConstructorInitializer(Decl);
+    ParseConstructorInitializer(Dcl);
   else
-    Actions.ActOnDefaultCtorInitializers(Decl);
+    Actions.ActOnDefaultCtorInitializers(Dcl);
 
   // Save and reset current vtordisp stack if we have entered a C++ method body.
   bool IsCXXMethod =
-      getLangOpts().CPlusPlus && Decl && isa<CXXMethodDecl>(Decl);
+      getLangOpts().CPlusPlus && Dcl && isa<CXXMethodDecl>(Dcl);
   Sema::PragmaStackSentinelRAII
     PragmaStackSentinel(Actions, "InternalPragmaState", IsCXXMethod);
 
@@ -2043,7 +2043,7 @@ Decl *Parser::ParseFunctionTryBlock(Decl *Decl, ParseScope &BodyScope) {
   }
 
   BodyScope.Exit();
-  return Actions.ActOnFinishFunctionBody(Decl, FnBody.get());
+  return Actions.ActOnFinishFunctionBody(Dcl, FnBody.get());
 }
 
 bool Parser::trySkippingFunctionBody() {

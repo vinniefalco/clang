@@ -12254,10 +12254,10 @@ Decl *Sema::ActOnStartOfFunctionDef(Scope *FnBodyScope, Decl *D,
 /// This function applies a very simplistic algorithm for NRVO: if every return
 /// statement in the scope of a variable has the same NRVO candidate, that
 /// candidate is an NRVO variable.
-void Sema::computeNRVO(Stmt *Body, FunctionScopeInfo *Scope) {
-  ReturnStmt **Returns = Scope->Returns.data();
+void Sema::computeNRVO(Stmt *Body, FunctionScopeInfo *S) {
+  ReturnStmt **Returns = S->Returns.data();
 
-  for (unsigned I = 0, E = Scope->Returns.size(); I != E; ++I) {
+  for (unsigned I = 0, E S->Returns.size(); I != E; ++I) {
     if (const VarDecl *NRVOCandidate = Returns[I]->getNRVOCandidate()) {
       if (!NRVOCandidate->isNRVOVariable())
         Returns[I]->setNRVOCandidate(nullptr);
@@ -12301,16 +12301,16 @@ bool Sema::canSkipFunctionBody(Decl *D) {
   return Consumer.shouldSkipFunctionBody(D);
 }
 
-Decl *Sema::ActOnSkippedFunctionBody(Decl *Decl) {
-  if (FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(Decl))
+Decl *Sema::ActOnSkippedFunctionBody(Decl *Dcl) {
+  if (FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(Dcl))
     FD->setHasSkippedBody();
-  else if (ObjCMethodDecl *MD = dyn_cast_or_null<ObjCMethodDecl>(Decl))
+  else if (ObjCMethodDecl *MD = dyn_cast_or_null<ObjCMethodDecl>(Dcl))
     MD->setHasSkippedBody();
-  return Decl;
+  return Dcl;
 }
 
-Decl *Sema::ActOnFinishFunctionBody(Decl *D, Stmt *BodyArg) {
-  return ActOnFinishFunctionBody(D, BodyArg, false);
+Decl *Sema::ActOnFinishFunctionBody(Decl *DD, Stmt *BodyArg) {
+  return this->ActOnFinishFunctionBody(DD, BodyArg, false);
 }
 
 Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
