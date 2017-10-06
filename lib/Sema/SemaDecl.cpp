@@ -12257,7 +12257,7 @@ Decl *Sema::ActOnStartOfFunctionDef(Scope *FnBodyScope, Decl *D,
 void Sema::computeNRVO(Stmt *Body, FunctionScopeInfo *S) {
   ReturnStmt **Returns = S->Returns.data();
 
-  for (unsigned I = 0, E S->Returns.size(); I != E; ++I) {
+  for (unsigned I = 0, E = S->Returns.size(); I != E; ++I) {
     if (const VarDecl *NRVOCandidate = Returns[I]->getNRVOCandidate()) {
       if (!NRVOCandidate->isNRVOVariable())
         Returns[I]->setNRVOCandidate(nullptr);
