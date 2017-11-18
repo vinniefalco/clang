@@ -58,6 +58,8 @@ struct FormatStyle;
 /// operations that might be executed before the main line breaking occurs:
 /// - getSplitBefore, for finding a split such that the content preceding it
 ///   needs to be specially reflown,
+/// - introducesBreakBefore, for checking if reformatting the beginning
+///   of the content introduces a line break before it,
 /// - getLineLengthAfterSplitBefore, for calculating the line length in columns
 ///   of the remainder of the content after the beginning of the content has
 ///   been reformatted, and
@@ -133,6 +135,12 @@ public:
                                unsigned ColumnLimit,
                                llvm::Regex &CommentPragmasRegex) const {
     return Split(StringRef::npos, 0);
+  }
+
+  /// \brief Returns whether there will be a line break at the start of the
+  /// token.
+  virtual bool introducesBreakBeforeToken() const {
+    return false;
   }
 
   /// \brief Returns the number of columns required to format the piece of line
@@ -339,6 +347,7 @@ public:
   Split getSplitBefore(unsigned LineIndex, unsigned PreviousEndColumn,
                        unsigned ColumnLimit,
                        llvm::Regex &CommentPragmasRegex) const override;
+  bool introducesBreakBeforeToken() const override;
   unsigned getLineLengthAfterSplitBefore(unsigned LineIndex,
                                          unsigned TailOffset,
                                          unsigned PreviousEndColumn,

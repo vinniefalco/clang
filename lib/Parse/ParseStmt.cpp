@@ -1112,6 +1112,7 @@ bool Parser::ParseParenExprOrCondition(StmtResult *InitStmt,
 
   // Otherwise the condition is valid or the rparen is present.
   T.consumeClose();
+  Cond.setRParenLoc(T.getCloseLocation());
 
   // Check for extraneous ')'s to catch things like "if (foo())) {".  We know
   // that all callers are looking for a statement after the condition, so ")"
@@ -1490,6 +1491,9 @@ StmtResult Parser::ParseDoStatement() {
   DiagnoseAndSkipCXX11Attributes();
 
   ExprResult Cond = ParseExpression();
+  // Correct the typos in condition before closing the scope.
+  if (Cond.isUsable())
+    Cond = Actions.CorrectDelayedTyposInExpr(Cond);
   T.consumeClose();
   DoScope.Exit();
 

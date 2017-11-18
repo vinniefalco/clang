@@ -546,6 +546,9 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
     OPT_fuse_register_sized_bitfield_access);
   Opts.RelaxedAliasing = Args.hasArg(OPT_relaxed_aliasing);
   Opts.StructPathTBAA = !Args.hasArg(OPT_no_struct_path_tbaa);
+  Opts.FineGrainedBitfieldAccesses =
+      Args.hasFlag(OPT_ffine_grained_bitfield_accesses,
+                   OPT_fno_fine_grained_bitfield_accesses, false);
   Opts.DwarfDebugFlags = Args.getLastArgValue(OPT_dwarf_debug_flags);
   Opts.MergeAllConstants = !Args.hasArg(OPT_fno_merge_all_constants);
   Opts.NoCommon = Args.hasArg(OPT_fno_common);
@@ -650,6 +653,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
       Args.hasArg(OPT_mincremental_linker_compatible);
   Opts.PIECopyRelocations =
       Args.hasArg(OPT_mpie_copy_relocations);
+  Opts.NoPLT = Args.hasArg(OPT_fno_plt);
   Opts.OmitLeafFramePointer = Args.hasArg(OPT_momit_leaf_frame_pointer);
   Opts.SaveTempLabels = Args.hasArg(OPT_msave_temp_labels);
   Opts.NoDwarfDirectoryAsm = Args.hasArg(OPT_fno_dwarf_directory_asm);
@@ -773,6 +777,8 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
 
   Opts.PreserveVec3Type = Args.hasArg(OPT_fpreserve_vec3_type);
   Opts.InstrumentFunctions = Args.hasArg(OPT_finstrument_functions);
+  Opts.InstrumentFunctionsAfterInlining =
+      Args.hasArg(OPT_finstrument_functions_after_inlining);
   Opts.XRayInstrumentFunctions = Args.hasArg(OPT_fxray_instrument);
   Opts.XRayInstructionThreshold =
       getLastArgIntValue(Args, OPT_fxray_instruction_threshold_EQ, 200, Diags);
@@ -836,6 +842,8 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
                    false);
   Opts.SanitizeMinimalRuntime = Args.hasArg(OPT_fsanitize_minimal_runtime);
   Opts.SanitizeCfiCrossDso = Args.hasArg(OPT_fsanitize_cfi_cross_dso);
+  Opts.SanitizeCfiICallGeneralizePointers =
+      Args.hasArg(OPT_fsanitize_cfi_icall_generalize_pointers);
   Opts.SanitizeStats = Args.hasArg(OPT_fsanitize_stats);
   if (Arg *A = Args.getLastArg(OPT_fsanitize_address_use_after_scope,
                                OPT_fno_sanitize_address_use_after_scope)) {
@@ -2138,6 +2146,12 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     && Opts.OpenCLVersion >= 200);
   Opts.BlocksRuntimeOptional = Args.hasArg(OPT_fblocks_runtime_optional);
   Opts.CoroutinesTS = Args.hasArg(OPT_fcoroutines_ts);
+  
+  // Enable [[]] attributes in C++11 by default.
+  Opts.DoubleSquareBracketAttributes =
+      Args.hasFlag(OPT_fdouble_square_bracket_attributes,
+                   OPT_fno_double_square_bracket_attributes, Opts.CPlusPlus11);
+
   Opts.ModulesTS = Args.hasArg(OPT_fmodules_ts);
   Opts.Modules = Args.hasArg(OPT_fmodules) || Opts.ModulesTS;
   Opts.ModulesStrictDeclUse = Args.hasArg(OPT_fmodules_strict_decluse);
@@ -2299,12 +2313,12 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   // Check for MS default calling conventions being specified.
   if (Arg *A = Args.getLastArg(OPT_fdefault_calling_conv_EQ)) {
     LangOptions::DefaultCallingConvention DefaultCC =
-        llvm::StringSwitch<LangOptions::DefaultCallingConvention>(
-            A->getValue())
+        llvm::StringSwitch<LangOptions::DefaultCallingConvention>(A->getValue())
             .Case("cdecl", LangOptions::DCC_CDecl)
             .Case("fastcall", LangOptions::DCC_FastCall)
             .Case("stdcall", LangOptions::DCC_StdCall)
             .Case("vectorcall", LangOptions::DCC_VectorCall)
+            .Case("regcall", LangOptions::DCC_RegCall)
             .Default(LangOptions::DCC_None);
     if (DefaultCC == LangOptions::DCC_None)
       Diags.Report(diag::err_drv_invalid_value)
@@ -2315,7 +2329,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     bool emitError = (DefaultCC == LangOptions::DCC_FastCall ||
                       DefaultCC == LangOptions::DCC_StdCall) &&
                      Arch != llvm::Triple::x86;
-    emitError |= DefaultCC == LangOptions::DCC_VectorCall &&
+    emitError |= (DefaultCC == LangOptions::DCC_VectorCall ||
+                  DefaultCC == LangOptions::DCC_RegCall) &&
                  !(Arch == llvm::Triple::x86 || Arch == llvm::Triple::x86_64);
     if (emitError)
       Diags.Report(diag::err_drv_argument_not_allowed_with)
@@ -2756,6 +2771,13 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
   auto Arch = T.getArch();
   if (Arch == llvm::Triple::spir || Arch == llvm::Triple::spir64) {
     Res.getDiagnosticOpts().Warnings.push_back("spir-compat");
+  }
+
+  // If sanitizer is enabled, disable OPT_ffine_grained_bitfield_accesses.
+  if (Res.getCodeGenOpts().FineGrainedBitfieldAccesses &&
+      !Res.getLangOpts()->Sanitize.empty()) {
+    Res.getCodeGenOpts().FineGrainedBitfieldAccesses = false;
+    Diags.Report(diag::warn_drv_fine_grained_bitfield_accesses_ignored);
   }
   return Success;
 }

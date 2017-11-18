@@ -97,6 +97,10 @@ testImport(const std::string &FromCode, Language FromLang,
   llvm::raw_svector_ostream ToNothing(ImportChecker);
   ToCtx.getTranslationUnitDecl()->print(ToNothing);
 
+  // This traverses the AST to catch certain bugs like poorly or not
+  // implemented subtrees.
+  Imported->dump(ToNothing);
+
   return Verifier.match(Imported, AMatcher);
 }
 
@@ -265,6 +269,15 @@ TEST(ImportExpr, ImportParenListExpr) {
                       varDecl(hasInitializer(parenListExpr(has(unaryOperator(
                           hasOperatorName("*"),
                           hasUnaryOperand(cxxThisExpr()))))))))))))))))))))))));
+}
+
+TEST(ImportExpr, ImportSwitch) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(
+      testImport("void declToImport() { int b; switch (b) { case 1: break; } }",
+                 Lang_CXX, "", Lang_CXX, Verifier,
+                 functionDecl(hasBody(compoundStmt(
+                     has(switchStmt(has(compoundStmt(has(caseStmt()))))))))));
 }
 
 TEST(ImportExpr, ImportStmtExpr) {
@@ -470,6 +483,46 @@ TEST(ImportType, ImportAtomicType) {
                                    has(
                                      typedefDecl(
                                        has(atomicType()))))))))));
+}
+
+
+TEST(ImportType, ImportTypeAliasTemplate) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(testImport("template <int K>"
+                         "struct dummy { static const int i = K; };"
+                         "template <int K> using dummy2 = dummy<K>;"
+                         "int declToImport() { return dummy2<3>::i; }",
+                         Lang_CXX11, "", Lang_CXX11, Verifier,
+                         functionDecl(
+                           hasBody(
+                             compoundStmt(
+                               has(
+                                 returnStmt(
+                                   has(
+                                     implicitCastExpr(
+                                       has(
+                                         declRefExpr()))))))))));
+}
+
+
+TEST(ImportType, ImportPackExpansion) {
+  MatchVerifier<Decl> Verifier;
+  EXPECT_TRUE(testImport("template <typename... Args>"
+                         "struct dummy {"
+                         "  dummy(Args... args) {}"
+                         "  static const int i = 4;"
+                         "};"
+                         "int declToImport() { return dummy<int>::i; }",
+                         Lang_CXX11, "", Lang_CXX11, Verifier,
+                         functionDecl(
+                           hasBody(
+                             compoundStmt(
+                               has(
+                                 returnStmt(
+                                   has(
+                                     implicitCastExpr(
+                                       has(
+                                         declRefExpr()))))))))));
 }
 
 

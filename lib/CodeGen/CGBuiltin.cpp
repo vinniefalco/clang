@@ -30,8 +30,9 @@
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/MDBuilder.h"
-#include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/ConvertUTF.h"
+#include "llvm/Support/ScopedPrinter.h"
+#include "llvm/Support/TargetParser.h"
 #include <sstream>
 
 using namespace clang;
@@ -1431,7 +1432,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     EmitNonNullArgCheck(RValue::get(Dest.getPointer()), E->getArg(0)->getType(),
                         E->getArg(0)->getExprLoc(), FD, 0);
     Builder.CreateMemSet(Dest, Builder.getInt8(0), SizeVal, false);
-    return RValue::get(Dest.getPointer());
+    return RValue::get(nullptr);
   }
   case Builtin::BImemcpy:
   case Builtin::BI__builtin_memcpy: {
@@ -2072,24 +2073,21 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     return RValue::get(nullptr);
   }
 
-    // Library functions with special handling.
   case Builtin::BIsqrt:
   case Builtin::BIsqrtf:
-  case Builtin::BIsqrtl: {
-    // Transform a call to sqrt* into a @llvm.sqrt.* intrinsic call, but only
-    // in finite- or unsafe-math mode (the intrinsic has different semantics
-    // for handling negative numbers compared to the library function, so
-    // -fmath-errno=0 is not enough).
-    if (!FD->hasAttr<ConstAttr>())
-      break;
-    if (!(CGM.getCodeGenOpts().UnsafeFPMath ||
-          CGM.getCodeGenOpts().NoNaNsFPMath))
-      break;
-    Value *Arg0 = EmitScalarExpr(E->getArg(0));
-    llvm::Type *ArgType = Arg0->getType();
-    Value *F = CGM.getIntrinsic(Intrinsic::sqrt, ArgType);
-    return RValue::get(Builder.CreateCall(F, Arg0));
-  }
+  case Builtin::BIsqrtl:
+    // Builtins have the same semantics as library functions. The LLVM intrinsic
+    // has the same semantics as the library function except it does not set
+    // errno. Thus, we can transform either sqrt or __builtin_sqrt to @llvm.sqrt
+    // if the call is 'const' (the call must not set errno).
+    //
+    // FIXME: The builtin cases are not here because they are marked 'const' in
+    // Builtins.def. So that means they are wrongly defined to have different
+    // semantics than the library functions. If we included them here, we would
+    // turn them into LLVM intrinsics regardless of whether -fmath-errno was on.
+    if (FD->hasAttr<ConstAttr>())
+      return RValue::get(emitUnaryBuiltin(*this, E, Intrinsic::sqrt));
+    break;
 
   case Builtin::BI__builtin_pow:
   case Builtin::BI__builtin_powf:
@@ -2112,15 +2110,11 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
   case Builtin::BIfmal:
   case Builtin::BI__builtin_fma:
   case Builtin::BI__builtin_fmaf:
-  case Builtin::BI__builtin_fmal: {
-    // Rewrite fma to intrinsic.
-    Value *FirstArg = EmitScalarExpr(E->getArg(0));
-    llvm::Type *ArgType = FirstArg->getType();
-    Value *F = CGM.getIntrinsic(Intrinsic::fma, ArgType);
-    return RValue::get(
-        Builder.CreateCall(F, {FirstArg, EmitScalarExpr(E->getArg(1)),
-                               EmitScalarExpr(E->getArg(2))}));
-  }
+  case Builtin::BI__builtin_fmal:
+    // A constant libcall or builtin is equivalent to the LLVM intrinsic.
+    if (FD->hasAttr<ConstAttr>())
+      return RValue::get(emitTernaryBuiltin(*this, E, Intrinsic::fma));
+    break;
 
   case Builtin::BI__builtin_signbit:
   case Builtin::BI__builtin_signbitf:
@@ -2779,12 +2773,17 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
       // The most basic form of the call with parameters:
       // queue_t, kernel_enqueue_flags_t, ndrange_t, block(void)
       Name = "__enqueue_kernel_basic";
-      llvm::Type *ArgTys[] = {QueueTy, Int32Ty, RangeTy, GenericVoidPtrTy};
+      llvm::Type *ArgTys[] = {QueueTy, Int32Ty, RangeTy, GenericVoidPtrTy,
+                              GenericVoidPtrTy};
       llvm::FunctionType *FTy = llvm::FunctionType::get(
-          Int32Ty, llvm::ArrayRef<llvm::Type *>(ArgTys, 4), false);
+          Int32Ty, llvm::ArrayRef<llvm::Type *>(ArgTys), false);
 
-      llvm::Value *Block = Builder.CreatePointerCast(
-          EmitScalarExpr(E->getArg(3)), GenericVoidPtrTy);
+      auto Info =
+          CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(3));
+      llvm::Value *Kernel =
+          Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+      llvm::Value *Block =
+          Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
 
       AttrBuilder B;
       B.addAttribute(Attribute::ByVal);
@@ -2793,7 +2792,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
 
       auto RTCall =
           Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, Name, ByValAttrSet),
-                             {Queue, Flags, Range, Block});
+                             {Queue, Flags, Range, Kernel, Block});
       RTCall->setAttributes(ByValAttrSet);
       return RValue::get(RTCall);
     }
@@ -2825,21 +2824,23 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     if (E->getArg(3)->getType()->isBlockPointerType()) {
       // No events passed, but has variadic arguments.
       Name = "__enqueue_kernel_vaargs";
-      auto *Block = Builder.CreatePointerCast(EmitScalarExpr(E->getArg(3)),
-                                              GenericVoidPtrTy);
+      auto Info =
+          CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(3));
+      llvm::Value *Kernel =
+          Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+      auto *Block = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
       auto *PtrToSizeArray = CreateArrayForSizeVar(4);
 
       // Create a vector of the arguments, as well as a constant value to
       // express to the runtime the number of variadic arguments.
-      std::vector<llvm::Value *> Args = {Queue,
-                                         Flags,
-                                         Range,
-                                         Block,
-                                         ConstantInt::get(IntTy, NumArgs - 4),
-                                         PtrToSizeArray};
-      std::vector<llvm::Type *> ArgTys = {QueueTy, IntTy,
-                                          RangeTy, GenericVoidPtrTy,
-                                          IntTy,   PtrToSizeArray->getType()};
+      std::vector<llvm::Value *> Args = {
+          Queue,  Flags, Range,
+          Kernel, Block, ConstantInt::get(IntTy, NumArgs - 4),
+          PtrToSizeArray};
+      std::vector<llvm::Type *> ArgTys = {
+          QueueTy,          IntTy,            RangeTy,
+          GenericVoidPtrTy, GenericVoidPtrTy, IntTy,
+          PtrToSizeArray->getType()};
 
       llvm::FunctionType *FTy = llvm::FunctionType::get(
           Int32Ty, llvm::ArrayRef<llvm::Type *>(ArgTys), false);
@@ -2863,15 +2864,19 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
       // Convert to generic address space.
       EventList = Builder.CreatePointerCast(EventList, EventPtrTy);
       ClkEvent = Builder.CreatePointerCast(ClkEvent, EventPtrTy);
-      llvm::Value *Block = Builder.CreatePointerCast(
-          EmitScalarExpr(E->getArg(6)), GenericVoidPtrTy);
+      auto Info =
+          CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(6));
+      llvm::Value *Kernel =
+          Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+      llvm::Value *Block =
+          Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
 
       std::vector<llvm::Type *> ArgTys = {
-          QueueTy,    Int32Ty,    RangeTy,         Int32Ty,
-          EventPtrTy, EventPtrTy, GenericVoidPtrTy};
+          QueueTy,    Int32Ty,    RangeTy,          Int32Ty,
+          EventPtrTy, EventPtrTy, GenericVoidPtrTy, GenericVoidPtrTy};
 
-      std::vector<llvm::Value *> Args = {Queue,     Flags,    Range, NumEvents,
-                                         EventList, ClkEvent, Block};
+      std::vector<llvm::Value *> Args = {Queue,     Flags,    Range,  NumEvents,
+                                         EventList, ClkEvent, Kernel, Block};
 
       if (NumArgs == 7) {
         // Has events but no variadics.
@@ -2905,24 +2910,30 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
   case Builtin::BIget_kernel_work_group_size: {
     llvm::Type *GenericVoidPtrTy = Builder.getInt8PtrTy(
         getContext().getTargetAddressSpace(LangAS::opencl_generic));
-    Value *Arg = EmitScalarExpr(E->getArg(0));
-    Arg = Builder.CreatePointerCast(Arg, GenericVoidPtrTy);
+    auto Info =
+        CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(0));
+    Value *Kernel = Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+    Value *Arg = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
     return RValue::get(Builder.CreateCall(
         CGM.CreateRuntimeFunction(
-            llvm::FunctionType::get(IntTy, GenericVoidPtrTy, false),
+            llvm::FunctionType::get(IntTy, {GenericVoidPtrTy, GenericVoidPtrTy},
+                                    false),
             "__get_kernel_work_group_size_impl"),
-        Arg));
+        {Kernel, Arg}));
   }
   case Builtin::BIget_kernel_preferred_work_group_size_multiple: {
     llvm::Type *GenericVoidPtrTy = Builder.getInt8PtrTy(
         getContext().getTargetAddressSpace(LangAS::opencl_generic));
-    Value *Arg = EmitScalarExpr(E->getArg(0));
-    Arg = Builder.CreatePointerCast(Arg, GenericVoidPtrTy);
+    auto Info =
+        CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(0));
+    Value *Kernel = Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+    Value *Arg = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
     return RValue::get(Builder.CreateCall(
         CGM.CreateRuntimeFunction(
-            llvm::FunctionType::get(IntTy, GenericVoidPtrTy, false),
+            llvm::FunctionType::get(IntTy, {GenericVoidPtrTy, GenericVoidPtrTy},
+                                    false),
             "__get_kernel_preferred_work_group_multiple_impl"),
-        Arg));
+        {Kernel, Arg}));
   }
   case Builtin::BIget_kernel_max_sub_group_size_for_ndrange:
   case Builtin::BIget_kernel_sub_group_count_for_ndrange: {
@@ -2930,8 +2941,10 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
         getContext().getTargetAddressSpace(LangAS::opencl_generic));
     LValue NDRangeL = EmitAggExprToLValue(E->getArg(0));
     llvm::Value *NDRange = NDRangeL.getAddress().getPointer();
-    Value *Block = EmitScalarExpr(E->getArg(1));
-    Block = Builder.CreatePointerCast(Block, GenericVoidPtrTy);
+    auto Info =
+        CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(1));
+    Value *Kernel = Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
+    Value *Block = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
     const char *Name =
         BuiltinID == Builtin::BIget_kernel_max_sub_group_size_for_ndrange
             ? "__get_kernel_max_sub_group_size_for_ndrange_impl"
@@ -2939,9 +2952,10 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     return RValue::get(Builder.CreateCall(
         CGM.CreateRuntimeFunction(
             llvm::FunctionType::get(
-                IntTy, {NDRange->getType(), GenericVoidPtrTy}, false),
+                IntTy, {NDRange->getType(), GenericVoidPtrTy, GenericVoidPtrTy},
+                false),
             Name),
-        {NDRange, Block}));
+        {NDRange, Kernel, Block}));
   }
 
   case Builtin::BI__builtin_store_half:
@@ -4613,8 +4627,8 @@ static bool HasExtraNeonArgument(unsigned BuiltinID) {
   case NEON::BI__builtin_neon_vsha1cq_u32:
   case NEON::BI__builtin_neon_vsha1pq_u32:
   case NEON::BI__builtin_neon_vsha1mq_u32:
-  case ARM::BI_MoveToCoprocessor:
-  case ARM::BI_MoveToCoprocessor2:
+  case clang::ARM::BI_MoveToCoprocessor:
+  case clang::ARM::BI_MoveToCoprocessor2:
     return false;
   }
   return true;
@@ -7484,76 +7498,6 @@ Value *CodeGenFunction::EmitX86CpuIs(const CallExpr *E) {
 
 Value *CodeGenFunction::EmitX86CpuIs(StringRef CPUStr) {
 
-  // This enum contains the vendor, type, and subtype enums from the
-  // runtime library concatenated together. The _START labels mark
-  // the start and are used to adjust the value into the correct
-  // encoding space.
-  enum X86CPUs {
-    INTEL = 1,
-    AMD,
-    CPU_TYPE_START,
-    INTEL_BONNELL,
-    INTEL_CORE2,
-    INTEL_COREI7,
-    AMDFAM10H,
-    AMDFAM15H,
-    INTEL_SILVERMONT,
-    INTEL_KNL,
-    AMD_BTVER1,
-    AMD_BTVER2,
-    CPU_SUBTYPE_START,
-    INTEL_COREI7_NEHALEM,
-    INTEL_COREI7_WESTMERE,
-    INTEL_COREI7_SANDYBRIDGE,
-    AMDFAM10H_BARCELONA,
-    AMDFAM10H_SHANGHAI,
-    AMDFAM10H_ISTANBUL,
-    AMDFAM15H_BDVER1,
-    AMDFAM15H_BDVER2,
-    AMDFAM15H_BDVER3,
-    AMDFAM15H_BDVER4,
-    AMDFAM17H_ZNVER1,
-    INTEL_COREI7_IVYBRIDGE,
-    INTEL_COREI7_HASWELL,
-    INTEL_COREI7_BROADWELL,
-    INTEL_COREI7_SKYLAKE,
-    INTEL_COREI7_SKYLAKE_AVX512,
-  };
-
-  X86CPUs CPU =
-    StringSwitch<X86CPUs>(CPUStr)
-      .Case("amd", AMD)
-      .Case("amdfam10h", AMDFAM10H)
-      .Case("amdfam10", AMDFAM10H)
-      .Case("amdfam15h", AMDFAM15H)
-      .Case("amdfam15", AMDFAM15H)
-      .Case("atom", INTEL_BONNELL)
-      .Case("barcelona", AMDFAM10H_BARCELONA)
-      .Case("bdver1", AMDFAM15H_BDVER1)
-      .Case("bdver2", AMDFAM15H_BDVER2)
-      .Case("bdver3", AMDFAM15H_BDVER3)
-      .Case("bdver4", AMDFAM15H_BDVER4)
-      .Case("bonnell", INTEL_BONNELL)
-      .Case("broadwell", INTEL_COREI7_BROADWELL)
-      .Case("btver1", AMD_BTVER1)
-      .Case("btver2", AMD_BTVER2)
-      .Case("core2", INTEL_CORE2)
-      .Case("corei7", INTEL_COREI7)
-      .Case("haswell", INTEL_COREI7_HASWELL)
-      .Case("intel", INTEL)
-      .Case("istanbul", AMDFAM10H_ISTANBUL)
-      .Case("ivybridge", INTEL_COREI7_IVYBRIDGE)
-      .Case("knl", INTEL_KNL)
-      .Case("nehalem", INTEL_COREI7_NEHALEM)
-      .Case("sandybridge", INTEL_COREI7_SANDYBRIDGE)
-      .Case("shanghai", AMDFAM10H_SHANGHAI)
-      .Case("silvermont", INTEL_SILVERMONT)
-      .Case("skylake", INTEL_COREI7_SKYLAKE)
-      .Case("skylake-avx512", INTEL_COREI7_SKYLAKE_AVX512)
-      .Case("slm", INTEL_SILVERMONT)
-      .Case("westmere", INTEL_COREI7_WESTMERE)
-      .Case("znver1", AMDFAM17H_ZNVER1);
-
   llvm::Type *Int32Ty = Builder.getInt32Ty();
 
   // Matching the struct layout from the compiler-rt/libgcc structure that is
@@ -7572,22 +7516,22 @@ Value *CodeGenFunction::EmitX86CpuIs(StringRef CPUStr) {
   // range. Also adjust the expected value.
   unsigned Index;
   unsigned Value;
-  if (CPU > CPU_SUBTYPE_START) {
-    Index = 2;
-    Value = CPU - CPU_SUBTYPE_START;
-  } else if (CPU > CPU_TYPE_START) {
-    Index = 1;
-    Value = CPU - CPU_TYPE_START;
-  } else {
-    Index = 0;
-    Value = CPU;
-  }
+  std::tie(Index, Value) = StringSwitch<std::pair<unsigned, unsigned>>(CPUStr)
+#define X86_VENDOR(ENUM, STRING)                                               \
+  .Case(STRING, {0u, static_cast<unsigned>(llvm::X86::ENUM)})
+#define X86_CPU_TYPE_COMPAT_WITH_ALIAS(ARCHNAME, ENUM, STR, ALIAS)             \
+  .Cases(STR, ALIAS, {1u, static_cast<unsigned>(llvm::X86::ENUM)})
+#define X86_CPU_TYPE_COMPAT(ARCHNAME, ENUM, STR)                               \
+  .Case(STR, {1u, static_cast<unsigned>(llvm::X86::ENUM)})
+#define X86_CPU_SUBTYPE_COMPAT(ARCHNAME, ENUM, STR)                            \
+  .Case(STR, {2u, static_cast<unsigned>(llvm::X86::ENUM)})
+#include "llvm/Support/X86TargetParser.def"
+                               .Default({0, 0});
+  assert(Value != 0 && "Invalid CPUStr passed to CpuIs");
 
   // Grab the appropriate field from __cpu_model.
-  llvm::Value *Idxs[] = {
-    ConstantInt::get(Int32Ty, 0),
-    ConstantInt::get(Int32Ty, Index)
-  };
+  llvm::Value *Idxs[] = {ConstantInt::get(Int32Ty, 0),
+                         ConstantInt::get(Int32Ty, Index)};
   llvm::Value *CpuValue = Builder.CreateGEP(STy, CpuModel, Idxs);
   CpuValue = Builder.CreateAlignedLoad(CpuValue, CharUnits::fromQuantity(4));
 
@@ -8123,32 +8067,6 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
   case X86::BI__builtin_ia32_selectpd_256:
   case X86::BI__builtin_ia32_selectpd_512:
     return EmitX86Select(*this, Ops[0], Ops[1], Ops[2]);
-  case X86::BI__builtin_ia32_pcmpeqb128_mask:
-  case X86::BI__builtin_ia32_pcmpeqb256_mask:
-  case X86::BI__builtin_ia32_pcmpeqb512_mask:
-  case X86::BI__builtin_ia32_pcmpeqw128_mask:
-  case X86::BI__builtin_ia32_pcmpeqw256_mask:
-  case X86::BI__builtin_ia32_pcmpeqw512_mask:
-  case X86::BI__builtin_ia32_pcmpeqd128_mask:
-  case X86::BI__builtin_ia32_pcmpeqd256_mask:
-  case X86::BI__builtin_ia32_pcmpeqd512_mask:
-  case X86::BI__builtin_ia32_pcmpeqq128_mask:
-  case X86::BI__builtin_ia32_pcmpeqq256_mask:
-  case X86::BI__builtin_ia32_pcmpeqq512_mask:
-    return EmitX86MaskedCompare(*this, 0, false, Ops);
-  case X86::BI__builtin_ia32_pcmpgtb128_mask:
-  case X86::BI__builtin_ia32_pcmpgtb256_mask:
-  case X86::BI__builtin_ia32_pcmpgtb512_mask:
-  case X86::BI__builtin_ia32_pcmpgtw128_mask:
-  case X86::BI__builtin_ia32_pcmpgtw256_mask:
-  case X86::BI__builtin_ia32_pcmpgtw512_mask:
-  case X86::BI__builtin_ia32_pcmpgtd128_mask:
-  case X86::BI__builtin_ia32_pcmpgtd256_mask:
-  case X86::BI__builtin_ia32_pcmpgtd512_mask:
-  case X86::BI__builtin_ia32_pcmpgtq128_mask:
-  case X86::BI__builtin_ia32_pcmpgtq256_mask:
-  case X86::BI__builtin_ia32_pcmpgtq512_mask:
-    return EmitX86MaskedCompare(*this, 6, true, Ops);
   case X86::BI__builtin_ia32_cmpb128_mask:
   case X86::BI__builtin_ia32_cmpb256_mask:
   case X86::BI__builtin_ia32_cmpb512_mask:
@@ -9103,6 +9021,15 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
     CI->setConvergent();
     return CI;
   }
+  case AMDGPU::BI__builtin_amdgcn_read_exec_lo:
+  case AMDGPU::BI__builtin_amdgcn_read_exec_hi: {
+    StringRef RegName = BuiltinID == AMDGPU::BI__builtin_amdgcn_read_exec_lo ?
+      "exec_lo" : "exec_hi";
+    CallInst *CI = cast<CallInst>(
+      EmitSpecialRegisterBuiltin(*this, E, Int32Ty, Int32Ty, true, RegName));
+    CI->setConvergent();
+    return CI;
+  }
 
   // amdgcn workitem
   case AMDGPU::BI__builtin_amdgcn_workitem_id_x:
@@ -9552,6 +9479,16 @@ Value *CodeGenFunction::EmitNVPTXBuiltinExpr(unsigned BuiltinID,
     return Builder.CreateCall(FnALAF32, {Ptr, Val});
   }
 
+  case NVPTX::BI__nvvm_atom_add_gen_d: {
+    Value *Ptr = EmitScalarExpr(E->getArg(0));
+    Value *Val = EmitScalarExpr(E->getArg(1));
+    // atomicrmw only deals with integer arguments, so we need to use
+    // LLVM's nvvm_atomic_load_add_f64 intrinsic.
+    Value *FnALAF64 =
+        CGM.getIntrinsic(Intrinsic::nvvm_atomic_load_add_f64, Ptr->getType());
+    return Builder.CreateCall(FnALAF64, {Ptr, Val});
+  }
+
   case NVPTX::BI__nvvm_atom_inc_gen_ui: {
     Value *Ptr = EmitScalarExpr(E->getArg(0));
     Value *Val = EmitScalarExpr(E->getArg(1));
@@ -9719,6 +9656,204 @@ Value *CodeGenFunction::EmitNVPTXBuiltinExpr(unsigned BuiltinID,
                                      PredOutPtr.getElementType());
     Builder.CreateStore(Pred, PredOutPtr);
     return Builder.CreateExtractValue(ResultPair, 0);
+  }
+  case NVPTX::BI__hmma_m16n16k16_ld_a:
+  case NVPTX::BI__hmma_m16n16k16_ld_b:
+  case NVPTX::BI__hmma_m16n16k16_ld_c_f16:
+  case NVPTX::BI__hmma_m16n16k16_ld_c_f32: {
+    Address Dst = EmitPointerWithAlignment(E->getArg(0));
+    Value *Src = EmitScalarExpr(E->getArg(1));
+    Value *Ldm = EmitScalarExpr(E->getArg(2));
+    llvm::APSInt isColMajorArg;
+    if (!E->getArg(3)->isIntegerConstantExpr(isColMajorArg, getContext()))
+      return nullptr;
+    bool isColMajor = isColMajorArg.getSExtValue();
+    unsigned IID;
+    unsigned NumResults;
+    switch (BuiltinID) {
+    case NVPTX::BI__hmma_m16n16k16_ld_a:
+      IID = isColMajor ? Intrinsic::nvvm_wmma_load_a_f16_col_stride
+                       : Intrinsic::nvvm_wmma_load_a_f16_row_stride;
+      NumResults = 8;
+      break;
+    case NVPTX::BI__hmma_m16n16k16_ld_b:
+      IID = isColMajor ? Intrinsic::nvvm_wmma_load_b_f16_col_stride
+                       : Intrinsic::nvvm_wmma_load_b_f16_row_stride;
+      NumResults = 8;
+      break;
+    case NVPTX::BI__hmma_m16n16k16_ld_c_f16:
+      IID = isColMajor ? Intrinsic::nvvm_wmma_load_c_f16_col_stride
+                       : Intrinsic::nvvm_wmma_load_c_f16_row_stride;
+      NumResults = 4;
+      break;
+    case NVPTX::BI__hmma_m16n16k16_ld_c_f32:
+      IID = isColMajor ? Intrinsic::nvvm_wmma_load_c_f32_col_stride
+                       : Intrinsic::nvvm_wmma_load_c_f32_row_stride;
+      NumResults = 8;
+      break;
+    default:
+      llvm_unreachable("Unexpected builtin ID.");
+    }
+    Value *Result =
+        Builder.CreateCall(CGM.getIntrinsic(IID),
+                           {Builder.CreatePointerCast(Src, VoidPtrTy), Ldm});
+
+    // Save returned values.
+    for (unsigned i = 0; i < NumResults; ++i) {
+      Builder.CreateAlignedStore(
+          Builder.CreateBitCast(Builder.CreateExtractValue(Result, i),
+                                Dst.getElementType()),
+          Builder.CreateGEP(Dst.getPointer(), llvm::ConstantInt::get(IntTy, i)),
+          CharUnits::fromQuantity(4));
+    }
+    return Result;
+  }
+
+  case NVPTX::BI__hmma_m16n16k16_st_c_f16:
+  case NVPTX::BI__hmma_m16n16k16_st_c_f32: {
+    Value *Dst = EmitScalarExpr(E->getArg(0));
+    Address Src = EmitPointerWithAlignment(E->getArg(1));
+    Value *Ldm = EmitScalarExpr(E->getArg(2));
+    llvm::APSInt isColMajorArg;
+    if (!E->getArg(3)->isIntegerConstantExpr(isColMajorArg, getContext()))
+      return nullptr;
+    bool isColMajor = isColMajorArg.getSExtValue();
+    unsigned IID;
+    unsigned NumResults = 8;
+    // PTX Instructions (and LLVM instrinsics) are defined for slice _d_, yet
+    // for some reason nvcc builtins use _c_.
+    switch (BuiltinID) {
+    case NVPTX::BI__hmma_m16n16k16_st_c_f16:
+      IID = isColMajor ? Intrinsic::nvvm_wmma_store_d_f16_col_stride
+                       : Intrinsic::nvvm_wmma_store_d_f16_row_stride;
+      NumResults = 4;
+      break;
+    case NVPTX::BI__hmma_m16n16k16_st_c_f32:
+      IID = isColMajor ? Intrinsic::nvvm_wmma_store_d_f32_col_stride
+                       : Intrinsic::nvvm_wmma_store_d_f32_row_stride;
+      break;
+    default:
+      llvm_unreachable("Unexpected builtin ID.");
+    }
+    Function *Intrinsic = CGM.getIntrinsic(IID);
+    llvm::Type *ParamType = Intrinsic->getFunctionType()->getParamType(1);
+    SmallVector<Value *, 10> Values;
+    Values.push_back(Builder.CreatePointerCast(Dst, VoidPtrTy));
+    for (unsigned i = 0; i < NumResults; ++i) {
+      Value *V = Builder.CreateAlignedLoad(
+          Builder.CreateGEP(Src.getPointer(), llvm::ConstantInt::get(IntTy, i)),
+          CharUnits::fromQuantity(4));
+      Values.push_back(Builder.CreateBitCast(V, ParamType));
+    }
+    Values.push_back(Ldm);
+    Value *Result = Builder.CreateCall(Intrinsic, Values);
+    return Result;
+  }
+
+  // BI__hmma_m16n16k16_mma_<Dtype><CType>(d, a, b, c, layout, satf)
+  //  --> Intrinsic::nvvm_wmma_mma_sync<layout A,B><DType><CType><Satf>
+  case NVPTX::BI__hmma_m16n16k16_mma_f16f16:
+  case NVPTX::BI__hmma_m16n16k16_mma_f32f16:
+  case NVPTX::BI__hmma_m16n16k16_mma_f32f32:
+  case NVPTX::BI__hmma_m16n16k16_mma_f16f32: {
+    Address Dst = EmitPointerWithAlignment(E->getArg(0));
+    Address SrcA = EmitPointerWithAlignment(E->getArg(1));
+    Address SrcB = EmitPointerWithAlignment(E->getArg(2));
+    Address SrcC = EmitPointerWithAlignment(E->getArg(3));
+    llvm::APSInt LayoutArg;
+    if (!E->getArg(4)->isIntegerConstantExpr(LayoutArg, getContext()))
+      return nullptr;
+    int Layout = LayoutArg.getSExtValue();
+    if (Layout < 0 || Layout > 3)
+      return nullptr;
+    llvm::APSInt SatfArg;
+    if (!E->getArg(5)->isIntegerConstantExpr(SatfArg, getContext()))
+      return nullptr;
+    bool Satf = SatfArg.getSExtValue();
+
+    // clang-format off
+#define MMA_VARIANTS(type) {{                                   \
+      Intrinsic::nvvm_wmma_mma_sync_row_row_##type,             \
+      Intrinsic::nvvm_wmma_mma_sync_row_row_##type##_satfinite, \
+      Intrinsic::nvvm_wmma_mma_sync_row_col_##type,             \
+      Intrinsic::nvvm_wmma_mma_sync_row_col_##type##_satfinite, \
+      Intrinsic::nvvm_wmma_mma_sync_col_row_##type,             \
+      Intrinsic::nvvm_wmma_mma_sync_col_row_##type##_satfinite, \
+      Intrinsic::nvvm_wmma_mma_sync_col_col_##type,             \
+      Intrinsic::nvvm_wmma_mma_sync_col_col_##type##_satfinite  \
+    }}
+    // clang-format on
+
+    auto getMMAIntrinsic = [Layout, Satf](std::array<unsigned, 8> Variants) {
+      unsigned Index = Layout * 2 + Satf;
+      assert(Index < 8);
+      return Variants[Index];
+    };
+    unsigned IID;
+    unsigned NumEltsC;
+    unsigned NumEltsD;
+    switch (BuiltinID) {
+    case NVPTX::BI__hmma_m16n16k16_mma_f16f16:
+      IID = getMMAIntrinsic(MMA_VARIANTS(f16_f16));
+      NumEltsC = 4;
+      NumEltsD = 4;
+      break;
+    case NVPTX::BI__hmma_m16n16k16_mma_f32f16:
+      IID = getMMAIntrinsic(MMA_VARIANTS(f32_f16));
+      NumEltsC = 4;
+      NumEltsD = 8;
+      break;
+    case NVPTX::BI__hmma_m16n16k16_mma_f16f32:
+      IID = getMMAIntrinsic(MMA_VARIANTS(f16_f32));
+      NumEltsC = 8;
+      NumEltsD = 4;
+      break;
+    case NVPTX::BI__hmma_m16n16k16_mma_f32f32:
+      IID = getMMAIntrinsic(MMA_VARIANTS(f32_f32));
+      NumEltsC = 8;
+      NumEltsD = 8;
+      break;
+    default:
+      llvm_unreachable("Unexpected builtin ID.");
+    }
+#undef MMA_VARIANTS
+
+    SmallVector<Value *, 24> Values;
+    Function *Intrinsic = CGM.getIntrinsic(IID);
+    llvm::Type *ABType = Intrinsic->getFunctionType()->getParamType(0);
+    // Load A
+    for (unsigned i = 0; i < 8; ++i) {
+      Value *V = Builder.CreateAlignedLoad(
+          Builder.CreateGEP(SrcA.getPointer(),
+                            llvm::ConstantInt::get(IntTy, i)),
+          CharUnits::fromQuantity(4));
+      Values.push_back(Builder.CreateBitCast(V, ABType));
+    }
+    // Load B
+    for (unsigned i = 0; i < 8; ++i) {
+      Value *V = Builder.CreateAlignedLoad(
+          Builder.CreateGEP(SrcB.getPointer(),
+                            llvm::ConstantInt::get(IntTy, i)),
+          CharUnits::fromQuantity(4));
+      Values.push_back(Builder.CreateBitCast(V, ABType));
+    }
+    // Load C
+    llvm::Type *CType = Intrinsic->getFunctionType()->getParamType(16);
+    for (unsigned i = 0; i < NumEltsC; ++i) {
+      Value *V = Builder.CreateAlignedLoad(
+          Builder.CreateGEP(SrcC.getPointer(),
+                            llvm::ConstantInt::get(IntTy, i)),
+          CharUnits::fromQuantity(4));
+      Values.push_back(Builder.CreateBitCast(V, CType));
+    }
+    Value *Result = Builder.CreateCall(Intrinsic, Values);
+    llvm::Type *DType = Dst.getElementType();
+    for (unsigned i = 0; i < NumEltsD; ++i)
+      Builder.CreateAlignedStore(
+          Builder.CreateBitCast(Builder.CreateExtractValue(Result, i), DType),
+          Builder.CreateGEP(Dst.getPointer(), llvm::ConstantInt::get(IntTy, i)),
+          CharUnits::fromQuantity(4));
+    return Result;
   }
   default:
     return nullptr;
