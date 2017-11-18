@@ -9343,4 +9343,7 @@ def warn_shadow_field :
   InGroup<ShadowField>, DefaultIgnore;
 def note_shadow_field : Note<"declared here">;
 
+def err_builtin_launder_non_pointer_arg :
+  Error<"non-pointer argument to '__builtin_launder'">;
+
 } // end of sema component.

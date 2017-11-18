@@ -850,6 +850,30 @@ static bool SemaOpenCLBuiltinToAddr(Sema &S, unsigned BuiltinID,
   return false;
 }
 
+static ExprResult SemaBuiltinLaunder(Sema &S, CallExpr *TheCall) {
+  if (checkArgCount(S, TheCall, 1))
+    return ExprError();
+
+  QualType ArgTy = TheCall->getArg(0)->getType();
+  TheCall->setType(ArgTy);
+
+  if (!ArgTy->isPointerType()) {
+    S.Diag(TheCall->getLocStart(), diag::err_builtin_launder_non_pointer_arg)
+        << TheCall->getSourceRange();
+    return ExprError();
+  }
+
+  InitializedEntity Entity =
+      InitializedEntity::InitializeParameter(S.Context, ArgTy, false);
+  ExprResult Arg = TheCall->getArg(0);
+  Arg = S.PerformCopyInitialization(Entity, SourceLocation(), Arg);
+  if (Arg.isInvalid())
+    return ExprError();
+  TheCall->setArg(0, Arg.get());
+
+  return TheCall;
+}
+
 ExprResult
 Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
                                CallExpr *TheCall) {
@@ -967,6 +991,8 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
     if (checkArgCount(*this, TheCall, 1)) return true;
     TheCall->setType(Context.IntTy);
     break;
+  case Builtin::BI__builtin_launder:
+    return SemaBuiltinLaunder(*this, TheCall);
   case Builtin::BI__sync_fetch_and_add:
   case Builtin::BI__sync_fetch_and_add_1:
   case Builtin::BI__sync_fetch_and_add_2:

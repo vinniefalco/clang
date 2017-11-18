@@ -132,6 +132,8 @@ int main() {
   R(extract_return_addr, (&N));
   P(signbit, (1.0));
 
+  R(launder, (&N));
+
   return 0;
 }
 
@@ -394,6 +396,20 @@ void test_builtin_longjmp(void **buffer) {
 long long test_builtin_readcyclecounter() {
   // CHECK: call i64 @llvm.readcyclecounter()
   return __builtin_readcyclecounter();
+}
+
+// CHECK-LABEL: define void @test_builtin_launder
+void test_builtin_launder(int *p) {
+  // CHECK: entry
+  // CHECK-NEXT: %p.addr = alloca i32*
+  // CHECK-NEXT: %d = alloca i32*
+  // CHECK-NEXT: store i32* %p, i32** %p.addr, align 8
+  // CHECK-NEXT: [[TMP:%.*]] = load i32*, i32** %p.addr
+  // CHECK-NEXT: [[TMP1:%.*]] = bitcast i32* [[TMP]] to i8*
+  // CHECK-NEXT: [[TMP2:%.*]] = call i8* @llvm.invariant.group.barrier.p0i8(i8* [[TMP1]])
+  // CHECK-NEXT: [[TMP3:%.*]] = bitcast i8* [[TMP2]] to i32*
+  // CHECK-NEXT: store i32* [[TMP3]], i32** %d
+  int *d = __builtin_launder(p);
 }
 
 // Behavior of __builtin_os_log differs between platforms, so only test on X86

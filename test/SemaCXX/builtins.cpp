@@ -53,3 +53,52 @@ extern "C" int vfprintf(FILE *__restrict, const char *__restrict,
 void synchronize_args() {
   __sync_synchronize(0); // expected-error {{too many arguments}}
 }
+
+namespace test_launder {
+
+void test_builtin_launder(char *p, void *vp, const volatile int *ip, const float *&fp,
+                          double *__restrict dp) {
+  int x;
+  __builtin_launder(x); // expected-error {{non-pointer argument to '__builtin_launder'}}
+#define TEST_TYPE(Ptr, Type) \
+  static_assert(__is_same(decltype(__builtin_launder(Ptr)), Type), "expected same type")
+  TEST_TYPE(p, char*);
+  TEST_TYPE(vp, void*);
+  TEST_TYPE(ip, const volatile int*);
+  TEST_TYPE(fp, const float*);
+  TEST_TYPE(dp, double *__restrict);
+#undef TEST_TYPE
+  char *d = __builtin_launder(p);
+  void *vd = __builtin_launder(vp);
+  const volatile int *id = __builtin_launder(ip);
+  int *id2 = __builtin_launder(ip); // expected-error {{cannot initialize a variable of type 'int *' with an rvalue of type 'const volatile int *'}}
+  const float* fd = __builtin_launder(fp);
+}
+
+template <class Tp>
+constexpr Tp *test_constexpr_launder(Tp *tp) {
+  return __builtin_launder(tp);
+}
+constexpr int const_int = 42;
+constexpr int const_int2 = 101;
+constexpr const int *const_ptr = test_constexpr_launder(&const_int);
+static_assert(&const_int == const_ptr, "");
+static_assert(const_ptr != test_constexpr_launder(&const_int2), "");
+
+void test_non_constexpr() {
+  constexpr int i = 42;                            // expected-note {{declared here}}
+  constexpr const int *ip = __builtin_launder(&i); // expected-error {{constexpr variable 'ip' must be initialized by a constant expression}}
+  // expected-note@-1 {{pointer to 'i' is not a constant expression}}
+}
+
+constexpr bool test_in_constexpr(const int &i) {
+  return (__builtin_launder(&i) == &i);
+}
+static_assert(test_in_constexpr(const_int), "");
+void f() {
+  constexpr int i = 42;
+  // FIXME: Should this work? Since `&i` doesn't.
+  static_assert(test_in_constexpr(i), "");
+}
+
+} // end namespace test_launder

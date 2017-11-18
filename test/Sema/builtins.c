@@ -248,3 +248,15 @@ char * Test20(char *p, const char *in, unsigned n)
 
     return buf;
 }
+
+void test_builtin_launder(char *p, void *vp, const volatile int *ip, float *restrict fp) {
+  __builtin_launder(); // expected-error {{too few arguments to function call, expected 1, have 0}}
+  __builtin_launder(p, p); // expected-error {{too many arguments to function call, expected 1, have 2}}
+  int x;
+  __builtin_launder(x); // expected-error {{non-pointer argument to '__builtin_launder'}}
+  char *d = __builtin_launder(p);
+  void *vd = __builtin_launder(vp);
+  const volatile int *id = __builtin_launder(ip);
+  int *id2 = __builtin_launder(ip); // expected-warning {{discards qualifiers}}
+  float *fd = __builtin_launder(fp);
+}
