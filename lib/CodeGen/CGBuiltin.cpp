@@ -1885,18 +1885,12 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
   case Builtin::BI__builtin_launder: {
     const Expr *Arg = E->getArg(0);
     QualType ArgTy = Arg->getType()->getPointeeType();
-    // Only emit a barrier if the type contains a const or reference subobject,
-    // or contains a vptr.
-    bool EmitBarrier = false;
-    if (CGM.getCodeGenOpts().StrictVTablePointers || true) {
-      if (const RecordType *RT = ArgTy->getAs<RecordType>())
-        EmitBarrier |= cast<RecordDecl>(RT->getDecl())->hasConstMember();
-      if (const auto *Record = ArgTy->getAsCXXRecordDecl())
-        EmitBarrier |= Record->isDynamicClass() || Record->hasReferenceMember();
-    }
     Value *Ptr = EmitScalarExpr(Arg);
-    if (EmitBarrier)
+    const auto *Record = ArgTy->getAsCXXRecordDecl();
+    if (CGM.getCodeGenOpts().StrictVTablePointers && Record &&
+        Record->isDynamicClass())
       Ptr = Builder.CreateInvariantGroupBarrier(Ptr);
+
     return RValue::get(Ptr);
   }
   case Builtin::BI__sync_fetch_and_add:
