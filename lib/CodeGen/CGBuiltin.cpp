@@ -1888,13 +1888,11 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     // Only emit a barrier if the type contains a const or reference subobject,
     // or contains a vptr.
     bool EmitBarrier = false;
-    if (CGM.getCodeGenOpts().StrictVTablePointers) {
-      const TagDecl *Tag = ArgTy->getAsTagDecl();
-      if (const auto *Record = dyn_cast_or_null<RecordDecl>(Tag))
-        EmitBarrier |= Record->hasConstMember();
-      if (const auto *Record = dyn_cast_or_null<CXXRecordDecl>(Tag))
-       EmitBarrier |= Record->isDynamicClass()
-               || Record->hasReferenceMember();
+    if (CGM.getCodeGenOpts().StrictVTablePointers || true) {
+      if (const RecordType *RT = ArgTy->getAs<RecordType>())
+        EmitBarrier |= cast<RecordDecl>(RT->getDecl())->hasConstMember();
+      if (const auto *Record = ArgTy->getAsCXXRecordDecl())
+        EmitBarrier |= Record->isDynamicClass() || Record->hasReferenceMember();
     }
     Value *Ptr = EmitScalarExpr(Arg);
     if (EmitBarrier)
