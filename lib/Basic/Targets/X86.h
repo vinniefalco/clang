@@ -48,7 +48,10 @@ class LLVM_LIBRARY_VISIBILITY X86TargetInfo : public TargetInfo {
   enum XOPEnum { NoXOP, SSE4A, FMA4, XOP } XOPLevel = NoXOP;
 
   bool HasAES = false;
+  bool HasVAES = false;
   bool HasPCLMUL = false;
+  bool HasVPCLMULQDQ = false;
+  bool HasGFNI = false;
   bool HasLZCNT = false;
   bool HasRDRND = false;
   bool HasFSGSBASE = false;
@@ -65,15 +68,20 @@ class LLVM_LIBRARY_VISIBILITY X86TargetInfo : public TargetInfo {
   bool HasF16C = false;
   bool HasAVX512CD = false;
   bool HasAVX512VPOPCNTDQ = false;
+  bool HasAVX512VNNI = false;
   bool HasAVX512ER = false;
   bool HasAVX512PF = false;
   bool HasAVX512DQ = false;
+  bool HasAVX512BITALG = false;
   bool HasAVX512BW = false;
   bool HasAVX512VL = false;
   bool HasAVX512VBMI = false;
+  bool HasAVX512VBMI2 = false;
   bool HasAVX512IFMA = false;
   bool HasSHA = false;
   bool HasMPX = false;
+  bool HasSHSTK = false;
+  bool HasIBT = false;
   bool HasSGX = false;
   bool HasCX16 = false;
   bool HasFXSR = false;
@@ -102,6 +110,8 @@ class LLVM_LIBRARY_VISIBILITY X86TargetInfo : public TargetInfo {
   bool checkCPUKind(CPUKind Kind) const;
 
   CPUKind getCPUKind(StringRef CPU) const;
+
+  std::string getCPUKindCanonicalName(CPUKind Kind) const;
 
   enum FPMathKind { FP_Default, FP_SSE, FP_387 } FPMath = FP_Default;
 
@@ -148,6 +158,12 @@ public:
 
   bool validateInputSize(StringRef Constraint, unsigned Size) const override;
 
+  virtual bool
+  checkCFProtectionReturnSupported(DiagnosticsEngine &Diags) const override;
+
+  virtual bool
+  checkCFProtectionBranchSupported(DiagnosticsEngine &Diags) const override;
+
   virtual bool validateOperandSize(StringRef Constraint, unsigned Size) const;
 
   std::string convertConstraint(const char *&Constraint) const override;
@@ -189,6 +205,10 @@ public:
       break;
     }
     return "";
+  }
+
+  bool useFP16ConversionIntrinsics() const override {
+    return false;
   }
 
   void getTargetDefines(const LangOptions &Opts,
@@ -243,6 +263,11 @@ public:
   bool setCPU(const std::string &Name) override {
     return checkCPUKind(CPU = getCPUKind(Name));
   }
+
+  bool supportsMultiVersioning() const override {
+    return getTriple().isOSBinFormatELF();
+  }
+  unsigned multiVersionSortPriority(StringRef Name) const override;
 
   bool setFPMath(StringRef Name) override;
 
@@ -410,11 +435,6 @@ public:
                         ? "e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32"
                         : "e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
   }
-
-  void getTargetDefines(const LangOptions &Opts,
-                        MacroBuilder &Builder) const override {
-    WindowsTargetInfo<X86_32TargetInfo>::getTargetDefines(Opts, Builder);
-  }
 };
 
 // x86-32 Windows Visual Studio target
@@ -451,10 +471,7 @@ public:
   void getTargetDefines(const LangOptions &Opts,
                         MacroBuilder &Builder) const override {
     WindowsX86_32TargetInfo::getTargetDefines(Opts, Builder);
-    DefineStd(Builder, "WIN32", Opts);
-    DefineStd(Builder, "WINNT", Opts);
     Builder.defineMacro("_X86_");
-    addMinGWDefines(Opts, Builder);
   }
 };
 
@@ -658,12 +675,6 @@ public:
     IntPtrType = SignedLongLong;
   }
 
-  void getTargetDefines(const LangOptions &Opts,
-                        MacroBuilder &Builder) const override {
-    WindowsTargetInfo<X86_64TargetInfo>::getTargetDefines(Opts, Builder);
-    Builder.defineMacro("_WIN64");
-  }
-
   BuiltinVaListKind getBuiltinVaListKind() const override {
     return TargetInfo::CharPtrBuiltinVaList;
   }
@@ -722,18 +733,6 @@ public:
     LongDoubleFormat = &llvm::APFloat::x87DoubleExtended();
     HasFloat128 = true;
   }
-
-  void getTargetDefines(const LangOptions &Opts,
-                        MacroBuilder &Builder) const override {
-    WindowsX86_64TargetInfo::getTargetDefines(Opts, Builder);
-    DefineStd(Builder, "WIN64", Opts);
-    Builder.defineMacro("__MINGW64__");
-    addMinGWDefines(Opts, Builder);
-
-    // GCC defines this macro when it is using __gxx_personality_seh0.
-    if (!Opts.SjLjExceptions)
-      Builder.defineMacro("__SEH__");
-  }
 };
 
 // x86-64 Cygwin target
@@ -755,10 +754,6 @@ public:
     DefineStd(Builder, "unix", Opts);
     if (Opts.CPlusPlus)
       Builder.defineMacro("_GNU_SOURCE");
-
-    // GCC defines this macro when it is using __gxx_personality_seh0.
-    if (!Opts.SjLjExceptions)
-      Builder.defineMacro("__SEH__");
   }
 };
 

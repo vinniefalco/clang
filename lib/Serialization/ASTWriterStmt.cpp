@@ -514,6 +514,7 @@ void ASTStmtWriter::VisitUnaryOperator(UnaryOperator *E) {
   Record.AddStmt(E->getSubExpr());
   Record.push_back(E->getOpcode()); // FIXME: stable encoding
   Record.AddSourceLocation(E->getOperatorLoc());
+  Record.push_back(E->canOverflow());
   Code = serialization::EXPR_UNARY_OPERATOR;
 }
 
@@ -2573,6 +2574,7 @@ void ASTStmtWriter::VisitOMPTargetUpdateDirective(OMPTargetUpdateDirective *D) {
 void ASTStmtWriter::VisitOMPDistributeParallelForDirective(
     OMPDistributeParallelForDirective *D) {
   VisitOMPLoopDirective(D);
+  Record.push_back(D->hasCancel() ? 1 : 0);
   Code = serialization::STMT_OMP_DISTRIBUTE_PARALLEL_FOR_DIRECTIVE;
 }
 
@@ -2620,6 +2622,7 @@ void ASTStmtWriter::VisitOMPTeamsDistributeParallelForSimdDirective(
 void ASTStmtWriter::VisitOMPTeamsDistributeParallelForDirective(
     OMPTeamsDistributeParallelForDirective *D) {
   VisitOMPLoopDirective(D);
+  Record.push_back(D->hasCancel() ? 1 : 0);
   Code = serialization::STMT_OMP_TEAMS_DISTRIBUTE_PARALLEL_FOR_DIRECTIVE;
 }
 
@@ -2639,6 +2642,7 @@ void ASTStmtWriter::VisitOMPTargetTeamsDistributeDirective(
 void ASTStmtWriter::VisitOMPTargetTeamsDistributeParallelForDirective(
     OMPTargetTeamsDistributeParallelForDirective *D) {
   VisitOMPLoopDirective(D);
+  Record.push_back(D->hasCancel() ? 1 : 0);
   Code = serialization::STMT_OMP_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR_DIRECTIVE;
 }
 
