@@ -1906,7 +1906,7 @@ StmtResult Parser::ParseCopromiseStatement() {
   MaybeParseCXX11Attributes(attrs);
   SourceLocation DeclStart = Tok.getLocation(), DeclEnd;
   DeclGroupPtrTy DG = ParseSimpleDeclaration(
-      Declarator::InitStmtContext, DeclEnd, attrs, /*RequireSemi=*/true);
+      DeclaratorContext::InitStmtContext, DeclEnd, attrs, /*RequireSemi=*/true);
   StmtResult InitStmt = Actions.ActOnDeclStmt(DG, DeclStart, DeclEnd);
   if (InitStmt.isInvalid())
     return InitStmt;
