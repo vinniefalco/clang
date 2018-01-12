@@ -857,11 +857,18 @@ static ExprResult SemaBuiltinLaunder(Sema &S, CallExpr *TheCall) {
   QualType ArgTy = TheCall->getArg(0)->getType();
   TheCall->setType(ArgTy);
 
-  if (!ArgTy->isPointerType()) {
-    S.Diag(TheCall->getLocStart(), diag::err_builtin_launder_non_pointer_arg)
-        << TheCall->getSourceRange();
+  auto DiagArg = [&](unsigned DiagID) {
+    S.Diag(TheCall->getLocStart(), DiagID)
+      << TheCall->getSourceRange();
     return ExprError();
-  }
+  };
+
+  if (!ArgTy->isPointerType())
+    return DiagArg(diag::err_builtin_launder_non_pointer_arg);
+  else if (ArgTy->isFunctionPointerType())
+    return DiagArg(diag::err_builtin_launder_function_pointer_arg);
+  else if (ArgTy->isVoidPointerType())
+    return DiagArg(diag::err_builtin_launder_void_pointer_arg);
 
   InitializedEntity Entity =
       InitializedEntity::InitializeParameter(S.Context, ArgTy, false);

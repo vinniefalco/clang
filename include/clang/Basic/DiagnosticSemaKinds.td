@@ -9334,6 +9334,10 @@ def note_shadow_field : Note<"declared here">;
 
 def err_builtin_launder_non_pointer_arg :
   Error<"non-pointer argument to '__builtin_launder'">;
+def err_builtin_launder_function_pointer_arg :
+  Error<"argument to '__builtin_launder' cannot be a function pointer">;
+def err_builtin_launder_void_pointer_arg :
+  Error<"argument to '__builtin_launder' cannot be a void pointer">;
 
 def err_target_required_in_redecl : Error<
   "function declaration is missing 'target' attribute in a multiversioned "
