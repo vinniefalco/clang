@@ -78,9 +78,8 @@ CXXRecordDecl::DefinitionData::DefinitionData(CXXRecordDecl *D)
       HasPrivateFields(false), HasProtectedFields(false),
       HasPublicFields(false), HasMutableFields(false), HasVariantMembers(false),
       HasOnlyCMembers(true), HasInClassInitializer(false),
-      HasReferenceMember(false), HasUninitializedReferenceMember(false),
-      HasUninitializedFields(false), HasInheritedConstructor(false),
-      HasInheritedAssignment(false),
+      HasUninitializedReferenceMember(false), HasUninitializedFields(false),
+      HasInheritedConstructor(false), HasInheritedAssignment(false),
       NeedOverloadResolutionForCopyConstructor(false),
       NeedOverloadResolutionForMoveConstructor(false),
       NeedOverloadResolutionForMoveAssignment(false),
@@ -377,17 +376,11 @@ CXXRecordDecl::setBases(CXXBaseSpecifier const * const *Bases,
     if (BaseClassDecl->hasVolatileMember())
       setHasVolatileMember(true);
 
-    if (BaseClassDecl->hasConstMember())
-      setHasConstMember(true);
-
     // Keep track of the presence of mutable fields.
     if (BaseClassDecl->hasMutableFields()) {
       data().HasMutableFields = true;
       data().NeedOverloadResolutionForCopyConstructor = true;
     }
-
-    if (BaseClassDecl->hasReferenceMember())
-      data().HasReferenceMember = true;
 
     if (BaseClassDecl->hasUninitializedReferenceMember())
       data().HasUninitializedReferenceMember = true;
@@ -787,8 +780,6 @@ void CXXRecordDecl::addedMember(Decl *D) {
       data().PlainOldData = false;
     
     if (T->isReferenceType()) {
-      data().HasReferenceMember = true;
-
       if (!Field->hasInClassInitializer())
         data().HasUninitializedReferenceMember = true;
 
@@ -936,8 +927,6 @@ void CXXRecordDecl::addedMember(Decl *D) {
           setHasObjectMember(true);
         if (FieldRec->hasVolatileMember())
           setHasVolatileMember(true);
-        if (FieldRec->hasConstMember())
-          setHasConstMember(true);
 
         // C++0x [class]p7:
         //   A standard-layout class is a class that:
@@ -1005,9 +994,6 @@ void CXXRecordDecl::addedMember(Decl *D) {
         //   parameter is of type 'const M&', 'const volatile M&' or 'M'.
         if (!FieldRec->hasCopyAssignmentWithConstParam())
           data().ImplicitCopyAssignmentHasConstParam = false;
-
-        if (FieldRec->hasReferenceMember())
-          data().HasReferenceMember = true;
 
         if (FieldRec->hasUninitializedReferenceMember() &&
             !Field->hasInClassInitializer())

@@ -998,7 +998,6 @@ bool ASTNodeImporter::ImportDefinition(RecordDecl *From, RecordDecl *To,
     ToData.HasVariantMembers = FromData.HasVariantMembers;
     ToData.HasOnlyCMembers = FromData.HasOnlyCMembers;
     ToData.HasInClassInitializer = FromData.HasInClassInitializer;
-    ToData.HasReferenceMember = FromData.HasReferenceMember;
     ToData.HasUninitializedReferenceMember
       = FromData.HasUninitializedReferenceMember;
     ToData.HasUninitializedFields = FromData.HasUninitializedFields;

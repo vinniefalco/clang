@@ -392,12 +392,6 @@ class CXXRecordDecl : public RecordDecl {
     /// within anonymous unions or structs.
     unsigned HasInClassInitializer : 1;
 
-    /// \brief True if any field is of reference type.
-    ///
-    /// In this case calls to `__builtin_launder` for classes of this type
-    /// cannot be ommitted.
-    unsigned HasReferenceMember : 1;
-
     /// \brief True if any field is of reference type, and does not have an
     /// in-class initializer.
     ///
@@ -1245,10 +1239,6 @@ public:
   /// for non-static data members (including those in anonymous unions or
   /// structs).
   bool hasInClassInitializer() const { return data().HasInClassInitializer; }
-
-  /// \brief Whether this class or any of its subobjects has any members of
-  /// reference type.
-  bool hasReferenceMember() const { return data().HasReferenceMember; }
 
   /// \brief Whether this class or any of its subobjects has any members of
   /// reference type which would make value-initialization ill-formed.
