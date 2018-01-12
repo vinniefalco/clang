@@ -5973,6 +5973,7 @@ void ASTRecordWriter::AddCXXDefinitionData(const CXXRecordDecl *D) {
   Record->push_back(Data.HasVariantMembers);
   Record->push_back(Data.HasOnlyCMembers);
   Record->push_back(Data.HasInClassInitializer);
+  Record->push_back(Data.HasReferenceMember);
   Record->push_back(Data.HasUninitializedReferenceMember);
   Record->push_back(Data.HasUninitializedFields);
   Record->push_back(Data.HasInheritedConstructor);

@@ -739,6 +739,8 @@ ASTDeclReader::VisitRecordDeclImpl(RecordDecl *RD) {
   RD->setAnonymousStructOrUnion(Record.readInt());
   RD->setHasObjectMember(Record.readInt());
   RD->setHasVolatileMember(Record.readInt());
+  RD->setHasConstMember(Record.readInt());
+
   return Redecl;
 }
 
@@ -1564,6 +1566,7 @@ void ASTDeclReader::ReadCXXDefinitionData(
   Data.HasVariantMembers = Record.readInt();
   Data.HasOnlyCMembers = Record.readInt();
   Data.HasInClassInitializer = Record.readInt();
+  Data.HasReferenceMember = Record.readInt();
   Data.HasUninitializedReferenceMember = Record.readInt();
   Data.HasUninitializedFields = Record.readInt();
   Data.HasInheritedConstructor = Record.readInt();
@@ -1702,6 +1705,7 @@ void ASTDeclReader::MergeDefinitionData(
   MATCH_FIELD(HasVariantMembers)
   MATCH_FIELD(HasOnlyCMembers)
   MATCH_FIELD(HasInClassInitializer)
+  MATCH_FIELD(HasReferenceMember)
   MATCH_FIELD(HasUninitializedReferenceMember)
   MATCH_FIELD(HasUninitializedFields)
   MATCH_FIELD(HasInheritedConstructor)

@@ -870,6 +870,8 @@ static ExprResult SemaBuiltinLaunder(Sema &S, CallExpr *TheCall) {
   else if (ArgTy->isVoidPointerType())
     return DiagArg(diag::err_builtin_launder_void_pointer_arg);
 
+  assert(ArgTy->getPointeeType()->isObjectType() && "Unhandled non-object pointer case");
+
   InitializedEntity Entity =
       InitializedEntity::InitializeParameter(S.Context, ArgTy, false);
   ExprResult Arg = TheCall->getArg(0);

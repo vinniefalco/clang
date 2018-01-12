@@ -3519,6 +3519,10 @@ class RecordDecl : public TagDecl {
   /// 'volatile' type.
   bool HasVolatileMember : 1;
 
+  /// HasConstMember - This is true if the struct has at least one member of
+  /// 'const' type.
+  bool HasConstMember : 1;
+
   /// \brief Whether the field declarations of this record have been loaded
   /// from external storage. To avoid unnecessary deserialization of
   /// methods/nested types we allow deserialization of just the fields
@@ -3576,6 +3580,9 @@ public:
 
   bool hasVolatileMember() const { return HasVolatileMember; }
   void setHasVolatileMember (bool val) { HasVolatileMember = val; }
+
+  bool hasConstMember() const { return HasConstMember; }
+  void setHasConstMember(bool val) { HasConstMember = val; }
 
   bool hasLoadedFieldsFromExternalStorage() const {
     return LoadedFieldsFromExternalStorage;
