@@ -14,6 +14,7 @@
 
 #include "TargetInfo.h"
 #include "ABIInfo.h"
+#include "CGBlocks.h"
 #include "CGCXXABI.h"
 #include "CGValue.h"
 #include "CodeGenFunction.h"
@@ -24,6 +25,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/raw_ostream.h"
@@ -196,10 +198,6 @@ bool ABIInfo::isHomogeneousAggregateBaseType(QualType Ty) const {
 
 bool ABIInfo::isHomogeneousAggregateSmallEnough(const Type *Base,
                                                 uint64_t Members) const {
-  return false;
-}
-
-bool ABIInfo::shouldSignExtUnsignedType(QualType Ty) const {
   return false;
 }
 
@@ -421,18 +419,17 @@ llvm::Constant *TargetCodeGenInfo::getNullPointer(const CodeGen::CodeGenModule &
   return llvm::ConstantPointerNull::get(T);
 }
 
-unsigned TargetCodeGenInfo::getGlobalVarAddressSpace(CodeGenModule &CGM,
-                                                     const VarDecl *D) const {
+LangAS TargetCodeGenInfo::getGlobalVarAddressSpace(CodeGenModule &CGM,
+                                                   const VarDecl *D) const {
   assert(!CGM.getLangOpts().OpenCL &&
          !(CGM.getLangOpts().CUDA && CGM.getLangOpts().CUDAIsDevice) &&
          "Address space agnostic languages only");
-  return D ? D->getType().getAddressSpace()
-           : static_cast<unsigned>(LangAS::Default);
+  return D ? D->getType().getAddressSpace() : LangAS::Default;
 }
 
 llvm::Value *TargetCodeGenInfo::performAddrSpaceCast(
-    CodeGen::CodeGenFunction &CGF, llvm::Value *Src, unsigned SrcAddr,
-    unsigned DestAddr, llvm::Type *DestTy, bool isNonNull) const {
+    CodeGen::CodeGenFunction &CGF, llvm::Value *Src, LangAS SrcAddr,
+    LangAS DestAddr, llvm::Type *DestTy, bool isNonNull) const {
   // Since target may map different address spaces in AST to the same address
   // space, an address space conversion may end up as a bitcast.
   if (auto *C = dyn_cast<llvm::Constant>(Src))
@@ -442,7 +439,7 @@ llvm::Value *TargetCodeGenInfo::performAddrSpaceCast(
 
 llvm::Constant *
 TargetCodeGenInfo::performAddrSpaceCast(CodeGenModule &CGM, llvm::Constant *Src,
-                                        unsigned SrcAddr, unsigned DestAddr,
+                                        LangAS SrcAddr, LangAS DestAddr,
                                         llvm::Type *DestTy) const {
   // Since target may map different address spaces in AST to the same address
   // space, an address space conversion may end up as a bitcast.
@@ -681,8 +678,8 @@ ABIArgInfo DefaultABIInfo::classifyArgumentType(QualType Ty) const {
   if (const EnumType *EnumTy = Ty->getAs<EnumType>())
     Ty = EnumTy->getDecl()->getIntegerType();
 
-  return (Ty->isPromotableIntegerType() ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (Ty->isPromotableIntegerType() ? ABIArgInfo::getExtend(Ty)
+                                        : ABIArgInfo::getDirect());
 }
 
 ABIArgInfo DefaultABIInfo::classifyReturnType(QualType RetTy) const {
@@ -696,8 +693,8 @@ ABIArgInfo DefaultABIInfo::classifyReturnType(QualType RetTy) const {
   if (const EnumType *EnumTy = RetTy->getAs<EnumType>())
     RetTy = EnumTy->getDecl()->getIntegerType();
 
-  return (RetTy->isPromotableIntegerType() ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (RetTy->isPromotableIntegerType() ? ABIArgInfo::getExtend(RetTy)
+                                           : ABIArgInfo::getDirect());
 }
 
 //===----------------------------------------------------------------------===//
@@ -844,8 +841,8 @@ ABIArgInfo PNaClABIInfo::classifyArgumentType(QualType Ty) const {
     return ABIArgInfo::getDirect();
   }
 
-  return (Ty->isPromotableIntegerType() ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (Ty->isPromotableIntegerType() ? ABIArgInfo::getExtend(Ty)
+                                        : ABIArgInfo::getDirect());
 }
 
 ABIArgInfo PNaClABIInfo::classifyReturnType(QualType RetTy) const {
@@ -860,8 +857,8 @@ ABIArgInfo PNaClABIInfo::classifyReturnType(QualType RetTy) const {
   if (const EnumType *EnumTy = RetTy->getAs<EnumType>())
     RetTy = EnumTy->getDecl()->getIntegerType();
 
-  return (RetTy->isPromotableIntegerType() ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (RetTy->isPromotableIntegerType() ? ABIArgInfo::getExtend(RetTy)
+                                           : ABIArgInfo::getDirect());
 }
 
 /// IsX86_MMXType - Return true if this is an MMX type.
@@ -1027,8 +1024,7 @@ public:
       IsMCUABI(CGT.getTarget().getTriple().isOSIAMCU()),
       DefaultNumRegisterParameters(NumRegisterParameters) {}
 
-  bool shouldPassIndirectlyForSwift(CharUnits totalSize,
-                                    ArrayRef<llvm::Type*> scalars,
+  bool shouldPassIndirectlyForSwift(ArrayRef<llvm::Type*> scalars,
                                     bool asReturnValue) const override {
     // LLVM's x86-32 lowering currently only assigns up to three
     // integer registers and three fp registers.  Oddly, it'll use up to
@@ -1403,8 +1399,8 @@ ABIArgInfo X86_32ABIInfo::classifyReturnType(QualType RetTy,
   if (const EnumType *EnumTy = RetTy->getAs<EnumType>())
     RetTy = EnumTy->getDecl()->getIntegerType();
 
-  return (RetTy->isPromotableIntegerType() ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (RetTy->isPromotableIntegerType() ? ABIArgInfo::getExtend(RetTy)
+                                           : ABIArgInfo::getDirect());
 }
 
 static bool isSSEVectorType(ASTContext &Context, QualType Ty) {
@@ -1676,8 +1672,8 @@ ABIArgInfo X86_32ABIInfo::classifyArgumentType(QualType Ty,
 
   if (Ty->isPromotableIntegerType()) {
     if (InReg)
-      return ABIArgInfo::getExtendInReg();
-    return ABIArgInfo::getExtend();
+      return ABIArgInfo::getExtendInReg(Ty);
+    return ABIArgInfo::getExtend(Ty);
   }
 
   if (InReg)
@@ -2167,8 +2163,7 @@ public:
     return Has64BitPointers;
   }
 
-  bool shouldPassIndirectlyForSwift(CharUnits totalSize,
-                                    ArrayRef<llvm::Type*> scalars,
+  bool shouldPassIndirectlyForSwift(ArrayRef<llvm::Type*> scalars,
                                     bool asReturnValue) const override {
     return occupiesMoreThan(CGT, scalars, /*total*/ 4);
   }  
@@ -2200,8 +2195,7 @@ public:
     return isX86VectorCallAggregateSmallEnough(NumMembers);
   }
 
-  bool shouldPassIndirectlyForSwift(CharUnits totalSize,
-                                    ArrayRef<llvm::Type *> scalars,
+  bool shouldPassIndirectlyForSwift(ArrayRef<llvm::Type *> scalars,
                                     bool asReturnValue) const override {
     return occupiesMoreThan(CGT, scalars, /*total*/ 4);
   }
@@ -2867,8 +2861,8 @@ ABIArgInfo X86_64ABIInfo::getIndirectReturnResult(QualType Ty) const {
     if (const EnumType *EnumTy = Ty->getAs<EnumType>())
       Ty = EnumTy->getDecl()->getIntegerType();
 
-    return (Ty->isPromotableIntegerType() ?
-            ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+    return (Ty->isPromotableIntegerType() ? ABIArgInfo::getExtend(Ty)
+                                          : ABIArgInfo::getDirect());
   }
 
   return getNaturalAlignIndirect(Ty);
@@ -2900,8 +2894,8 @@ ABIArgInfo X86_64ABIInfo::getIndirectResult(QualType Ty,
     if (const EnumType *EnumTy = Ty->getAs<EnumType>())
       Ty = EnumTy->getDecl()->getIntegerType();
 
-    return (Ty->isPromotableIntegerType() ?
-            ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+    return (Ty->isPromotableIntegerType() ? ABIArgInfo::getExtend(Ty)
+                                          : ABIArgInfo::getDirect());
   }
 
   if (CGCXXABI::RecordArgABI RAA = getRecordArgABI(Ty, getCXXABI()))
@@ -3270,7 +3264,7 @@ classifyReturnType(QualType RetTy) const {
 
       if (RetTy->isIntegralOrEnumerationType() &&
           RetTy->isPromotableIntegerType())
-        return ABIArgInfo::getExtend();
+        return ABIArgInfo::getExtend(RetTy);
     }
     break;
 
@@ -3415,7 +3409,7 @@ ABIArgInfo X86_64ABIInfo::classifyArgumentType(
 
       if (Ty->isIntegralOrEnumerationType() &&
           Ty->isPromotableIntegerType())
-        return ABIArgInfo::getExtend();
+        return ABIArgInfo::getExtend(Ty);
     }
 
     break;
@@ -3940,7 +3934,7 @@ ABIArgInfo WinX86_64ABIInfo::classify(QualType Ty, unsigned &FreeSSERegs,
   // extended.
   const BuiltinType *BT = Ty->getAs<BuiltinType>();
   if (BT && BT->getKind() == BuiltinType::Bool)
-    return ABIArgInfo::getExtend();
+    return ABIArgInfo::getExtend(Ty);
 
   // Mingw64 GCC uses the old 80 bit extended precision floating point unit. It
   // passes them indirectly through memory.
@@ -4035,7 +4029,10 @@ Address WinX86_64ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
 namespace {
 /// PPC32_SVR4_ABIInfo - The 32-bit PowerPC ELF (SVR4) ABI information.
 class PPC32_SVR4_ABIInfo : public DefaultABIInfo {
-bool IsSoftFloatABI;
+  bool IsSoftFloatABI;
+
+  CharUnits getParamTypeAlignment(QualType Ty) const;
+
 public:
   PPC32_SVR4_ABIInfo(CodeGen::CodeGenTypes &CGT, bool SoftFloatABI)
       : DefaultABIInfo(CGT), IsSoftFloatABI(SoftFloatABI) {}
@@ -4057,13 +4054,46 @@ public:
   bool initDwarfEHRegSizeTable(CodeGen::CodeGenFunction &CGF,
                                llvm::Value *Address) const override;
 };
+}
 
+CharUnits PPC32_SVR4_ABIInfo::getParamTypeAlignment(QualType Ty) const {
+  // Complex types are passed just like their elements
+  if (const ComplexType *CTy = Ty->getAs<ComplexType>())
+    Ty = CTy->getElementType();
+
+  if (Ty->isVectorType())
+    return CharUnits::fromQuantity(getContext().getTypeSize(Ty) == 128 ? 16
+                                                                       : 4);
+
+  // For single-element float/vector structs, we consider the whole type
+  // to have the same alignment requirements as its single element.
+  const Type *AlignTy = nullptr;
+  if (const Type *EltType = isSingleElementStruct(Ty, getContext())) {
+    const BuiltinType *BT = EltType->getAs<BuiltinType>();
+    if ((EltType->isVectorType() && getContext().getTypeSize(EltType) == 128) ||
+        (BT && BT->isFloatingPoint()))
+      AlignTy = EltType;
+  }
+
+  if (AlignTy)
+    return CharUnits::fromQuantity(AlignTy->isVectorType() ? 16 : 4);
+  return CharUnits::fromQuantity(4);
 }
 
 // TODO: this implementation is now likely redundant with
 // DefaultABIInfo::EmitVAArg.
 Address PPC32_SVR4_ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAList,
                                       QualType Ty) const {
+  if (getTarget().getTriple().isOSDarwin()) {
+    auto TI = getContext().getTypeInfoInChars(Ty);
+    TI.second = getParamTypeAlignment(Ty);
+
+    CharUnits SlotSize = CharUnits::fromQuantity(4);
+    return emitVoidPtrVAArg(CGF, VAList, Ty,
+                            classifyArgumentType(Ty).isIndirect(), TI, SlotSize,
+                            /*AllowHigherAlign=*/true);
+  }
+
   const unsigned OverflowLimit = 8;
   if (const ComplexType *CTy = Ty->getAs<ComplexType>()) {
     // TODO: Implement this. For now ignore.
@@ -4657,8 +4687,8 @@ PPC64_SVR4_ABIInfo::classifyArgumentType(QualType Ty) const {
                                    /*Realign=*/TyAlign > ABIAlign);
   }
 
-  return (isPromotableTypeForABI(Ty) ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (isPromotableTypeForABI(Ty) ? ABIArgInfo::getExtend(Ty)
+                                     : ABIArgInfo::getDirect());
 }
 
 ABIArgInfo
@@ -4712,8 +4742,8 @@ PPC64_SVR4_ABIInfo::classifyReturnType(QualType RetTy) const {
     return getNaturalAlignIndirect(RetTy);
   }
 
-  return (isPromotableTypeForABI(RetTy) ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (isPromotableTypeForABI(RetTy) ? ABIArgInfo::getExtend(RetTy)
+                                        : ABIArgInfo::getDirect());
 }
 
 // Based on ARMABIInfo::EmitVAArg, adjusted for 64-bit machine.
@@ -4885,8 +4915,7 @@ private:
   Address EmitMSVAArg(CodeGenFunction &CGF, Address VAListAddr,
                       QualType Ty) const override;
 
-  bool shouldPassIndirectlyForSwift(CharUnits totalSize,
-                                    ArrayRef<llvm::Type*> scalars,
+  bool shouldPassIndirectlyForSwift(ArrayRef<llvm::Type*> scalars,
                                     bool asReturnValue) const override {
     return occupiesMoreThan(CGT, scalars, /*total*/ 4);
   }
@@ -4965,7 +4994,7 @@ ABIArgInfo AArch64ABIInfo::classifyArgumentType(QualType Ty) const {
       Ty = EnumTy->getDecl()->getIntegerType();
 
     return (Ty->isPromotableIntegerType() && isDarwinPCS()
-                ? ABIArgInfo::getExtend()
+                ? ABIArgInfo::getExtend(Ty)
                 : ABIArgInfo::getDirect());
   }
 
@@ -5035,7 +5064,7 @@ ABIArgInfo AArch64ABIInfo::classifyReturnType(QualType RetTy) const {
       RetTy = EnumTy->getDecl()->getIntegerType();
 
     return (RetTy->isPromotableIntegerType() && isDarwinPCS()
-                ? ABIArgInfo::getExtend()
+                ? ABIArgInfo::getExtend(RetTy)
                 : ABIArgInfo::getDirect());
   }
 
@@ -5484,8 +5513,7 @@ private:
   llvm::CallingConv::ID getABIDefaultCC() const;
   void setCCs();
 
-  bool shouldPassIndirectlyForSwift(CharUnits totalSize,
-                                    ArrayRef<llvm::Type*> scalars,
+  bool shouldPassIndirectlyForSwift(ArrayRef<llvm::Type*> scalars,
                                     bool asReturnValue) const override {
     return occupiesMoreThan(CGT, scalars, /*total*/ 4);
   }
@@ -5709,7 +5737,7 @@ ABIArgInfo ARMABIInfo::classifyArgumentType(QualType Ty,
       Ty = EnumTy->getDecl()->getIntegerType();
     }
 
-    return (Ty->isPromotableIntegerType() ? ABIArgInfo::getExtend()
+    return (Ty->isPromotableIntegerType() ? ABIArgInfo::getExtend(Ty)
                                           : ABIArgInfo::getDirect());
   }
 
@@ -5906,7 +5934,7 @@ ABIArgInfo ARMABIInfo::classifyReturnType(QualType RetTy,
     if (const EnumType *EnumTy = RetTy->getAs<EnumType>())
       RetTy = EnumTy->getDecl()->getIntegerType();
 
-    return RetTy->isPromotableIntegerType() ? ABIArgInfo::getExtend()
+    return RetTy->isPromotableIntegerType() ? ABIArgInfo::getExtend(RetTy)
                                             : ABIArgInfo::getDirect();
   }
 
@@ -6139,8 +6167,8 @@ ABIArgInfo NVPTXABIInfo::classifyReturnType(QualType RetTy) const {
   if (const EnumType *EnumTy = RetTy->getAs<EnumType>())
     RetTy = EnumTy->getDecl()->getIntegerType();
 
-  return (RetTy->isPromotableIntegerType() ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (RetTy->isPromotableIntegerType() ? ABIArgInfo::getExtend(RetTy)
+                                           : ABIArgInfo::getDirect());
 }
 
 ABIArgInfo NVPTXABIInfo::classifyArgumentType(QualType Ty) const {
@@ -6152,8 +6180,8 @@ ABIArgInfo NVPTXABIInfo::classifyArgumentType(QualType Ty) const {
   if (isAggregateTypeForABI(Ty))
     return getNaturalAlignIndirect(Ty, /* byval */ true);
 
-  return (Ty->isPromotableIntegerType() ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (Ty->isPromotableIntegerType() ? ABIArgInfo::getExtend(Ty)
+                                        : ABIArgInfo::getDirect());
 }
 
 void NVPTXABIInfo::computeInfo(CGFunctionInfo &FI) const {
@@ -6276,13 +6304,12 @@ public:
   Address EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
                     QualType Ty) const override;
 
-  bool shouldPassIndirectlyForSwift(CharUnits totalSize,
-                                    ArrayRef<llvm::Type*> scalars,
+  bool shouldPassIndirectlyForSwift(ArrayRef<llvm::Type*> scalars,
                                     bool asReturnValue) const override {
     return occupiesMoreThan(CGT, scalars, /*total*/ 4);
   }
   bool isSwiftErrorInRegister() const override {
-    return true;
+    return false;
   }
 };
 
@@ -6549,8 +6576,8 @@ ABIArgInfo SystemZABIInfo::classifyReturnType(QualType RetTy) const {
     return ABIArgInfo::getDirect();
   if (isCompoundType(RetTy) || getContext().getTypeSize(RetTy) > 64)
     return getNaturalAlignIndirect(RetTy);
-  return (isPromotableIntegerType(RetTy) ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (isPromotableIntegerType(RetTy) ? ABIArgInfo::getExtend(RetTy)
+                                         : ABIArgInfo::getDirect());
 }
 
 ABIArgInfo SystemZABIInfo::classifyArgumentType(QualType Ty) const {
@@ -6560,7 +6587,7 @@ ABIArgInfo SystemZABIInfo::classifyArgumentType(QualType Ty) const {
 
   // Integers and enums are extended to full register width.
   if (isPromotableIntegerType(Ty))
-    return ABIArgInfo::getExtend();
+    return ABIArgInfo::getExtend(Ty);
 
   // Handle vector types and vector-like structure types.  Note that
   // as opposed to float-like structure types, we do not allow any
@@ -6668,7 +6695,7 @@ public:
   void computeInfo(CGFunctionInfo &FI) const override;
   Address EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
                     QualType Ty) const override;
-  bool shouldSignExtUnsignedType(QualType Ty) const override;
+  ABIArgInfo extendType(QualType Ty) const;
 };
 
 class MIPSTargetCodeGenInfo : public TargetCodeGenInfo {
@@ -6861,7 +6888,7 @@ MipsABIInfo::classifyArgumentType(QualType Ty, uint64_t &Offset) const {
 
   // All integral types are promoted to the GPR width.
   if (Ty->isIntegralOrEnumerationType())
-    return ABIArgInfo::getExtend();
+    return extendType(Ty);
 
   return ABIArgInfo::getDirect(
       nullptr, 0, IsO32 ? nullptr : getPaddingType(OrigOffset, CurrOffset));
@@ -6943,8 +6970,8 @@ ABIArgInfo MipsABIInfo::classifyReturnType(QualType RetTy) const {
   if (const EnumType *EnumTy = RetTy->getAs<EnumType>())
     RetTy = EnumTy->getDecl()->getIntegerType();
 
-  return (RetTy->isPromotableIntegerType() ?
-          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+  return (RetTy->isPromotableIntegerType() ? ABIArgInfo::getExtend(RetTy)
+                                           : ABIArgInfo::getDirect());
 }
 
 void MipsABIInfo::computeInfo(CGFunctionInfo &FI) const {
@@ -7010,14 +7037,14 @@ Address MipsABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
   return Addr;
 }
 
-bool MipsABIInfo::shouldSignExtUnsignedType(QualType Ty) const {
+ABIArgInfo MipsABIInfo::extendType(QualType Ty) const {
   int TySize = getContext().getTypeSize(Ty);
 
   // MIPS64 ABI requires unsigned 32 bit integers to be sign extended.
   if (Ty->isUnsignedIntegerOrEnumerationType() && TySize == 32)
-    return true;
+    return ABIArgInfo::getSignExtend(Ty);
 
-  return false;
+  return ABIArgInfo::getExtend(Ty);
 }
 
 bool
@@ -7190,8 +7217,8 @@ ABIArgInfo HexagonABIInfo::classifyArgumentType(QualType Ty) const {
     if (const EnumType *EnumTy = Ty->getAs<EnumType>())
       Ty = EnumTy->getDecl()->getIntegerType();
 
-    return (Ty->isPromotableIntegerType() ?
-            ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+    return (Ty->isPromotableIntegerType() ? ABIArgInfo::getExtend(Ty)
+                                          : ABIArgInfo::getDirect());
   }
 
   if (CGCXXABI::RecordArgABI RAA = getRecordArgABI(Ty, getCXXABI()))
@@ -7228,8 +7255,8 @@ ABIArgInfo HexagonABIInfo::classifyReturnType(QualType RetTy) const {
     if (const EnumType *EnumTy = RetTy->getAs<EnumType>())
       RetTy = EnumTy->getDecl()->getIntegerType();
 
-    return (RetTy->isPromotableIntegerType() ?
-            ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+    return (RetTy->isPromotableIntegerType() ? ABIArgInfo::getExtend(RetTy)
+                                             : ABIArgInfo::getDirect());
   }
 
   if (isEmptyRecord(getContext(), RetTy, true))
@@ -7372,7 +7399,7 @@ ABIArgInfo LanaiABIInfo::classifyArgumentType(QualType Ty,
   if (Ty->isPromotableIntegerType()) {
     if (InReg)
       return ABIArgInfo::getDirectInReg();
-    return ABIArgInfo::getExtend();
+    return ABIArgInfo::getExtend(Ty);
   }
   if (InReg)
     return ABIArgInfo::getDirectInReg();
@@ -7609,14 +7636,18 @@ public:
   llvm::Constant *getNullPointer(const CodeGen::CodeGenModule &CGM,
       llvm::PointerType *T, QualType QT) const override;
 
-  unsigned getASTAllocaAddressSpace() const override {
-    return LangAS::FirstTargetAddressSpace +
-           getABIInfo().getDataLayout().getAllocaAddrSpace();
+  LangAS getASTAllocaAddressSpace() const override {
+    return getLangASFromTargetAS(
+        getABIInfo().getDataLayout().getAllocaAddrSpace());
   }
-  unsigned getGlobalVarAddressSpace(CodeGenModule &CGM,
-                                    const VarDecl *D) const override;
+  LangAS getGlobalVarAddressSpace(CodeGenModule &CGM,
+                                  const VarDecl *D) const override;
   llvm::SyncScope::ID getLLVMSyncScopeID(SyncScope S,
                                          llvm::LLVMContext &C) const override;
+  llvm::Function *
+  createEnqueuedBlockKernel(CodeGenFunction &CGF,
+                            llvm::Function *BlockInvokeFunc,
+                            llvm::Value *BlockLiteral) const override;
 };
 }
 
@@ -7701,21 +7732,19 @@ llvm::Constant *AMDGPUTargetCodeGenInfo::getNullPointer(
       llvm::ConstantPointerNull::get(NPT), PT);
 }
 
-unsigned
+LangAS
 AMDGPUTargetCodeGenInfo::getGlobalVarAddressSpace(CodeGenModule &CGM,
                                                   const VarDecl *D) const {
   assert(!CGM.getLangOpts().OpenCL &&
          !(CGM.getLangOpts().CUDA && CGM.getLangOpts().CUDAIsDevice) &&
          "Address space agnostic languages only");
-  unsigned DefaultGlobalAS =
-      LangAS::FirstTargetAddressSpace +
-      CGM.getContext().getTargetAddressSpace(LangAS::opencl_global);
+  LangAS DefaultGlobalAS = getLangASFromTargetAS(
+      CGM.getContext().getTargetAddressSpace(LangAS::opencl_global));
   if (!D)
     return DefaultGlobalAS;
 
-  unsigned AddrSpace = D->getType().getAddressSpace();
-  assert(AddrSpace == LangAS::Default ||
-         AddrSpace >= LangAS::FirstTargetAddressSpace);
+  LangAS AddrSpace = D->getType().getAddressSpace();
+  assert(AddrSpace == LangAS::Default || isTargetAddressSpace(AddrSpace));
   if (AddrSpace != LangAS::Default)
     return AddrSpace;
 
@@ -7952,7 +7981,7 @@ SparcV9ABIInfo::classifyType(QualType Ty, unsigned SizeLimit) const {
 
   // Integer types smaller than a register are extended.
   if (Size < 64 && Ty->isIntegerType())
-    return ABIArgInfo::getExtend();
+    return ABIArgInfo::getExtend(Ty);
 
   // Other non-aggregates go in registers.
   if (!isAggregateTypeForABI(Ty))
@@ -8916,4 +8945,109 @@ const TargetCodeGenInfo &CodeGenModule::getTargetCodeGenInfo() {
   case llvm::Triple::spir64:
     return SetCGInfo(new SPIRTargetCodeGenInfo(Types));
   }
+}
+
+/// Create an OpenCL kernel for an enqueued block.
+///
+/// The kernel has the same function type as the block invoke function. Its
+/// name is the name of the block invoke function postfixed with "_kernel".
+/// It simply calls the block invoke function then returns.
+llvm::Function *
+TargetCodeGenInfo::createEnqueuedBlockKernel(CodeGenFunction &CGF,
+                                             llvm::Function *Invoke,
+                                             llvm::Value *BlockLiteral) const {
+  auto *InvokeFT = Invoke->getFunctionType();
+  llvm::SmallVector<llvm::Type *, 2> ArgTys;
+  for (auto &P : InvokeFT->params())
+    ArgTys.push_back(P);
+  auto &C = CGF.getLLVMContext();
+  std::string Name = Invoke->getName().str() + "_kernel";
+  auto *FT = llvm::FunctionType::get(llvm::Type::getVoidTy(C), ArgTys, false);
+  auto *F = llvm::Function::Create(FT, llvm::GlobalValue::InternalLinkage, Name,
+                                   &CGF.CGM.getModule());
+  auto IP = CGF.Builder.saveIP();
+  auto *BB = llvm::BasicBlock::Create(C, "entry", F);
+  auto &Builder = CGF.Builder;
+  Builder.SetInsertPoint(BB);
+  llvm::SmallVector<llvm::Value *, 2> Args;
+  for (auto &A : F->args())
+    Args.push_back(&A);
+  Builder.CreateCall(Invoke, Args);
+  Builder.CreateRetVoid();
+  Builder.restoreIP(IP);
+  return F;
+}
+
+/// Create an OpenCL kernel for an enqueued block.
+///
+/// The type of the first argument (the block literal) is the struct type
+/// of the block literal instead of a pointer type. The first argument
+/// (block literal) is passed directly by value to the kernel. The kernel
+/// allocates the same type of struct on stack and stores the block literal
+/// to it and passes its pointer to the block invoke function. The kernel
+/// has "enqueued-block" function attribute and kernel argument metadata.
+llvm::Function *AMDGPUTargetCodeGenInfo::createEnqueuedBlockKernel(
+    CodeGenFunction &CGF, llvm::Function *Invoke,
+    llvm::Value *BlockLiteral) const {
+  auto &Builder = CGF.Builder;
+  auto &C = CGF.getLLVMContext();
+
+  auto *BlockTy = BlockLiteral->getType()->getPointerElementType();
+  auto *InvokeFT = Invoke->getFunctionType();
+  llvm::SmallVector<llvm::Type *, 2> ArgTys;
+  llvm::SmallVector<llvm::Metadata *, 8> AddressQuals;
+  llvm::SmallVector<llvm::Metadata *, 8> AccessQuals;
+  llvm::SmallVector<llvm::Metadata *, 8> ArgTypeNames;
+  llvm::SmallVector<llvm::Metadata *, 8> ArgBaseTypeNames;
+  llvm::SmallVector<llvm::Metadata *, 8> ArgTypeQuals;
+  llvm::SmallVector<llvm::Metadata *, 8> ArgNames;
+
+  ArgTys.push_back(BlockTy);
+  ArgTypeNames.push_back(llvm::MDString::get(C, "__block_literal"));
+  AddressQuals.push_back(llvm::ConstantAsMetadata::get(Builder.getInt32(0)));
+  ArgBaseTypeNames.push_back(llvm::MDString::get(C, "__block_literal"));
+  ArgTypeQuals.push_back(llvm::MDString::get(C, ""));
+  AccessQuals.push_back(llvm::MDString::get(C, "none"));
+  ArgNames.push_back(llvm::MDString::get(C, "block_literal"));
+  for (unsigned I = 1, E = InvokeFT->getNumParams(); I < E; ++I) {
+    ArgTys.push_back(InvokeFT->getParamType(I));
+    ArgTypeNames.push_back(llvm::MDString::get(C, "void*"));
+    AddressQuals.push_back(llvm::ConstantAsMetadata::get(Builder.getInt32(3)));
+    AccessQuals.push_back(llvm::MDString::get(C, "none"));
+    ArgBaseTypeNames.push_back(llvm::MDString::get(C, "void*"));
+    ArgTypeQuals.push_back(llvm::MDString::get(C, ""));
+    ArgNames.push_back(
+        llvm::MDString::get(C, (Twine("local_arg") + Twine(I)).str()));
+  }
+  std::string Name = Invoke->getName().str() + "_kernel";
+  auto *FT = llvm::FunctionType::get(llvm::Type::getVoidTy(C), ArgTys, false);
+  auto *F = llvm::Function::Create(FT, llvm::GlobalValue::InternalLinkage, Name,
+                                   &CGF.CGM.getModule());
+  F->addFnAttr("enqueued-block");
+  auto IP = CGF.Builder.saveIP();
+  auto *BB = llvm::BasicBlock::Create(C, "entry", F);
+  Builder.SetInsertPoint(BB);
+  unsigned BlockAlign = CGF.CGM.getDataLayout().getPrefTypeAlignment(BlockTy);
+  auto *BlockPtr = Builder.CreateAlloca(BlockTy, nullptr);
+  BlockPtr->setAlignment(BlockAlign);
+  Builder.CreateAlignedStore(F->arg_begin(), BlockPtr, BlockAlign);
+  auto *Cast = Builder.CreatePointerCast(BlockPtr, InvokeFT->getParamType(0));
+  llvm::SmallVector<llvm::Value *, 2> Args;
+  Args.push_back(Cast);
+  for (auto I = F->arg_begin() + 1, E = F->arg_end(); I != E; ++I)
+    Args.push_back(I);
+  Builder.CreateCall(Invoke, Args);
+  Builder.CreateRetVoid();
+  Builder.restoreIP(IP);
+
+  F->setMetadata("kernel_arg_addr_space", llvm::MDNode::get(C, AddressQuals));
+  F->setMetadata("kernel_arg_access_qual", llvm::MDNode::get(C, AccessQuals));
+  F->setMetadata("kernel_arg_type", llvm::MDNode::get(C, ArgTypeNames));
+  F->setMetadata("kernel_arg_base_type",
+                 llvm::MDNode::get(C, ArgBaseTypeNames));
+  F->setMetadata("kernel_arg_type_qual", llvm::MDNode::get(C, ArgTypeQuals));
+  if (CGF.CGM.getCodeGenOpts().EmitOpenCLArgMetadata)
+    F->setMetadata("kernel_arg_name", llvm::MDNode::get(C, ArgNames));
+
+  return F;
 }

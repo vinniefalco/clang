@@ -63,8 +63,8 @@
   OPERATOR(PtrMemD) OPERATOR(PtrMemI) OPERATOR(Mul) OPERATOR(Div)              \
       OPERATOR(Rem) OPERATOR(Add) OPERATOR(Sub) OPERATOR(Shl) OPERATOR(Shr)    \
       OPERATOR(LT) OPERATOR(GT) OPERATOR(LE) OPERATOR(GE) OPERATOR(EQ)         \
-      OPERATOR(NE) OPERATOR(And) OPERATOR(Xor) OPERATOR(Or) OPERATOR(LAnd)     \
-      OPERATOR(LOr) OPERATOR(Assign) OPERATOR(Comma)
+      OPERATOR(NE) OPERATOR(Cmp) OPERATOR(And) OPERATOR(Xor) OPERATOR(Or)      \
+      OPERATOR(LAnd) OPERATOR(LOr) OPERATOR(Assign) OPERATOR(Comma)
 
 // All compound assign operators.
 #define CAO_LIST()                                                             \
@@ -988,6 +988,11 @@ DEF_TRAVERSE_TYPE(DependentSizedArrayType, {
     TRY_TO(TraverseStmt(T->getSizeExpr()));
 })
 
+DEF_TRAVERSE_TYPE(DependentAddressSpaceType, {
+  TRY_TO(TraverseStmt(T->getAddrSpaceExpr()));
+  TRY_TO(TraverseType(T->getPointeeType()));
+})
+
 DEF_TRAVERSE_TYPE(DependentSizedExtVectorType, {
   if (T->getSizeExpr())
     TRY_TO(TraverseStmt(T->getSizeExpr()));
@@ -1196,6 +1201,11 @@ DEF_TRAVERSE_TYPELOC(VariableArrayType, {
 DEF_TRAVERSE_TYPELOC(DependentSizedArrayType, {
   TRY_TO(TraverseTypeLoc(TL.getElementLoc()));
   return TraverseArrayTypeLocHelper(TL);
+})
+
+DEF_TRAVERSE_TYPELOC(DependentAddressSpaceType, {
+  TRY_TO(TraverseStmt(TL.getTypePtr()->getAddrSpaceExpr()));
+  TRY_TO(TraverseType(TL.getTypePtr()->getPointeeType()));
 })
 
 // FIXME: order? why not size expr first?
@@ -3101,6 +3111,7 @@ bool RecursiveASTVisitor<Derived>::VisitOMPDependClause(OMPDependClause *C) {
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPDeviceClause(OMPDeviceClause *C) {
+  TRY_TO(VisitOMPClauseWithPreInit(C));
   TRY_TO(TraverseStmt(C->getDevice()));
   return true;
 }

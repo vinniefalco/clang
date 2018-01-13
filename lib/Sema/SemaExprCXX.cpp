@@ -356,7 +356,7 @@ ParsedType Sema::getDestructorTypeForDecltype(const DeclSpec &DS,
 
 bool Sema::checkLiteralOperatorId(const CXXScopeSpec &SS,
                                   const UnqualifiedId &Name) {
-  assert(Name.getKind() == UnqualifiedId::IK_LiteralOperatorId);
+  assert(Name.getKind() == UnqualifiedIdKind::IK_LiteralOperatorId);
 
   if (!SS.isValid())
     return false;
@@ -1407,14 +1407,20 @@ namespace {
     UsualDeallocFnInfo() : Found(), FD(nullptr) {}
     UsualDeallocFnInfo(Sema &S, DeclAccessPair Found)
         : Found(Found), FD(dyn_cast<FunctionDecl>(Found->getUnderlyingDecl())),
-          HasSizeT(false), HasAlignValT(false), CUDAPref(Sema::CFP_Native) {
+          Destroying(false), HasSizeT(false), HasAlignValT(false),
+          CUDAPref(Sema::CFP_Native) {
       // A function template declaration is never a usual deallocation function.
       if (!FD)
         return;
-      if (FD->getNumParams() == 3)
+      unsigned NumBaseParams = 1;
+      if (FD->isDestroyingOperatorDelete()) {
+        Destroying = true;
+        ++NumBaseParams;
+      }
+      if (FD->getNumParams() == NumBaseParams + 2)
         HasAlignValT = HasSizeT = true;
-      else if (FD->getNumParams() == 2) {
-        HasSizeT = FD->getParamDecl(1)->getType()->isIntegerType();
+      else if (FD->getNumParams() == NumBaseParams + 1) {
+        HasSizeT = FD->getParamDecl(NumBaseParams)->getType()->isIntegerType();
         HasAlignValT = !HasSizeT;
       }
 
@@ -1428,6 +1434,12 @@ namespace {
 
     bool isBetterThan(const UsualDeallocFnInfo &Other, bool WantSize,
                       bool WantAlign) const {
+      // C++ P0722:
+      //   A destroying operator delete is preferred over a non-destroying
+      //   operator delete.
+      if (Destroying != Other.Destroying)
+        return Destroying;
+
       // C++17 [expr.delete]p10:
       //   If the type has new-extended alignment, a function with a parameter
       //   of type std::align_val_t is preferred; otherwise a function without
@@ -1444,7 +1456,7 @@ namespace {
 
     DeclAccessPair Found;
     FunctionDecl *FD;
-    bool HasSizeT, HasAlignValT;
+    bool Destroying, HasSizeT, HasAlignValT;
     Sema::CUDAFunctionPreference CUDAPref;
   };
 }
@@ -1736,13 +1748,17 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
     if (AllocType.isNull())
       return ExprError();
   } else if (Deduced) {
+    bool Braced = (initStyle == CXXNewExpr::ListInit);
+    if (NumInits == 1) {
+      if (auto p = dyn_cast_or_null<InitListExpr>(Inits[0])) {
+        Inits = p->getInits();
+        NumInits = p->getNumInits();
+        Braced = true;
+      }
+    }
+
     if (initStyle == CXXNewExpr::NoInit || NumInits == 0)
       return ExprError(Diag(StartLoc, diag::err_auto_new_requires_ctor_arg)
-                       << AllocType << TypeRange);
-    if (initStyle == CXXNewExpr::ListInit ||
-        (NumInits == 1 && isa<InitListExpr>(Inits[0])))
-      return ExprError(Diag(Inits[0]->getLocStart(),
-                            diag::err_auto_new_list_init)
                        << AllocType << TypeRange);
     if (NumInits > 1) {
       Expr *FirstBad = Inits[1];
@@ -1750,6 +1766,9 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
                             diag::err_auto_new_ctor_multiple_expressions)
                        << AllocType << TypeRange);
     }
+    if (Braced && !getLangOpts().CPlusPlus17)
+      Diag(Initializer->getLocStart(), diag::ext_auto_new_list_init)
+          << AllocType << TypeRange;
     Expr *Deduce = Inits[0];
     QualType DeducedType;
     if (DeduceAutoType(AllocTypeInfo, Deduce, DeducedType) == DAR_Failed)
@@ -2101,7 +2120,7 @@ bool Sema::CheckAllocatedType(QualType AllocType, SourceLocation Loc,
   else if (AllocType->isVariablyModifiedType())
     return Diag(Loc, diag::err_variably_modified_new_type)
              << AllocType;
-  else if (AllocType.getAddressSpace())
+  else if (AllocType.getAddressSpace() != LangAS::Default)
     return Diag(Loc, diag::err_address_space_qualified_new)
       << AllocType.getUnqualifiedType()
       << AllocType.getQualifiers().getAddressSpaceAttributePrintValue();
@@ -3173,7 +3192,7 @@ Sema::ActOnCXXDelete(SourceLocation StartLoc, bool UseGlobal,
     QualType Pointee = Type->getAs<PointerType>()->getPointeeType();
     QualType PointeeElem = Context.getBaseElementType(Pointee);
 
-    if (Pointee.getAddressSpace())
+    if (Pointee.getAddressSpace() != LangAS::Default)
       return Diag(Ex.get()->getLocStart(),
                   diag::err_address_space_qualified_delete)
                << Pointee.getUnqualifiedType()
@@ -3261,16 +3280,39 @@ Sema::ActOnCXXDelete(SourceLocation StartLoc, bool UseGlobal,
 
     MarkFunctionReferenced(StartLoc, OperatorDelete);
 
-    // Check access and ambiguity of operator delete and destructor.
+    // Check access and ambiguity of destructor if we're going to call it.
+    // Note that this is required even for a virtual delete.
+    bool IsVirtualDelete = false;
     if (PointeeRD) {
       if (CXXDestructorDecl *Dtor = LookupDestructor(PointeeRD)) {
-          CheckDestructorAccess(Ex.get()->getExprLoc(), Dtor,
-                      PDiag(diag::err_access_dtor) << PointeeElem);
+        CheckDestructorAccess(Ex.get()->getExprLoc(), Dtor,
+                              PDiag(diag::err_access_dtor) << PointeeElem);
+        IsVirtualDelete = Dtor->isVirtual();
       }
     }
 
     diagnoseUnavailableAlignedAllocation(*OperatorDelete, StartLoc, true,
                                          *this);
+
+    // Convert the operand to the type of the first parameter of operator
+    // delete. This is only necessary if we selected a destroying operator
+    // delete that we are going to call (non-virtually); converting to void*
+    // is trivial and left to AST consumers to handle.
+    QualType ParamType = OperatorDelete->getParamDecl(0)->getType();
+    if (!IsVirtualDelete && !ParamType->getPointeeType()->isVoidType()) {
+      Qualifiers Qs = Pointee.getQualifiers();
+      if (Qs.hasCVRQualifiers()) {
+        // Qualifiers are irrelevant to this conversion; we're only looking
+        // for access and ambiguity.
+        Qs.removeCVRQualifiers();
+        QualType Unqual = Context.getPointerType(
+            Context.getQualifiedType(Pointee.getUnqualifiedType(), Qs));
+        Ex = ImpCastExprToType(Ex.get(), Unqual, CK_NoOp);
+      }
+      Ex = PerformImplicitConversion(Ex.get(), ParamType, AA_Passing);
+      if (Ex.isInvalid())
+        return ExprError();
+    }
   }
 
   CXXDeleteExpr *Result = new (Context) CXXDeleteExpr(
@@ -3805,7 +3847,7 @@ Sema::PerformImplicitConversion(Expr *From, QualType ToType,
           << From->getSourceRange();
     }
 
-    CastKind Kind = CK_Invalid;
+    CastKind Kind;
     CXXCastPath BasePath;
     if (CheckPointerConversion(From, ToType, Kind, BasePath, CStyle))
       return ExprError();
@@ -3825,7 +3867,7 @@ Sema::PerformImplicitConversion(Expr *From, QualType ToType,
   }
 
   case ICK_Pointer_Member: {
-    CastKind Kind = CK_Invalid;
+    CastKind Kind;
     CXXCastPath BasePath;
     if (CheckMemberPointerConversion(From, ToType, Kind, BasePath, CStyle))
       return ExprError();
@@ -4149,6 +4191,7 @@ static bool CheckUnaryTypeTraitTypeCompleteness(Sema &S, TypeTrait UTT,
   case UTT_IsDestructible:
   case UTT_IsNothrowDestructible:
   case UTT_IsTriviallyDestructible:
+  case UTT_HasUniqueObjectRepresentations:
     if (ArgTy->isIncompleteArrayType() || ArgTy->isVoidType())
       return true;
 
@@ -4588,6 +4631,8 @@ static bool EvaluateUnaryTypeTrait(Sema &Self, TypeTrait UTT,
     //   Returns True if and only if T is a complete type at the point of the
     //   function call.
     return !T->isIncompleteType();
+  case UTT_HasUniqueObjectRepresentations:
+    return C.hasUniqueObjectRepresentations(T);
   }
 }
 
@@ -4600,11 +4645,14 @@ static bool evaluateTypeTrait(Sema &S, TypeTrait Kind, SourceLocation KWLoc,
   if (Kind <= UTT_Last)
     return EvaluateUnaryTypeTrait(S, Kind, KWLoc, Args[0]->getType());
 
-  if (Kind <= BTT_Last)
+  // Evaluate BTT_ReferenceBindsToTemporary alongside the IsConstructible
+  // traits to avoid duplication.
+  if (Kind <= BTT_Last && Kind != BTT_ReferenceBindsToTemporary)
     return EvaluateBinaryTypeTrait(S, Kind, Args[0]->getType(),
                                    Args[1]->getType(), RParenLoc);
 
   switch (Kind) {
+  case clang::BTT_ReferenceBindsToTemporary:
   case clang::TT_IsConstructible:
   case clang::TT_IsNothrowConstructible:
   case clang::TT_IsTriviallyConstructible: {
@@ -4680,6 +4728,13 @@ static bool evaluateTypeTrait(Sema &S, TypeTrait Kind, SourceLocation KWLoc,
 
     if (Kind == clang::TT_IsConstructible)
       return true;
+
+    if (Kind == clang::BTT_ReferenceBindsToTemporary) {
+      if (!T->isReferenceType())
+        return false;
+
+      return !Init.isDirectReferenceBinding();
+    }
 
     if (Kind == clang::TT_IsNothrowConstructible)
       return S.canThrow(Result.get()) == CT_Cannot;
@@ -4798,9 +4853,13 @@ static bool EvaluateBinaryTypeTrait(Sema &Self, TypeTrait BTT, QualType LhsT,
   }
   case BTT_IsSame:
     return Self.Context.hasSameType(LhsT, RhsT);
-  case BTT_TypeCompatible:
-    return Self.Context.typesAreCompatible(LhsT.getUnqualifiedType(),
-                                           RhsT.getUnqualifiedType());
+  case BTT_TypeCompatible: {
+    // GCC ignores cv-qualifiers on arrays for this builtin.
+    Qualifiers LhsQuals, RhsQuals;
+    QualType Lhs = Self.getASTContext().getUnqualifiedArrayType(LhsT, LhsQuals);
+    QualType Rhs = Self.getASTContext().getUnqualifiedArrayType(RhsT, RhsQuals);
+    return Self.Context.typesAreCompatible(Lhs, Rhs);
+  }
   case BTT_IsConvertible:
   case BTT_IsConvertibleTo: {
     // C++0x [meta.rel]p4:
@@ -5717,7 +5776,7 @@ mergeExceptionSpecs(Sema &S, FunctionProtoType::ExceptionSpecInfo ESI1,
   // happen in C++17, because it would mean we were computing the composite
   // pointer type of dependent types, which should never happen.
   if (EST1 == EST_ComputedNoexcept || EST2 == EST_ComputedNoexcept) {
-    assert(!S.getLangOpts().CPlusPlus1z &&
+    assert(!S.getLangOpts().CPlusPlus17 &&
            "computing composite pointer type of dependent types");
     return FunctionProtoType::ExceptionSpecInfo();
   }
@@ -6216,9 +6275,8 @@ Stmt *Sema::MaybeCreateStmtWithCleanups(Stmt *SubStmt) {
   // a StmtExpr; currently this is only used for asm statements.
   // This is hacky, either create a new CXXStmtWithTemporaries statement or
   // a new AsmStmtWithTemporaries.
-  CompoundStmt *CompStmt = new (Context) CompoundStmt(Context, SubStmt,
-                                                      SourceLocation(),
-                                                      SourceLocation());
+  CompoundStmt *CompStmt = CompoundStmt::Create(
+      Context, SubStmt, SourceLocation(), SourceLocation());
   Expr *E = new (Context) StmtExpr(CompStmt, Context.VoidTy, SourceLocation(),
                                    SourceLocation());
   return MaybeCreateExprWithCleanups(E);
@@ -6668,11 +6726,11 @@ ExprResult Sema::ActOnPseudoDestructorExpr(Scope *S, Expr *Base,
                                            SourceLocation CCLoc,
                                            SourceLocation TildeLoc,
                                            UnqualifiedId &SecondTypeName) {
-  assert((FirstTypeName.getKind() == UnqualifiedId::IK_TemplateId ||
-          FirstTypeName.getKind() == UnqualifiedId::IK_Identifier) &&
+  assert((FirstTypeName.getKind() == UnqualifiedIdKind::IK_TemplateId ||
+          FirstTypeName.getKind() == UnqualifiedIdKind::IK_Identifier) &&
          "Invalid first type name in pseudo-destructor");
-  assert((SecondTypeName.getKind() == UnqualifiedId::IK_TemplateId ||
-          SecondTypeName.getKind() == UnqualifiedId::IK_Identifier) &&
+  assert((SecondTypeName.getKind() == UnqualifiedIdKind::IK_TemplateId ||
+          SecondTypeName.getKind() == UnqualifiedIdKind::IK_Identifier) &&
          "Invalid second type name in pseudo-destructor");
 
   QualType ObjectType;
@@ -6694,7 +6752,7 @@ ExprResult Sema::ActOnPseudoDestructorExpr(Scope *S, Expr *Base,
   QualType DestructedType;
   TypeSourceInfo *DestructedTypeInfo = nullptr;
   PseudoDestructorTypeStorage Destructed;
-  if (SecondTypeName.getKind() == UnqualifiedId::IK_Identifier) {
+  if (SecondTypeName.getKind() == UnqualifiedIdKind::IK_Identifier) {
     ParsedType T = getTypeName(*SecondTypeName.Identifier,
                                SecondTypeName.StartLocation,
                                S, &SS, true, false, ObjectTypePtrForLookup,
@@ -6752,9 +6810,9 @@ ExprResult Sema::ActOnPseudoDestructorExpr(Scope *S, Expr *Base,
   // Convert the name of the scope type (the type prior to '::') into a type.
   TypeSourceInfo *ScopeTypeInfo = nullptr;
   QualType ScopeType;
-  if (FirstTypeName.getKind() == UnqualifiedId::IK_TemplateId ||
+  if (FirstTypeName.getKind() == UnqualifiedIdKind::IK_TemplateId ||
       FirstTypeName.Identifier) {
-    if (FirstTypeName.getKind() == UnqualifiedId::IK_Identifier) {
+    if (FirstTypeName.getKind() == UnqualifiedIdKind::IK_Identifier) {
       ParsedType T = getTypeName(*FirstTypeName.Identifier,
                                  FirstTypeName.StartLocation,
                                  S, &SS, true, false, ObjectTypePtrForLookup,

@@ -564,6 +564,13 @@ ExprResult Sema::BuildObjCBoxedExpr(SourceRange SR, Expr *ValueExpr) {
       
       BoxingMethod = StringWithUTF8StringMethod;
       BoxedType = NSStringPointer;
+      // Transfer the nullability from method's return type.
+      Optional<NullabilityKind> Nullability =
+          BoxingMethod->getReturnType()->getNullability(Context);
+      if (Nullability)
+        BoxedType = Context.getAttributedType(
+            AttributedType::getNullabilityAttrKind(*Nullability), BoxedType,
+            BoxedType);
     }
   } else if (ValueType->isBuiltinType()) {
     // The other types we support are numeric, char and BOOL/bool. We could also
@@ -2974,6 +2981,7 @@ ExprResult Sema::BuildInstanceMessage(Expr *Receiver,
     case OMF_init:
       if (Method)
         checkInitMethod(Method, ReceiverType);
+      break;
 
     case OMF_None:
     case OMF_alloc:
@@ -4268,9 +4276,9 @@ Expr *Sema::stripARCUnbridgedCast(Expr *e) {
   } else if (UnaryOperator *uo = dyn_cast<UnaryOperator>(e)) {
     assert(uo->getOpcode() == UO_Extension);
     Expr *sub = stripARCUnbridgedCast(uo->getSubExpr());
-    return new (Context) UnaryOperator(sub, UO_Extension, sub->getType(),
-                                   sub->getValueKind(), sub->getObjectKind(),
-                                       uo->getOperatorLoc());
+    return new (Context)
+        UnaryOperator(sub, UO_Extension, sub->getType(), sub->getValueKind(),
+                      sub->getObjectKind(), uo->getOperatorLoc(), false);
   } else if (GenericSelectionExpr *gse = dyn_cast<GenericSelectionExpr>(e)) {
     assert(!gse->isResultDependent());
 
@@ -4317,14 +4325,37 @@ bool Sema::CheckObjCARCUnavailableWeakConversion(QualType castType,
 
 /// Look for an ObjCReclaimReturnedObject cast and destroy it.
 static Expr *maybeUndoReclaimObject(Expr *e) {
-  // For now, we just undo operands that are *immediately* reclaim
-  // expressions, which prevents the vast majority of potential
-  // problems here.  To catch them all, we'd need to rebuild arbitrary
-  // value-propagating subexpressions --- we can't reliably rebuild
-  // in-place because of expression sharing.
-  if (ImplicitCastExpr *ice = dyn_cast<ImplicitCastExpr>(e))
-    if (ice->getCastKind() == CK_ARCReclaimReturnedObject)
-      return ice->getSubExpr();
+  Expr *curExpr = e, *prevExpr = nullptr;
+
+  // Walk down the expression until we hit an implicit cast of kind
+  // ARCReclaimReturnedObject or an Expr that is neither a Paren nor a Cast.
+  while (true) {
+    if (auto *pe = dyn_cast<ParenExpr>(curExpr)) {
+      prevExpr = curExpr;
+      curExpr = pe->getSubExpr();
+      continue;
+    }
+
+    if (auto *ce = dyn_cast<CastExpr>(curExpr)) {
+      if (auto *ice = dyn_cast<ImplicitCastExpr>(ce))
+        if (ice->getCastKind() == CK_ARCReclaimReturnedObject) {
+          if (!prevExpr)
+            return ice->getSubExpr();
+          if (auto *pe = dyn_cast<ParenExpr>(prevExpr))
+            pe->setSubExpr(ice->getSubExpr());
+          else
+            cast<CastExpr>(prevExpr)->setSubExpr(ice->getSubExpr());
+          return e;
+        }
+
+      prevExpr = curExpr;
+      curExpr = ce->getSubExpr();
+      continue;
+    }
+
+    // Break out of the loop if curExpr is neither a Paren nor a Cast.
+    break;
+  }
 
   return e;
 }

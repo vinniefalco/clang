@@ -275,6 +275,7 @@ public:
     MLV_LValueCast,           // Specialized form of MLV_InvalidExpression.
     MLV_IncompleteType,
     MLV_ConstQualified,
+    MLV_ConstQualifiedField,
     MLV_ConstAddrSpace,
     MLV_ArrayType,
     MLV_NoSetterProperty,
@@ -324,6 +325,7 @@ public:
       CM_LValueCast, // Same as CM_RValue, but indicates GCC cast-as-lvalue ext
       CM_NoSetterProperty,// Implicit assignment to ObjC property without setter
       CM_ConstQualified,
+      CM_ConstQualifiedField,
       CM_ConstAddrSpace,
       CM_ArrayType,
       CM_IncompleteType
@@ -1718,19 +1720,19 @@ public:
 
 private:
   unsigned Opc : 5;
+  unsigned CanOverflow : 1;
   SourceLocation Loc;
   Stmt *Val;
 public:
-
-  UnaryOperator(Expr *input, Opcode opc, QualType type,
-                ExprValueKind VK, ExprObjectKind OK, SourceLocation l)
-    : Expr(UnaryOperatorClass, type, VK, OK,
-           input->isTypeDependent() || type->isDependentType(),
-           input->isValueDependent(),
-           (input->isInstantiationDependent() ||
-            type->isInstantiationDependentType()),
-           input->containsUnexpandedParameterPack()),
-      Opc(opc), Loc(l), Val(input) {}
+  UnaryOperator(Expr *input, Opcode opc, QualType type, ExprValueKind VK,
+                ExprObjectKind OK, SourceLocation l, bool CanOverflow)
+      : Expr(UnaryOperatorClass, type, VK, OK,
+             input->isTypeDependent() || type->isDependentType(),
+             input->isValueDependent(),
+             (input->isInstantiationDependent() ||
+              type->isInstantiationDependentType()),
+             input->containsUnexpandedParameterPack()),
+        Opc(opc), CanOverflow(CanOverflow), Loc(l), Val(input) {}
 
   /// \brief Build an empty unary operator.
   explicit UnaryOperator(EmptyShell Empty)
@@ -1745,6 +1747,15 @@ public:
   /// getOperatorLoc - Return the location of the operator.
   SourceLocation getOperatorLoc() const { return Loc; }
   void setOperatorLoc(SourceLocation L) { Loc = L; }
+
+  /// Returns true if the unary operator can cause an overflow. For instance,
+  ///   signed int i = INT_MAX; i++;
+  ///   signed char c = CHAR_MAX; c++;
+  /// Due to integer promotions, c++ is promoted to an int before the postfix
+  /// increment, and the result is an int that cannot overflow. However, i++
+  /// can overflow.
+  bool canOverflow() const { return CanOverflow; }
+  void setCanOverflow(bool C) { CanOverflow = C; }
 
   /// isPostfix - Return true if this is a postfix operation, like x++.
   static bool isPostfix(Opcode Op) {
@@ -2346,6 +2357,12 @@ public:
   SourceLocation getLocStart() const LLVM_READONLY;
   SourceLocation getLocEnd() const LLVM_READONLY;
 
+  bool isCallToStdMove() const {
+    const FunctionDecl* FD = getDirectCallee();
+    return getNumArgs() == 1 && FD && FD->isInStdNamespace() &&
+           FD->getIdentifier() && FD->getIdentifier()->isStr("move");
+  }
+
   static bool classof(const Stmt *T) {
     return T->getStmtClass() >= firstCallExprConstant &&
            T->getStmtClass() <= lastCallExprConstant;
@@ -2734,7 +2751,6 @@ protected:
                ty->containsUnexpandedParameterPack()) ||
               (op && op->containsUnexpandedParameterPack()))),
         Op(op) {
-    assert(kind != CK_Invalid && "creating cast with invalid cast kind");
     CastExprBits.Kind = kind;
     setBasePathSize(BasePathSize);
     assert(CastConsistency());
@@ -3065,7 +3081,7 @@ public:
   static bool isEqualityOp(Opcode Opc) { return Opc == BO_EQ || Opc == BO_NE; }
   bool isEqualityOp() const { return isEqualityOp(getOpcode()); }
 
-  static bool isComparisonOp(Opcode Opc) { return Opc >= BO_LT && Opc<=BO_NE; }
+  static bool isComparisonOp(Opcode Opc) { return Opc >= BO_Cmp && Opc<=BO_NE; }
   bool isComparisonOp() const { return isComparisonOp(getOpcode()); }
 
   static Opcode negateComparisonOp(Opcode Opc) {
@@ -3123,6 +3139,12 @@ public:
   bool isShiftAssignOp() const {
     return isShiftAssignOp(getOpcode());
   }
+
+  // Return true if a binary operator using the specified opcode and operands
+  // would match the 'p = (i8*)nullptr + n' idiom for casting a pointer-sized
+  // integer to a pointer.
+  static bool isNullPointerArithmeticExtension(ASTContext &Ctx, Opcode Opc,
+                                               Expr *LHS, Expr *RHS);
 
   static bool classof(const Stmt *S) {
     return S->getStmtClass() >= firstBinaryOperatorConstant &&
@@ -4076,6 +4098,10 @@ public:
   /// initializer)?
   bool isTransparent() const;
 
+  /// Is this the zero initializer {0} in a language which considers it
+  /// idiomatic?
+  bool isIdiomaticZeroInitializer(const LangOptions &LangOpts) const;
+
   SourceLocation getLBraceLoc() const { return LBraceLoc; }
   void setLBraceLoc(SourceLocation Loc) { LBraceLoc = Loc; }
   SourceLocation getRBraceLoc() const { return RBraceLoc; }
@@ -4084,6 +4110,9 @@ public:
   bool isSemanticForm() const { return AltForm.getInt(); }
   InitListExpr *getSemanticForm() const {
     return isSemanticForm() ? nullptr : AltForm.getPointer();
+  }
+  bool isSyntacticForm() const {
+    return !AltForm.getInt() || !AltForm.getPointer();
   }
   InitListExpr *getSyntacticForm() const {
     return isSemanticForm() ? AltForm.getPointer() : nullptr;

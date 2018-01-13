@@ -18,6 +18,8 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <algorithm>
+
 #define DEBUG_TYPE "format-parser"
 
 namespace clang {
@@ -56,8 +58,7 @@ private:
 };
 
 static bool isLineComment(const FormatToken &FormatTok) {
-  return FormatTok.is(tok::comment) &&
-         FormatTok.TokenText.startswith("//");
+  return FormatTok.is(tok::comment) && !FormatTok.TokenText.startswith("/*");
 }
 
 // Checks if \p FormatTok is a line comment that continues the line comment
@@ -226,6 +227,7 @@ private:
 
 UnwrappedLineParser::UnwrappedLineParser(const FormatStyle &Style,
                                          const AdditionalKeywords &Keywords,
+                                         unsigned FirstStartColumn,
                                          ArrayRef<FormatToken *> Tokens,
                                          UnwrappedLineConsumer &Callback)
     : Line(new UnwrappedLine), MustBreakBeforeNextToken(false),
@@ -233,7 +235,7 @@ UnwrappedLineParser::UnwrappedLineParser(const FormatStyle &Style,
       CommentPragmasRegex(Style.CommentPragmas), Tokens(nullptr),
       Callback(Callback), AllTokens(Tokens), PPBranchLevel(-1),
       IfNdefCondition(nullptr), FoundIncludeGuardStart(false),
-      IncludeGuardRejected(false) {}
+      IncludeGuardRejected(false), FirstStartColumn(FirstStartColumn) {}
 
 void UnwrappedLineParser::reset() {
   PPBranchLevel = -1;
@@ -248,10 +250,12 @@ void UnwrappedLineParser::reset() {
   CurrentLines = &Lines;
   DeclarationScopeStack.clear();
   PPStack.clear();
+  Line->FirstStartColumn = FirstStartColumn;
 }
 
 void UnwrappedLineParser::parse() {
   IndexedTokenSource TokenSource(AllTokens);
+  Line->FirstStartColumn = FirstStartColumn;
   do {
     DEBUG(llvm::dbgs() << "----\n");
     reset();
@@ -331,7 +335,8 @@ void UnwrappedLineParser::parseLevel(bool HasOpeningBrace) {
       break;
     case tok::kw_default:
     case tok::kw_case:
-      if (Style.Language == FormatStyle::LK_JavaScript && Line->MustBeDeclaration) {
+      if (Style.Language == FormatStyle::LK_JavaScript &&
+          Line->MustBeDeclaration) {
         // A 'case: string' style field declaration.
         parseStructuralElement();
         break;
@@ -356,7 +361,7 @@ void UnwrappedLineParser::calculateBraceTypes(bool ExpectClassBody) {
   // definitions, too.
   unsigned StoredPosition = Tokens->getPosition();
   FormatToken *Tok = FormatTok;
-  const FormatToken *PrevTok = getPreviousToken();
+  const FormatToken *PrevTok = Tok->Previous;
   // Keep a stack of positions of lbrace tokens. We will
   // update information about whether an lbrace starts a
   // braced init list or a different block during the loop.
@@ -374,13 +379,16 @@ void UnwrappedLineParser::calculateBraceTypes(bool ExpectClassBody) {
     switch (Tok->Tok.getKind()) {
     case tok::l_brace:
       if (Style.Language == FormatStyle::LK_JavaScript && PrevTok) {
-        if (PrevTok->is(tok::colon))
-          // A colon indicates this code is in a type, or a braced list
-          // following a label in an object literal ({a: {b: 1}}). The code
-          // below could be confused by semicolons between the individual
-          // members in a type member list, which would normally trigger
-          // BK_Block. In both cases, this must be parsed as an inline braced
-          // init.
+        if (PrevTok->isOneOf(tok::colon, tok::less))
+          // A ':' indicates this code is in a type, or a braced list
+          // following a label in an object literal ({a: {b: 1}}).
+          // A '<' could be an object used in a comparison, but that is nonsense
+          // code (can never return true), so more likely it is a generic type
+          // argument (`X<{a: string; b: number}>`).
+          // The code below could be confused by semicolons between the
+          // individual members in a type member list, which would normally
+          // trigger BK_Block. In both cases, this must be parsed as an inline
+          // braced init.
           Tok->BlockKind = BK_BracedInit;
         else if (PrevTok->is(tok::r_paren))
           // `) { }` can only occur in function or method declarations in JS.
@@ -591,9 +599,8 @@ void UnwrappedLineParser::parseChildBlock() {
   FormatTok->BlockKind = BK_Block;
   nextToken();
   {
-    bool SkipIndent =
-        (Style.Language == FormatStyle::LK_JavaScript &&
-         (isGoogScope(*Line) || isIIFE(*Line, Keywords)));
+    bool SkipIndent = (Style.Language == FormatStyle::LK_JavaScript &&
+                       (isGoogScope(*Line) || isIIFE(*Line, Keywords)));
     ScopedLineState LineState(*this);
     ScopedDeclarationState DeclarationState(*Line, DeclarationScopeStack,
                                             /*MustBeDeclaration=*/false);
@@ -835,8 +842,8 @@ static bool mustBeJSIdent(const AdditionalKeywords &Keywords,
               Keywords.kw_function, Keywords.kw_import, Keywords.kw_is,
               Keywords.kw_let, Keywords.kw_var, tok::kw_const,
               Keywords.kw_abstract, Keywords.kw_extends, Keywords.kw_implements,
-              Keywords.kw_instanceof, Keywords.kw_interface,
-              Keywords.kw_throws, Keywords.kw_from));
+              Keywords.kw_instanceof, Keywords.kw_interface, Keywords.kw_throws,
+              Keywords.kw_from));
 }
 
 static bool mustBeJSIdentOrValue(const AdditionalKeywords &Keywords,
@@ -889,11 +896,14 @@ void UnwrappedLineParser::readTokenWithJavaScriptASI() {
   bool PreviousMustBeValue = mustBeJSIdentOrValue(Keywords, Previous);
   bool PreviousStartsTemplateExpr =
       Previous->is(TT_TemplateString) && Previous->TokenText.endswith("${");
-  if (PreviousMustBeValue && Line && Line->Tokens.size() > 1) {
-    // If the token before the previous one is an '@', the previous token is an
-    // annotation and can precede another identifier/value.
-    const FormatToken *PrePrevious = std::prev(Line->Tokens.end(), 2)->Tok;
-    if (PrePrevious->is(tok::at))
+  if (PreviousMustBeValue || Previous->is(tok::r_paren)) {
+    // If the line contains an '@' sign, the previous token might be an
+    // annotation, which can precede another identifier/value.
+    bool HasAt = std::find_if(Line->Tokens.begin(), Line->Tokens.end(),
+                              [](UnwrappedLineNode &LineNode) {
+                                return LineNode.Tok->is(tok::at);
+                              }) != Line->Tokens.end();
+    if (HasAt)
       return;
   }
   if (Next->is(tok::exclaim) && PreviousMustBeValue)
@@ -1039,7 +1049,12 @@ void UnwrappedLineParser::parseStructuralElement() {
     if (FormatTok->Tok.is(tok::string_literal)) {
       nextToken();
       if (FormatTok->Tok.is(tok::l_brace)) {
-        parseBlock(/*MustBeDeclaration=*/true, /*AddLevel=*/false);
+        if (Style.BraceWrapping.AfterExternBlock) {
+          addUnwrappedLine();
+          parseBlock(/*MustBeDeclaration=*/true);
+        } else {
+          parseBlock(/*MustBeDeclaration=*/true, /*AddLevel=*/false);
+        }
         addUnwrappedLine();
         return;
       }
@@ -1095,7 +1110,7 @@ void UnwrappedLineParser::parseStructuralElement() {
     break;
   }
   do {
-    const FormatToken *Previous = getPreviousToken();
+    const FormatToken *Previous = FormatTok->Previous;
     switch (FormatTok->Tok.getKind()) {
     case tok::at:
       nextToken();
@@ -1285,7 +1300,7 @@ void UnwrappedLineParser::parseStructuralElement() {
         nextToken();
         parseBracedList();
       } else if (Style.Language == FormatStyle::LK_Proto &&
-               FormatTok->Tok.is(tok::less)) {
+                 FormatTok->Tok.is(tok::less)) {
         nextToken();
         parseBracedList(/*ContinueOnSemicolons=*/false,
                         /*ClosingBraceKind=*/tok::greater);
@@ -1306,14 +1321,6 @@ void UnwrappedLineParser::parseStructuralElement() {
 
 bool UnwrappedLineParser::tryToParseLambda() {
   if (!Style.isCpp()) {
-    nextToken();
-    return false;
-  }
-  const FormatToken* Previous = getPreviousToken();
-  if (Previous &&
-      (Previous->isOneOf(tok::identifier, tok::kw_operator, tok::kw_new,
-                         tok::kw_delete) ||
-       Previous->closesScope() || Previous->isSimpleTypeSpecifier())) {
     nextToken();
     return false;
   }
@@ -1359,49 +1366,18 @@ bool UnwrappedLineParser::tryToParseLambda() {
 }
 
 bool UnwrappedLineParser::tryToParseLambdaIntroducer() {
-  nextToken();
-  if (FormatTok->is(tok::equal)) {
+  const FormatToken *Previous = FormatTok->Previous;
+  if (Previous &&
+      (Previous->isOneOf(tok::identifier, tok::kw_operator, tok::kw_new,
+                         tok::kw_delete) ||
+       FormatTok->isCppStructuredBinding(Style) || Previous->closesScope() ||
+       Previous->isSimpleTypeSpecifier())) {
     nextToken();
-    if (FormatTok->is(tok::r_square)) {
-      nextToken();
-      return true;
-    }
-    if (FormatTok->isNot(tok::comma))
-      return false;
-    nextToken();
-  } else if (FormatTok->is(tok::amp)) {
-    nextToken();
-    if (FormatTok->is(tok::r_square)) {
-      nextToken();
-      return true;
-    }
-    if (!FormatTok->isOneOf(tok::comma, tok::identifier)) {
-      return false;
-    }
-    if (FormatTok->is(tok::comma))
-      nextToken();
-  } else if (FormatTok->is(tok::r_square)) {
-    nextToken();
-    return true;
+    return false;
   }
-  do {
-    if (FormatTok->is(tok::amp))
-      nextToken();
-    if (!FormatTok->isOneOf(tok::identifier, tok::kw_this))
-      return false;
-    nextToken();
-    if (FormatTok->is(tok::ellipsis))
-      nextToken();
-    if (FormatTok->is(tok::comma)) {
-      nextToken();
-    } else if (FormatTok->is(tok::r_square)) {
-      nextToken();
-      return true;
-    } else {
-      return false;
-    }
-  } while (!eof());
-  return false;
+  nextToken();
+  parseSquare(/*LambdaIntroducer=*/true);
+  return true;
 }
 
 void UnwrappedLineParser::tryToParseJSFunction() {
@@ -1603,10 +1579,12 @@ void UnwrappedLineParser::parseParens() {
   } while (!eof());
 }
 
-void UnwrappedLineParser::parseSquare() {
-  assert(FormatTok->Tok.is(tok::l_square) && "'[' expected.");
-  if (tryToParseLambda())
-    return;
+void UnwrappedLineParser::parseSquare(bool LambdaIntroducer) {
+  if (!LambdaIntroducer) {
+    assert(FormatTok->Tok.is(tok::l_square) && "'[' expected.");
+    if (tryToParseLambda())
+      return;
+  }
   do {
     switch (FormatTok->Tok.getKind()) {
     case tok::l_paren:
@@ -2209,7 +2187,7 @@ void UnwrappedLineParser::parseJavaScriptEs6ImportExport() {
   while (!eof()) {
     if (FormatTok->is(tok::semi))
       return;
-    if (Line->Tokens.size() == 0) {
+    if (Line->Tokens.empty()) {
       // Common issue: Automatic Semicolon Insertion wrapped the line, so the
       // import statement should terminate.
       return;
@@ -2226,14 +2204,15 @@ void UnwrappedLineParser::parseJavaScriptEs6ImportExport() {
 
 LLVM_ATTRIBUTE_UNUSED static void printDebugInfo(const UnwrappedLine &Line,
                                                  StringRef Prefix = "") {
-  llvm::dbgs() << Prefix << "Line(" << Line.Level << ")"
+  llvm::dbgs() << Prefix << "Line(" << Line.Level
+               << ", FSC=" << Line.FirstStartColumn << ")"
                << (Line.InPPDirective ? " MACRO" : "") << ": ";
   for (std::list<UnwrappedLineNode>::const_iterator I = Line.Tokens.begin(),
                                                     E = Line.Tokens.end();
        I != E; ++I) {
     llvm::dbgs() << I->Tok->Tok.getName() << "["
-                 << "T=" << I->Tok->Type
-                 << ", OC=" << I->Tok->OriginalColumn << "] ";
+                 << "T=" << I->Tok->Type << ", OC=" << I->Tok->OriginalColumn
+                 << "] ";
   }
   for (std::list<UnwrappedLineNode>::const_iterator I = Line.Tokens.begin(),
                                                     E = Line.Tokens.end();
@@ -2259,12 +2238,15 @@ void UnwrappedLineParser::addUnwrappedLine() {
   CurrentLines->push_back(std::move(*Line));
   Line->Tokens.clear();
   Line->MatchingOpeningBlockLineIndex = UnwrappedLine::kInvalidIndex;
+  Line->FirstStartColumn = 0;
   if (CurrentLines == &Lines && !PreprocessorDirectives.empty()) {
     CurrentLines->append(
         std::make_move_iterator(PreprocessorDirectives.begin()),
         std::make_move_iterator(PreprocessorDirectives.end()));
     PreprocessorDirectives.clear();
   }
+  // Disconnect the current token from the last token on the previous line.
+  FormatTok->Previous = nullptr;
 }
 
 bool UnwrappedLineParser::eof() const { return FormatTok->Tok.is(tok::eof); }
@@ -2411,18 +2393,12 @@ void UnwrappedLineParser::nextToken(int LevelDifference) {
     return;
   flushComments(isOnNewLine(*FormatTok));
   pushToken(FormatTok);
+  FormatToken *Previous = FormatTok;
   if (Style.Language != FormatStyle::LK_JavaScript)
     readToken(LevelDifference);
   else
     readTokenWithJavaScriptASI();
-}
-
-const FormatToken *UnwrappedLineParser::getPreviousToken() {
-  // FIXME: This is a dirty way to access the previous token. Find a better
-  // solution.
-  if (!Line || Line->Tokens.empty())
-    return nullptr;
-  return Line->Tokens.back().Tok;
+  FormatTok->Previous = Previous;
 }
 
 void UnwrappedLineParser::distributeComments(
@@ -2462,8 +2438,7 @@ void UnwrappedLineParser::distributeComments(
   }
   for (unsigned i = 0, e = Comments.size(); i < e; ++i) {
     FormatToken *FormatTok = Comments[i];
-    if (HasTrailAlignedWithNextToken &&
-        i == StartOfTrailAlignedWithNextToken) {
+    if (HasTrailAlignedWithNextToken && i == StartOfTrailAlignedWithNextToken) {
       FormatTok->ContinuesLineCommentSection = false;
     } else {
       FormatTok->ContinuesLineCommentSection =

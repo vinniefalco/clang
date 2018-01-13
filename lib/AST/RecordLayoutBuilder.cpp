@@ -1169,7 +1169,6 @@ ItaniumRecordLayoutBuilder::LayoutBase(const BaseSubobjectInfo *Base) {
   // Query the external layout to see if it provides an offset.
   bool HasExternalLayout = false;
   if (UseExternalLayout) {
-    llvm::DenseMap<const CXXRecordDecl *, CharUnits>::iterator Known;
     if (Base->IsVirtual)
       HasExternalLayout = External.getExternalNVBaseOffset(Base->Class, Offset);
     else
@@ -1732,7 +1731,7 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
     const ArrayType* ATy = Context.getAsArrayType(D->getType());
     FieldAlign = Context.getTypeAlignInChars(ATy->getElementType());
   } else if (const ReferenceType *RT = D->getType()->getAs<ReferenceType>()) {
-    unsigned AS = RT->getPointeeType().getAddressSpace();
+    unsigned AS = Context.getTargetAddressSpace(RT->getPointeeType());
     FieldSize = 
       Context.toCharUnitsFromBits(Context.getTargetInfo().getPointerWidth(AS));
     FieldAlign = 
@@ -2896,13 +2895,12 @@ void MicrosoftRecordLayoutBuilder::computeVtorDispSet(
       Work.insert(MD);
   while (!Work.empty()) {
     const CXXMethodDecl *MD = *Work.begin();
-    CXXMethodDecl::method_iterator i = MD->begin_overridden_methods(),
-                                   e = MD->end_overridden_methods();
+    auto MethodRange = MD->overridden_methods();
     // If a virtual method has no-overrides it lives in its parent's vtable.
-    if (i == e)
+    if (MethodRange.begin() == MethodRange.end())
       BasesWithOverriddenMethods.insert(MD->getParent());
     else
-      Work.insert(i, e);
+      Work.insert(MethodRange.begin(), MethodRange.end());
     // We've finished processing this element, remove it from the working set.
     Work.erase(MD);
   }

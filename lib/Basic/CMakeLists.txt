@@ -62,6 +62,7 @@ add_clang_library(clangBasic
   OpenMPKinds.cpp
   OperatorPrecedence.cpp
   SanitizerBlacklist.cpp
+  SanitizerSpecialCaseList.cpp
   Sanitizers.cpp
   SourceLocation.cpp
   SourceManager.cpp
@@ -82,6 +83,7 @@ add_clang_library(clangBasic
   Targets/OSTargets.cpp
   Targets/PNaCl.cpp
   Targets/PPC.cpp
+  Targets/RISCV.cpp
   Targets/SPIR.cpp
   Targets/Sparc.cpp
   Targets/SystemZ.cpp

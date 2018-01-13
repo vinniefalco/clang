@@ -29,6 +29,7 @@
 #include "Targets/OSTargets.h"
 #include "Targets/PNaCl.h"
 #include "Targets/PPC.h"
+#include "Targets/RISCV.h"
 #include "Targets/SPIR.h"
 #include "Targets/Sparc.h"
 #include "Targets/SystemZ.h"
@@ -97,7 +98,14 @@ void addCygMingDefines(const LangOptions &Opts, MacroBuilder &Builder) {
   }
 }
 
-void addMinGWDefines(const LangOptions &Opts, MacroBuilder &Builder) {
+void addMinGWDefines(const llvm::Triple &Triple, const LangOptions &Opts,
+                     MacroBuilder &Builder) {
+  DefineStd(Builder, "WIN32", Opts);
+  DefineStd(Builder, "WINNT", Opts);
+  if (Triple.isArch64Bit()) {
+    DefineStd(Builder, "WIN64", Opts);
+    Builder.defineMacro("__MINGW64__");
+  }
   Builder.defineMacro("__MSVCRT__");
   Builder.defineMacro("__MINGW32__");
   addCygMingDefines(Opts, Builder);
@@ -363,6 +371,11 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
   case llvm::Triple::r600:
     return new AMDGPUTargetInfo(Triple, Opts);
 
+  case llvm::Triple::riscv32:
+    return new RISCV32TargetInfo(Triple, Opts);
+  case llvm::Triple::riscv64:
+    return new RISCV64TargetInfo(Triple, Opts);
+
   case llvm::Triple::sparc:
     switch (os) {
     case llvm::Triple::Linux:
@@ -620,6 +633,7 @@ TargetInfo::CreateTargetInfo(DiagnosticsEngine &Diags,
 
   Target->setSupportedOpenCLOpts();
   Target->setOpenCLExtensionOpts();
+  Target->setMaxAtomicWidth();
 
   if (!Target->validateTarget(Diags))
     return nullptr;

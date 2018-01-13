@@ -558,10 +558,13 @@ def warn_cxx98_compat_noexcept_expr : Warning<
 def warn_cxx98_compat_nullptr : Warning<
   "'nullptr' is incompatible with C++98">, InGroup<CXX98Compat>, DefaultIgnore;
 
-def warn_cxx14_compat_attribute : Warning<
+def ext_ns_enum_attribute : Extension<
+  "attributes on %select{a namespace|an enumerator}0 declaration are "
+  "a C++17 extension">, InGroup<CXX17>;
+def warn_cxx14_compat_ns_enum_attribute : Warning<
   "attributes on %select{a namespace|an enumerator}0 declaration are "
   "incompatible with C++ standards before C++17">,
-  InGroup<CXXPre17Compat>, DefaultIgnore;
+  InGroup<CXXPre17CompatPedantic>, DefaultIgnore;
 def warn_cxx98_compat_alignas : Warning<"'alignas' is incompatible with C++98">,
   InGroup<CXX98Compat>, DefaultIgnore;
 def warn_cxx98_compat_attribute : Warning<
@@ -584,6 +587,7 @@ def ext_using_attribute_ns : ExtWarn<
 def err_using_attribute_ns_conflict : Error<
   "attribute with scope specifier cannot follow default scope specifier">;
 def err_attributes_not_allowed : Error<"an attribute list cannot appear here">;
+def err_attributes_misplaced : Error<"misplaced attributes; expected attributes here">;
 def err_l_square_l_square_not_attribute : Error<
   "C++11 only allows consecutive left square brackets when "
   "introducing an attribute">;
@@ -969,6 +973,12 @@ def warn_pragma_init_seg_unsupported_target : Warning<
 def err_pragma_fp_contract_scope : Error<
   "'#pragma fp_contract' can only appear at file scope or at the start of a "
   "compound statement">; 
+// - #pragma stdc unknown
+def ext_stdc_pragma_ignored : ExtWarn<"unknown pragma in STDC namespace">,
+   InGroup<UnknownPragmas>;
+def warn_stdc_fenv_access_not_supported :
+   Warning<"pragma STDC FENV_ACCESS ON is not supported, ignoring pragma">,
+   InGroup<UnknownPragmas>;
 // - #pragma comment
 def err_pragma_comment_malformed : Error<
   "pragma comment requires parenthesized identifier and optional string">;

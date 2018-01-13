@@ -827,6 +827,21 @@ void ExprEngine::VisitCXXBindTemporaryExpr(const CXXBindTemporaryExpr *BTE,
   }
 }
 
+namespace {
+class CollectReachableSymbolsCallback final : public SymbolVisitor {
+  InvalidatedSymbols Symbols;
+
+public:
+  explicit CollectReachableSymbolsCallback(ProgramStateRef State) {}
+  const InvalidatedSymbols &getSymbols() const { return Symbols; }
+
+  bool VisitSymbol(SymbolRef Sym) override {
+    Symbols.insert(Sym);
+    return true;
+  }
+};
+} // end anonymous namespace
+
 void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
                        ExplodedNodeSet &DstTop) {
   PrettyStackTraceLoc CrashInfo(getContext().getSourceManager(),
@@ -1104,8 +1119,29 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
         SVal result = svalBuilder.conjureSymbolVal(nullptr, Ex, LCtx,
                                                    resultType,
                                                    currBldrCtx->blockCount());
-        ProgramStateRef state = N->getState()->BindExpr(Ex, LCtx, result);
-        Bldr2.generateNode(S, N, state);
+        ProgramStateRef State = N->getState()->BindExpr(Ex, LCtx, result);
+
+        // Escape pointers passed into the list, unless it's an ObjC boxed
+        // expression which is not a boxable C structure.
+        if (!(isa<ObjCBoxedExpr>(Ex) &&
+              !cast<ObjCBoxedExpr>(Ex)->getSubExpr()
+                                      ->getType()->isRecordType()))
+          for (auto Child : Ex->children()) {
+            assert(Child);
+
+            SVal Val = State->getSVal(Child, LCtx);
+
+            CollectReachableSymbolsCallback Scanner =
+                State->scanReachableSymbols<CollectReachableSymbolsCallback>(
+                    Val);
+            const InvalidatedSymbols &EscapedSymbols = Scanner.getSymbols();
+
+            State = getCheckerManager().runCheckersForPointerEscape(
+                State, EscapedSymbols,
+                /*CallEvent*/ nullptr, PSK_EscapeOther, nullptr);
+          }
+
+        Bldr2.generateNode(S, N, State);
       }
 
       getCheckerManager().runCheckersForPostStmt(Dst, Tmp, S, *this);
@@ -1115,7 +1151,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
 
     case Stmt::ArraySubscriptExprClass:
       Bldr.takeNodes(Pred);
-      VisitLvalArraySubscriptExpr(cast<ArraySubscriptExpr>(S), Pred, Dst);
+      VisitArraySubscriptExpr(cast<ArraySubscriptExpr>(S), Pred, Dst);
       Bldr.addNodes(Dst);
       break;
 
@@ -2073,10 +2109,12 @@ void ExprEngine::VisitCommonDeclRefExpr(const Expr *Ex, const NamedDecl *D,
                       ProgramPoint::PostLValueKind);
     return;
   }
-  if (isa<FieldDecl>(D)) {
+  if (isa<FieldDecl>(D) || isa<IndirectFieldDecl>(D)) {
     // FIXME: Compute lvalue of field pointers-to-member.
     // Right now we just use a non-null void pointer, so that it gives proper
     // results in boolean contexts.
+    // FIXME: Maybe delegate this to the surrounding operator&.
+    // Note how this expression is lvalue, however pointer-to-member is NonLoc.
     SVal V = svalBuilder.conjureSymbolVal(Ex, LCtx, getContext().VoidPtrTy,
                                           currBldrCtx->blockCount());
     state = state->assume(V.castAs<DefinedOrUnknownSVal>(), true);
@@ -2089,10 +2127,9 @@ void ExprEngine::VisitCommonDeclRefExpr(const Expr *Ex, const NamedDecl *D,
 }
 
 /// VisitArraySubscriptExpr - Transfer function for array accesses
-void ExprEngine::VisitLvalArraySubscriptExpr(const ArraySubscriptExpr *A,
+void ExprEngine::VisitArraySubscriptExpr(const ArraySubscriptExpr *A,
                                              ExplodedNode *Pred,
                                              ExplodedNodeSet &Dst){
-
   const Expr *Base = A->getBase()->IgnoreParens();
   const Expr *Idx  = A->getIdx()->IgnoreParens();
 
@@ -2101,18 +2138,32 @@ void ExprEngine::VisitLvalArraySubscriptExpr(const ArraySubscriptExpr *A,
 
   ExplodedNodeSet EvalSet;
   StmtNodeBuilder Bldr(CheckerPreStmt, EvalSet, *currBldrCtx);
-  assert(A->isGLValue() ||
-          (!AMgr.getLangOpts().CPlusPlus &&
-           A->getType().isCForbiddenLValueType()));
+
+  bool IsVectorType = A->getBase()->getType()->isVectorType();
+
+  // The "like" case is for situations where C standard prohibits the type to
+  // be an lvalue, e.g. taking the address of a subscript of an expression of
+  // type "void *".
+  bool IsGLValueLike = A->isGLValue() ||
+    (A->getType().isCForbiddenLValueType() && !AMgr.getLangOpts().CPlusPlus);
 
   for (auto *Node : CheckerPreStmt) {
     const LocationContext *LCtx = Node->getLocationContext();
     ProgramStateRef state = Node->getState();
-    SVal V = state->getLValue(A->getType(),
-                              state->getSVal(Idx, LCtx),
-                              state->getSVal(Base, LCtx));
-    Bldr.generateNode(A, Node, state->BindExpr(A, LCtx, V), nullptr,
-                      ProgramPoint::PostLValueKind);
+
+    if (IsGLValueLike) {
+      SVal V = state->getLValue(A->getType(),
+          state->getSVal(Idx, LCtx),
+          state->getSVal(Base, LCtx));
+      Bldr.generateNode(A, Node, state->BindExpr(A, LCtx, V), nullptr,
+          ProgramPoint::PostLValueKind);
+    } else if (IsVectorType) {
+      // FIXME: non-glvalue vector reads are not modelled.
+      Bldr.generateNode(A, Node, state, nullptr);
+    } else {
+      llvm_unreachable("Array subscript should be an lValue when not \
+a vector and not a forbidden lvalue type");
+    }
   }
 
   getCheckerManager().runCheckersForPostStmt(Dst, EvalSet, A, *this);
@@ -2237,21 +2288,6 @@ void ExprEngine::VisitAtomicExpr(const AtomicExpr *AE, ExplodedNode *Pred,
 
   getCheckerManager().runCheckersForPostStmt(Dst, AfterInvalidateSet, AE, *this);
 }
-
-namespace {
-class CollectReachableSymbolsCallback final : public SymbolVisitor {
-  InvalidatedSymbols Symbols;
-
-public:
-  CollectReachableSymbolsCallback(ProgramStateRef State) {}
-  const InvalidatedSymbols &getSymbols() const { return Symbols; }
-
-  bool VisitSymbol(SymbolRef Sym) override {
-    Symbols.insert(Sym);
-    return true;
-  }
-};
-} // end anonymous namespace
 
 // A value escapes in three possible cases:
 // (1) We are binding to something that is not a memory region.

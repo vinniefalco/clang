@@ -27,6 +27,8 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/TargetParser.h"
 #include "llvm/Support/TargetRegistry.h"
 
@@ -79,6 +81,12 @@ ToolChain::ToolChain(const Driver &D, const llvm::Triple &T,
     getFilePaths().push_back(CandidateLibPath);
 }
 
+void ToolChain::setTripleEnvironment(llvm::Triple::EnvironmentType Env) {
+  Triple.setEnvironment(Env);
+  if (EffectiveTriple != llvm::Triple())
+    EffectiveTriple.setEnvironment(Env);
+}
+
 ToolChain::~ToolChain() {
 }
 
@@ -88,6 +96,10 @@ bool ToolChain::useIntegratedAs() const {
   return Args.hasFlag(options::OPT_fintegrated_as,
                       options::OPT_fno_integrated_as,
                       IsIntegratedAssemblerDefault());
+}
+
+bool ToolChain::useRelaxRelocations() const {
+  return ENABLE_X86_RELAX_RELOCATIONS;
 }
 
 const SanitizerArgs& ToolChain::getSanitizerArgs() const {
@@ -215,6 +227,10 @@ StringRef ToolChain::getDefaultUniversalArchName() const {
   }
 }
 
+std::string ToolChain::getInputFilename(const InputInfo &Input) const {
+  return Input.getFilename();
+}
+
 bool ToolChain::IsUnwindTablesDefault(const ArgList &Args) const {
   return false;
 }
@@ -309,8 +325,12 @@ static StringRef getArchNameForCompilerRTLib(const ToolChain &TC,
 
 std::string ToolChain::getCompilerRTPath() const {
   SmallString<128> Path(getDriver().ResourceDir);
-  StringRef OSLibName = Triple.isOSFreeBSD() ? "freebsd" : getOS();
-  llvm::sys::path::append(Path, "lib", OSLibName);
+  if (Triple.isOSUnknown()) {
+    llvm::sys::path::append(Path, "lib");
+  } else {
+    StringRef OSLibName = Triple.isOSFreeBSD() ? "freebsd" : getOS();
+    llvm::sys::path::append(Path, "lib", OSLibName);
+  }
   return Path.str();
 }
 
@@ -390,7 +410,11 @@ std::string ToolChain::GetLinkerPath() const {
     // then use whatever the default system linker is.
     return GetProgramPath(getDefaultLinker());
   } else {
-    llvm::SmallString<8> LinkerName("ld.");
+    llvm::SmallString<8> LinkerName;
+    if (Triple.isOSDarwin())
+      LinkerName.append("ld64.");
+    else
+      LinkerName.append("ld.");
     LinkerName.append(UseLinker);
 
     std::string LinkerPath(GetProgramPath(LinkerName.c_str()));
@@ -431,6 +455,13 @@ bool ToolChain::isCrossCompiling() const {
 ObjCRuntime ToolChain::getDefaultObjCRuntime(bool isNonFragile) const {
   return ObjCRuntime(isNonFragile ? ObjCRuntime::GNUstep : ObjCRuntime::GCC,
                      VersionTuple());
+}
+
+llvm::ExceptionHandling
+ToolChain::GetExceptionModel(const llvm::opt::ArgList &Args) const {
+  if (Triple.isOSWindows() && Triple.getArch() != llvm::Triple::x86)
+    return llvm::ExceptionHandling::WinEH;
+  return llvm::ExceptionHandling::None;
 }
 
 bool ToolChain::isThreadModelSupported(const StringRef Model) const {
@@ -533,11 +564,30 @@ std::string ToolChain::ComputeLLVMTriple(const ArgList &Args,
           << tools::arm::getARMArch(MArch, getTriple()) << "ARM";
     }
 
-    // Assembly files should start in ARM mode, unless arch is M-profile.
-    // Windows is always thumb.
-    if ((InputType != types::TY_PP_Asm && Args.hasFlag(options::OPT_mthumb,
-         options::OPT_mno_thumb, ThumbDefault)) || IsMProfile ||
-         getTriple().isOSWindows()) {
+    // Check to see if an explicit choice to use thumb has been made via
+    // -mthumb. For assembler files we must check for -mthumb in the options
+    // passed to the assember via -Wa or -Xassembler.
+    bool IsThumb = false;
+    if (InputType != types::TY_PP_Asm)
+      IsThumb = Args.hasFlag(options::OPT_mthumb, options::OPT_mno_thumb,
+                              ThumbDefault);
+    else {
+      // Ideally we would check for these flags in
+      // CollectArgsForIntegratedAssembler but we can't change the ArchName at
+      // that point. There is no assembler equivalent of -mno-thumb, -marm, or
+      // -mno-arm.
+      for (const Arg *A :
+           Args.filtered(options::OPT_Wa_COMMA, options::OPT_Xassembler)) {
+        for (StringRef Value : A->getValues()) {
+          if (Value == "-mthumb")
+            IsThumb = true;
+        }
+      }
+    }
+    // Assembly files should start in ARM mode, unless arch is M-profile, or
+    // -mthumb has been passed explicitly to the assembler. Windows is always
+    // thumb.
+    if (IsThumb || IsMProfile || getTriple().isOSWindows()) {
       if (IsBigEndian)
         ArchName = "thumbeb";
       else
@@ -800,70 +850,69 @@ ToolChain::computeMSVCVersion(const Driver *D,
   return VersionTuple();
 }
 
-llvm::opt::DerivedArgList *
-ToolChain::TranslateOpenMPTargetArgs(const llvm::opt::DerivedArgList &Args,
-    Action::OffloadKind DeviceOffloadKind) const {
-  if (DeviceOffloadKind == Action::OFK_OpenMP) {
-    DerivedArgList *DAL = new DerivedArgList(Args.getBaseArgs());
-    const OptTable &Opts = getDriver().getOpts();
-    bool NewArgAdded = false;
+llvm::opt::DerivedArgList *ToolChain::TranslateOpenMPTargetArgs(
+    const llvm::opt::DerivedArgList &Args, bool SameTripleAsHost,
+    SmallVectorImpl<llvm::opt::Arg *> &AllocatedArgs) const {
+  DerivedArgList *DAL = new DerivedArgList(Args.getBaseArgs());
+  const OptTable &Opts = getDriver().getOpts();
+  bool Modified = false;
 
-    // Handle -Xopenmp-target flags
-    for (Arg *A : Args) {
-      // Exclude flags which may only apply to the host toolchain.
-      // Do not exclude flags when the host triple (AuxTriple),
-      // matches the current toolchain triple.
-      if (A->getOption().matches(options::OPT_m_Group)) {
-        if (getAuxTriple() && getAuxTriple()->str() == getTriple().str())
-          DAL->append(A);
-        continue;
-      }
-
-      unsigned Index;
-      unsigned Prev;
-      bool XOpenMPTargetNoTriple = A->getOption().matches(
-          options::OPT_Xopenmp_target);
-
-      if (A->getOption().matches(options::OPT_Xopenmp_target_EQ)) {
-        // Passing device args: -Xopenmp-target=<triple> -opt=val.
-        if (A->getValue(0) == getTripleString())
-          Index = Args.getBaseArgs().MakeIndex(A->getValue(1));
-        else
-          continue;
-      } else if (XOpenMPTargetNoTriple) {
-        // Passing device args: -Xopenmp-target -opt=val.
-        Index = Args.getBaseArgs().MakeIndex(A->getValue(0));
-      } else {
+  // Handle -Xopenmp-target flags
+  for (Arg *A : Args) {
+    // Exclude flags which may only apply to the host toolchain.
+    // Do not exclude flags when the host triple (AuxTriple)
+    // matches the current toolchain triple. If it is not present
+    // at all, target and host share a toolchain.
+    if (A->getOption().matches(options::OPT_m_Group)) {
+      if (SameTripleAsHost)
         DAL->append(A);
-        continue;
-      }
-
-      // Parse the argument to -Xopenmp-target.
-      Prev = Index;
-      std::unique_ptr<Arg> XOpenMPTargetArg(Opts.ParseOneArg(Args, Index));
-      if (!XOpenMPTargetArg || Index > Prev + 1) {
-        getDriver().Diag(diag::err_drv_invalid_Xopenmp_target_with_args)
-            << A->getAsString(Args);
-        continue;
-      }
-      if (XOpenMPTargetNoTriple && XOpenMPTargetArg &&
-          Args.getAllArgValues(
-              options::OPT_fopenmp_targets_EQ).size() != 1) {
-        getDriver().Diag(diag::err_drv_Xopenmp_target_missing_triple);
-        continue;
-      }
-      XOpenMPTargetArg->setBaseArg(A);
-      A = XOpenMPTargetArg.release();
-      DAL->append(A);
-      NewArgAdded = true;
+      else
+        Modified = true;
+      continue;
     }
 
-    if (NewArgAdded) {
-      return DAL;
+    unsigned Index;
+    unsigned Prev;
+    bool XOpenMPTargetNoTriple =
+        A->getOption().matches(options::OPT_Xopenmp_target);
+
+    if (A->getOption().matches(options::OPT_Xopenmp_target_EQ)) {
+      // Passing device args: -Xopenmp-target=<triple> -opt=val.
+      if (A->getValue(0) == getTripleString())
+        Index = Args.getBaseArgs().MakeIndex(A->getValue(1));
+      else
+        continue;
+    } else if (XOpenMPTargetNoTriple) {
+      // Passing device args: -Xopenmp-target -opt=val.
+      Index = Args.getBaseArgs().MakeIndex(A->getValue(0));
     } else {
-      delete DAL;
+      DAL->append(A);
+      continue;
     }
+
+    // Parse the argument to -Xopenmp-target.
+    Prev = Index;
+    std::unique_ptr<Arg> XOpenMPTargetArg(Opts.ParseOneArg(Args, Index));
+    if (!XOpenMPTargetArg || Index > Prev + 1) {
+      getDriver().Diag(diag::err_drv_invalid_Xopenmp_target_with_args)
+          << A->getAsString(Args);
+      continue;
+    }
+    if (XOpenMPTargetNoTriple && XOpenMPTargetArg &&
+        Args.getAllArgValues(options::OPT_fopenmp_targets_EQ).size() != 1) {
+      getDriver().Diag(diag::err_drv_Xopenmp_target_missing_triple);
+      continue;
+    }
+    XOpenMPTargetArg->setBaseArg(A);
+    A = XOpenMPTargetArg.release();
+    AllocatedArgs.push_back(A);
+    DAL->append(A);
+    Modified = true;
   }
 
+  if (Modified)
+    return DAL;
+
+  delete DAL;
   return nullptr;
 }

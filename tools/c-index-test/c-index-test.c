@@ -804,12 +804,16 @@ static void PrintCursor(CXCursor Cursor, const char *CommentSchemaFile) {
       printf(" (const)");
     if (clang_CXXMethod_isPureVirtual(Cursor))
       printf(" (pure)");
+    if (clang_CXXRecord_isAbstract(Cursor))
+      printf(" (abstract)");
     if (clang_EnumDecl_isScoped(Cursor))
       printf(" (scoped)");
     if (clang_Cursor_isVariadic(Cursor))
       printf(" (variadic)");
     if (clang_Cursor_isObjCOptional(Cursor))
       printf(" (@optional)");
+    if (clang_isInvalidDeclaration(Cursor))
+      printf(" (invalid)");
 
     switch (clang_getCursorExceptionSpecificationType(Cursor))
     {
@@ -1563,10 +1567,19 @@ static enum CXChildVisitResult PrintManglings(CXCursor cursor, CXCursor p,
     return CXChildVisit_Continue;
   PrintCursor(cursor, NULL);
   Manglings = clang_Cursor_getCXXManglings(cursor);
-  for (I = 0, E = Manglings->Count; I < E; ++I)
-    printf(" [mangled=%s]", clang_getCString(Manglings->Strings[I]));
-  clang_disposeStringSet(Manglings);
-  printf("\n");
+  if (Manglings) {
+    for (I = 0, E = Manglings->Count; I < E; ++I)
+      printf(" [mangled=%s]", clang_getCString(Manglings->Strings[I]));
+    clang_disposeStringSet(Manglings);
+    printf("\n");
+  }
+  Manglings = clang_Cursor_getObjCManglings(cursor);
+  if (Manglings) {
+    for (I = 0, E = Manglings->Count; I < E; ++I)
+      printf(" [mangled=%s]", clang_getCString(Manglings->Strings[I]));
+    clang_disposeStringSet(Manglings);
+    printf("\n");
+  }
   return CXChildVisit_Recurse;
 }
 
@@ -1738,11 +1751,15 @@ int perform_test_load_source(int argc, const char **argv,
   int result;
   unsigned Repeats = 0;
   unsigned I;
+  const char *InvocationPath;
 
   Idx = clang_createIndex(/* excludeDeclsFromPCH */
                           (!strcmp(filter, "local") || 
                            !strcmp(filter, "local-display"))? 1 : 0,
                           /* displayDiagnostics=*/1);
+  InvocationPath = getenv("CINDEXTEST_INVOCATION_EMISSION_PATH");
+  if (InvocationPath)
+    clang_CXIndex_setInvocationEmissionPathOption(Idx, InvocationPath);
 
   if ((CommentSchemaFile = parse_comments_schema(argc, argv))) {
     argc--;
@@ -2303,11 +2320,14 @@ int perform_code_completion(int argc, const char **argv, int timing_only) {
   CXTranslationUnit TU;
   unsigned I, Repeats = 1;
   unsigned completionOptions = clang_defaultCodeCompleteOptions();
-  
+  const char *InvocationPath;
+
   if (getenv("CINDEXTEST_CODE_COMPLETE_PATTERNS"))
     completionOptions |= CXCodeComplete_IncludeCodePatterns;
   if (getenv("CINDEXTEST_COMPLETION_BRIEF_COMMENTS"))
     completionOptions |= CXCodeComplete_IncludeBriefComments;
+  if (getenv("CINDEXTEST_COMPLETION_SKIP_PREAMBLE"))
+    completionOptions |= CXCodeComplete_SkipPreamble;
   
   if (timing_only)
     input += strlen("-code-completion-timing=");
@@ -2322,7 +2342,10 @@ int perform_code_completion(int argc, const char **argv, int timing_only) {
     return -1;
 
   CIdx = clang_createIndex(0, 0);
-  
+  InvocationPath = getenv("CINDEXTEST_INVOCATION_EMISSION_PATH");
+  if (InvocationPath)
+    clang_CXIndex_setInvocationEmissionPathOption(CIdx, InvocationPath);
+
   if (getenv("CINDEXTEST_EDITING"))
     Repeats = 5;
 

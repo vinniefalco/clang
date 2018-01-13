@@ -162,7 +162,7 @@ llvm::Value *CodeGenFunction::EmitObjCCollectionLiteral(const Expr *E,
       const Expr *Rhs = ALE->getElement(i);
       LValue LV = MakeAddrLValue(
           Builder.CreateConstArrayGEP(Objects, i, getPointerSize()),
-          ElementType, LValueBaseInfo(AlignmentSource::Decl, false));
+          ElementType, AlignmentSource::Decl);
 
       llvm::Value *value = EmitScalarExpr(Rhs);
       EmitStoreThroughLValue(RValue::get(value), LV, true);
@@ -174,7 +174,7 @@ llvm::Value *CodeGenFunction::EmitObjCCollectionLiteral(const Expr *E,
       const Expr *Key = DLE->getKeyValueElement(i).Key;
       LValue KeyLV = MakeAddrLValue(
           Builder.CreateConstArrayGEP(Keys, i, getPointerSize()),
-          ElementType, LValueBaseInfo(AlignmentSource::Decl, false));
+          ElementType, AlignmentSource::Decl);
       llvm::Value *keyValue = EmitScalarExpr(Key);
       EmitStoreThroughLValue(RValue::get(keyValue), KeyLV, /*isInit=*/true);
 
@@ -182,7 +182,7 @@ llvm::Value *CodeGenFunction::EmitObjCCollectionLiteral(const Expr *E,
       const Expr *Value = DLE->getKeyValueElement(i).Value;
       LValue ValueLV = MakeAddrLValue(
           Builder.CreateConstArrayGEP(Objects, i, getPointerSize()),
-          ElementType, LValueBaseInfo(AlignmentSource::Decl, false));
+          ElementType, AlignmentSource::Decl);
       llvm::Value *valueValue = EmitScalarExpr(Value);
       EmitStoreThroughLValue(RValue::get(valueValue), ValueLV, /*isInit=*/true);
       if (TrackNeededObjects) {
@@ -3268,12 +3268,12 @@ CodeGenFunction::GenerateObjCAtomicSetterCopyHelperFunction(
   DeclRefExpr DstExpr(&DstDecl, false, DestTy,
                       VK_RValue, SourceLocation());
   UnaryOperator DST(&DstExpr, UO_Deref, DestTy->getPointeeType(),
-                    VK_LValue, OK_Ordinary, SourceLocation());
+                    VK_LValue, OK_Ordinary, SourceLocation(), false);
   
   DeclRefExpr SrcExpr(&SrcDecl, false, SrcTy,
                       VK_RValue, SourceLocation());
   UnaryOperator SRC(&SrcExpr, UO_Deref, SrcTy->getPointeeType(),
-                    VK_LValue, OK_Ordinary, SourceLocation());
+                    VK_LValue, OK_Ordinary, SourceLocation(), false);
   
   Expr *Args[2] = { &DST, &SRC };
   CallExpr *CalleeExp = cast<CallExpr>(PID->getSetterCXXAssignment());
@@ -3351,7 +3351,7 @@ CodeGenFunction::GenerateObjCAtomicGetterCopyHelperFunction(
                       VK_RValue, SourceLocation());
   
   UnaryOperator SRC(&SrcExpr, UO_Deref, SrcTy->getPointeeType(),
-                    VK_LValue, OK_Ordinary, SourceLocation());
+                    VK_LValue, OK_Ordinary, SourceLocation(), false);
   
   CXXConstructExpr *CXXConstExpr = 
     cast<CXXConstructExpr>(PID->getGetterCXXConstructor());

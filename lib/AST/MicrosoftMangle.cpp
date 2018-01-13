@@ -1192,6 +1192,15 @@ void MicrosoftCXXNameMangler::mangleOperatorName(OverloadedOperatorKind OO,
   // <operator-name> ::= ?__L # co_await
   case OO_Coawait: Out << "?__L"; break;
 
+  case OO_Spaceship: {
+    // FIXME: Once MS picks a mangling, use it.
+    DiagnosticsEngine &Diags = Context.getDiags();
+    unsigned DiagID = Diags.getCustomDiagID(DiagnosticsEngine::Error,
+      "cannot mangle this three-way comparison operator yet");
+    Diags.Report(Loc, DiagID);
+    break;
+  }
+
   case OO_Conditional: {
     DiagnosticsEngine &Diags = Context.getDiags();
     unsigned DiagID = Diags.getCustomDiagID(DiagnosticsEngine::Error,
@@ -2428,6 +2437,15 @@ void MicrosoftCXXNameMangler::mangleType(const DependentSizedExtVectorType *T,
     "cannot mangle this dependent-sized extended vector type yet");
   Diags.Report(Range.getBegin(), DiagID)
     << Range;
+}
+
+void MicrosoftCXXNameMangler::mangleType(const DependentAddressSpaceType *T,
+                                         Qualifiers, SourceRange Range) {
+  DiagnosticsEngine &Diags = Context.getDiags();
+  unsigned DiagID = Diags.getCustomDiagID(
+      DiagnosticsEngine::Error,
+      "cannot mangle this dependent address space type yet");
+  Diags.Report(Range.getBegin(), DiagID) << Range;
 }
 
 void MicrosoftCXXNameMangler::mangleType(const ObjCInterfaceType *T, Qualifiers,

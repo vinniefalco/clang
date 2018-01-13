@@ -173,10 +173,12 @@ void CodeGenFunction::EmitCXXGlobalVarDeclInit(const VarDecl &D,
   ConstantAddress DeclAddr(DeclPtr, getContext().getDeclAlign(&D));
 
   if (!T->isReferenceType()) {
-    if (getLangOpts().OpenMP && D.hasAttr<OMPThreadPrivateDeclAttr>())
+    if (getLangOpts().OpenMP && !getLangOpts().OpenMPSimd &&
+        D.hasAttr<OMPThreadPrivateDeclAttr>()) {
       (void)CGM.getOpenMPRuntime().emitThreadPrivateVarDefinition(
           &D, DeclAddr, D.getAttr<OMPThreadPrivateDeclAttr>()->getLocation(),
           PerformInit, this);
+    }
     if (PerformInit)
       EmitDeclInit(*this, D, DeclAddr);
     if (CGM.isTypeConstant(D.getType(), true))
@@ -316,17 +318,29 @@ llvm::Function *CodeGenModule::CreateGlobalInitOrDestructFunction(
   if (!getLangOpts().Exceptions)
     Fn->setDoesNotThrow();
 
-  if (!isInSanitizerBlacklist(Fn, Loc)) {
-    if (getLangOpts().Sanitize.hasOneOf(SanitizerKind::Address |
-                                        SanitizerKind::KernelAddress))
-      Fn->addFnAttr(llvm::Attribute::SanitizeAddress);
-    if (getLangOpts().Sanitize.has(SanitizerKind::Thread))
-      Fn->addFnAttr(llvm::Attribute::SanitizeThread);
-    if (getLangOpts().Sanitize.has(SanitizerKind::Memory))
-      Fn->addFnAttr(llvm::Attribute::SanitizeMemory);
-    if (getLangOpts().Sanitize.has(SanitizerKind::SafeStack))
-      Fn->addFnAttr(llvm::Attribute::SafeStack);
-  }
+  if (getLangOpts().Sanitize.has(SanitizerKind::Address) &&
+      !isInSanitizerBlacklist(SanitizerKind::Address, Fn, Loc))
+    Fn->addFnAttr(llvm::Attribute::SanitizeAddress);
+
+  if (getLangOpts().Sanitize.has(SanitizerKind::KernelAddress) &&
+      !isInSanitizerBlacklist(SanitizerKind::KernelAddress, Fn, Loc))
+    Fn->addFnAttr(llvm::Attribute::SanitizeAddress);
+
+  if (getLangOpts().Sanitize.has(SanitizerKind::HWAddress) &&
+      !isInSanitizerBlacklist(SanitizerKind::HWAddress, Fn, Loc))
+    Fn->addFnAttr(llvm::Attribute::SanitizeHWAddress);
+
+  if (getLangOpts().Sanitize.has(SanitizerKind::Thread) &&
+      !isInSanitizerBlacklist(SanitizerKind::Thread, Fn, Loc))
+    Fn->addFnAttr(llvm::Attribute::SanitizeThread);
+
+  if (getLangOpts().Sanitize.has(SanitizerKind::Memory) &&
+      !isInSanitizerBlacklist(SanitizerKind::Memory, Fn, Loc))
+    Fn->addFnAttr(llvm::Attribute::SanitizeMemory);
+
+  if (getLangOpts().Sanitize.has(SanitizerKind::SafeStack) &&
+      !isInSanitizerBlacklist(SanitizerKind::SafeStack, Fn, Loc))
+    Fn->addFnAttr(llvm::Attribute::SafeStack);
 
   return Fn;
 }

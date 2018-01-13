@@ -456,10 +456,54 @@ void ODRHash::AddCXXRecordDecl(const CXXRecordDecl *Record) {
   if (TD) {
     AddTemplateParameterList(TD->getTemplateParameters());
   }
+
+  ID.AddInteger(Record->getNumBases());
+  auto Bases = Record->bases();
+  for (auto Base : Bases) {
+    AddQualType(Base.getType());
+    ID.AddInteger(Base.isVirtual());
+    ID.AddInteger(Base.getAccessSpecifierAsWritten());
+  }
+}
+
+void ODRHash::AddFunctionDecl(const FunctionDecl *Function) {
+  assert(Function && "Expecting non-null pointer.");
+
+  // Skip hashing these kinds of function.
+  if (Function->isImplicit()) return;
+  if (Function->isDefaulted()) return;
+  if (Function->isDeleted()) return;
+  if (!Function->hasBody()) return;
+  if (!Function->getBody()) return;
+
+  // TODO: Fix hashing for class methods.
+  if (isa<CXXMethodDecl>(Function)) return;
+  // And friend functions.
+  if (Function->getFriendObjectKind()) return;
+
+  // Skip functions that are specializations or in specialization context.
+  const DeclContext *DC = Function;
+  while (DC) {
+    if (isa<ClassTemplateSpecializationDecl>(DC)) return;
+    if (auto *F = dyn_cast<FunctionDecl>(DC))
+      if (F->isFunctionTemplateSpecialization()) return;
+    DC = DC->getParent();
+  }
+
+  AddDecl(Function);
+
+  AddQualType(Function->getReturnType());
+
+  ID.AddInteger(Function->param_size());
+  for (auto Param : Function->parameters())
+    AddSubDecl(Param);
+
+  AddStmt(Function->getBody());
 }
 
 void ODRHash::AddDecl(const Decl *D) {
   assert(D && "Expecting non-null pointer.");
+  D = D->getCanonicalDecl();
   auto Result = DeclMap.insert(std::make_pair(D, DeclMap.size()));
   ID.AddInteger(Result.first->second);
   // On first encounter of a Decl pointer, process it.  Every time afterwards,

@@ -15,6 +15,7 @@
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringExtras.h"
 
 using namespace clang;
 using namespace clang::targets;
@@ -26,6 +27,8 @@ const Builtin::Info AArch64TargetInfo::BuiltinInfo[] = {
 
 #define BUILTIN(ID, TYPE, ATTRS)                                               \
    {#ID, TYPE, ATTRS, nullptr, ALL_LANGUAGES, nullptr},
+#define LANGBUILTIN(ID, TYPE, ATTRS, LANG)                                     \
+  {#ID, TYPE, ATTRS, nullptr, LANG, nullptr},
 #include "clang/Basic/BuiltinsAArch64.def"
 };
 
@@ -34,17 +37,18 @@ AArch64TargetInfo::AArch64TargetInfo(const llvm::Triple &Triple,
     : TargetInfo(Triple), ABI("aapcs") {
   if (getTriple().getOS() == llvm::Triple::NetBSD ||
       getTriple().getOS() == llvm::Triple::OpenBSD) {
-    WCharType = SignedInt;
-
     // NetBSD apparently prefers consistency across ARM targets to
     // consistency across 64-bit targets.
     Int64Type = SignedLongLong;
     IntMaxType = SignedLongLong;
   } else {
-    WCharType = UnsignedInt;
+    if (!getTriple().isOSDarwin())
+      WCharType = UnsignedInt;
+
     Int64Type = SignedLong;
     IntMaxType = SignedLong;
   }
+
 
   LongWidth = LongAlign = PointerWidth = PointerAlign = 64;
   MaxVectorAlign = 128;
@@ -154,7 +158,8 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
   if (Opts.UnsafeFPMath)
     Builder.defineMacro("__ARM_FP_FAST", "1");
 
-  Builder.defineMacro("__ARM_SIZEOF_WCHAR_T", Opts.ShortWChar ? "2" : "4");
+  Builder.defineMacro("__ARM_SIZEOF_WCHAR_T",
+                      Twine(Opts.WCharSize ? Opts.WCharSize : 4));
 
   Builder.defineMacro("__ARM_SIZEOF_MINIMAL_ENUM", Opts.ShortEnums ? "1" : "4");
 
@@ -175,6 +180,9 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
 
   if (Unaligned)
     Builder.defineMacro("__ARM_FEATURE_UNALIGNED", "1");
+
+  if ((FPU & NeonMode) && HasFullFP16)
+    Builder.defineMacro("__ARM_FEATURE_FP16_VECTOR_ARITHMETIC", "1");
 
   switch (ArchKind) {
   default:
@@ -420,7 +428,6 @@ WindowsARM64TargetInfo::WindowsARM64TargetInfo(const llvm::Triple &Triple,
 
   // This is an LLP64 platform.
   // int:4, long:4, long long:8, long double:8.
-  WCharType = UnsignedShort;
   IntWidth = IntAlign = 32;
   LongWidth = LongAlign = 32;
   DoubleAlign = LongLongAlign = 64;
@@ -452,6 +459,8 @@ WindowsARM64TargetInfo::checkCallingConvention(CallingConv CC) const {
     return CCCR_Ignore;
   case CC_C:
   case CC_OpenCLKernel:
+  case CC_PreserveMost:
+  case CC_PreserveAll:
   case CC_Win64:
     return CCCR_OK;
   default:
@@ -468,8 +477,6 @@ MicrosoftARM64TargetInfo::MicrosoftARM64TargetInfo(const llvm::Triple &Triple,
 void MicrosoftARM64TargetInfo::getVisualStudioDefines(
     const LangOptions &Opts, MacroBuilder &Builder) const {
   WindowsTargetInfo<AArch64leTargetInfo>::getVisualStudioDefines(Opts, Builder);
-  Builder.defineMacro("_WIN32", "1");
-  Builder.defineMacro("_WIN64", "1");
   Builder.defineMacro("_M_ARM64", "1");
 }
 
@@ -485,22 +492,10 @@ MinGWARM64TargetInfo::MinGWARM64TargetInfo(const llvm::Triple &Triple,
   TheCXXABI.set(TargetCXXABI::GenericAArch64);
 }
 
-void MinGWARM64TargetInfo::getTargetDefines(const LangOptions &Opts,
-                                            MacroBuilder &Builder) const {
-  WindowsTargetInfo::getTargetDefines(Opts, Builder);
-  Builder.defineMacro("_WIN32", "1");
-  Builder.defineMacro("_WIN64", "1");
-  Builder.defineMacro("WIN32", "1");
-  Builder.defineMacro("WIN64", "1");
-  addMinGWDefines(Opts, Builder);
-}
-
-
 DarwinAArch64TargetInfo::DarwinAArch64TargetInfo(const llvm::Triple &Triple,
                                                  const TargetOptions &Opts)
     : DarwinTargetInfo<AArch64leTargetInfo>(Triple, Opts) {
   Int64Type = SignedLongLong;
-  WCharType = SignedInt;
   UseSignedCharForObjCBool = false;
 
   LongDoubleWidth = LongDoubleAlign = SuitableAlign = 64;

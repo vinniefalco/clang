@@ -46,7 +46,6 @@ class MacroBuilder;
 class QualType;
 class SourceLocation;
 class SourceManager;
-class Type;
 
 namespace Builtin { struct Info; }
 
@@ -60,6 +59,7 @@ protected:
   // values are specified by the TargetInfo constructor.
   bool BigEndian;
   bool TLSSupported;
+  bool VLASupported;
   bool NoAsmVariants;  // True if {|} are normal characters.
   bool HasFloat128;
   unsigned char PointerWidth, PointerAlign;
@@ -86,7 +86,7 @@ protected:
     *LongDoubleFormat, *Float128Format;
   unsigned char RegParmMax, SSERegParmMax;
   TargetCXXABI TheCXXABI;
-  const LangAS::Map *AddrSpaceMap;
+  const LangASMap *AddrSpaceMap;
 
   mutable StringRef PlatformName;
   mutable VersionTuple PlatformMinVersion;
@@ -248,6 +248,9 @@ public:
   IntType getPtrDiffType(unsigned AddrSpace) const {
     return AddrSpace == 0 ? PtrDiffType : getPtrDiffTypeV(AddrSpace);
   }
+  IntType getUnsignedPtrDiffType(unsigned AddrSpace) const {
+    return getCorrespondingUnsignedType(getPtrDiffType(AddrSpace));
+  }
   IntType getIntPtrType() const { return IntPtrType; }
   IntType getUIntPtrType() const {
     return getCorrespondingUnsignedType(IntPtrType);
@@ -319,9 +322,7 @@ public:
 
   /// \brief Get integer value for null pointer.
   /// \param AddrSpace address space of pointee in source language.
-  virtual uint64_t getNullPointerValue(unsigned AddrSpace) const {
-    return 0;
-  }
+  virtual uint64_t getNullPointerValue(LangAS AddrSpace) const { return 0; }
 
   /// \brief Return the size of '_Bool' and C++ 'bool' for this target, in bits.
   unsigned getBoolWidth() const { return BoolWidth; }
@@ -448,6 +449,9 @@ public:
   /// \brief Return the maximum width lock-free atomic operation which can be
   /// inlined given the supported features of the given target.
   unsigned getMaxAtomicInlineWidth() const { return MaxAtomicInlineWidth; }
+  /// \brief Set the maximum inline or promote width lock-free atomic operation
+  /// for the given target.
+  virtual void setMaxAtomicWidth() {}
   /// \brief Returns true if the given target supports lock-free atomic
   /// operations at the specified width and alignment.
   virtual bool hasBuiltinAtomic(uint64_t AtomicSizeInBits,
@@ -553,6 +557,14 @@ public:
   /// of Objective-C message passing on this target.
   bool useObjCFP2RetForComplexLongDouble() const {
     return ComplexLongDoubleUsesFP2Ret;
+  }
+
+  /// Check whether llvm intrinsics such as llvm.convert.to.fp16 should be used
+  /// to convert to and from __fp16.
+  /// FIXME: This function should be removed once all targets stop using the
+  /// conversion intrinsics.
+  virtual bool useFP16ConversionIntrinsics() const {
+    return true;
   }
 
   /// \brief Specify if mangling based on address space map should be used or
@@ -857,7 +869,7 @@ public:
 
   /// brief Determine whether this TargetInfo supports the given CPU name.
   virtual bool isValidCPUName(StringRef Name) const {
-    return false;
+    return true;
   }
 
   /// \brief Use the specified ABI.
@@ -884,7 +896,7 @@ public:
 
   /// \brief Determine whether this TargetInfo supports the given feature.
   virtual bool isValidFeatureName(StringRef Feature) const {
-    return false;
+    return true;
   }
 
   /// \brief Perform initialization based on the user configured
@@ -908,9 +920,19 @@ public:
     return false;
   }
 
+  /// \brief Identify whether this taret supports multiversioning of functions,
+  /// which requires support for cpu_supports and cpu_is functionality.
+  virtual bool supportsMultiVersioning() const { return false; }
+
   // \brief Validate the contents of the __builtin_cpu_supports(const char*)
   // argument.
   virtual bool validateCpuSupports(StringRef Name) const { return false; }
+
+  // \brief Return the target-specific priority for features/cpus/vendors so
+  // that they can be properly sorted for checking.
+  virtual unsigned multiVersionSortPriority(StringRef Name) const {
+    return 0;
+  }
 
   // \brief Validate the contents of the __builtin_cpu_is(const char*)
   // argument.
@@ -934,6 +956,9 @@ public:
   unsigned short getMaxTLSAlign() const {
     return MaxTLSAlign;
   }
+
+  /// \brief Whether target supports variable-length arrays.
+  bool isVLASupported() const { return VLASupported; }
 
   /// \brief Whether the target supports SEH __try.
   bool isSEHTrySupported() const {
@@ -965,15 +990,13 @@ public:
     return nullptr;
   }
 
-  const LangAS::Map &getAddressSpaceMap() const {
-    return *AddrSpaceMap;
-  }
+  const LangASMap &getAddressSpaceMap() const { return *AddrSpaceMap; }
 
   /// \brief Return an AST address space which can be used opportunistically
   /// for constant global memory. It must be possible to convert pointers into
   /// this address space to LangAS::Default. If no such address space exists,
   /// this may return None, and such optimizations will be disabled.
-  virtual llvm::Optional<unsigned> getConstantAddressSpace() const {
+  virtual llvm::Optional<LangAS> getConstantAddressSpace() const {
     return LangAS::Default;
   }
 
@@ -1028,6 +1051,18 @@ public:
     return false;
   }
 
+  /// Check if the target supports CFProtection branch.
+  virtual bool
+  checkCFProtectionBranchSupported(DiagnosticsEngine &Diags) const {
+    return false;
+  }
+
+  /// Check if the target supports CFProtection branch.
+  virtual bool
+  checkCFProtectionReturnSupported(DiagnosticsEngine &Diags) const {
+    return false;
+  }
+
   /// \brief Whether target allows to overalign ABI-specified preferred alignment
   virtual bool allowsLargerPreferedTypeAlignment() const { return true; }
 
@@ -1051,8 +1086,19 @@ public:
       return getTargetOpts().SupportedOpenCLOptions;
   }
 
+  enum OpenCLTypeKind {
+    OCLTK_Default,
+    OCLTK_ClkEvent,
+    OCLTK_Event,
+    OCLTK_Image,
+    OCLTK_Pipe,
+    OCLTK_Queue,
+    OCLTK_ReserveID,
+    OCLTK_Sampler,
+  };
+
   /// \brief Get address space for OpenCL type.
-  virtual LangAS::ID getOpenCLTypeAddrSpace(const Type *T) const;
+  virtual LangAS getOpenCLTypeAddrSpace(OpenCLTypeKind TK) const;
 
   /// \returns Target specific vtbl ptr address space.
   virtual unsigned getVtblPtrAddressSpace() const {
