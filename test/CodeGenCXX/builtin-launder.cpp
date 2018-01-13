@@ -1,4 +1,66 @@
-// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -fstrict-vtable-pointers -o - %s \
+// RUN: | FileCheck --check-prefixes=CHECK,CHECK-STRICT %s
+// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -o - %s \
+// RUN: | FileCheck --check-prefixes=CHECK,CHECK-NONSTRICT %s
+
+//===----------------------------------------------------------------------===//
+//                            Positive Cases
+//===----------------------------------------------------------------------===//
+
+struct TestVirtualFn {
+  virtual void foo() {}
+};
+
+// CHECK-LABEL: define void @test_builtin_launder_virtual_fn
+extern "C" void test_builtin_launder_virtual_fn(TestVirtualFn *p) {
+  // CHECK: entry
+  // CHECK-NEXT: %p.addr = alloca [[TYPE:%.*]], align 8
+  // CHECK-NEXT: %d = alloca [[TYPE]]
+  // CHECK-NEXT: store [[TYPE]] %p, [[TYPE]]* %p.addr
+  // CHECK-NEXT: [[TMP0:%.*]] = load [[TYPE]], [[TYPE]]* %p.addr
+
+  // CHECK-NONSTRICT-NEXT: store [[TYPE]] [[TMP0]], [[TYPE]]* %d
+
+  // CHECK-STRICT-NEXT: [[TMP1:%.*]] = bitcast [[TYPE]] [[TMP0]] to i8*
+  // CHECK-STRICT-NEXT: [[TMP2:%.*]] = call i8* @llvm.invariant.group.barrier.p0i8(i8* [[TMP1]])
+  // CHECK-STRICT-NEXT: [[TMP3:%.*]] = bitcast i8* [[TMP2]] to [[TYPE]]
+  // CHECK-STRICT-NEXT: store [[TYPE]] [[TMP3]], [[TYPE]]* %d
+
+  // CHECK-NEXT: ret void
+  TestVirtualFn *d = __builtin_launder(p);
+}
+
+struct TestPolyBase : TestVirtualFn {
+};
+
+// CHECK-LABEL: define void @test_builtin_launder_poly_base
+extern "C" void test_builtin_launder_poly_base(TestPolyBase *p) {
+  // CHECK-STRICT-NOT: ret void
+  // CHECK-STRICT: @llvm.invariant.group.barrier
+
+  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
+
+  // CHECK: ret void
+  TestPolyBase *d = __builtin_launder(p);
+}
+
+struct TestBase {};
+struct TestVirtualBase : virtual TestBase {};
+
+// CHECK-LABEL: define void @test_builtin_launder_virtual_base
+extern "C" void test_builtin_launder_virtual_base(TestVirtualBase *p) {
+  // CHECK-STRICT-NOT: ret void
+  // CHECK-STRICT: @llvm.invariant.group.barrier
+
+  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
+
+  // CHECK: ret void
+  TestVirtualBase *d = __builtin_launder(p);
+}
+
+//===----------------------------------------------------------------------===//
+//                            Negative Cases
+//===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: define void @test_builtin_launder_ommitted_one
 extern "C" void test_builtin_launder_ommitted_one(int *p) {
@@ -17,7 +79,7 @@ struct TestNoInvariant {
 };
 
 // CHECK-LABEL: define void @test_builtin_launder_ommitted_two
-extern "C" void test_builtin_launder_ommitted_two(struct TestNoInvariant *p) {
+extern "C" void test_builtin_launder_ommitted_two(TestNoInvariant *p) {
   // CHECK: entry
   // CHECK-NEXT: %p.addr = alloca [[TYPE:%.*]], align 8
   // CHECK-NEXT: %d = alloca [[TYPE]]
@@ -25,39 +87,37 @@ extern "C" void test_builtin_launder_ommitted_two(struct TestNoInvariant *p) {
   // CHECK-NEXT: [[TMP:%.*]] = load [[TYPE]], [[TYPE]]* %p.addr
   // CHECK-NEXT: store [[TYPE]] [[TMP]], [[TYPE]]* %d
   // CHECK-NEXT: ret void
-  struct TestNoInvariant *d = __builtin_launder(p);
+  TestNoInvariant *d = __builtin_launder(p);
 }
+
+/// The test cases in this namespace technically need to be laundered according
+/// to the language in the standard (ie they have const or reference subobjects)
+/// but LLVM doesn't currently optimize on these cases -- so Clang emits
+/// __builtin_launder as a nop.
+namespace pessimizing_cases {
 
 struct TestConstMember {
   const int x;
 };
 
 // CHECK-LABEL: define void @test_builtin_launder_const_member
-extern "C" void test_builtin_launder_const_member(struct TestConstMember *p) {
+extern "C" void test_builtin_launder_const_member(TestConstMember *p) {
   // CHECK: entry
-  // CHECK-NEXT: %p.addr = alloca [[TYPE:%.*]], align 8
-  // CHECK-NEXT: %d = alloca [[TYPE]]
-  // CHECK-NEXT: store [[TYPE]] %p, [[TYPE]]* %p.addr
-  // CHECK-NEXT: [[TMP0:%.*]] = load [[TYPE]], [[TYPE]]* %p.addr
-  // CHECK-NEXT: [[TMP1:%.*]] = bitcast [[TYPE]] [[TMP0]] to i8*
-  // CHECK-NEXT: [[TMP2:%.*]] = call i8* @llvm.invariant.group.barrier.p0i8(i8* [[TMP1]])
-  // CHECK-NEXT: [[TMP3:%.*]] = bitcast i8* [[TMP2]] to [[TYPE]]
-  // CHECK-NEXT: store [[TYPE]] [[TMP3]], [[TYPE]]* %d
-  // CHECK-NEXT: ret void
-  struct TestConstMember *d = __builtin_launder(p);
+  // CHECK-NOT: @llvm.invariant.group.barrier
+  // CHECK: ret void
+  TestConstMember *d = __builtin_launder(p);
 }
 
 struct TestConstSubobject {
-  struct TestConstMember x;
+  TestConstMember x;
 };
 
 // CHECK-LABEL: define void @test_builtin_launder_const_subobject
-extern "C" void test_builtin_launder_const_subobject(struct TestConstSubobject *p) {
+extern "C" void test_builtin_launder_const_subobject(TestConstSubobject *p) {
   // CHECK: entry
-  // CHECK-NOT: ret void
-  // CHECK: @llvm.invariant.group.barrier
+  // CHECK-NOT: @llvm.invariant.group.barrier
   // CHECK: ret void
-  struct TestConstSubobject *d = __builtin_launder(p);
+  TestConstSubobject *d = __builtin_launder(p);
 }
 
 struct TestConstObject {
@@ -65,12 +125,11 @@ struct TestConstObject {
 };
 
 // CHECK-LABEL: define void @test_builtin_launder_const_object
-extern "C" void test_builtin_launder_const_object(struct TestConstObject *p) {
+extern "C" void test_builtin_launder_const_object(TestConstObject *p) {
   // CHECK: entry
-  // CHECK-NOT: ret void
-  // CHECK: @llvm.invariant.group.barrier
+  // CHECK-NOT: @llvm.invariant.group.barrier
   // CHECK: ret void
-  struct TestConstObject *d = __builtin_launder(p);
+  TestConstObject *d = __builtin_launder(p);
 }
 
 struct TestReferenceMember {
@@ -78,47 +137,11 @@ struct TestReferenceMember {
 };
 
 // CHECK-LABEL: define void @test_builtin_launder_reference_member
-extern "C" void test_builtin_launder_reference_member(struct TestReferenceMember *p) {
+extern "C" void test_builtin_launder_reference_member(TestReferenceMember *p) {
   // CHECK: entry
-  // CHECK-NOT: ret void
-  // CHECK: @llvm.invariant.group.barrier
+  // CHECK-NOT: @llvm.invariant.group.barrier
   // CHECK: ret void
-  struct TestReferenceMember *d = __builtin_launder(p);
+  TestReferenceMember *d = __builtin_launder(p);
 }
 
-struct TestVirtualFn {
-  virtual void foo() {}
-};
-
-// CHECK-LABEL: define void @test_builtin_launder_virtual_fn
-extern "C" void test_builtin_launder_virtual_fn(struct TestVirtualFn *p) {
-  // CHECK: entry
-  // CHECK-NOT: ret void
-  // CHECK: @llvm.invariant.group.barrier
-  // CHECK: ret void
-  struct TestVirtualFn *d = __builtin_launder(p);
-}
-
-struct TestPolyBase : TestVirtualFn {
-};
-
-// CHECK-LABEL: define void @test_builtin_launder_poly_base
-extern "C" void test_builtin_launder_poly_base(struct TestPolyBase *p) {
-  // CHECK: entry
-  // CHECK-NOT: ret void
-  // CHECK: @llvm.invariant.group.barrier
-  // CHECK: ret void
-  struct TestPolyBase *d = __builtin_launder(p);
-}
-
-struct DummyBase {};
-struct TestVirtualBase : virtual DummyBase {};
-
-// CHECK-LABEL: define void @test_builtin_launder_virtual_base
-extern "C" void test_builtin_launder_virtual_base(TestVirtualBase *p) {
-  // CHECK: entry
-  // CHECK-NOT: ret void
-  // CHECK: @llvm.invariant.group.barrier
-  // CHECK: ret void
-  struct TestVirtualBase *d = __builtin_launder(p);
-}
+} // namespace pessimizing_cases

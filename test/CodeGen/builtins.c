@@ -398,6 +398,18 @@ long long test_builtin_readcyclecounter() {
   return __builtin_readcyclecounter();
 }
 
+/// __builtin_launder should be a NOP in C since there are no vtables.
+// CHECK-LABEL: define void @test_builtin_launder
+void test_builtin_launder(int *p) {
+  // CHECK: entry
+  // CHECK-NEXT: %p.addr = alloca i32*
+  // CHECK-NEXT: %d = alloca i32*
+  // CHECK-NEXT: store i32* %p, i32** %p.addr, align 8
+  // CHECK-NEXT: [[TMP:%.*]] = load i32*, i32** %p.addr
+  // CHECK-NEXT: store i32* [[TMP]], i32** %d
+  int *d = __builtin_launder(p);
+}
+
 // Behavior of __builtin_os_log differs between platforms, so only test on X86
 #ifdef __x86_64__
 

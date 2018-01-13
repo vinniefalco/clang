@@ -56,20 +56,39 @@ void synchronize_args() {
 
 namespace test_launder {
 
-void test_builtin_launder(char *p, void *vp, const volatile int *ip, const float *&fp,
+struct Dummy {};
+
+using FnType = int(char);
+using MemFnType = int (Dummy::*)(char);
+using ConstMemFnType = int (Dummy::*)() const;
+
+void foo() {}
+
+void test_builtin_launder_diags(void *vp, const void *cvp, FnType *fnp,
+                                MemFnType mfp, ConstMemFnType cmfp) {
+  __builtin_launder(vp);   // expected-error {{argument to '__builtin_launder' cannot be a void pointer}}
+  __builtin_launder(cvp);  // expected-error {{argument to '__builtin_launder' cannot be a void pointer}}
+  __builtin_launder(fnp);  // expected-error {{argument to '__builtin_launder' cannot be a function pointer}}
+  __builtin_launder(mfp);  // expected-error {{non-pointer argument to '__builtin_launder'}}
+  __builtin_launder(cmfp); // expected-error {{non-pointer argument to '__builtin_launder'}}
+  (void)__builtin_launder(&fnp);
+  __builtin_launder(42);      // expected-error {{non-pointer argument to '__builtin_launder'}}
+  __builtin_launder(nullptr); // expected-error {{non-pointer argument to '__builtin_launder'}}
+  __builtin_launder(foo) // expected-error {{non-pointer argument to '__builtin_launder'}}
+}
+
+void test_builtin_launder(char *p, const volatile int *ip, const float *&fp,
                           double *__restrict dp) {
   int x;
   __builtin_launder(x); // expected-error {{non-pointer argument to '__builtin_launder'}}
 #define TEST_TYPE(Ptr, Type) \
   static_assert(__is_same(decltype(__builtin_launder(Ptr)), Type), "expected same type")
   TEST_TYPE(p, char*);
-  TEST_TYPE(vp, void*);
   TEST_TYPE(ip, const volatile int*);
   TEST_TYPE(fp, const float*);
   TEST_TYPE(dp, double *__restrict);
 #undef TEST_TYPE
   char *d = __builtin_launder(p);
-  void *vd = __builtin_launder(vp);
   const volatile int *id = __builtin_launder(ip);
   int *id2 = __builtin_launder(ip); // expected-error {{cannot initialize a variable of type 'int *' with an rvalue of type 'const volatile int *'}}
   const float* fd = __builtin_launder(fp);
