@@ -857,18 +857,20 @@ static ExprResult SemaBuiltinLaunder(Sema &S, CallExpr *TheCall) {
   QualType ArgTy = TheCall->getArg(0)->getType();
   TheCall->setType(ArgTy);
 
-  auto DiagArg = [&](unsigned DiagID) {
-    S.Diag(TheCall->getLocStart(), DiagID)
-      << TheCall->getSourceRange();
+  int DiagSelect = [&]() {
+    if (!ArgTy->isPointerType())
+      return 0;
+    if (ArgTy->isFunctionPointerType())
+      return 1;
+    if (ArgTy->isVoidPointerType())
+      return 2;
+    return -1;
+  }();
+  if (DiagSelect != -1) {
+    S.Diag(TheCall->getLocStart(), diag::err_builtin_launder_invalid_arg)
+        << DiagSelect << TheCall->getSourceRange();
     return ExprError();
-  };
-
-  if (!ArgTy->isPointerType())
-    return DiagArg(diag::err_builtin_launder_non_pointer_arg);
-  else if (ArgTy->isFunctionPointerType())
-    return DiagArg(diag::err_builtin_launder_function_pointer_arg);
-  else if (ArgTy->isVoidPointerType())
-    return DiagArg(diag::err_builtin_launder_void_pointer_arg);
+  }
 
   assert(ArgTy->getPointeeType()->isObjectType() && "Unhandled non-object pointer case");
 

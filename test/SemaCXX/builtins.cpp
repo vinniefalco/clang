@@ -66,21 +66,21 @@ void foo() {}
 
 void test_builtin_launder_diags(void *vp, const void *cvp, FnType *fnp,
                                 MemFnType mfp, ConstMemFnType cmfp) {
-  __builtin_launder(vp);   // expected-error {{argument to '__builtin_launder' cannot be a void pointer}}
-  __builtin_launder(cvp);  // expected-error {{argument to '__builtin_launder' cannot be a void pointer}}
-  __builtin_launder(fnp);  // expected-error {{argument to '__builtin_launder' cannot be a function pointer}}
-  __builtin_launder(mfp);  // expected-error {{non-pointer argument to '__builtin_launder'}}
-  __builtin_launder(cmfp); // expected-error {{non-pointer argument to '__builtin_launder'}}
+  __builtin_launder(vp);   // expected-error {{void pointer argument to '__builtin_launder' is not allowed}}
+  __builtin_launder(cvp);  // expected-error {{void pointer argument to '__builtin_launder' is not allowed}}
+  __builtin_launder(fnp);  // expected-error {{function pointer argument to '__builtin_launder' is not allowed}}
+  __builtin_launder(mfp);  // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
+  __builtin_launder(cmfp); // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
   (void)__builtin_launder(&fnp);
-  __builtin_launder(42);      // expected-error {{non-pointer argument to '__builtin_launder'}}
-  __builtin_launder(nullptr); // expected-error {{non-pointer argument to '__builtin_launder'}}
-  __builtin_launder(foo) // expected-error {{non-pointer argument to '__builtin_launder'}}
+  __builtin_launder(42);      // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
+  __builtin_launder(nullptr); // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
+  __builtin_launder(foo)      // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
 }
 
 void test_builtin_launder(char *p, const volatile int *ip, const float *&fp,
                           double *__restrict dp) {
   int x;
-  __builtin_launder(x); // expected-error {{non-pointer argument to '__builtin_launder'}}
+  __builtin_launder(x); // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
 #define TEST_TYPE(Ptr, Type) \
   static_assert(__is_same(decltype(__builtin_launder(Ptr)), Type), "expected same type")
   TEST_TYPE(p, char*);

@@ -257,12 +257,12 @@ void test_builtin_launder(char *p, void *vp, const void *cvp,
   __builtin_launder(); // expected-error {{too few arguments to function call, expected 1, have 0}}
   __builtin_launder(p, p); // expected-error {{too many arguments to function call, expected 1, have 2}}
   int x;
-  __builtin_launder(x); // expected-error {{non-pointer argument to '__builtin_launder'}}
+  __builtin_launder(x); // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
   char *d = __builtin_launder(p);
-  __builtin_launder(vp); // expected-error {{argument to '__builtin_launder' cannot be a void pointer}}
-  __builtin_launder(cvp); // expected-error {{argument to '__builtin_launder' cannot be a void pointer}}
+  __builtin_launder(vp);  // expected-error {{void pointer argument to '__builtin_launder' is not allowed}}
+  __builtin_launder(cvp); // expected-error {{void pointer argument to '__builtin_launder' is not allowed}}
   const volatile int *id = __builtin_launder(ip);
   int *id2 = __builtin_launder(ip); // expected-warning {{discards qualifiers}}
   float *fd = __builtin_launder(fp);
-  __builtin_launder(fn); // expected-error {{argument to '__builtin_launder' cannot be a function pointer}}
+  __builtin_launder(fn); // expected-error {{function pointer argument to '__builtin_launder' is not allowed}}
 }
