@@ -7973,7 +7973,10 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
     // We can decide statically which value the runtime would return if called.
     return Success(Info.getLangOpts().OpenMPIsDevice ? 0 : 1, E);
   case Builtin::BI__builtin_constexpr: {
-    bool Val = Info.EvalMode == EvalInfo::EM_ConstantExpression;
+    bool Val = (Info.EvalMode == EvalInfo::EM_ConstantExpression
+      || Info.EvalMode == EvalInfo::EM_PotentialConstantExpression
+      || Info.EvalMode == EvalInfo::EM_PotentialConstantExpressionUnevaluated
+      || Info.EvalMode == EvalInfo::EM_ConstantExpressionUnevaluated);
     return Success(Val, E);
   }
   }
