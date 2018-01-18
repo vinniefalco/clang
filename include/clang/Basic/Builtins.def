@@ -1459,6 +1459,8 @@ BUILTIN(__builtin_ms_va_start, "vc*&.", "nt")
 BUILTIN(__builtin_ms_va_end, "vc*&", "n")
 BUILTIN(__builtin_ms_va_copy, "vc*&c*&", "n")
 
+BUILTIN(__builtin_constexpr, "b", "nc")
+
 #undef BUILTIN
 #undef LIBBUILTIN
 #undef LANGBUILTIN

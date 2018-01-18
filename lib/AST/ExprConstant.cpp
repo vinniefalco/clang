@@ -7972,6 +7972,8 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
   case Builtin::BIomp_is_initial_device:
     // We can decide statically which value the runtime would return if called.
     return Success(Info.getLangOpts().OpenMPIsDevice ? 0 : 1, E);
+  case Builtin::BI__builtin_constexpr:
+    return Success(1, E);
   }
 }
 
