@@ -105,6 +105,14 @@ template <> struct ScalarEnumerationTraits<FormatStyle::ShortFunctionStyle> {
   }
 };
 
+template <> struct ScalarEnumerationTraits<FormatStyle::BinPackStyle> {
+  static void enumeration(IO &IO, FormatStyle::BinPackStyle &Value) {
+    IO.enumCase(Value, "Auto", FormatStyle::BPS_Auto);
+    IO.enumCase(Value, "Always", FormatStyle::BPS_Always);
+    IO.enumCase(Value, "Never", FormatStyle::BPS_Never);
+  }
+};
+
 template <> struct ScalarEnumerationTraits<FormatStyle::BinaryOperatorStyle> {
   static void enumeration(IO &IO, FormatStyle::BinaryOperatorStyle &Value) {
     IO.enumCase(Value, "All", FormatStyle::BOS_All);
@@ -378,6 +386,7 @@ template <> struct MappingTraits<FormatStyle> {
     IO.mapOptional("MacroBlockEnd", Style.MacroBlockEnd);
     IO.mapOptional("MaxEmptyLinesToKeep", Style.MaxEmptyLinesToKeep);
     IO.mapOptional("NamespaceIndentation", Style.NamespaceIndentation);
+    IO.mapOptional("ObjCBinPackProtocolList", Style.ObjCBinPackProtocolList);
     IO.mapOptional("ObjCBlockIndentWidth", Style.ObjCBlockIndentWidth);
     IO.mapOptional("ObjCSpaceAfterProperty", Style.ObjCSpaceAfterProperty);
     IO.mapOptional("ObjCSpaceBeforeProtocolList",
@@ -459,6 +468,7 @@ template <> struct MappingTraits<FormatStyle::RawStringFormat> {
     IO.mapOptional("Language", Format.Language);
     IO.mapOptional("Delimiters", Format.Delimiters);
     IO.mapOptional("EnclosingFunctions", Format.EnclosingFunctions);
+    IO.mapOptional("CanonicalDelimiter", Format.CanonicalDelimiter);
     IO.mapOptional("BasedOnStyle", Format.BasedOnStyle);
   }
 };
@@ -636,6 +646,7 @@ FormatStyle getLLVMStyle() {
   LLVMStyle.MaxEmptyLinesToKeep = 1;
   LLVMStyle.KeepEmptyLinesAtTheStartOfBlocks = true;
   LLVMStyle.NamespaceIndentation = FormatStyle::NI_None;
+  LLVMStyle.ObjCBinPackProtocolList = FormatStyle::BPS_Auto;
   LLVMStyle.ObjCBlockIndentWidth = 2;
   LLVMStyle.ObjCSpaceAfterProperty = false;
   LLVMStyle.ObjCSpaceBeforeProtocolList = true;
@@ -674,6 +685,12 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
   if (Language == FormatStyle::LK_TextProto) {
     FormatStyle GoogleStyle = getGoogleStyle(FormatStyle::LK_Proto);
     GoogleStyle.Language = FormatStyle::LK_TextProto;
+
+    // Text protos are currently mostly formatted inside C++ raw string literals
+    // and often the current breaking behavior of string literals is not
+    // beneficial there. Investigate turning this on once proper string reflow
+    // has been implemented.
+    GoogleStyle.BreakStringLiterals = false;
     return GoogleStyle;
   }
 
@@ -694,7 +711,7 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
   GoogleStyle.IndentCaseLabels = true;
   GoogleStyle.KeepEmptyLinesAtTheStartOfBlocks = false;
   GoogleStyle.ObjCSpaceAfterProperty = false;
-  GoogleStyle.ObjCSpaceBeforeProtocolList = false;
+  GoogleStyle.ObjCSpaceBeforeProtocolList = true;
   GoogleStyle.PointerAlignment = FormatStyle::PAS_Left;
   GoogleStyle.RawStringFormats = {{
       FormatStyle::LK_TextProto,
@@ -702,17 +719,10 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
       {
           "pb",
           "PB",
-          "proto",
-          "PROTO",
-          "textproto",
-          "TEXTPROTO",
       },
       /*EnclosingFunctionNames=*/
-       {
-           "EqualsProto",
-           "PARSE_TEXT_PROTO",
-           "ParseTextProto",
-       },
+      {},
+      /*CanonicalDelimiter=*/"",
       /*BasedOnStyle=*/"google",
   }};
   GoogleStyle.SpacesBeforeTrailingComments = 2;
@@ -750,6 +760,7 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
   } else if (Language == FormatStyle::LK_Proto) {
     GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
     GoogleStyle.SpacesInContainerLiterals = false;
+    GoogleStyle.Cpp11BracedListStyle = false;
   } else if (Language == FormatStyle::LK_ObjC) {
     GoogleStyle.ColumnLimit = 100;
   }

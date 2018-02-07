@@ -1871,11 +1871,7 @@ public:
   llvm::BasicBlock *createBasicBlock(const Twine &name = "",
                                      llvm::Function *parent = nullptr,
                                      llvm::BasicBlock *before = nullptr) {
-#ifdef NDEBUG
-    return llvm::BasicBlock::Create(getLLVMContext(), "", parent, before);
-#else
     return llvm::BasicBlock::Create(getLLVMContext(), name, parent, before);
-#endif
   }
 
   /// getBasicBlockForLabel - Return the LLVM basicblock that the specified
@@ -2123,16 +2119,14 @@ public:
   ///
   /// The difference to EmitAggregateCopy is that tail padding is not copied.
   /// This is required for correctness when assigning non-POD structures in C++.
-  void EmitAggregateAssign(Address DestPtr, Address SrcPtr,
-                           QualType EltTy) {
+  void EmitAggregateAssign(LValue Dest, LValue Src, QualType EltTy) {
     bool IsVolatile = hasVolatileMember(EltTy);
-    EmitAggregateCopy(DestPtr, SrcPtr, EltTy, IsVolatile, true);
+    EmitAggregateCopy(Dest, Src, EltTy, IsVolatile, /* isAssignment= */ true);
   }
 
-  void EmitAggregateCopyCtor(Address DestPtr, Address SrcPtr,
-                             QualType DestTy, QualType SrcTy) {
-    EmitAggregateCopy(DestPtr, SrcPtr, SrcTy, /*IsVolatile=*/false,
-                      /*IsAssignment=*/false);
+  void EmitAggregateCopyCtor(LValue Dest, LValue Src) {
+    EmitAggregateCopy(Dest, Src, Src.getType(),
+                      /* IsVolatile= */ false, /* IsAssignment= */ false);
   }
 
   /// EmitAggregateCopy - Emit an aggregate copy.
@@ -2141,9 +2135,8 @@ public:
   /// volatile.
   /// \param isAssignment - If false, allow padding to be copied.  This often
   /// yields more efficient.
-  void EmitAggregateCopy(Address DestPtr, Address SrcPtr,
-                         QualType EltTy, bool isVolatile=false,
-                         bool isAssignment = false);
+  void EmitAggregateCopy(LValue Dest, LValue Src, QualType EltTy,
+                         bool isVolatile = false, bool isAssignment = false);
 
   /// GetAddrOfLocalVar - Return the address of a local variable.
   Address GetAddrOfLocalVar(const VarDecl *VD) {
@@ -2223,12 +2216,24 @@ public:
   /// This function can be called with a null (unreachable) insert point.
   void EmitVariablyModifiedType(QualType Ty);
 
-  /// getVLASize - Returns an LLVM value that corresponds to the size,
+  struct VlaSizePair {
+    llvm::Value *NumElts;
+    QualType Type;
+
+    VlaSizePair(llvm::Value *NE, QualType T) : NumElts(NE), Type(T) {}
+  };
+
+  /// Return the number of elements for a single dimension
+  /// for the given array type.
+  VlaSizePair getVLAElements1D(const VariableArrayType *vla);
+  VlaSizePair getVLAElements1D(QualType vla);
+
+  /// Returns an LLVM value that corresponds to the size,
   /// in non-variably-sized elements, of a variable length array type,
   /// plus that largest non-variably-sized element type.  Assumes that
   /// the type has already been emitted with EmitVariablyModifiedType.
-  std::pair<llvm::Value*,QualType> getVLASize(const VariableArrayType *vla);
-  std::pair<llvm::Value*,QualType> getVLASize(QualType vla);
+  VlaSizePair getVLASize(const VariableArrayType *vla);
+  VlaSizePair getVLASize(QualType vla);
 
   /// LoadCXXThis - Load the value of 'this'. This function is only valid while
   /// generating code for an C++ member function.
@@ -2535,6 +2540,15 @@ public:
   void EmitAutoVarCleanups(const AutoVarEmission &emission);
   void emitAutoVarTypeCleanup(const AutoVarEmission &emission,
                               QualType::DestructionKind dtorKind);
+
+  /// Emits the alloca and debug information for the size expressions for each
+  /// dimension of an array. It registers the association of its (1-dimensional)
+  /// QualTypes and size expression's debug node, so that CGDebugInfo can
+  /// reference this node when creating the DISubrange object to describe the
+  /// array types.
+  void EmitAndRegisterVariableArrayDimensions(CGDebugInfo *DI,
+                                              const VarDecl &D,
+                                              bool EmitDebugInfo);
 
   void EmitStaticVarDecl(const VarDecl &D,
                          llvm::GlobalValue::LinkageTypes Linkage);

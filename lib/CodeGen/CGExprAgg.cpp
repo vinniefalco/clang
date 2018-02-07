@@ -299,7 +299,9 @@ void AggExprEmitter::EmitCopy(QualType type, const AggValueSlot &dest,
   // If the result of the assignment is used, copy the LHS there also.
   // It's volatile if either side is.  Use the minimum alignment of
   // the two sides.
-  CGF.EmitAggregateCopy(dest.getAddress(), src.getAddress(), type,
+  LValue DestLV = CGF.MakeAddrLValue(dest.getAddress(), type);
+  LValue SrcLV = CGF.MakeAddrLValue(src.getAddress(), type);
+  CGF.EmitAggregateCopy(DestLV, SrcLV, type,
                         dest.isVolatile() || src.isVolatile());
 }
 
@@ -1542,11 +1544,13 @@ LValue CodeGenFunction::EmitAggExprToLValue(const Expr *E) {
   return LV;
 }
 
-void CodeGenFunction::EmitAggregateCopy(Address DestPtr,
-                                        Address SrcPtr, QualType Ty,
-                                        bool isVolatile,
+void CodeGenFunction::EmitAggregateCopy(LValue Dest, LValue Src,
+                                        QualType Ty, bool isVolatile,
                                         bool isAssignment) {
   assert(!Ty->isAnyComplexType() && "Shouldn't happen for complex");
+
+  Address DestPtr = Dest.getAddress();
+  Address SrcPtr = Src.getAddress();
 
   if (getLangOpts().CPlusPlus) {
     if (const RecordType *RT = Ty->getAs<RecordType>()) {
@@ -1563,7 +1567,7 @@ void CodeGenFunction::EmitAggregateCopy(Address DestPtr,
         return;
     }
   }
-  
+
   // Aggregate assignment turns into llvm.memcpy.  This is almost valid per
   // C99 6.5.16.1p3, which states "If the value being stored in an object is
   // read from another object that overlaps in anyway the storage of the first
@@ -1658,4 +1662,10 @@ void CodeGenFunction::EmitAggregateCopy(Address DestPtr,
   // the optimizer wishes to expand it in to scalar memory operations.
   if (llvm::MDNode *TBAAStructTag = CGM.getTBAAStructInfo(Ty))
     Inst->setMetadata(llvm::LLVMContext::MD_tbaa_struct, TBAAStructTag);
+
+  if (CGM.getCodeGenOpts().NewStructPathTBAA) {
+    TBAAAccessInfo TBAAInfo = CGM.mergeTBAAInfoForMemoryTransfer(
+        Dest.getTBAAInfo(), Src.getTBAAInfo());
+    CGM.DecorateInstructionWithTBAA(Inst, TBAAInfo);
+  }
 }

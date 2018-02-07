@@ -1497,9 +1497,10 @@ void NamedDecl::printQualifiedName(raw_ostream &OS,
   using ContextsTy = SmallVector<const DeclContext *, 8>;
   ContextsTy Contexts;
 
-  // Collect contexts.
-  while (Ctx && isa<NamedDecl>(Ctx)) {
-    Contexts.push_back(Ctx);
+  // Collect named contexts.
+  while (Ctx) {
+    if (isa<NamedDecl>(Ctx))
+      Contexts.push_back(Ctx);
     Ctx = Ctx->getParent();
   }
 
@@ -2899,6 +2900,13 @@ unsigned FunctionDecl::getBuiltinID() const {
   // the C99 standard headers are not available.
   if (Context.getLangOpts().OpenCL &&
       Context.BuiltinInfo.isPredefinedLibFunction(BuiltinID))
+    return 0;
+
+  // CUDA does not have device-side standard library. printf and malloc are the
+  // only special cases that are supported by device-side runtime.
+  if (Context.getLangOpts().CUDA && hasAttr<CUDADeviceAttr>() &&
+      !hasAttr<CUDAHostAttr>() &&
+      !(BuiltinID == Builtin::BIprintf || BuiltinID == Builtin::BImalloc))
     return 0;
 
   return BuiltinID;
@@ -4365,9 +4373,7 @@ bool TypedefNameDecl::isTransparentTagSlow() const {
   };
 
   bool isTransparent = determineIsTransparent();
-  CacheIsTransparentTag = 1;
-  if (isTransparent)
-    CacheIsTransparentTag |= 0x2;
+  MaybeModedTInfo.setInt((isTransparent << 1) | 1);
   return isTransparent;
 }
 

@@ -90,7 +90,7 @@ ExprEngine::ExprEngine(AnalysisManager &mgr, bool gcEnabled,
                        InliningModes HowToInlineIn)
   : AMgr(mgr),
     AnalysisDeclContexts(mgr.getAnalysisDeclContextManager()),
-    Engine(*this, FS),
+    Engine(*this, FS, mgr.getAnalyzerOptions()),
     G(Engine.getGraph()),
     StateMgr(getContext(), mgr.getStoreManagerCreator(),
              mgr.getConstraintManagerCreator(), G.getAllocator(),
@@ -1325,8 +1325,16 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
 
     case Stmt::CXXNewExprClass: {
       Bldr.takeNodes(Pred);
+
+      ExplodedNodeSet PreVisit;
+      getCheckerManager().runCheckersForPreStmt(PreVisit, Pred, S, *this);
+
       ExplodedNodeSet PostVisit;
-      VisitCXXNewExpr(cast<CXXNewExpr>(S), Pred, PostVisit);
+      for (ExplodedNodeSet::iterator i = PreVisit.begin(),
+                                     e = PreVisit.end(); i != e ; ++i) {
+        VisitCXXNewExpr(cast<CXXNewExpr>(S), *i, PostVisit);
+      }
+
       getCheckerManager().runCheckersForPostStmt(Dst, PostVisit, S, *this);
       Bldr.addNodes(Dst);
       break;
@@ -2244,16 +2252,15 @@ void ExprEngine::VisitMemberExpr(const MemberExpr *M, ExplodedNode *Pred,
   ExplodedNodeSet CheckedSet;
   getCheckerManager().runCheckersForPreStmt(CheckedSet, Pred, M, *this);
 
-  ExplodedNodeSet EvalSet;
-  ValueDecl *Member = M->getMemberDecl();
+  ExplodedNodeSet EvalSet;  
+  ValueDecl *Member = M->getMemberDecl();  
 
   // Handle static member variables and enum constants accessed via
   // member syntax.
-  if (isa<VarDecl>(Member) || isa<EnumConstantDecl>(Member)) {
-    ExplodedNodeSet Dst;
+  if (isa<VarDecl>(Member) || isa<EnumConstantDecl>(Member)) {    
     for (ExplodedNodeSet::iterator I = CheckedSet.begin(), E = CheckedSet.end();
          I != E; ++I) {
-      VisitCommonDeclRefExpr(M, Member, Pred, EvalSet);
+      VisitCommonDeclRefExpr(M, Member, *I, EvalSet);
     }
   } else {
     StmtNodeBuilder Bldr(CheckedSet, EvalSet, *currBldrCtx);
@@ -2931,6 +2938,8 @@ struct DOTGraphTraits<ExplodedNode*> :
           Out << "\\lPostStore\\l";
         else if (Loc.getAs<PostLValue>())
           Out << "\\lPostLValue\\l";
+        else if (Loc.getAs<PostAllocatorCall>())
+          Out << "\\lPostAllocatorCall\\l";
 
         break;
       }

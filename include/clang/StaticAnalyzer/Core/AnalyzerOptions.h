@@ -139,6 +139,10 @@ public:
   AnalysisPurgeMode AnalysisPurgeOpt;
   
   std::string AnalyzeSpecificFunction;
+
+  /// Store full compiler invocation for reproducible instructions in the
+  /// generated report.
+  std::string FullCompilerInvocation;
   
   /// \brief The maximum number of times the analyzer visits a block.
   unsigned maxBlockVisitOnPath;
@@ -184,7 +188,17 @@ public:
   /// \brief The mode of function selection used during inlining.
   AnalysisInliningMode InliningMode;
 
+  enum class ExplorationStrategyKind {
+    DFS,
+    BFS,
+    BFSBlockDFSContents,
+    NotSet
+  };
+
 private:
+
+  ExplorationStrategyKind ExplorationStrategy;
+
   /// \brief Describes the kinds for high-level analyzer mode.
   enum UserModeKind {
     UMK_NotSet = 0,
@@ -385,6 +399,8 @@ public:
   /// which is used to set other low-level options. It is not accessible
   /// outside of AnalyzerOptions.
   UserModeKind getUserMode();
+
+  ExplorationStrategyKind getExplorationStrategy();
 
   /// \brief Returns the inter-procedural analysis mode.
   IPAKind getIPAMode();
@@ -607,6 +623,7 @@ public:
     // Cap the stack depth at 4 calls (5 stack frames, base + 4 calls).
     InlineMaxStackDepth(5),
     InliningMode(NoRedundancy),
+    ExplorationStrategy(ExplorationStrategyKind::NotSet),
     UserMode(UMK_NotSet),
     IPAMode(IPAK_NotSet),
     CXXMemberInliningMode() {}

@@ -3266,12 +3266,23 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (!C.isForDiagnostics())
     CmdArgs.push_back("-disable-free");
 
-// Disable the verification pass in -asserts builds.
 #ifdef NDEBUG
-  CmdArgs.push_back("-disable-llvm-verifier");
-  // Discard LLVM value names in -asserts builds.
-  CmdArgs.push_back("-discard-value-names");
+  const bool IsAssertBuild = false;
+#else
+  const bool IsAssertBuild = true;
 #endif
+
+  // Disable the verification pass in -asserts builds.
+  if (!IsAssertBuild)
+    CmdArgs.push_back("-disable-llvm-verifier");
+
+  // Discard value names in assert builds unless otherwise specified.
+  if (const Arg *A = Args.getLastArg(options::OPT_fdiscard_value_names,
+                                     options::OPT_fno_discard_value_names)) {
+    if (A->getOption().matches(options::OPT_fdiscard_value_names))
+      CmdArgs.push_back("-discard-value-names");
+  } else if (!IsAssertBuild)
+    CmdArgs.push_back("-discard-value-names");
 
   // Set the main file name, so that debug info works even with
   // -save-temps.
@@ -3625,7 +3636,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       options::OPT_finstrument_function_entry_bare))
     A->render(Args, CmdArgs);
 
-  addPGOAndCoverageFlags(C, D, Output, Args, CmdArgs);
+  // NVPTX doesn't support PGO or coverage. There's no runtime support for
+  // sampling, overhead of call arc collection is way too high and there's no
+  // way to collect the output.
+  if (!Triple.isNVPTX())
+    addPGOAndCoverageFlags(C, D, Output, Args, CmdArgs);
 
   if (auto *ABICompatArg = Args.getLastArg(options::OPT_fclang_abi_compat_EQ))
     ABICompatArg->render(Args, CmdArgs);
@@ -4688,6 +4703,37 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
           << "-fwhole-program-vtables"
           << "-flto";
     CmdArgs.push_back("-fwhole-program-vtables");
+  }
+
+  if (Arg *A = Args.getLastArg(options::OPT_fexperimental_isel,
+                               options::OPT_fno_experimental_isel)) {
+    CmdArgs.push_back("-mllvm");
+    if (A->getOption().matches(options::OPT_fexperimental_isel)) {
+      CmdArgs.push_back("-global-isel=1");
+
+      // GISel is on by default on AArch64 -O0, so don't bother adding
+      // the fallback remarks for it. Other combinations will add a warning of
+      // some kind.
+      bool IsArchSupported = Triple.getArch() == llvm::Triple::aarch64;
+      bool IsOptLevelSupported = false;
+
+      Arg *A = Args.getLastArg(options::OPT_O_Group);
+      if (Triple.getArch() == llvm::Triple::aarch64) {
+        if (!A || A->getOption().matches(options::OPT_O0))
+          IsOptLevelSupported = true;
+      }
+      if (!IsArchSupported || !IsOptLevelSupported) {
+        CmdArgs.push_back("-mllvm");
+        CmdArgs.push_back("-global-isel-abort=2");
+
+        if (!IsArchSupported)
+          D.Diag(diag::warn_drv_experimental_isel_incomplete) << Triple.getArchName();
+        else
+          D.Diag(diag::warn_drv_experimental_isel_incomplete_opt);
+      }
+    } else {
+      CmdArgs.push_back("-global-isel=0");
+    }
   }
 
   // Finally add the compile command to the compilation.

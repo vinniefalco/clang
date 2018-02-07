@@ -189,6 +189,17 @@ TEST_F(FormatTestObjC, FormatObjCAutoreleasepool) {
                "}\n");
 }
 
+TEST_F(FormatTestObjC, FormatObjCGenerics) {
+  Style.ColumnLimit = 40;
+  verifyFormat("int aaaaaaaaaaaaaaaa(\n"
+               "    NSArray<aaaaaaaaaaaaaaaaaa *>\n"
+               "        aaaaaaaaaaaaaaaaa);\n");
+  verifyFormat("int aaaaaaaaaaaaaaaa(\n"
+               "    NSArray<aaaaaaaaaaaaaaaaaaa<\n"
+               "        aaaaaaaaaaaaaaaa *> *>\n"
+               "        aaaaaaaaaaaaaaaaa);\n");
+}
+
 TEST_F(FormatTestObjC, FormatObjCInterface) {
   verifyFormat("@interface Foo : NSObject <NSSomeDelegate> {\n"
                "@public\n"
@@ -215,6 +226,12 @@ TEST_F(FormatTestObjC, FormatObjCInterface) {
                "@end");
 
   verifyFormat("@interface Foo : Bar\n"
+               "@property(assign, readwrite) NSInteger bar;\n"
+               "+ (id)init;\n"
+               "@end");
+
+  verifyFormat("FOUNDATION_EXPORT NS_AVAILABLE_IOS(10.0) @interface Foo : Bar\n"
+               "@property(assign, readwrite) NSInteger bar;\n"
                "+ (id)init;\n"
                "@end");
 
@@ -270,8 +287,35 @@ TEST_F(FormatTestObjC, FormatObjCInterface) {
                "+ (id)init;\n"
                "@end");
 
+  Style.ColumnLimit = 40;
+  verifyFormat("@interface ccccccccccccc () <\n"
+               "    ccccccccccccc, ccccccccccccc,\n"
+               "    ccccccccccccc, ccccccccccccc> {\n"
+               "}");
+  Style.ObjCBinPackProtocolList = FormatStyle::BPS_Never;
+  verifyFormat("@interface ddddddddddddd () <\n"
+               "    ddddddddddddd,\n"
+               "    ddddddddddddd,\n"
+               "    ddddddddddddd,\n"
+               "    ddddddddddddd> {\n"
+               "}");
+
+  Style.BinPackParameters = false;
+  Style.ObjCBinPackProtocolList = FormatStyle::BPS_Auto;
+  verifyFormat("@interface eeeeeeeeeeeee () <\n"
+               "    eeeeeeeeeeeee,\n"
+               "    eeeeeeeeeeeee,\n"
+               "    eeeeeeeeeeeee,\n"
+               "    eeeeeeeeeeeee> {\n"
+               "}");
+  Style.ObjCBinPackProtocolList = FormatStyle::BPS_Always;
+  verifyFormat("@interface fffffffffffff () <\n"
+               "    fffffffffffff, fffffffffffff,\n"
+               "    fffffffffffff, fffffffffffff> {\n"
+               "}");
+
   Style = getGoogleStyle(FormatStyle::LK_ObjC);
-  verifyFormat("@interface Foo : NSObject<NSSomeDelegate> {\n"
+  verifyFormat("@interface Foo : NSObject <NSSomeDelegate> {\n"
                " @public\n"
                "  int field1;\n"
                " @protected\n"
@@ -283,15 +327,15 @@ TEST_F(FormatTestObjC, FormatObjCInterface) {
                "}\n"
                "+ (id)init;\n"
                "@end");
-  verifyFormat("@interface Foo : Bar<Baz, Quux>\n"
+  verifyFormat("@interface Foo : Bar <Baz, Quux>\n"
                "+ (id)init;\n"
                "@end");
-  verifyFormat("@interface Foo (HackStuff)<MyProtocol>\n"
+  verifyFormat("@interface Foo (HackStuff) <MyProtocol>\n"
                "+ (id)init;\n"
                "@end");
   Style.BinPackParameters = false;
   Style.ColumnLimit = 80;
-  verifyFormat("@interface aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ()<\n"
+  verifyFormat("@interface aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa () <\n"
                "    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
                "    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
                "    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n"
@@ -394,6 +438,10 @@ TEST_F(FormatTestObjC, FormatObjCProtocol) {
                "@protocol Bar\n"
                "@end");
 
+  verifyFormat("FOUNDATION_EXPORT NS_AVAILABLE_IOS(10.0) @protocol Foo\n"
+               "@property(assign, readwrite) NSInteger bar;\n"
+               "@end");
+
   verifyFormat("@protocol myProtocol\n"
                "- (void)mandatoryWithInt:(int)i;\n"
                "@optional\n"
@@ -414,7 +462,7 @@ TEST_F(FormatTestObjC, FormatObjCProtocol) {
                "@end");
 
   Style = getGoogleStyle(FormatStyle::LK_ObjC);
-  verifyFormat("@protocol MyProtocol<NSObject>\n"
+  verifyFormat("@protocol MyProtocol <NSObject>\n"
                "- (NSUInteger)numberOfThings;\n"
                "@end");
 }
@@ -644,6 +692,39 @@ TEST_F(FormatTestObjC, FormatObjCMethodExpr) {
   verifyFormat("[I drawRectOn:surface //\n"
                "        ofSize:aa:bbb\n"
                "      atOrigin:cc:dd];");
+
+  // Inline block as a first argument.
+  verifyFormat("[object justBlock:^{\n"
+               "  a = 42;\n"
+               "}];");
+  verifyFormat("[object\n"
+               "    justBlock:^{\n"
+               "      a = 42;\n"
+               "    }\n"
+               "     notBlock:42\n"
+               "            a:42];");
+  verifyFormat("[object\n"
+               "    firstBlock:^{\n"
+               "      a = 42;\n"
+               "    }\n"
+               "    blockWithLongerName:^{\n"
+               "      a = 42;\n"
+               "    }];");
+  verifyFormat("[object\n"
+               "    blockWithLongerName:^{\n"
+               "      a = 42;\n"
+               "    }\n"
+               "    secondBlock:^{\n"
+               "      a = 42;\n"
+               "    }];");
+  verifyFormat("[object\n"
+               "    firstBlock:^{\n"
+               "      a = 42;\n"
+               "    }\n"
+               "    notBlock:42\n"
+               "    secondBlock:^{\n"
+               "      a = 42;\n"
+               "    }];");
 
   Style.ColumnLimit = 70;
   verifyFormat(

@@ -5537,7 +5537,9 @@ void ASTWriter::associateDeclWithFile(const Decl *D, DeclID ID) {
     return;
   // FIXME: ParmVarDecls that are part of a function type of a parameter of
   // a function/objc method, should not have TU as lexical context.
-  if (isa<ParmVarDecl>(D))
+  // TemplateTemplateParmDecls that are part of an alias template, should not
+  // have TU as lexical context.
+  if (isa<ParmVarDecl>(D) || isa<TemplateTemplateParmDecl>(D))
     return;
 
   SourceManager &SM = Context->getSourceManager();
@@ -6007,7 +6009,9 @@ void ASTRecordWriter::AddCXXDefinitionData(const CXXRecordDecl *D) {
   Record->push_back(Data.DefaultedMoveAssignmentIsDeleted);
   Record->push_back(Data.DefaultedDestructorIsDeleted);
   Record->push_back(Data.HasTrivialSpecialMembers);
+  Record->push_back(Data.HasTrivialSpecialMembersForCall);
   Record->push_back(Data.DeclaredNonTrivialSpecialMembers);
+  Record->push_back(Data.DeclaredNonTrivialSpecialMembersForCall);
   Record->push_back(Data.HasIrrelevantDestructor);
   Record->push_back(Data.HasConstexprNonCopyMoveConstructor);
   Record->push_back(Data.HasDefaultedDefaultConstructor);
