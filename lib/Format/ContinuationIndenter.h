@@ -38,10 +38,14 @@ class WhitespaceManager;
 
 struct RawStringFormatStyleManager {
   llvm::StringMap<FormatStyle> DelimiterStyle;
+  llvm::StringMap<FormatStyle> EnclosingFunctionStyle;
 
   RawStringFormatStyleManager(const FormatStyle &CodeStyle);
 
-  llvm::Optional<FormatStyle> get(StringRef Delimiter) const;
+  llvm::Optional<FormatStyle> getDelimiterStyle(StringRef Delimiter) const;
+
+  llvm::Optional<FormatStyle>
+  getEnclosingFunctionStyle(StringRef EnclosingFunction) const;
 };
 
 class ContinuationIndenter {
@@ -310,8 +314,8 @@ struct ParenState {
   /// the same token.
   bool HasMultipleNestedBlocks : 1;
 
-  // \brief The start of a nested block (e.g. lambda introducer in C++ or
-  // "function" in JavaScript) is not wrapped to a new line.
+  /// \brief The start of a nested block (e.g. lambda introducer in C++ or
+  /// "function" in JavaScript) is not wrapped to a new line.
   bool NestedBlockInlined : 1;
 
   bool operator<(const ParenState &Other) const {

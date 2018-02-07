@@ -159,8 +159,108 @@ std::unique_ptr<PathDiagnosticPiece> BugReporterVisitor::getDefaultEndPath(
   return std::move(P);
 }
 
+/// \return name of the macro inside the location \p Loc.
+static StringRef getMacroName(SourceLocation Loc,
+    BugReporterContext &BRC) {
+  return Lexer::getImmediateMacroName(
+      Loc,
+      BRC.getSourceManager(),
+      BRC.getASTContext().getLangOpts());
+}
+
+/// \return Whether given spelling location corresponds to an expansion
+/// of a function-like macro.
+static bool isFunctionMacroExpansion(SourceLocation Loc,
+                                const SourceManager &SM) {
+  if (!Loc.isMacroID())
+    return false;
+  while (SM.isMacroArgExpansion(Loc))
+    Loc = SM.getImmediateExpansionRange(Loc).first;
+  std::pair<FileID, unsigned> TLInfo = SM.getDecomposedLoc(Loc);
+  SrcMgr::SLocEntry SE = SM.getSLocEntry(TLInfo.first);
+  const SrcMgr::ExpansionInfo &EInfo = SE.getExpansion();
+  return EInfo.isFunctionMacroExpansion();
+}
 
 namespace {
+
+class MacroNullReturnSuppressionVisitor final
+    : public BugReporterVisitorImpl<MacroNullReturnSuppressionVisitor> {
+
+  const SubRegion *RegionOfInterest;
+
+public:
+  MacroNullReturnSuppressionVisitor(const SubRegion *R) : RegionOfInterest(R) {}
+
+  static void *getTag() {
+    static int Tag = 0;
+    return static_cast<void *>(&Tag);
+  }
+
+  void Profile(llvm::FoldingSetNodeID &ID) const override {
+    ID.AddPointer(getTag());
+  }
+
+  std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *N,
+                                                 const ExplodedNode *PrevN,
+                                                 BugReporterContext &BRC,
+                                                 BugReport &BR) override {
+    auto BugPoint = BR.getErrorNode()->getLocation().getAs<StmtPoint>();
+    if (!BugPoint)
+      return nullptr;
+
+    const SourceManager &SMgr = BRC.getSourceManager();
+    if (auto Loc = matchAssignment(N, BRC)) {
+      if (isFunctionMacroExpansion(*Loc, SMgr)) {
+        std::string MacroName = getMacroName(*Loc, BRC);
+        SourceLocation BugLoc = BugPoint->getStmt()->getLocStart();
+        if (!BugLoc.isMacroID() || getMacroName(BugLoc, BRC) != MacroName)
+          BR.markInvalid(getTag(), MacroName.c_str());
+      }
+    }
+    return nullptr;
+  }
+
+  static void addMacroVisitorIfNecessary(
+        const ExplodedNode *N, const MemRegion *R,
+        bool EnableNullFPSuppression, BugReport &BR,
+        const SVal V) {
+    AnalyzerOptions &Options = N->getState()->getStateManager()
+        .getOwningEngine()->getAnalysisManager().options;
+    if (EnableNullFPSuppression && Options.shouldSuppressNullReturnPaths()
+          && V.getAs<Loc>())
+      BR.addVisitor(llvm::make_unique<MacroNullReturnSuppressionVisitor>(
+              R->getAs<SubRegion>()));
+  }
+
+private:
+  /// \return Source location of right hand side of an assignment
+  /// into \c RegionOfInterest, empty optional if none found.
+  Optional<SourceLocation> matchAssignment(const ExplodedNode *N,
+                                           BugReporterContext &BRC) {
+    const Stmt *S = PathDiagnosticLocation::getStmt(N);
+    ProgramStateRef State = N->getState();
+    auto *LCtx = N->getLocationContext();
+    if (!S)
+      return None;
+
+    if (auto *DS = dyn_cast<DeclStmt>(S)) {
+      if (const VarDecl *VD = dyn_cast<VarDecl>(DS->getSingleDecl()))
+        if (const Expr *RHS = VD->getInit())
+          if (RegionOfInterest->isSubRegionOf(
+                  State->getLValue(VD, LCtx).getAsRegion()))
+            return RHS->getLocStart();
+    } else if (auto *BO = dyn_cast<BinaryOperator>(S)) {
+      const MemRegion *R = N->getSVal(BO->getLHS()).getAsRegion();
+      const Expr *RHS = BO->getRHS();
+      if (BO->isAssignmentOp() && RegionOfInterest->isSubRegionOf(R)) {
+        return RHS->getLocStart();
+      }
+    }
+    return None;
+  }
+};
+
 /// Emits an extra note at the return statement of an interesting stack frame.
 ///
 /// The returned value is marked as an interesting value, and if it's null,
@@ -235,7 +335,7 @@ public:
 
     // Check the return value.
     ProgramStateRef State = Node->getState();
-    SVal RetVal = State->getSVal(S, Node->getLocationContext());
+    SVal RetVal = Node->getSVal(S);
 
     // Handle cases where a reference is returned and then immediately used.
     if (cast<Expr>(S)->isGLValue())
@@ -717,7 +817,7 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
       if (VR) {
         // See if we can get the BlockVarRegion.
         ProgramStateRef State = StoreSite->getState();
-        SVal V = State->getSVal(S, PS->getLocationContext());
+        SVal V = StoreSite->getSVal(S);
         if (const BlockDataRegion *BDR =
               dyn_cast_or_null<BlockDataRegion>(V.getAsRegion())) {
           if (const VarRegion *OriginalR = BDR->getOriginalRegion(VR)) {
@@ -854,13 +954,6 @@ const char *SuppressInlineDefensiveChecksVisitor::getTag() {
   return "IDCVisitor";
 }
 
-/// \return name of the macro inside the location \p Loc.
-static StringRef getMacroName(SourceLocation Loc,
-    BugReporterContext &BRC) {
-  return Lexer::getImmediateMacroName(
-      Loc, BRC.getSourceManager(), BRC.getASTContext().getLangOpts());
-}
-
 std::shared_ptr<PathDiagnosticPiece>
 SuppressInlineDefensiveChecksVisitor::VisitNode(const ExplodedNode *Succ,
                                                 const ExplodedNode *Pred,
@@ -921,20 +1014,14 @@ SuppressInlineDefensiveChecksVisitor::VisitNode(const ExplodedNode *Succ,
 
     SourceLocation TerminatorLoc = CurTerminatorStmt->getLocStart();
     if (TerminatorLoc.isMacroID()) {
-      const SourceManager &SMgr = BRC.getSourceManager();
-      std::pair<FileID, unsigned> TLInfo = SMgr.getDecomposedLoc(TerminatorLoc);
-      SrcMgr::SLocEntry SE = SMgr.getSLocEntry(TLInfo.first);
-      const SrcMgr::ExpansionInfo &EInfo = SE.getExpansion();
-      if (EInfo.isFunctionMacroExpansion()) {
-        SourceLocation BugLoc = BugPoint->getStmt()->getLocStart();
+      SourceLocation BugLoc = BugPoint->getStmt()->getLocStart();
 
-        // Suppress reports unless we are in that same macro.
-        if (!BugLoc.isMacroID() ||
-            getMacroName(BugLoc, BRC) != getMacroName(TerminatorLoc, BRC)) {
-          BR.markInvalid("Suppress Macro IDC", CurLC);
-        }
-        return nullptr;
+      // Suppress reports unless we are in that same macro.
+      if (!BugLoc.isMacroID() ||
+          getMacroName(BugLoc, BRC) != getMacroName(TerminatorLoc, BRC)) {
+        BR.markInvalid("Suppress Macro IDC", CurLC);
       }
+      return nullptr;
     }
   }
   return nullptr;
@@ -1104,7 +1191,7 @@ bool bugreporter::trackNullOrUndefValue(const ExplodedNode *N,
   if (Inner && ExplodedGraph::isInterestingLValueExpr(Inner)) {
     const ExplodedNode *LVNode = findNodeForExpression(N, Inner);
     ProgramStateRef LVState = LVNode->getState();
-    SVal LVal = LVState->getSVal(Inner, LVNode->getLocationContext());
+    SVal LVal = LVNode->getSVal(Inner);
 
     const MemRegion *RR = getLocationRegionIfReference(Inner, N);
     bool LVIsNull = LVState->isNull(LVal).isConstrainedTrue();
@@ -1123,11 +1210,14 @@ bool bugreporter::trackNullOrUndefValue(const ExplodedNode *N,
     // If the LVal is null, check if we are dealing with null reference.
     // For those, we want to track the location of the reference.
     const MemRegion *R = (RR && LVIsNull) ? RR :
-        LVState->getSVal(Inner, LVNode->getLocationContext()).getAsRegion();
+        LVNode->getSVal(Inner).getAsRegion();
 
     if (R) {
       // Mark both the variable region and its contents as interesting.
       SVal V = LVState->getRawSVal(loc::MemRegionVal(R));
+
+      MacroNullReturnSuppressionVisitor::addMacroVisitorIfNecessary(
+          N, R, EnableNullFPSuppression, report, V);
 
       report.markInteresting(R);
       report.markInteresting(V);
@@ -1203,7 +1293,7 @@ const Expr *NilReceiverBRVisitor::getNilReceiver(const Stmt *S,
     return nullptr;
   if (const Expr *Receiver = ME->getInstanceReceiver()) {
     ProgramStateRef state = N->getState();
-    SVal V = state->getSVal(Receiver, N->getLocationContext());
+    SVal V = N->getSVal(Receiver);
     if (state->isNull(V).isConstrainedTrue())
       return Receiver;
   }
@@ -1259,8 +1349,7 @@ void FindLastStoreBRVisitor::registerStatementVarDecls(BugReport &BR,
     const Stmt *Head = WorkList.front();
     WorkList.pop_front();
 
-    ProgramStateRef state = N->getState();
-    ProgramStateManager &StateMgr = state->getStateManager();
+    ProgramStateManager &StateMgr = N->getState()->getStateManager();
 
     if (const DeclRefExpr *DR = dyn_cast<DeclRefExpr>(Head)) {
       if (const VarDecl *VD = dyn_cast<VarDecl>(DR->getDecl())) {
@@ -1268,7 +1357,7 @@ void FindLastStoreBRVisitor::registerStatementVarDecls(BugReport &BR,
         StateMgr.getRegionManager().getVarRegion(VD, N->getLocationContext());
 
         // What did we load?
-        SVal V = state->getSVal(S, N->getLocationContext());
+        SVal V = N->getSVal(S);
 
         if (V.getAs<loc::ConcreteInt>() || V.getAs<nonloc::ConcreteInt>()) {
           // Register a new visitor with the BugReport.
@@ -1838,7 +1927,7 @@ UndefOrNullArgVisitor::VisitNode(const ExplodedNode *N,
     const MemRegion *ArgReg = Call->getArgSVal(Idx).getAsRegion();
 
     // Are we tracking the argument or its subregion?
-    if ( !ArgReg || (ArgReg != R && !R->isSubRegionOf(ArgReg->StripCasts())))
+    if ( !ArgReg || !R->isSubRegionOf(ArgReg->StripCasts()))
       continue;
 
     // Check the function parameter type.

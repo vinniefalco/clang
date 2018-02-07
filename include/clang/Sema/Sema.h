@@ -1339,7 +1339,7 @@ public:
       getCurFunction()->recordUseOfWeak(E, IsRead);
   }
 
-  void PushCompoundScope();
+  void PushCompoundScope(bool IsStmtExpr);
   void PopCompoundScope();
 
   sema::CompoundScopeInfo &getCurCompoundScope() const;
@@ -1459,6 +1459,7 @@ public:
       const PartialDiagnostic &DiagID, const PartialDiagnostic & NoteID,
       const FunctionProtoType *Old, SourceLocation OldLoc,
       const FunctionProtoType *New, SourceLocation NewLoc);
+  bool handlerCanCatch(QualType HandlerType, QualType ExceptionType);
   bool CheckExceptionSpecSubset(const PartialDiagnostic &DiagID,
                                 const PartialDiagnostic &NestedDiagID,
                                 const PartialDiagnostic &NoteID,
@@ -2235,7 +2236,17 @@ public:
 
   bool CheckNontrivialField(FieldDecl *FD);
   void DiagnoseNontrivial(const CXXRecordDecl *Record, CXXSpecialMember CSM);
+
+  enum TrivialABIHandling {
+    /// The triviality of a method unaffected by "trivial_abi".
+    TAH_IgnoreTrivialABI,
+
+    /// The triviality of a method affected by "trivial_abi".
+    TAH_ConsiderTrivialABI
+  };
+
   bool SpecialMemberIsTrivial(CXXMethodDecl *MD, CXXSpecialMember CSM,
+                              TrivialABIHandling TAH = TAH_IgnoreTrivialABI,
                               bool Diagnose = false);
   CXXSpecialMember getSpecialMember(const CXXMethodDecl *MD);
   void ActOnLastBitfield(SourceLocation DeclStart,
@@ -3666,7 +3677,7 @@ public:
   StmtResult ActOnNullStmt(SourceLocation SemiLoc,
                            bool HasLeadingEmptyMacro = false);
 
-  void ActOnStartOfCompoundStmt();
+  void ActOnStartOfCompoundStmt(bool IsStmtExpr);
   void ActOnFinishOfCompoundStmt();
   StmtResult ActOnCompoundStmt(SourceLocation L, SourceLocation R,
                                ArrayRef<Stmt *> Elts, bool isStmtExpr);
@@ -3674,8 +3685,8 @@ public:
   /// \brief A RAII object to enter scope of a compound statement.
   class CompoundScopeRAII {
   public:
-    CompoundScopeRAII(Sema &S): S(S) {
-      S.ActOnStartOfCompoundStmt();
+    CompoundScopeRAII(Sema &S, bool IsStmtExpr = false) : S(S) {
+      S.ActOnStartOfCompoundStmt(IsStmtExpr);
     }
 
     ~CompoundScopeRAII() {
@@ -5105,14 +5116,16 @@ public:
   /// or class type construction ("ClassType(x,y,z)")
   /// or creation of a value-initialized type ("int()").
   ExprResult ActOnCXXTypeConstructExpr(ParsedType TypeRep,
-                                       SourceLocation LParenLoc,
+                                       SourceLocation LParenOrBraceLoc,
                                        MultiExprArg Exprs,
-                                       SourceLocation RParenLoc);
+                                       SourceLocation RParenOrBraceLoc,
+                                       bool ListInitialization);
 
   ExprResult BuildCXXTypeConstructExpr(TypeSourceInfo *Type,
                                        SourceLocation LParenLoc,
                                        MultiExprArg Exprs,
-                                       SourceLocation RParenLoc);
+                                       SourceLocation RParenLoc,
+                                       bool ListInitialization);
 
   /// ActOnCXXNew - Parsed a C++ 'new' expression.
   ExprResult ActOnCXXNew(SourceLocation StartLoc, bool UseGlobal,
@@ -5793,6 +5806,11 @@ public:
       SourceLocation BaseLoc);
 
   void CheckCompletedCXXClass(CXXRecordDecl *Record);
+
+  /// Check that the C++ class annoated with "trivial_abi" satisfies all the
+  /// conditions that are needed for the attribute to have an effect.
+  void checkIllFormedTrivialABIStruct(CXXRecordDecl &RD);
+
   void ActOnFinishCXXMemberSpecification(Scope* S, SourceLocation RLoc,
                                          Decl *TagDecl,
                                          SourceLocation LBrac,
@@ -8475,6 +8493,7 @@ public:
   StmtResult BuildCoreturnStmt(SourceLocation KwLoc, Expr *E,
                                bool IsImplicit = false);
   StmtResult BuildCoroutineBodyStmt(CoroutineBodyStmt::CtorArgs);
+  bool buildCoroutineParameterMoves(SourceLocation Loc);
   VarDecl *buildCoroutinePromise(SourceLocation Loc);
   void CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body);
 

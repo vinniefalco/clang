@@ -1390,6 +1390,7 @@ bool Sema::CheckNeonBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
   switch (BuiltinID) {
 #define GET_NEON_OVERLOAD_CHECK
 #include "clang/Basic/arm_neon.inc"
+#include "clang/Basic/arm_fp16.inc"
 #undef GET_NEON_OVERLOAD_CHECK
   }
 
@@ -1441,6 +1442,7 @@ bool Sema::CheckNeonBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
     return false;
 #define GET_NEON_IMMEDIATE_CHECK
 #include "clang/Basic/arm_neon.inc"
+#include "clang/Basic/arm_fp16.inc"
 #undef GET_NEON_IMMEDIATE_CHECK
   }
 
@@ -8990,6 +8992,16 @@ static void AnalyzeComparison(Sema &S, BinaryOperator *E) {
   LHS = LHS->IgnoreParenImpCasts();
   RHS = RHS->IgnoreParenImpCasts();
 
+  if (!S.getLangOpts().CPlusPlus) {
+    // Avoid warning about comparison of integers with different signs when
+    // RHS/LHS has a `typeof(E)` type whose sign is different from the sign of
+    // the type of `E`.
+    if (const auto *TET = dyn_cast<TypeOfExprType>(LHS->getType()))
+      LHS = TET->getUnderlyingExpr()->IgnoreParenImpCasts();
+    if (const auto *TET = dyn_cast<TypeOfExprType>(RHS->getType()))
+      RHS = TET->getUnderlyingExpr()->IgnoreParenImpCasts();
+  }
+
   // Check to see if one of the (unmodified) operands is of different
   // signedness.
   Expr *signedOperand, *unsignedOperand;
@@ -10849,23 +10861,18 @@ bool Sema::CheckParmsForFunctionDef(ArrayRef<ParmVarDecl *> Parameters,
     // information is added for it.
     diagnoseArrayStarInParamType(*this, PType, Param->getLocation());
 
-    // MSVC destroys objects passed by value in the callee.  Therefore a
-    // function definition which takes such a parameter must be able to call the
-    // object's destructor.  However, we don't perform any direct access check
-    // on the dtor.
-    if (getLangOpts().CPlusPlus && Context.getTargetInfo()
-                                       .getCXXABI()
-                                       .areArgsDestroyedLeftToRightInCallee()) {
-      if (!Param->isInvalidDecl()) {
-        if (const RecordType *RT = Param->getType()->getAs<RecordType>()) {
-          CXXRecordDecl *ClassDecl = cast<CXXRecordDecl>(RT->getDecl());
-          if (!ClassDecl->isInvalidDecl() &&
-              !ClassDecl->hasIrrelevantDestructor() &&
-              !ClassDecl->isDependentContext()) {
-            CXXDestructorDecl *Destructor = LookupDestructor(ClassDecl);
-            MarkFunctionReferenced(Param->getLocation(), Destructor);
-            DiagnoseUseOfDecl(Destructor, Param->getLocation());
-          }
+    // If the parameter is a c++ class type and it has to be destructed in the
+    // callee function, declare the destructor so that it can be called by the
+    // callee function. Do not perfom any direct access check on the dtor here.
+    if (!Param->isInvalidDecl()) {
+      if (CXXRecordDecl *ClassDecl = Param->getType()->getAsCXXRecordDecl()) {
+        if (!ClassDecl->isInvalidDecl() &&
+            !ClassDecl->hasIrrelevantDestructor() &&
+            !ClassDecl->isDependentContext() &&
+            Context.isParamDestroyedInCallee(Param->getType())) {
+          CXXDestructorDecl *Destructor = LookupDestructor(ClassDecl);
+          MarkFunctionReferenced(Param->getLocation(), Destructor);
+          DiagnoseUseOfDecl(Destructor, Param->getLocation());
         }
       }
     }

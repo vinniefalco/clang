@@ -1764,8 +1764,8 @@ static bool IsStandardConversion(Sema &S, Expr* From, QualType ToType,
                                    (FromType == S.Context.LongDoubleTy &&
                                     ToType == S.Context.Float128Ty));
       if (Float128AndLongDouble &&
-          (&S.Context.getFloatTypeSemantics(S.Context.LongDoubleTy) !=
-           &llvm::APFloat::IEEEdouble()))
+          (&S.Context.getFloatTypeSemantics(S.Context.LongDoubleTy) ==
+           &llvm::APFloat::PPCDoubleDouble()))
         return false;
     }
     // Floating point conversions (C++ 4.8).
@@ -10534,9 +10534,8 @@ static void CompleteNonViableCandidate(Sema &S, OverloadCandidate *Cand,
   }
 }
 
-/// PrintOverloadCandidates - When overload resolution fails, prints
-/// diagnostic messages containing the candidates in the candidate
-/// set.
+/// When overload resolution fails, prints diagnostic messages containing the
+/// candidates in the candidate set.
 void OverloadCandidateSet::NoteCandidates(
     Sema &S, OverloadCandidateDisplayKind OCD, ArrayRef<Expr *> Args,
     StringRef Opc, SourceLocation OpLoc,
