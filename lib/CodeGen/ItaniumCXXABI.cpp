@@ -1531,7 +1531,7 @@ void ItaniumCXXABI::emitVTableDefinitions(CodeGenVTables &CGVT,
     VTable->setComdat(CGM.getModule().getOrInsertComdat(VTable->getName()));
 
   // Set the right visibility.
-  CGM.setGlobalVisibility(VTable, RD);
+  CGM.setGVProperties(VTable, RD);
 
   // Use pointer alignment for the vtable. Otherwise we would align them based
   // on the size of the initializer which doesn't make sense as only single
@@ -1641,7 +1641,7 @@ llvm::GlobalVariable *ItaniumCXXABI::getAddrOfVTable(const CXXRecordDecl *RD,
   VTable = CGM.CreateOrReplaceCXXRuntimeVariable(
       Name, VTableType, llvm::GlobalValue::ExternalLinkage);
   VTable->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
-  CGM.setGlobalVisibility(VTable, RD);
+  CGM.setGVProperties(VTable, RD);
 
   if (RD->hasAttr<DLLImportAttr>())
     VTable->setDLLStorageClass(llvm::GlobalValue::DLLImportStorageClass);
@@ -1848,7 +1848,8 @@ Address ItaniumCXXABI::InitializeArrayCookie(CodeGenFunction &CGF,
 
   // Handle the array cookie specially in ASan.
   if (CGM.getLangOpts().Sanitize.has(SanitizerKind::Address) && AS == 0 &&
-      expr->getOperatorNew()->isReplaceableGlobalAllocationFunction()) {
+      (expr->getOperatorNew()->isReplaceableGlobalAllocationFunction() ||
+       CGM.getCodeGenOpts().SanitizeAddressPoisonClassMemberArrayNewCookie)) {
     // The store to the CookiePtr does not need to be instrumented.
     CGM.getSanitizerMetadata()->disableSanitizerForInstruction(SI);
     llvm::FunctionType *FTy =
@@ -2052,6 +2053,7 @@ void ItaniumCXXABI::EmitGuardedInit(CodeGenFunction &CGF,
                                      false, var->getLinkage(),
                                      llvm::ConstantInt::get(guardTy, 0),
                                      guardName.str());
+    guard->setDSOLocal(var->isDSOLocal());
     guard->setVisibility(var->getVisibility());
     // If the variable is thread-local, so is its guard variable.
     guard->setThreadLocalMode(var->getThreadLocalMode());
@@ -3212,7 +3214,10 @@ llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(QualType Ty, bool Force,
     llvmVisibility = CodeGenModule::GetLLVMVisibility(Ty->getVisibility());
 
   TypeName->setVisibility(llvmVisibility);
+  CGM.setDSOLocal(TypeName, Ty->getAsCXXRecordDecl());
+
   GV->setVisibility(llvmVisibility);
+  CGM.setDSOLocal(GV, Ty->getAsCXXRecordDecl());
 
   if (CGM.getTriple().isWindowsItaniumEnvironment()) {
     auto RD = Ty->getAsCXXRecordDecl();

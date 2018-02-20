@@ -3935,6 +3935,7 @@ class SubstNonTypeTemplateParmPackExpr : public Expr {
 
 public:
   SubstNonTypeTemplateParmPackExpr(QualType T,
+                                   ExprValueKind ValueKind,
                                    NonTypeTemplateParmDecl *Param,
                                    SourceLocation NameLoc,
                                    const TemplateArgument &ArgPack);
