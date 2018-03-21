@@ -90,6 +90,35 @@ extern "C" void test_builtin_launder_ommitted_two(TestNoInvariant *p) {
   TestNoInvariant *d = __builtin_launder(p);
 }
 
+
+struct TestVirtualMember {
+  TestVirtualFn member;
+};
+
+
+// CHECK-LABEL: define void @test_builtin_launder_virtual_member
+extern "C" void test_builtin_launder_virtual_member(TestVirtualMember *p) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
+  // CHECK-STRICT: @llvm.invariant.group.barrier
+  // CHECK: ret void
+  TestVirtualMember *d = __builtin_launder(p);
+}
+
+
+struct TestVirtualMemberDepth2 {
+  TestVirtualMember member;
+};
+
+// CHECK-LABEL: define void @test_builtin_launder_virtual_member_depth_2
+extern "C" void test_builtin_launder_virtual_member_depth_2(TestVirtualMemberDepth2 *p) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
+  // CHECK-STRICT: @llvm.invariant.group.barrier
+  // CHECK: ret void
+  TestVirtualMemberDepth2 *d = __builtin_launder(p);
+}
+
 /// The test cases in this namespace technically need to be laundered according
 /// to the language in the standard (ie they have const or reference subobjects)
 /// but LLVM doesn't currently optimize on these cases -- so Clang emits

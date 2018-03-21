@@ -857,18 +857,18 @@ static ExprResult SemaBuiltinLaunder(Sema &S, CallExpr *TheCall) {
   QualType ArgTy = TheCall->getArg(0)->getType();
   TheCall->setType(ArgTy);
 
-  int DiagSelect = [&]() {
+  auto DiagSelect = [&]() -> llvm::Optional<unsigned> {
     if (!ArgTy->isPointerType())
       return 0;
     if (ArgTy->isFunctionPointerType())
       return 1;
     if (ArgTy->isVoidPointerType())
       return 2;
-    return -1;
+    return llvm::Optional<unsigned>{};
   }();
-  if (DiagSelect != -1) {
+  if (DiagSelect.hasValue()) {
     S.Diag(TheCall->getLocStart(), diag::err_builtin_launder_invalid_arg)
-        << DiagSelect << TheCall->getSourceRange();
+        << DiagSelect.getValue() << TheCall->getSourceRange();
     return ExprError();
   }
 

@@ -930,6 +930,19 @@ EmitCheckedMixedSignMultiply(CodeGenFunction &CGF, const clang::Expr *Op1,
   return RValue::get(Overflow);
 }
 
+static bool IsOrContainsDynamicClass(QualType Ty) {
+  const auto *Record = Ty->getAsCXXRecordDecl();
+  if (!Record)
+    return false;
+  if (Record->isDynamicClass())
+    return true;
+  for (FieldDecl *F : Record->fields()) {
+    if (IsOrContainsDynamicClass(F->getType()))
+      return true;
+  }
+  return false;
+}
+
 RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
                                         unsigned BuiltinID, const CallExpr *E,
                                         ReturnValueSlot ReturnValue) {
@@ -1943,9 +1956,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     const Expr *Arg = E->getArg(0);
     QualType ArgTy = Arg->getType()->getPointeeType();
     Value *Ptr = EmitScalarExpr(Arg);
-    const auto *Record = ArgTy->getAsCXXRecordDecl();
-    if (CGM.getCodeGenOpts().StrictVTablePointers && Record &&
-        Record->isDynamicClass())
+    if (CGM.getCodeGenOpts().StrictVTablePointers &&
+        IsOrContainsDynamicClass(ArgTy))
       Ptr = Builder.CreateInvariantGroupBarrier(Ptr);
 
     return RValue::get(Ptr);
