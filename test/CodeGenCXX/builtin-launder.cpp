@@ -158,6 +158,9 @@ extern "C" void test_builtin_launder_virtual_recursive_member(TestVirtualRecursi
 /// to the language in the standard (ie they have const or reference subobjects)
 /// but LLVM doesn't currently optimize on these cases -- so Clang emits
 /// __builtin_launder as a nop.
+///
+/// NOTE: Adding optimizations for these cases later is an LTO ABI break. That's
+/// probably OK for now -- but is something to keep in mind.
 namespace pessimizing_cases {
 
 struct TestConstMember {

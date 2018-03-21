@@ -945,8 +945,8 @@ TypeRequiresBuiltinLaunder(QualType Ty,
   return false;
 }
 
-/// Determine if the specified type is a dynamic class type or contains a
-/// subobject which is a dynamic class type.
+/// Determine if the specified type requires laundering by checking if it is a
+/// dynamic class type or contains a subobject which is a dynamic class type.
 static bool TypeRequiresBuiltinLaunder(QualType Ty) {
   llvm::DenseSet<const CXXRecordDecl *> Seen;
   return TypeRequiresBuiltinLaunder(Ty, Seen);
