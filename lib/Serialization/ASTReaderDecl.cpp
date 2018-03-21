@@ -739,6 +739,10 @@ ASTDeclReader::VisitRecordDeclImpl(RecordDecl *RD) {
   RD->setAnonymousStructOrUnion(Record.readInt());
   RD->setHasObjectMember(Record.readInt());
   RD->setHasVolatileMember(Record.readInt());
+  RD->setNonTrivialToPrimitiveDefaultInitialize(Record.readInt());
+  RD->setNonTrivialToPrimitiveCopy(Record.readInt());
+  RD->setNonTrivialToPrimitiveDestroy(Record.readInt());
+  RD->setCanPassInRegisters(Record.readInt());
   return Redecl;
 }
 
@@ -1584,7 +1588,6 @@ void ASTDeclReader::ReadCXXDefinitionData(
   Data.HasIrrelevantDestructor = Record.readInt();
   Data.HasConstexprNonCopyMoveConstructor = Record.readInt();
   Data.HasDefaultedDefaultConstructor = Record.readInt();
-  Data.CanPassInRegisters = Record.readInt();
   Data.DefaultedDefaultConstructorIsConstexpr = Record.readInt();
   Data.HasConstexprDefaultConstructor = Record.readInt();
   Data.HasNonLiteralTypeFieldsOrBases = Record.readInt();
@@ -1724,7 +1727,6 @@ void ASTDeclReader::MergeDefinitionData(
   MATCH_FIELD(HasIrrelevantDestructor)
   OR_FIELD(HasConstexprNonCopyMoveConstructor)
   OR_FIELD(HasDefaultedDefaultConstructor)
-  MATCH_FIELD(CanPassInRegisters)
   MATCH_FIELD(DefaultedDefaultConstructorIsConstexpr)
   OR_FIELD(HasConstexprDefaultConstructor)
   MATCH_FIELD(HasNonLiteralTypeFieldsOrBases)
@@ -1911,7 +1913,7 @@ void ASTDeclReader::VisitCXXDestructorDecl(CXXDestructorDecl *D) {
   VisitCXXMethodDecl(D);
 
   if (auto *OperatorDelete = ReadDeclAs<FunctionDecl>()) {
-    auto *Canon = cast<CXXDestructorDecl>(D->getCanonicalDecl());
+    CXXDestructorDecl *Canon = D->getCanonicalDecl();
     auto *ThisArg = Record.readExpr();
     // FIXME: Check consistency if we have an old and new operator delete.
     if (!Canon->OperatorDelete) {
@@ -4104,6 +4106,7 @@ void ASTDeclReader::UpdateDecl(Decl *D,
       bool HadRealDefinition =
           OldDD && (OldDD->Definition != RD ||
                     !Reader.PendingFakeDefinitionData.count(OldDD));
+      RD->setCanPassInRegisters(Record.readInt());
       ReadCXXRecordDefinition(RD, /*Update*/true);
 
       // Visible update is handled separately.

@@ -276,7 +276,6 @@ TEST_F(FormatTest, RemovesEmptyLines) {
                    "\n"
                    "}"));
 
-  // FIXME: This is slightly inconsistent.
   FormatStyle LLVMWithNoNamespaceFix = getLLVMStyle();
   LLVMWithNoNamespaceFix.FixNamespaceComments = false;
   EXPECT_EQ("namespace {\n"
@@ -295,12 +294,25 @@ TEST_F(FormatTest, RemovesEmptyLines) {
                    "}"));
   EXPECT_EQ("namespace {\n"
             "int i;\n"
-            "\n"
+            "};",
+            format("namespace {\n"
+                   "int i;\n"
+                   "\n"
+                   "};"));
+  EXPECT_EQ("namespace {\n"
+            "int i;\n"
             "} // namespace",
             format("namespace {\n"
                    "int i;\n"
                    "\n"
                    "}  // namespace"));
+  EXPECT_EQ("namespace {\n"
+            "int i;\n"
+            "}; // namespace",
+            format("namespace {\n"
+                   "int i;\n"
+                   "\n"
+                   "};  // namespace"));
 
   FormatStyle Style = getLLVMStyle();
   Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_All;
@@ -741,6 +753,12 @@ TEST_F(FormatTest, FormatsForLoop) {
                "         aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);\n"
                "     aaaaaaaaaaaaaaaaaaaaaaaaaaa != bbbbbbbbbbbbbbbbbbbbbbb;\n"
                "     ++aaaaaaaaaaaaaaaaaaaaaaaaaaa) {");
+
+  // These should not be formatted as Objective-C for-in loops.
+  verifyFormat("for (Foo *x = 0; x != in; x++) {\n}");
+  verifyFormat("Foo *x;\nfor (x = 0; x != in; x++) {\n}");
+  verifyFormat("Foo *x;\nfor (x in y) {\n}");
+  verifyFormat("for (const Foo<Bar> &baz = in.value(); !baz.at_end(); ++baz) {\n}");
 
   FormatStyle NoBinPacking = getLLVMStyle();
   NoBinPacking.BinPackParameters = false;
@@ -5655,6 +5673,8 @@ TEST_F(FormatTest, UnderstandsUnaryOperators) {
   verifyFormat("(a->f())++;");
   verifyFormat("a[42]++;");
   verifyFormat("if (!(a->f())) {\n}");
+  verifyFormat("if (!+i) {\n}");
+  verifyFormat("~&a;");
 
   verifyFormat("a-- > b;");
   verifyFormat("b ? -a : c;");
@@ -6057,6 +6077,16 @@ TEST_F(FormatTest, UnderstandsAttributes) {
   verifyFormat("__attribute__((nodebug)) void\n"
                "foo() {}\n",
                AfterType);
+}
+
+TEST_F(FormatTest, UnderstandsSquareAttributes) {
+  verifyFormat("SomeType s [[unused]] (InitValue);");
+  verifyFormat("SomeType s [[gnu::unused]] (InitValue);");
+  verifyFormat("SomeType s [[using gnu: unused]] (InitValue);");
+  verifyFormat("[[gsl::suppress(\"clang-tidy-check-name\")]] void f() {}");
+  verifyFormat("void f() [[deprecated(\"so sorry\")]];");
+  verifyFormat("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "    [[unused]] aaaaaaaaaaaaaaaaaaaaaaa(int i);");
 }
 
 TEST_F(FormatTest, UnderstandsEllipsis) {
@@ -8933,6 +8963,114 @@ TEST_F(FormatTest, ConfigurableSpaceBeforeAssignmentOperators) {
   verifyFormat("a or_eq 8;", Spaces);
 }
 
+TEST_F(FormatTest, ConfigurableSpaceBeforeColon) {
+  verifyFormat("class Foo : public Bar {};");
+  verifyFormat("Foo::Foo() : foo(1) {}");
+  verifyFormat("for (auto a : b) {\n}");
+  verifyFormat("int x = a ? b : c;");
+  verifyFormat("{\n"
+               "label0:\n"
+               "  int x = 0;\n"
+               "}");
+  verifyFormat("switch (x) {\n"
+               "case 1:\n"
+               "default:\n"
+               "}");
+
+  FormatStyle CtorInitializerStyle = getLLVMStyleWithColumns(30);
+  CtorInitializerStyle.SpaceBeforeCtorInitializerColon = false;
+  verifyFormat("class Foo : public Bar {};", CtorInitializerStyle);
+  verifyFormat("Foo::Foo(): foo(1) {}", CtorInitializerStyle);
+  verifyFormat("for (auto a : b) {\n}", CtorInitializerStyle);
+  verifyFormat("int x = a ? b : c;", CtorInitializerStyle);
+  verifyFormat("{\n"
+               "label1:\n"
+               "  int x = 0;\n"
+               "}",
+               CtorInitializerStyle);
+  verifyFormat("switch (x) {\n"
+               "case 1:\n"
+               "default:\n"
+               "}",
+               CtorInitializerStyle);
+  CtorInitializerStyle.BreakConstructorInitializers =
+      FormatStyle::BCIS_AfterColon;
+  verifyFormat("Fooooooooooo::Fooooooooooo():\n"
+               "    aaaaaaaaaaaaaaaa(1),\n"
+               "    bbbbbbbbbbbbbbbb(2) {}",
+               CtorInitializerStyle);
+  CtorInitializerStyle.BreakConstructorInitializers =
+      FormatStyle::BCIS_BeforeComma;
+  verifyFormat("Fooooooooooo::Fooooooooooo()\n"
+               "    : aaaaaaaaaaaaaaaa(1)\n"
+               "    , bbbbbbbbbbbbbbbb(2) {}",
+               CtorInitializerStyle);
+  CtorInitializerStyle.BreakConstructorInitializers =
+      FormatStyle::BCIS_BeforeColon;
+  verifyFormat("Fooooooooooo::Fooooooooooo()\n"
+               "    : aaaaaaaaaaaaaaaa(1),\n"
+               "      bbbbbbbbbbbbbbbb(2) {}",
+               CtorInitializerStyle);
+  CtorInitializerStyle.ConstructorInitializerIndentWidth = 0;
+  verifyFormat("Fooooooooooo::Fooooooooooo()\n"
+               ": aaaaaaaaaaaaaaaa(1),\n"
+               "  bbbbbbbbbbbbbbbb(2) {}",
+               CtorInitializerStyle);
+
+  FormatStyle InheritanceStyle = getLLVMStyle();
+  InheritanceStyle.SpaceBeforeInheritanceColon = false;
+  verifyFormat("class Foo: public Bar {};", InheritanceStyle);
+  verifyFormat("Foo::Foo() : foo(1) {}", InheritanceStyle);
+  verifyFormat("for (auto a : b) {\n}", InheritanceStyle);
+  verifyFormat("int x = a ? b : c;", InheritanceStyle);
+  verifyFormat("{\n"
+               "label2:\n"
+               "  int x = 0;\n"
+               "}",
+               InheritanceStyle);
+  verifyFormat("switch (x) {\n"
+               "case 1:\n"
+               "default:\n"
+               "}",
+               InheritanceStyle);
+
+  FormatStyle ForLoopStyle = getLLVMStyle();
+  ForLoopStyle.SpaceBeforeRangeBasedForLoopColon = false;
+  verifyFormat("class Foo : public Bar {};", ForLoopStyle);
+  verifyFormat("Foo::Foo() : foo(1) {}", ForLoopStyle);
+  verifyFormat("for (auto a: b) {\n}", ForLoopStyle);
+  verifyFormat("int x = a ? b : c;", ForLoopStyle);
+  verifyFormat("{\n"
+               "label2:\n"
+               "  int x = 0;\n"
+               "}",
+               ForLoopStyle);
+  verifyFormat("switch (x) {\n"
+               "case 1:\n"
+               "default:\n"
+               "}",
+               ForLoopStyle);
+
+  FormatStyle NoSpaceStyle = getLLVMStyle();
+  NoSpaceStyle.SpaceBeforeCtorInitializerColon = false;
+  NoSpaceStyle.SpaceBeforeInheritanceColon = false;
+  NoSpaceStyle.SpaceBeforeRangeBasedForLoopColon = false;
+  verifyFormat("class Foo: public Bar {};", NoSpaceStyle);
+  verifyFormat("Foo::Foo(): foo(1) {}", NoSpaceStyle);
+  verifyFormat("for (auto a: b) {\n}", NoSpaceStyle);
+  verifyFormat("int x = a ? b : c;", NoSpaceStyle);
+  verifyFormat("{\n"
+               "label3:\n"
+               "  int x = 0;\n"
+               "}",
+               NoSpaceStyle);
+  verifyFormat("switch (x) {\n"
+               "case 1:\n"
+               "default:\n"
+               "}",
+               NoSpaceStyle);
+}
+
 TEST_F(FormatTest, AlignConsecutiveAssignments) {
   FormatStyle Alignment = getLLVMStyle();
   Alignment.AlignConsecutiveAssignments = false;
@@ -10274,6 +10412,9 @@ TEST_F(FormatTest, ParsesConfigurationBools) {
   CHECK_PARSE_BOOL(SpaceAfterCStyleCast);
   CHECK_PARSE_BOOL(SpaceAfterTemplateKeyword);
   CHECK_PARSE_BOOL(SpaceBeforeAssignmentOperators);
+  CHECK_PARSE_BOOL(SpaceBeforeCtorInitializerColon);
+  CHECK_PARSE_BOOL(SpaceBeforeInheritanceColon);
+  CHECK_PARSE_BOOL(SpaceBeforeRangeBasedForLoopColon);
 
   CHECK_PARSE_NESTED_BOOL(BraceWrapping, AfterClass);
   CHECK_PARSE_NESTED_BOOL(BraceWrapping, AfterControlStatement);
@@ -11723,6 +11864,13 @@ TEST_F(FormatTest, NoSpaceAfterSuper) {
     verifyFormat("__super::FooBar();");
 }
 
+TEST(FormatStyle, GetStyleWithEmptyFileName) {
+  vfs::InMemoryFileSystem FS;
+  auto Style1 = getStyle("file", "", "Google", "", &FS);
+  ASSERT_TRUE((bool)Style1);
+  ASSERT_EQ(*Style1, getGoogleStyle());
+}
+
 TEST(FormatStyle, GetStyleOfFile) {
   vfs::InMemoryFileSystem FS;
   // Test 1: format file in the same directory.
@@ -11950,6 +12098,62 @@ TEST_F(FormatTest, StructuredBindings) {
   verifyFormat("auto &[ a, b ] = f();", Spaces);
   verifyFormat("auto const &&[ a, b ] = f();", Spaces);
   verifyFormat("auto const &[ a, b ] = f();", Spaces);
+}
+
+TEST_F(FormatTest, FileAndCode) {
+  EXPECT_EQ(FormatStyle::LK_Cpp, guessLanguage("foo.cc", ""));
+  EXPECT_EQ(FormatStyle::LK_ObjC, guessLanguage("foo.m", ""));
+  EXPECT_EQ(FormatStyle::LK_ObjC, guessLanguage("foo.mm", ""));
+  EXPECT_EQ(FormatStyle::LK_Cpp, guessLanguage("foo.h", ""));
+  EXPECT_EQ(FormatStyle::LK_ObjC, guessLanguage("foo.h", "@interface Foo\n@end\n"));
+  EXPECT_EQ(FormatStyle::LK_Cpp, guessLanguage("foo", ""));
+  EXPECT_EQ(FormatStyle::LK_ObjC, guessLanguage("foo", "@interface Foo\n@end\n"));
+}
+
+TEST_F(FormatTest, GuessLanguageWithCpp11AttributeSpecifiers) {
+  EXPECT_EQ(FormatStyle::LK_Cpp, guessLanguage("foo.h", "[[noreturn]];"));
+  EXPECT_EQ(FormatStyle::LK_ObjC,
+            guessLanguage("foo.h", "array[[calculator getIndex]];"));
+  EXPECT_EQ(FormatStyle::LK_Cpp,
+            guessLanguage("foo.h", "[[noreturn, deprecated(\"so sorry\")]];"));
+  EXPECT_EQ(
+      FormatStyle::LK_Cpp,
+      guessLanguage("foo.h", "[[noreturn, deprecated(\"gone, sorry\")]];"));
+  EXPECT_EQ(FormatStyle::LK_ObjC,
+            guessLanguage("foo.h", "[[noreturn foo] bar];"));
+  EXPECT_EQ(FormatStyle::LK_Cpp,
+            guessLanguage("foo.h", "[[clang::fallthrough]];"));
+  EXPECT_EQ(FormatStyle::LK_ObjC,
+            guessLanguage("foo.h", "[[clang:fallthrough] foo];"));
+  EXPECT_EQ(FormatStyle::LK_Cpp,
+            guessLanguage("foo.h", "[[gsl::suppress(\"type\")]];"));
+  EXPECT_EQ(FormatStyle::LK_Cpp,
+            guessLanguage("foo.h", "[[using clang: fallthrough]];"));
+  EXPECT_EQ(FormatStyle::LK_ObjC,
+            guessLanguage("foo.h", "[[abusing clang:fallthrough] bar];"));
+  EXPECT_EQ(FormatStyle::LK_Cpp,
+            guessLanguage("foo.h", "[[using gsl: suppress(\"type\")]];"));
+  EXPECT_EQ(
+      FormatStyle::LK_Cpp,
+      guessLanguage("foo.h",
+                    "[[clang::callable_when(\"unconsumed\", \"unknown\")]]"));
+  EXPECT_EQ(FormatStyle::LK_Cpp, guessLanguage("foo.h", "[[foo::bar, ...]]"));
+}
+
+TEST_F(FormatTest, GuessLanguageWithCaret) {
+  EXPECT_EQ(FormatStyle::LK_Cpp, guessLanguage("foo.h", "FOO(^);"));
+  EXPECT_EQ(FormatStyle::LK_Cpp, guessLanguage("foo.h", "FOO(^, Bar);"));
+  EXPECT_EQ(FormatStyle::LK_ObjC,
+            guessLanguage("foo.h", "int(^)(char, float);"));
+  EXPECT_EQ(FormatStyle::LK_ObjC,
+            guessLanguage("foo.h", "int(^foo)(char, float);"));
+  EXPECT_EQ(FormatStyle::LK_ObjC,
+            guessLanguage("foo.h", "int(^foo[10])(char, float);"));
+  EXPECT_EQ(FormatStyle::LK_ObjC,
+            guessLanguage("foo.h", "int(^foo[kNumEntries])(char, float);"));
+  EXPECT_EQ(
+      FormatStyle::LK_ObjC,
+      guessLanguage("foo.h", "int(^foo[(kNumEntries + 10)])(char, float);"));
 }
 
 } // end namespace
