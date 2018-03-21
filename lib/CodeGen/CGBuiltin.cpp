@@ -930,19 +930,26 @@ EmitCheckedMixedSignMultiply(CodeGenFunction &CGF, const clang::Expr *Op1,
   return RValue::get(Overflow);
 }
 
-/// Determine if the specified type is a dynamic class type or contains a
-/// subobject which is a dynamic class type.
-static bool TypeRequiresBuiltinLaunder(QualType Ty) {
+static bool
+TypeRequiresBuiltinLaunder(QualType Ty,
+                           llvm::DenseSet<const CXXRecordDecl *> &Seen) {
   const auto *Record = Ty->getAsCXXRecordDecl();
-  if (!Record)
+  if (!Record || !Seen.insert(Record).second)
     return false;
   if (Record->isDynamicClass())
     return true;
   for (FieldDecl *F : Record->fields()) {
-    if (TypeRequiresBuiltinLaunder(F->getType()))
+    if (TypeRequiresBuiltinLaunder(F->getType(), Seen))
       return true;
   }
   return false;
+}
+
+/// Determine if the specified type is a dynamic class type or contains a
+/// subobject which is a dynamic class type.
+static bool TypeRequiresBuiltinLaunder(QualType Ty) {
+  llvm::DenseSet<const CXXRecordDecl *> Seen;
+  return TypeRequiresBuiltinLaunder(Ty, Seen);
 }
 
 RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
