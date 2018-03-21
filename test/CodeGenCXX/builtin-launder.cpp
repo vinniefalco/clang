@@ -90,11 +90,9 @@ extern "C" void test_builtin_launder_ommitted_two(TestNoInvariant *p) {
   TestNoInvariant *d = __builtin_launder(p);
 }
 
-
 struct TestVirtualMember {
   TestVirtualFn member;
 };
-
 
 // CHECK-LABEL: define void @test_builtin_launder_virtual_member
 extern "C" void test_builtin_launder_virtual_member(TestVirtualMember *p) {
@@ -104,7 +102,6 @@ extern "C" void test_builtin_launder_virtual_member(TestVirtualMember *p) {
   // CHECK: ret void
   TestVirtualMember *d = __builtin_launder(p);
 }
-
 
 struct TestVirtualMemberDepth2 {
   TestVirtualMember member;
@@ -117,6 +114,44 @@ extern "C" void test_builtin_launder_virtual_member_depth_2(TestVirtualMemberDep
   // CHECK-STRICT: @llvm.invariant.group.barrier
   // CHECK: ret void
   TestVirtualMemberDepth2 *d = __builtin_launder(p);
+}
+
+struct TestVirtualReferenceMember {
+  TestVirtualFn &member;
+};
+
+// CHECK-LABEL: define void @test_builtin_launder_virtual_reference_member
+extern "C" void test_builtin_launder_virtual_reference_member(TestVirtualReferenceMember *p) {
+  // CHECK: entry
+  // CHECK-NOT: @llvm.invariant.group.barrier
+  // CHECK: ret void
+  TestVirtualReferenceMember *d = __builtin_launder(p);
+}
+
+struct TestRecursiveMember {
+  TestRecursiveMember &member;
+};
+
+// CHECK-LABEL: define void @test_builtin_launder_recursive_member
+extern "C" void test_builtin_launder_recursive_member(TestRecursiveMember *p) {
+  // CHECK: entry
+  // CHECK-NOT: @llvm.invariant.group.barrier
+  // CHECK: ret void
+  TestRecursiveMember *d = __builtin_launder(p);
+}
+
+struct TestVirtualRecursiveMember {
+  TestVirtualRecursiveMember &member;
+  virtual void foo();
+};
+
+// CHECK-LABEL: define void @test_builtin_launder_virtual_recursive_member
+extern "C" void test_builtin_launder_virtual_recursive_member(TestVirtualRecursiveMember *p) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
+  // CHECK-STRICT: @llvm.invariant.group.barrier
+  // CHECK: ret void
+  TestVirtualRecursiveMember *d = __builtin_launder(p);
 }
 
 /// The test cases in this namespace technically need to be laundered according

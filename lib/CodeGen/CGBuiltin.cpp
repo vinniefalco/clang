@@ -930,14 +930,16 @@ EmitCheckedMixedSignMultiply(CodeGenFunction &CGF, const clang::Expr *Op1,
   return RValue::get(Overflow);
 }
 
-static bool IsOrContainsDynamicClass(QualType Ty) {
+/// Determine if the specified type is a dynamic class type or contains a
+/// subobject which is a dynamic class type.
+static bool TypeRequiresBuiltinLaunder(QualType Ty) {
   const auto *Record = Ty->getAsCXXRecordDecl();
   if (!Record)
     return false;
   if (Record->isDynamicClass())
     return true;
   for (FieldDecl *F : Record->fields()) {
-    if (IsOrContainsDynamicClass(F->getType()))
+    if (TypeRequiresBuiltinLaunder(F->getType()))
       return true;
   }
   return false;
@@ -1957,7 +1959,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     QualType ArgTy = Arg->getType()->getPointeeType();
     Value *Ptr = EmitScalarExpr(Arg);
     if (CGM.getCodeGenOpts().StrictVTablePointers &&
-        IsOrContainsDynamicClass(ArgTy))
+        TypeRequiresBuiltinLaunder(ArgTy))
       Ptr = Builder.CreateInvariantGroupBarrier(Ptr);
 
     return RValue::get(Ptr);
