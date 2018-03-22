@@ -931,7 +931,7 @@ EmitCheckedMixedSignMultiply(CodeGenFunction &CGF, const clang::Expr *Op1,
 }
 
 static bool
-TypeRequiresBuiltinLaunder(QualType Ty,
+TypeRequiresBuiltinLaunderImp(QualType Ty,
                            llvm::DenseSet<const CXXRecordDecl *> &Seen) {
   const auto *Record = Ty->getAsCXXRecordDecl();
   if (!Record || !Seen.insert(Record).second)
@@ -939,7 +939,7 @@ TypeRequiresBuiltinLaunder(QualType Ty,
   if (Record->isDynamicClass())
     return true;
   for (FieldDecl *F : Record->fields()) {
-    if (TypeRequiresBuiltinLaunder(F->getType(), Seen))
+    if (TypeRequiresBuiltinLaunderImp(F->getType(), Seen))
       return true;
   }
   return false;
@@ -947,9 +947,11 @@ TypeRequiresBuiltinLaunder(QualType Ty,
 
 /// Determine if the specified type requires laundering by checking if it is a
 /// dynamic class type or contains a subobject which is a dynamic class type.
-static bool TypeRequiresBuiltinLaunder(QualType Ty) {
+static bool TypeRequiresBuiltinLaunder(CodeGenModule &CGM, QualType Ty) {
+  if (!CGM.getCodeGenOpts().StrictVTablePointers)
+    return false;
   llvm::DenseSet<const CXXRecordDecl *> Seen;
-  return TypeRequiresBuiltinLaunder(Ty, Seen);
+  return TypeRequiresBuiltinLaunderImp(Ty, Seen);
 }
 
 RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
@@ -1965,8 +1967,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     const Expr *Arg = E->getArg(0);
     QualType ArgTy = Arg->getType()->getPointeeType();
     Value *Ptr = EmitScalarExpr(Arg);
-    if (CGM.getCodeGenOpts().StrictVTablePointers &&
-        TypeRequiresBuiltinLaunder(ArgTy))
+    if (TypeRequiresBuiltinLaunder(CGM, ArgTy))
       Ptr = Builder.CreateInvariantGroupBarrier(Ptr);
 
     return RValue::get(Ptr);
