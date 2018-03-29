@@ -545,6 +545,19 @@ struct CanProxyAdaptor<UnaryTransformType>
   LLVM_CLANG_CANPROXY_SIMPLE_ACCESSOR(UnaryTransformType::UTTKind, getUTTKind)
 };
 
+template <>
+struct CanProxyAdaptor<TransformTraitType>
+    : public CanProxyBase<TransformTraitType> {
+  LLVM_CLANG_CANPROXY_TYPE_ACCESSOR(getBaseType)
+  LLVM_CLANG_CANPROXY_TYPE_ACCESSOR(getTransformedType)
+
+  CanQualType getArg(unsigned i) const {
+    return CanQualType::CreateUnsafe(this->getTypePtr()->getArg(i));
+  }
+
+  LLVM_CLANG_CANPROXY_SIMPLE_ACCESSOR(TransformTraitType::TTKind, getTTKind)
+};
+
 template<>
 struct CanProxyAdaptor<TagType> : public CanProxyBase<TagType> {
   LLVM_CLANG_CANPROXY_SIMPLE_ACCESSOR(TagDecl *, getDecl)

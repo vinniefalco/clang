@@ -65,6 +65,7 @@ namespace clang {
     QualType VisitTypeOfType(const TypeOfType *T);
     QualType VisitDecltypeType(const DecltypeType *T);
     QualType VisitUnaryTransformType(const UnaryTransformType *T);
+    QualType VisitTransformTraitType(const TransformTraitType *T);
     QualType VisitAutoType(const AutoType *T);
     QualType VisitInjectedClassNameType(const InjectedClassNameType *T);
     // FIXME: DependentDecltypeType
@@ -721,6 +722,23 @@ QualType ASTNodeImporter::VisitUnaryTransformType(const UnaryTransformType *T) {
   return Importer.getToContext().getUnaryTransformType(ToBaseType,
                                                        ToUnderlyingType,
                                                        T->getUTTKind());
+}
+
+QualType ASTNodeImporter::VisitTransformTraitType(const TransformTraitType *T) {
+  QualType ToBaseType = Importer.Import(T->getBaseType());
+  SmallVector<QualType, 2> ToArgTypes;
+  bool ArgTypeBad = false;
+  for (auto Ty : T->getArgs()) {
+    QualType ToTy = Importer.Import(Ty);
+    ArgTypeBad |= ToTy.isNull();
+    ToArgTypes.push_back(ToTy);
+  }
+  QualType ToTransformedType = Importer.Import(T->getTransformedType());
+  if (ToBaseType.isNull() || ToTransformedType.isNull() || ArgTypeBad)
+    return QualType();
+
+  return Importer.getToContext().getTransformTraitType(
+      ToBaseType, ToArgTypes, ToTransformedType, T->getTTKind());
 }
 
 QualType ASTNodeImporter::VisitAutoType(const AutoType *T) {

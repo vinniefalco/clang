@@ -370,6 +370,16 @@ namespace  {
       }
       dumpTypeAsChild(T->getBaseType());
     }
+    void VisitTransformTraitType(const TransformTraitType *T) {
+      switch (T->getTTKind()) {
+      case TransformTraitType::EnumRawInvocationType:
+        OS << " raw_invocation_type";
+        break;
+      }
+      dumpTypeAsChild(T->getBaseType());
+      for (auto Ty : T->getArgs())
+        dumpTypeAsChild(Ty);
+    }
     void VisitTagType(const TagType *T) {
       dumpDeclRef(T->getDecl());
     }
@@ -2214,8 +2224,8 @@ void ASTDumper::VisitArrayInitIndexExpr(const ArrayInitIndexExpr *E) {
 
 void ASTDumper::VisitUnaryOperator(const UnaryOperator *Node) {
   VisitExpr(Node);
-  OS << " " << (Node->isPostfix() ? "postfix" : "prefix")
-     << " '" << UnaryOperator::getOpcodeStr(Node->getOpcode()) << "'";
+  OS << " " << (Node->isPostfix() ? "postfix" : "prefix") << " '"
+     << UnaryOperator::getOpcodeStr(Node->getOpcode()) << "'";
   if (!Node->canOverflow())
     OS << " cannot overflow";
 }

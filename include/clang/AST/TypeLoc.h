@@ -1964,6 +1964,10 @@ public:
   void initializeLocal(ASTContext &Context, SourceLocation Loc);
 };
 
+class TransformTraitTypeLoc
+    : public InheritingConcreteTypeLoc<
+          UnaryTransformTypeLoc, TransformTraitTypeLoc, TransformTraitType> {};
+
 class DeducedTypeLoc
     : public InheritingConcreteTypeLoc<TypeSpecTypeLoc, DeducedTypeLoc,
                                        DeducedType> {};
