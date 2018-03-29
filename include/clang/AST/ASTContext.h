@@ -319,6 +319,8 @@ class ASTContext : public RefCountedBase<ASTContext> {
   /// The identifier '__type_pack_element'.
   mutable IdentifierInfo *TypePackElementName = nullptr;
 
+  mutable IdentifierInfo *InvocationTypeName = nullptr;
+
   QualType ObjCConstantStringType;
   mutable RecordDecl *CFConstantStringTagDecl = nullptr;
   mutable TypedefDecl *CFConstantStringTypeDecl = nullptr;
@@ -493,6 +495,7 @@ private:
   mutable ExternCContextDecl *ExternCContext = nullptr;
   mutable BuiltinTemplateDecl *MakeIntegerSeqDecl = nullptr;
   mutable BuiltinTemplateDecl *TypePackElementDecl = nullptr;
+  mutable BuiltinTemplateDecl *InvocationTypeDecl = nullptr;
 
   /// \brief The associated SourceManager object.
   SourceManager &SourceMgr;
@@ -991,7 +994,7 @@ public:
   ExternCContextDecl *getExternCContextDecl() const;
   BuiltinTemplateDecl *getMakeIntegerSeqDecl() const;
   BuiltinTemplateDecl *getTypePackElementDecl() const;
-
+  BuiltinTemplateDecl *getInvocationTypeDecl() const;
   // Builtin Types.
   CanQualType VoidTy;
   CanQualType BoolTy;
@@ -1685,6 +1688,12 @@ public:
     if (!TypePackElementName)
       TypePackElementName = &Idents.get("__type_pack_element");
     return TypePackElementName;
+  }
+
+  IdentifierInfo *getInvocationTypeName() const {
+    if (!InvocationTypeName)
+      InvocationTypeName = &Idents.get("__invocation_type");
+    return InvocationTypeName;
   }
 
   /// \brief Retrieve the Objective-C "instancetype" type, if already known;

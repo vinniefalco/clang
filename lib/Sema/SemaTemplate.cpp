@@ -982,14 +982,14 @@ NamedDecl *Sema::ActOnNonTypeTemplateParameter(Scope *S, Declarator &D,
   // Check that we have valid decl-specifiers specified.
   auto CheckValidDeclSpecifiers = [this, &D] {
     // C++ [temp.param]
-    // p1 
+    // p1
     //   template-parameter:
     //     ...
     //     parameter-declaration
-    // p2 
+    // p2
     //   ... A storage class shall not be specified in a template-parameter
     //   declaration.
-    // [dcl.typedef]p1: 
+    // [dcl.typedef]p1:
     //   The typedef specifier [...] shall not be used in the decl-specifier-seq
     //   of a parameter-declaration
     const DeclSpec &DS = D.getDeclSpec();
@@ -2889,7 +2889,7 @@ checkBuiltinTemplateIdType(Sema &SemaRef, BuiltinTemplateDecl *BTD,
                                        TemplateLoc, SyntheticTemplateArgs);
   }
 
-  case BTK__type_pack_element:
+  case BTK__type_pack_element: {
     // Specializations of
     //    __type_pack_element<Index, T_1, ..., T_N>
     // are treated like T_Index.
@@ -2910,6 +2910,47 @@ checkBuiltinTemplateIdType(Sema &SemaRef, BuiltinTemplateDecl *BTD,
     // We simply return the type at index `Index`.
     auto Nth = std::next(Ts.pack_begin(), Index.getExtValue());
     return Nth->getAsType();
+  }
+
+  case BTK__invocation_type:
+    // Specializations of
+    //    __invocation_type<Fn, T_1, ..., T_N>
+    // are treated like T_Index.
+    assert(Converted.size() == 2 &&
+           "__invocation_type should be given an index and a parameter pack");
+
+    // If the Index is out of bounds, the program is ill-formed.
+    TemplateArgument Fn = Converted[0], Ts = Converted[1];
+    QualType FnType = Fn.getAsType();
+    if (FnType->isFunctionPointerType()) {
+      const PointerType *PTy = FnType->getAs<PointerType>();
+      const FunctionType *F = PTy->getPointeeType()->getAs<FunctionType>();
+      assert(F);
+      return QualType(F, 0);
+    } else if (FnType->isMemberFunctionPointerType()) {
+      const MemberPointerType *T = FnType->getAs<MemberPointerType>();
+      const PointerType *PTy = T->getAs<PointerType>();
+      const FunctionType *F = PTy->getAs<FunctionType>();
+      assert(F);
+      return QualType(F, 0);
+    }
+    OpaqueValueExpr *FnExpr = new (Context) OpaqueValueExpr(
+        TemplateArgs[0].getLocation(), FnType, VK_RValue, OK_Ordinary);
+
+    std::vector<Expr *> Args;
+    for (auto TElem : Ts.pack_elements()) {
+      QualType T = TElem.getAsType();
+      OpaqueValueExpr *A = new (Context) OpaqueValueExpr(
+          TemplateArgs[1].getLocation(), T, VK_RValue, OK_Ordinary);
+      Args.push_back(A);
+    }
+
+    ExprResult Res = SemaRef.ActOnCallExpr(nullptr, FnExpr, TemplateLoc, Args,
+                                           TemplateLoc, nullptr);
+    assert(Res.isUsable());
+    CallExpr *CE = Res.getAs<CallExpr>();
+    const FunctionType *CalleeType = CE->getDirectCallee()->getFunctionType();
+    return QualType(CalleeType, 0);
   }
   llvm_unreachable("unexpected BuiltinTemplateDecl!");
 }

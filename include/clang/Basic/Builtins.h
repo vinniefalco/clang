@@ -232,8 +232,8 @@ enum BuiltinTemplateKind : int {
   BTK__make_integer_seq,
 
   /// \brief This names the __type_pack_element BuiltinTemplateDecl.
-  BTK__type_pack_element
+  BTK__type_pack_element,
+  BTK__invocation_type
 };
-
 } // end namespace clang
 #endif

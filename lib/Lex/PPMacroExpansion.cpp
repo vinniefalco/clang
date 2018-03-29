@@ -1817,14 +1817,15 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
           return true;
         } else {
           return llvm::StringSwitch<bool>(II->getName())
-                      .Case("__make_integer_seq", LangOpts.CPlusPlus)
-                      .Case("__type_pack_element", LangOpts.CPlusPlus)
-                      .Case("__builtin_available", true)
-                      .Case("__is_target_arch", true)
-                      .Case("__is_target_vendor", true)
-                      .Case("__is_target_os", true)
-                      .Case("__is_target_environment", true)
-                      .Default(false);
+              .Case("__make_integer_seq", LangOpts.CPlusPlus)
+              .Case("__type_pack_element", LangOpts.CPlusPlus)
+              .Case("__invocation_type", LangOpts.CPlusPlus)
+              .Case("__builtin_available", true)
+              .Case("__is_target_arch", true)
+              .Case("__is_target_vendor", true)
+              .Case("__is_target_os", true)
+              .Case("__is_target_environment", true)
+              .Default(false);
         }
       });
   } else if (II == Ident__is_identifier) {
