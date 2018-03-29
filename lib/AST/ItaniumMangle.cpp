@@ -1965,6 +1965,7 @@ bool CXXNameMangler::mangleUnresolvedTypeOrSimpleId(QualType Ty,
   case Type::Decltype:
   case Type::TemplateTypeParm:
   case Type::UnaryTransform:
+  case Type::TransformTrait:
   case Type::SubstTemplateTypeParm:
   unresolvedType:
     // Some callers want a prefix before the mangled type.
@@ -3247,6 +3248,24 @@ void CXXNameMangler::mangleType(const UnaryTransformType *T) {
   }
 
   mangleType(T->getBaseType());
+}
+
+void CXXNameMangler::mangleType(const TransformTraitType *T) {
+  // If this is dependent, we need to record that. If not, we simply
+  // mangle it as the underlying type since they are equivalent.
+  if (T->isDependentType()) {
+    Out << 'U';
+
+    switch (T->getTTKind()) {
+    case TransformTraitType::EnumRawInvocationType:
+      Out << "3rit";
+      break;
+    }
+  }
+
+  mangleType(T->getBaseType());
+  for (auto Ty : T->getArgs())
+    mangleType(Ty);
 }
 
 void CXXNameMangler::mangleType(const AutoType *T) {

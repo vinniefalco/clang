@@ -365,6 +365,17 @@ void ASTTypeWriter::VisitUnaryTransformType(const UnaryTransformType *T) {
   Code = TYPE_UNARY_TRANSFORM;
 }
 
+void ASTTypeWriter::VisitTransformTraitType(const TransformTraitType *T) {
+  Record.AddTypeRef(T->getBaseType());
+  auto ArgTys = T->getArgs();
+  Record.push_back(ArgTys.size());
+  for (auto Ty : ArgTys)
+    Record.AddTypeRef(Ty);
+  Record.AddTypeRef(T->getTransformedType());
+  Record.push_back(T->getTTKind());
+  Code = TYPE_TRANSFORM_TRAIT;
+}
+
 void ASTTypeWriter::VisitAutoType(const AutoType *T) {
   Record.AddTypeRef(T->getDeducedType());
   Record.push_back((unsigned)T->getKeyword());
@@ -1222,6 +1233,7 @@ void ASTWriter::WriteBlockInfoBlock() {
   RECORD(TYPE_SUBST_TEMPLATE_TYPE_PARM_PACK);
   RECORD(TYPE_AUTO);
   RECORD(TYPE_UNARY_TRANSFORM);
+  RECORD(TYPE_TRANSFORM_TRAIT);
   RECORD(TYPE_ATOMIC);
   RECORD(TYPE_DECAYED);
   RECORD(TYPE_ADJUSTED);

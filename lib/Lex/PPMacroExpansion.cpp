@@ -1279,6 +1279,7 @@ static bool HasFeature(const Preprocessor &PP, StringRef Feature) {
             LangOpts.Sanitize.has(SanitizerKind::ShadowCallStack))
       .Case("tls", PP.getTargetInfo().isTLSSupported())
       .Case("underlying_type", LangOpts.CPlusPlus)
+      .Case("raw_invocation_type", LangOpts.CPlusPlus)
       .Default(false);
 }
 

@@ -191,6 +191,8 @@ class ASTContext : public RefCountedBase<ASTContext> {
   mutable llvm::FoldingSet<ObjCObjectPointerType> ObjCObjectPointerTypes;
   mutable llvm::FoldingSet<DependentUnaryTransformType>
     DependentUnaryTransformTypes;
+  mutable llvm::FoldingSet<DependentTransformTraitType>
+      DependentTransformTraitTypes;
   mutable llvm::FoldingSet<AutoType> AutoTypes;
   mutable llvm::FoldingSet<DeducedTemplateSpecializationType>
     DeducedTemplateSpecializationTypes;
@@ -1479,6 +1481,11 @@ public:
   /// \brief Unary type transforms
   QualType getUnaryTransformType(QualType BaseType, QualType UnderlyingType,
                                  UnaryTransformType::UTTKind UKind) const;
+
+  /// \brief variadic type transforms
+  QualType getTransformTraitType(QualType BaseType, ArrayRef<QualType> ArgTypes,
+                                 QualType TransformedType,
+                                 TransformTraitType::TTKind TKind) const;
 
   /// \brief C++11 deduced auto type.
   QualType getAutoType(QualType DeducedType, AutoTypeKeyword Keyword,

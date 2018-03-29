@@ -1063,6 +1063,7 @@ Parser::isExpressionOrTypeSpecifierSimple(tok::TokenKind Kind) {
   case tok::kw__Thread_local:
   case tok::kw_typeof:
   case tok::kw___underlying_type:
+  case tok::kw___raw_invocation_type:
   case tok::kw___cdecl:
   case tok::kw___stdcall:
   case tok::kw___fastcall:
@@ -1582,6 +1583,7 @@ Parser::isCXXDeclarationSpecifier(Parser::TPResult BracedCastResult,
 
   // C++0x type traits support
   case tok::kw___underlying_type:
+  case tok::kw___raw_invocation_type:
     return TPResult::True;
 
   // C11 _Atomic
@@ -1601,6 +1603,7 @@ bool Parser::isCXXDeclarationSpecifierAType() {
   case tok::annot_typename:
   case tok::kw_typeof:
   case tok::kw___underlying_type:
+  case tok::kw___raw_invocation_type:
     return true;
 
     // elaborated-type-specifier
