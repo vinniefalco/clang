@@ -1504,10 +1504,17 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
     break;
   case DeclSpec::TST_rawInvocationType:
     // FIXME(EricWF)
-    Result = S.GetTypeFromParser(DS.getRepAsType());
-    assert(!Result.isNull() && "Didn't get a type for __raw_invocation_type?");
+    ArrayRef<ParsedType> ParsedArgs = DS.getRepAsTypeList();
+    SmallVector<QualType, 2> Args;
+    Args.reserve(ParsedArgs.size());
+    for (auto PT : ParsedArgs) {
+      QualType NewArg = S.GetTypeFromParser(PT);
+      assert(!NewArg.isNull());
+      Args.push_back(NewArg);
+    }
+
     Result = S.BuildTransformTraitType(
-        Result, TransformTraitType::EnumRawInvocationType,
+        Args, TransformTraitType::EnumRawInvocationType,
         DS.getTypeSpecTypeLoc());
     if (Result.isNull()) {
       Result = Context.IntTy;
