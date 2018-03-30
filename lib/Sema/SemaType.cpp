@@ -8046,6 +8046,45 @@ QualType Sema::BuildUnaryTransformType(QualType BaseType,
   llvm_unreachable("unknown unary transform type");
 }
 
+static const FunctionType *
+computeCallOperatorOverload(Sema &SemaRef, SourceLocation Loc, QualType FnType,
+                            ArrayRef<QualType> Args) {
+  ASTContext &Context = SemaRef.Context;
+
+  if (FnType->isObjectType() || FnType->isFunctionType())
+    FnType = Context.getRValueReferenceType(FnType);
+  OpaqueValueExpr OpaqueFnExpr =
+      OpaqueValueExpr(Loc, FnType.getNonLValueExprType(Context),
+                      Expr::getValueKindForType(FnType));
+
+  SmallVector<OpaqueValueExpr, 2> OpaqueArgExprs;
+  SmallVector<Expr *, 2> ArgExprs;
+
+  for (auto ArgTy : Args) {
+    if (ArgTy->isObjectType() || ArgTy->isFunctionType())
+      ArgTy = Context.getRValueReferenceType(ArgTy);
+    OpaqueArgExprs.push_back(
+        OpaqueValueExpr(SourceLocation(), ArgTy.getNonLValueExprType(Context),
+                        Expr::getValueKindForType(ArgTy)));
+  }
+  OpaqueArgExprs.reserve(OpaqueArgExprs.size());
+  for (Expr &E : OpaqueArgExprs)
+    ArgExprs.push_back(&E);
+
+  Sema::ContextRAII TUContext(SemaRef, Context.getTranslationUnitDecl());
+  ExprResult Res = SemaRef.ActOnCallExpr(nullptr, &OpaqueFnExpr, Loc, ArgExprs,
+                                         Loc, nullptr);
+  if (Res.isInvalid())
+    return nullptr;
+  CallExpr *CE = Res.getAs<CallExpr>();
+
+  const FunctionDecl *FDecl = CE->getDirectCallee();
+  assert(FDecl);
+  const FunctionType *CalleeType = FDecl->getFunctionType();
+  assert(CalleeType);
+  return CalleeType;
+}
+
 QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
                                        TransformTraitType::TTKind TKind,
                                        SourceLocation Loc) {
@@ -8071,8 +8110,7 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
       } else if (FnType->isMemberDataPointerType()) {
         assert(false && "FIXME");
       } else if (FnType->isRecordType()) {
-        CalleeType = computeCallOperatorOverload(SemaRef, TemplateLoc,
-                                                 TemplateArgs, Fn, Ts);
+        CalleeType = computeCallOperatorOverload(*this, Loc, FnType, Args);
       } else {
         assert(false && "unhandled case");
       }
