@@ -1516,10 +1516,8 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
     Result = S.BuildTransformTraitType(
         Args, TransformTraitType::EnumRawInvocationType,
         DS.getTypeSpecTypeLoc());
-    if (Result.isNull()) {
-      Result = QualType();
+    if (Result.isNull())
       declarator.setInvalidType(true);
-    }
     break;
   }
   case DeclSpec::TST_auto:
