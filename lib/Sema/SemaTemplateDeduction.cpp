@@ -1946,6 +1946,7 @@ DeduceTemplateArgumentsByTypeMatch(Sema &S,
     case Type::UnresolvedUsing:
     case Type::Decltype:
     case Type::UnaryTransform:
+    case Type::TransformTrait:
     case Type::Auto:
     case Type::DeducedTemplateSpecialization:
     case Type::DependentTemplateSpecialization:
@@ -5363,7 +5364,15 @@ MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
                                  cast<UnaryTransformType>(T)->getUnderlyingType(),
                                  OnlyDeduced, Depth, Used);
     break;
-
+  case Type::TransformTrait: {
+    const TransformTraitType *TT = cast<TransformTraitType>(T);
+    if (!OnlyDeduced) {
+      for (auto Ty : TT->getArgs()) {
+        MarkUsedTemplateParameters(Ctx, Ty, OnlyDeduced, Depth, Used);
+      }
+    }
+    break;
+  }
   case Type::PackExpansion:
     MarkUsedTemplateParameters(Ctx,
                                cast<PackExpansionType>(T)->getPattern(),
