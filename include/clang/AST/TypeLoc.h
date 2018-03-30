@@ -1991,9 +1991,9 @@ public:
     return getLocalData()->ArgTInfo;
   }
 
-  void setArgTInfo(SmallVectorImpl<TypeSourceInfo *> ArgInfo) {
-    auto &AInfo = getLocalData()->ArgTInfo;
-    AInfo = std::move(ArgInfo);
+  void setArgTInfo(ArrayRef<TypeSourceInfo *> ArgInfo) {
+    SmallVector<TypeSourceInfo *, 2> NewArgs(ArgInfo.begin(), ArgInfo.end());
+    getLocalData()->ArgTInfo = std::move(NewArgs);
   }
 
   TypeSourceInfo *getTransformedTInfo() const {
