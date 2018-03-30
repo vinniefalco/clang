@@ -747,6 +747,17 @@ void TypeLocWriter::VisitUnaryTransformTypeLoc(UnaryTransformTypeLoc TL) {
   Record.AddTypeSourceInfo(TL.getUnderlyingTInfo());
 }
 
+void TypeLocWriter::VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {
+  Record.AddSourceLocation(TL.getKWLoc());
+  Record.AddSourceLocation(TL.getLParenLoc());
+  Record.AddSourceLocation(TL.getRParenLoc());
+  ArrayRef<TypeSourceInfo *> ArgTInfo = TL.getArgTInfo();
+  Record.push_back(ArgTInfo.size());
+  for (auto *TSI : ArgTInfo)
+    Record.AddTypeSourceInfo(TSI);
+  Record.AddTypeSourceInfo(TL.getTransformedTInfo());
+}
+
 void TypeLocWriter::VisitAutoTypeLoc(AutoTypeLoc TL) {
   Record.AddSourceLocation(TL.getNameLoc());
 }

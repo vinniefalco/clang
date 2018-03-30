@@ -8052,9 +8052,8 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
   switch (TKind) {
   case TransformTraitType::EnumRawInvocationType: {
     bool IsDependent =
-        std::any_of(ArgTypes.begin(), ArgTypes.end(), [](TypeSourceInfo *T) {
-          return T->getType()->isDependentType();
-        });
+        std::any_of(ArgTypes.begin(), ArgTypes.end(),
+                    [](QualType T) { return T->isDependentType(); });
     QualType Underlying = Context.DependentTy;
     if (!IsDependent) {
       // FIXME: implement solution

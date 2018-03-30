@@ -6596,6 +6596,18 @@ void TypeLocReader::VisitUnaryTransformTypeLoc(UnaryTransformTypeLoc TL) {
   TL.setUnderlyingTInfo(GetTypeSourceInfo());
 }
 
+void TypeLocReader::VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {
+  TL.setKWLoc(ReadSourceLocation());
+  TL.setLParenLoc(ReadSourceLocation());
+  TL.setRParenLoc(ReadSourceLocation());
+  unsigned Size = Record[Idx++];
+  SmallVector<TypeSourceInfo *, 2> ArgTInfo;
+  for (unsigned I = 0; I < Size; ++I)
+    ArgTInfo.push_back(GetTypeSourceInfo());
+  TL.setArgTInfo(ArgTInfo);
+  TL.setTransformedTInfo(GetTypeSourceInfo());
+}
+
 void TypeLocReader::VisitAutoTypeLoc(AutoTypeLoc TL) {
   TL.setNameLoc(ReadSourceLocation());
 }
