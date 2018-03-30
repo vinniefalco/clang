@@ -1052,7 +1052,7 @@ void Parser::ParseUnderlyingTypeSpecifier(DeclSpec &DS) {
 }
 
 struct TransformTraitInfo {
-  int Arity;
+  unsigned Arity;
   bool AllowGreaterArity;
   DeclSpec::TST TypeSpecType;
 };
