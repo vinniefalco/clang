@@ -458,10 +458,10 @@ void TransformTraitTypeLoc::initializeLocal(ASTContext &Context,
   setKWLoc(Loc);
   setRParenLoc(Loc);
   setLParenLoc(Loc);
-  SmallVector<TypeSourceInfo *, 2> Args;
-  for (auto Ty : getTypePtr()->getArgs())
-    Args.push_back(Context.getTrivialTypeSourceInfo(Ty, Loc));
-  this->setArgTInfo(Args);
+  for (unsigned I = 0; I < getTypePtr()->getNumArgs(); ++I) {
+    this->setArgInfo(
+        I, Context.getTrivialTypeSourceInfo(getTypePtr()->getArg(I), Loc));
+  }
 }
 
 void ElaboratedTypeLoc::initializeLocal(ASTContext &Context, 

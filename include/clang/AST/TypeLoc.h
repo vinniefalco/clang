@@ -1970,12 +1970,16 @@ struct TransformTraitTypeLocInfo {
   // FIXME: While there's only one unary transform right now, future ones may
   // need different representations
   SourceLocation KWLoc, LParenLoc, RParenLoc;
-  SmallVector<TypeSourceInfo *, 2> ArgTInfo;
 };
 
 class TransformTraitTypeLoc
     : public ConcreteTypeLoc<UnqualTypeLoc, TransformTraitTypeLoc,
                              TransformTraitType, TransformTraitTypeLocInfo> {
+  // TypeSourceInfo*'s are stored after Info, one for each type argument.
+  TypeSourceInfo **getArgLocArray() const {
+    return (TypeSourceInfo **)this->getExtraLocalData();
+  }
+
 public:
   SourceLocation getKWLoc() const { return getLocalData()->KWLoc; }
   void setKWLoc(SourceLocation Loc) { getLocalData()->KWLoc = Loc; }
@@ -1986,23 +1990,26 @@ public:
   SourceLocation getRParenLoc() const { return getLocalData()->RParenLoc; }
   void setRParenLoc(SourceLocation Loc) { getLocalData()->RParenLoc = Loc; }
 
+  unsigned getNumArgs() const { return this->getTypePtr()->getNumArgs(); }
+
   ArrayRef<TypeSourceInfo *> getArgTInfo() const {
-    return getLocalData()->ArgTInfo;
+    return llvm::makeArrayRef(getArgLocArray(), getNumArgs());
   }
 
   TypeSourceInfo *getArgInfo(unsigned I) {
-    assert(I < getArgTInfo().size());
-    return getLocalData()->ArgTInfo[I];
+    assert(I < getNumArgs());
+    return getArgLocArray()[I];
   }
 
   void setArgInfo(unsigned I, TypeSourceInfo *Info) {
-    assert(I < getArgTInfo().size());
-    getLocalData()->ArgTInfo[I] = Info;
+    assert(I < getNumArgs());
+    getArgLocArray()[I] = Info;
   }
 
   void setArgTInfo(ArrayRef<TypeSourceInfo *> ArgInfo) {
-    SmallVector<TypeSourceInfo *, 2> NewArgs(ArgInfo.begin(), ArgInfo.end());
-    getLocalData()->ArgTInfo = NewArgs;
+    assert(ArgInfo.size() == getNumArgs());
+    for (unsigned I = 0; I < ArgInfo.size(); ++I)
+      setArgInfo(I, ArgInfo[I]);
   }
 
   SourceRange getLocalSourceRange() const {
@@ -2019,6 +2026,16 @@ public:
   }
 
   void initializeLocal(ASTContext &Context, SourceLocation Loc);
+
+  unsigned getExtraLocalDataSize() const {
+    return this->getNumArgs() * sizeof(TypeSourceInfo *);
+  }
+
+  unsigned getExtraLocalDataAlignment() const {
+    static_assert(alignof(TransformTraitTypeLoc) >= alignof(TypeSourceInfo *),
+                  "not enough alignment for tail-allocated data");
+    return alignof(TypeSourceInfo *);
+  }
 };
 
 #else
