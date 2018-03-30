@@ -893,6 +893,11 @@ public:
                                      UnaryTransformType::UTTKind UKind,
                                      SourceLocation Loc);
 
+  /// \brief Build a new transform trait type.
+  QualType RebuildTransformTraitType(ArrayRef<QualType> ArgTypes,
+                                     TransformTraitType::TTKind TKind,
+                                     SourceLocation Loc);
+
   /// \brief Build a new C++11 decltype type.
   ///
   /// By default, performs semantic analysis when building the decltype type.
@@ -5543,7 +5548,32 @@ QualType TreeTransform<Derived>::TransformUnaryTransformType(
   return Result;
 }
 
-template<typename Derived>
+template <typename Derived>
+QualType
+TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
+                                                    TransformTraitTypeLoc TL) {
+  QualType Result = TL.getType();
+  if (Result->isDependentType()) {
+    const TransformTraitType *T = TL.getTypePtr();
+    SmallVector<QualType, 2> Args;
+    for (auto Ty : T->getArgs()) {
+      QualType NewTy = getDerived().TransformType(Ty);
+      Args.push_back(NewTy);
+    }
+    Result = getDerived().RebuildUnaryTransformType(Args, T->getTTKind(),
+                                                    TL.getKWLoc());
+    if (Result.isNull())
+      return QualType();
+  }
+
+  TransformTraitTypeLoc NewTL = TLB.push<TransformTraitTypeLoc>(Result);
+  NewTL.setKWLoc(TL.getKWLoc());
+  NewTL.setParensRange(TL.getParensRange());
+  NewTL.setUnderlyingTInfo(TL.getUnderlyingTInfo());
+  return Result;
+}
+
+template <typename Derived>
 QualType TreeTransform<Derived>::TransformAutoType(TypeLocBuilder &TLB,
                                                    AutoTypeLoc TL) {
   const AutoType *T = TL.getTypePtr();
@@ -12482,6 +12512,13 @@ QualType TreeTransform<Derived>::RebuildUnaryTransformType(QualType BaseType,
                                             UnaryTransformType::UTTKind UKind,
                                             SourceLocation Loc) {
   return SemaRef.BuildUnaryTransformType(BaseType, UKind, Loc);
+}
+
+template <typename Derived>
+QualType TreeTransform<Derived>::RebuildTransformTraitType(
+    ArrayRef<QualType> ArgTypes, TransformTraitType::TTKind TKind,
+    SourceLocation Loc) {
+  return SemaRef.BuildTransformTraitType(ArgTypes, TKind, Loc);
 }
 
 template<typename Derived>

@@ -725,7 +725,6 @@ QualType ASTNodeImporter::VisitUnaryTransformType(const UnaryTransformType *T) {
 }
 
 QualType ASTNodeImporter::VisitTransformTraitType(const TransformTraitType *T) {
-  QualType ToBaseType = Importer.Import(T->getBaseType());
   SmallVector<QualType, 2> ToArgTypes;
   bool ArgTypeBad = false;
   for (auto Ty : T->getArgs()) {
@@ -734,11 +733,11 @@ QualType ASTNodeImporter::VisitTransformTraitType(const TransformTraitType *T) {
     ToArgTypes.push_back(ToTy);
   }
   QualType ToTransformedType = Importer.Import(T->getTransformedType());
-  if (ToBaseType.isNull() || ToTransformedType.isNull() || ArgTypeBad)
+  if (ToTransformedType.isNull() || ArgTypeBad)
     return QualType();
 
   return Importer.getToContext().getTransformTraitType(
-      ToBaseType, ToArgTypes, ToTransformedType, T->getTTKind());
+      ToArgTypes, ToTransformedType, T->getTTKind());
 }
 
 QualType ASTNodeImporter::VisitAutoType(const AutoType *T) {
