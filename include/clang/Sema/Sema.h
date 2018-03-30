@@ -1646,9 +1646,6 @@ public:
   QualType BuildUnaryTransformType(QualType BaseType,
                                    UnaryTransformType::UTTKind UKind,
                                    SourceLocation Loc);
-  QualType ActOnTransformTraitType(TransformTraitType::TTKind Kind,
-                                   ArrayRef<ParsedType> ArgTypes,
-                                   SourceLocation Loc);
   QualType BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
                                    TransformTraitType::TTKind Kind,
                                    SourceLocation Loc);
