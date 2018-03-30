@@ -8016,8 +8016,8 @@ static OpaqueValueExpr createValueForArg(Sema &S, QualType Ty,
 }
 
 static const FunctionType *
-computeCallOperatorOverload(Sema &SemaRef, SourceLocation Loc, QualType FnType,
-                            ArrayRef<QualType> Args) {
+computeCallToObjectOfClassType(Sema &SemaRef, SourceLocation Loc,
+                               QualType FnType, ArrayRef<QualType> Args) {
   ASTContext &Context = SemaRef.Context;
 
   OpaqueValueExpr OpaqueFnExpr = createValueForArg(SemaRef, FnType, Loc);
@@ -8033,8 +8033,8 @@ computeCallOperatorOverload(Sema &SemaRef, SourceLocation Loc, QualType FnType,
     ArgExprs.push_back(&E);
 
   Sema::ContextRAII TUContext(SemaRef, Context.getTranslationUnitDecl());
-  ExprResult Res = SemaRef.ActOnCallExpr(nullptr, &OpaqueFnExpr, Loc, ArgExprs,
-                                         Loc, nullptr);
+  ExprResult Res = SemaRef.BuildCallToObjectOfClassType(nullptr, &OpaqueFnExpr,
+                                                        Loc, ArgExprs, Loc);
   if (Res.isInvalid())
     return nullptr;
   CallExpr *CE = Res.getAs<CallExpr>();
@@ -8103,7 +8103,7 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
       } else if (FnType->isMemberDataPointerType()) {
         assert(false && "FIXME");
       } else if (FnType->isRecordType()) {
-        CalleeType = computeCallOperatorOverload(*this, Loc, FnType, Args);
+        CalleeType = computeCallToOperatorOfClassType(*this, Loc, FnType, Args);
       } else {
         assert(false && "unhandled case");
       }
