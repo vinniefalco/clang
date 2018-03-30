@@ -1037,6 +1037,13 @@ DEF_TRAVERSE_TYPE(UnaryTransformType, {
   TRY_TO(TraverseType(T->getUnderlyingType()));
 })
 
+DEF_TRAVERSE_TYPE(TransformTraitType, {
+  for (auto Ty : T->getArgs()) {
+    TRY_TO(TraverseType(Ty));
+  }
+  TRY_TO(TraverseType(T->getTransformedType()));
+})
+
 DEF_TRAVERSE_TYPE(AutoType, { TRY_TO(TraverseType(T->getDeducedType())); })
 DEF_TRAVERSE_TYPE(DeducedTemplateSpecializationType, {
   TRY_TO(TraverseTemplateName(T->getTemplateName()));
