@@ -1517,7 +1517,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
         Args, TransformTraitType::EnumRawInvocationType,
         DS.getTypeSpecTypeLoc());
     if (Result.isNull()) {
-      Result = Context.IntTy;
+      Result = QualType();
       declarator.setInvalidType(true);
     }
     break;
