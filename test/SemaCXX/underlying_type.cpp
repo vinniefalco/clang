@@ -10,7 +10,10 @@ template <typename T>
 struct is_same_type<T, T> {
   static const bool value = true;
 };
-
+// expected-error@+1 {{C++ requires a type}}
+__underlying_type() x;         // expected-error {{expected a type}}
+// expected-error@+1 {{C++ requires a type}}
+__underlying_type(int, int) y; // expected-error {{type trait requires 1 argument; have 2 arguments}}
 __underlying_type(int) a; // expected-error {{only enumeration types}}
 __underlying_type(struct b) c; // expected-error {{only enumeration types}}
 

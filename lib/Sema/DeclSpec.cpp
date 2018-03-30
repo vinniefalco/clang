@@ -368,6 +368,7 @@ bool Declarator::isDeclarationOfFunction() const {
      
     case TST_underlyingType:
     case TST_rawInvocationType:
+      return false; // FIXME(EricWF)
     case TST_typename:
     case TST_typeofType: {
       QualType QT = DS.getRepAsType().get();

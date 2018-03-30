@@ -1032,11 +1032,6 @@ DEF_TRAVERSE_TYPE(TypeOfType, { TRY_TO(TraverseType(T->getUnderlyingType())); })
 DEF_TRAVERSE_TYPE(DecltypeType,
                   { TRY_TO(TraverseStmt(T->getUnderlyingExpr())); })
 
-DEF_TRAVERSE_TYPE(UnaryTransformType, {
-  TRY_TO(TraverseType(T->getBaseType()));
-  TRY_TO(TraverseType(T->getUnderlyingType()));
-})
-
 DEF_TRAVERSE_TYPE(TransformTraitType, {
   for (auto Ty : T->getArgs()) {
     TRY_TO(TraverseType(Ty));
@@ -1274,9 +1269,6 @@ DEF_TRAVERSE_TYPELOC(DecltypeType, {
   TRY_TO(TraverseStmt(TL.getTypePtr()->getUnderlyingExpr()));
 })
 
-DEF_TRAVERSE_TYPELOC(UnaryTransformType, {
-  TRY_TO(TraverseTypeLoc(TL.getUnderlyingTInfo()->getTypeLoc()));
-})
 DEF_TRAVERSE_TYPELOC(TransformTraitType, {
   for (auto *TyInfo : TL.getArgTInfo()) {
     TRY_TO(TraverseTypeLoc(TyInfo->getTypeLoc()));

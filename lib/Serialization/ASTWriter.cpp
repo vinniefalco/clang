@@ -358,13 +358,6 @@ void ASTTypeWriter::VisitDecltypeType(const DecltypeType *T) {
   Code = TYPE_DECLTYPE;
 }
 
-void ASTTypeWriter::VisitUnaryTransformType(const UnaryTransformType *T) {
-  Record.AddTypeRef(T->getBaseType());
-  Record.AddTypeRef(T->getUnderlyingType());
-  Record.push_back(T->getUTTKind());
-  Code = TYPE_UNARY_TRANSFORM;
-}
-
 void ASTTypeWriter::VisitTransformTraitType(const TransformTraitType *T) {
   auto ArgTys = T->getArgs();
   Record.push_back(ArgTys.size());
@@ -738,13 +731,6 @@ void TypeLocWriter::VisitTypeOfTypeLoc(TypeOfTypeLoc TL) {
 
 void TypeLocWriter::VisitDecltypeTypeLoc(DecltypeTypeLoc TL) {
   Record.AddSourceLocation(TL.getNameLoc());
-}
-
-void TypeLocWriter::VisitUnaryTransformTypeLoc(UnaryTransformTypeLoc TL) {
-  Record.AddSourceLocation(TL.getKWLoc());
-  Record.AddSourceLocation(TL.getLParenLoc());
-  Record.AddSourceLocation(TL.getRParenLoc());
-  Record.AddTypeSourceInfo(TL.getUnderlyingTInfo());
 }
 
 void TypeLocWriter::VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {
@@ -1241,7 +1227,6 @@ void ASTWriter::WriteBlockInfoBlock() {
   RECORD(TYPE_ATTRIBUTED);
   RECORD(TYPE_SUBST_TEMPLATE_TYPE_PARM_PACK);
   RECORD(TYPE_AUTO);
-  RECORD(TYPE_UNARY_TRANSFORM);
   RECORD(TYPE_TRANSFORM_TRAIT);
   RECORD(TYPE_ATOMIC);
   RECORD(TYPE_DECAYED);

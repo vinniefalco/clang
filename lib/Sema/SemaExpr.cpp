@@ -3890,7 +3890,6 @@ static void captureVariablyModifiedType(ASTContext &Context, QualType T,
       break;
     case Type::Paren:
     case Type::TypeOf:
-    case Type::UnaryTransform:
     case Type::TransformTrait:
     case Type::Attributed:
     case Type::SubstTemplateTypeParm:

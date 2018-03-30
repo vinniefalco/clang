@@ -189,8 +189,6 @@ class ASTContext : public RefCountedBase<ASTContext> {
   llvm::FoldingSet<PackExpansionType> PackExpansionTypes;
   mutable llvm::FoldingSet<ObjCObjectTypeImpl> ObjCObjectTypes;
   mutable llvm::FoldingSet<ObjCObjectPointerType> ObjCObjectPointerTypes;
-  mutable llvm::FoldingSet<DependentUnaryTransformType>
-    DependentUnaryTransformTypes;
   mutable llvm::FoldingSet<DependentTransformTraitType>
       DependentTransformTraitTypes;
   mutable llvm::FoldingSet<AutoType> AutoTypes;
@@ -1477,10 +1475,6 @@ public:
 
   /// \brief C++11 decltype.
   QualType getDecltypeType(Expr *e, QualType UnderlyingType) const;
-
-  /// \brief Unary type transforms
-  QualType getUnaryTransformType(QualType BaseType, QualType UnderlyingType,
-                                 UnaryTransformType::UTTKind UKind) const;
 
   /// \brief variadic type transforms
   QualType getTransformTraitType(ArrayRef<QualType> ArgTypes,

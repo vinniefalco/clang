@@ -498,13 +498,6 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
       return false;
     break;
 
-  case Type::UnaryTransform:
-    if (!IsStructurallyEquivalent(
-            Context, cast<UnaryTransformType>(T1)->getUnderlyingType(),
-            cast<UnaryTransformType>(T1)->getUnderlyingType()))
-      return false;
-    break;
-
   case Type::TransformTrait: {
     const TransformTraitType *TT1 = cast<TransformTraitType>(T1);
     const TransformTraitType *TT2 = cast<TransformTraitType>(T2);

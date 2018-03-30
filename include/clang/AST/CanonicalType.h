@@ -538,14 +538,6 @@ struct CanProxyAdaptor<DecltypeType> : public CanProxyBase<DecltypeType> {
 };
 
 template <>
-struct CanProxyAdaptor<UnaryTransformType>
-    : public CanProxyBase<UnaryTransformType> {
-  LLVM_CLANG_CANPROXY_TYPE_ACCESSOR(getBaseType)
-  LLVM_CLANG_CANPROXY_TYPE_ACCESSOR(getUnderlyingType)
-  LLVM_CLANG_CANPROXY_SIMPLE_ACCESSOR(UnaryTransformType::UTTKind, getUTTKind)
-};
-
-template <>
 struct CanProxyAdaptor<TransformTraitType>
     : public CanProxyBase<TransformTraitType> {
   LLVM_CLANG_CANPROXY_TYPE_ACCESSOR(getTransformedType)

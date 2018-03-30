@@ -1020,58 +1020,24 @@ void Parser::AnnotateExistingDecltypeSpecifier(const DeclSpec& DS,
   PP.AnnotateCachedTokens(Tok);
 }
 
-void Parser::ParseUnderlyingTypeSpecifier(DeclSpec &DS) {
-  assert(Tok.is(tok::kw___underlying_type) &&
-         "Not an underlying type specifier");
-
-  SourceLocation StartLoc = ConsumeToken();
-  BalancedDelimiterTracker T(*this, tok::l_paren);
-  if (T.expectAndConsume(diag::err_expected_lparen_after,
-                       "__underlying_type", tok::r_paren)) {
-    return;
-  }
-
-  TypeResult Result = ParseTypeName();
-  if (Result.isInvalid()) {
-    SkipUntil(tok::r_paren, StopAtSemi);
-    return;
-  }
-
-  // Match the ')'
-  T.consumeClose();
-  if (T.getCloseLocation().isInvalid())
-    return;
-
-  const char *PrevSpec = nullptr;
-  unsigned DiagID;
-  if (DS.SetTypeSpecType(DeclSpec::TST_underlyingType, StartLoc, PrevSpec,
-                         DiagID, Result.get(),
-                         Actions.getASTContext().getPrintingPolicy()))
-    Diag(StartLoc, DiagID) << PrevSpec;
-  DS.setTypeofParensRange(T.getRange());
-}
-
 struct TransformTraitInfo {
-  unsigned Arity;
-  bool AllowGreaterArity;
+  unsigned MinArity, MaxArity;
   DeclSpec::TST TypeSpecType;
 };
 
 static TransformTraitInfo GetTraitInfo(tok::TokenKind Kind) {
   switch (Kind) {
   case tok::kw___raw_invocation_type:
-    return {1, true, DeclSpec::TST_rawInvocationType};
+    return {1, 0, DeclSpec::TST_rawInvocationType};
+  case tok::kw___underlying_type:
+    return {1, 1, DeclSpec::TST_underlyingType};
   default:
-    llvm_unreachable("unhandled case");
+    llvm_unreachable("Not a transformation trait type specifier");
   }
 }
 
 void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
-  assert((Tok.is(tok::kw___underlying_type) ||
-          Tok.is(tok::kw___raw_invocation_type)) &&
-         "Not a transformation trait type specifier");
-
-  Token SavedTok = Tok;
+  TransformTraitInfo Info = GetTraitInfo(Tok.getKind());
 
   SourceLocation StartLoc = ConsumeToken();
   BalancedDelimiterTracker Parens(*this, tok::l_paren);
@@ -1104,21 +1070,15 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     return;
 
   SourceLocation EndLoc = Parens.getCloseLocation();
-  TransformTraitInfo Info = GetTraitInfo(SavedTok.getKind());
 
-  if (Info.Arity && ((!Info.AllowGreaterArity && Args.size() != Info.Arity) ||
-                     (Info.AllowGreaterArity && Args.size() < Info.Arity))) {
+  if ((Info.MinArity && Args.size() < Info.MinArity) ||
+      (Info.MaxArity && Args.size() > Info.MaxArity)) {
     Diag(EndLoc, diag::err_type_trait_arity)
-        << Info.Arity << 0 << (Info.Arity > 1) << (int)Args.size()
-        << SourceRange(StartLoc);
+        << Info.MinArity << (Info.MaxArity > Info.MinArity)
+        << (Info.MinArity != 1) << (int)Args.size() << SourceRange(StartLoc);
     return;
   }
 
-  if (!Info.Arity && Args.empty()) {
-    Diag(EndLoc, diag::err_type_trait_arity)
-        << 1 << 1 << 1 << (int)Args.size() << SourceRange(StartLoc);
-    return;
-  }
   // TST
   const char *PrevSpec = nullptr;
   unsigned DiagID;

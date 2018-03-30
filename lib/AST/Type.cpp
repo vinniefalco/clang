@@ -967,9 +967,33 @@ public:
   TRIVIAL_TYPE_CLASS(TypeOfExpr)
   TRIVIAL_TYPE_CLASS(TypeOf)
   TRIVIAL_TYPE_CLASS(Decltype)
-  TRIVIAL_TYPE_CLASS(UnaryTransform)
   TRIVIAL_TYPE_CLASS(Record)
   TRIVIAL_TYPE_CLASS(Enum)
+
+  QualType VisitTransformTraitType(const TransformTraitType *T) {
+    // Transform type arguments.
+    bool typeArgChanged = false;
+    SmallVector<QualType, 4> typeArgs;
+    for (auto typeArg : T->getArgs()) {
+      QualType newTypeArg = recurse(typeArg);
+      if (newTypeArg.isNull())
+        return {};
+
+      if (newTypeArg.getAsOpaquePtr() != typeArg.getAsOpaquePtr())
+        typeArgChanged = true;
+
+      typeArgs.push_back(newTypeArg);
+    }
+    QualType TransformedType = recurse(T->getTransformedType());
+    if (TransformedType.isNull())
+      return {};
+    if (TransformedType.getAsOpaquePtr() ==
+            T->getTransformedType().getAsOpaquePtr() &&
+        !typeArgChanged)
+      return QualType(T, 0);
+
+    return Ctx.getTransformTraitType(typeArgs, TransformedType, T->getTTKind());
+  }
 
   // FIXME: Non-trivial to implement, but important for C++
   TRIVIAL_TYPE_CLASS(Elaborated)
@@ -3041,21 +3065,6 @@ void DependentDecltypeType::Profile(llvm::FoldingSetNodeID &ID,
   E->Profile(ID, Context, true);
 }
 
-UnaryTransformType::UnaryTransformType(QualType BaseType,
-                                       QualType UnderlyingType,
-                                       UTTKind UKind,
-                                       QualType CanonicalType)
-    : Type(UnaryTransform, CanonicalType, BaseType->isDependentType(),
-           BaseType->isInstantiationDependentType(),
-           BaseType->isVariablyModifiedType(),
-           BaseType->containsUnexpandedParameterPack()),
-      BaseType(BaseType), UnderlyingType(UnderlyingType), UKind(UKind) {}
-
-DependentUnaryTransformType::DependentUnaryTransformType(const ASTContext &C,
-                                                         QualType BaseType,
-                                                         UTTKind UKind)
-     : UnaryTransformType(BaseType, C.DependentTy, UKind, QualType()) {}
-
 TransformTraitType::TransformTraitType(ArrayRef<QualType> ArgTys,
                                        QualType TransformedTy, TTKind TKind,
                                        QualType CanonicalType)
@@ -3697,7 +3706,6 @@ bool Type::canHaveNullability(bool ResultIfUnknown) const {
   case Type::TypeOfExpr:
   case Type::TypeOf:
   case Type::Decltype:
-  case Type::UnaryTransform:
   case Type::TransformTrait:
   case Type::TemplateTypeParm:
   case Type::SubstTemplateTypeParmPack:

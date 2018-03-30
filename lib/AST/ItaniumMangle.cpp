@@ -1964,7 +1964,6 @@ bool CXXNameMangler::mangleUnresolvedTypeOrSimpleId(QualType Ty,
   case Type::TypeOf:
   case Type::Decltype:
   case Type::TemplateTypeParm:
-  case Type::UnaryTransform:
   case Type::TransformTrait:
   case Type::SubstTemplateTypeParm:
   unresolvedType:
@@ -3234,22 +3233,6 @@ void CXXNameMangler::mangleType(const DecltypeType *T) {
   Out << 'E';
 }
 
-void CXXNameMangler::mangleType(const UnaryTransformType *T) {
-  // If this is dependent, we need to record that. If not, we simply
-  // mangle it as the underlying type since they are equivalent.
-  if (T->isDependentType()) {
-    Out << 'U';
-    
-    switch (T->getUTTKind()) {
-      case UnaryTransformType::EnumUnderlyingType:
-        Out << "3eut";
-        break;
-    }
-  }
-
-  mangleType(T->getBaseType());
-}
-
 void CXXNameMangler::mangleType(const TransformTraitType *T) {
   // If this is dependent, we need to record that. If not, we simply
   // mangle it as the underlying type since they are equivalent.
@@ -3259,6 +3242,9 @@ void CXXNameMangler::mangleType(const TransformTraitType *T) {
     switch (T->getTTKind()) {
     case TransformTraitType::EnumRawInvocationType:
       Out << "3rit";
+      break;
+    case TransformTraitType::EnumUnderlyingType:
+      Out << "3eut";
       break;
     }
   }

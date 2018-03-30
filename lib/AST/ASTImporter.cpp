@@ -64,7 +64,6 @@ namespace clang {
     // FIXME: DependentTypeOfExprType
     QualType VisitTypeOfType(const TypeOfType *T);
     QualType VisitDecltypeType(const DecltypeType *T);
-    QualType VisitUnaryTransformType(const UnaryTransformType *T);
     QualType VisitTransformTraitType(const TransformTraitType *T);
     QualType VisitAutoType(const AutoType *T);
     QualType VisitInjectedClassNameType(const InjectedClassNameType *T);
@@ -713,27 +712,17 @@ QualType ASTNodeImporter::VisitDecltypeType(const DecltypeType *T) {
   return Importer.getToContext().getDecltypeType(ToExpr, UnderlyingType);
 }
 
-QualType ASTNodeImporter::VisitUnaryTransformType(const UnaryTransformType *T) {
-  QualType ToBaseType = Importer.Import(T->getBaseType());
-  QualType ToUnderlyingType = Importer.Import(T->getUnderlyingType());
-  if (ToBaseType.isNull() || ToUnderlyingType.isNull())
-    return QualType();
-
-  return Importer.getToContext().getUnaryTransformType(ToBaseType,
-                                                       ToUnderlyingType,
-                                                       T->getUTTKind());
-}
 
 QualType ASTNodeImporter::VisitTransformTraitType(const TransformTraitType *T) {
   SmallVector<QualType, 2> ToArgTypes;
-  bool ArgTypeBad = false;
   for (auto Ty : T->getArgs()) {
     QualType ToTy = Importer.Import(Ty);
-    ArgTypeBad |= ToTy.isNull();
+    if (ToTy.isNull())
+      return QualType();
     ToArgTypes.push_back(ToTy);
   }
   QualType ToTransformedType = Importer.Import(T->getTransformedType());
-  if (ToTransformedType.isNull() || ArgTypeBad)
+  if (ToTransformedType.isNull())
     return QualType();
 
   return Importer.getToContext().getTransformTraitType(

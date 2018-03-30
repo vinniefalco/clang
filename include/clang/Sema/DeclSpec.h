@@ -403,13 +403,14 @@ private:
   ObjCDeclSpec *ObjCQualifiers;
 
   static bool isTypeRep(TST T) {
-    return (T == TST_typename || T == TST_typeofType ||
-            T == TST_underlyingType || T == TST_atomic);
+    return (T == TST_typename || T == TST_typeofType || T == TST_atomic);
   }
   static bool isExprRep(TST T) {
     return (T == TST_typeofExpr || T == TST_decltype);
   }
-  static bool isTypeListRep(TST T) { return T == TST_rawInvocationType; }
+  static bool isTypeListRep(TST T) {
+    return (T == TST_rawInvocationType || T == TST_underlyingType);
+  }
 
   DeclSpec(const DeclSpec &) = delete;
   void operator=(const DeclSpec &) = delete;

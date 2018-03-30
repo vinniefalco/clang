@@ -6092,13 +6092,6 @@ QualType ASTReader::readTypeRecord(unsigned Index) {
     return Context.getDecltypeType(ReadExpr(*Loc.F), UnderlyingType);
   }
 
-  case TYPE_UNARY_TRANSFORM: {
-    QualType BaseType = readType(*Loc.F, Record, Idx);
-    QualType UnderlyingType = readType(*Loc.F, Record, Idx);
-    UnaryTransformType::UTTKind UKind = (UnaryTransformType::UTTKind)Record[2];
-    return Context.getUnaryTransformType(BaseType, UnderlyingType, UKind);
-  }
-
   case TYPE_TRANSFORM_TRAIT: {
     SmallVector<QualType, 2> ArgTypes;
     unsigned NumArgs = (unsigned)Record[Idx++];
@@ -6587,13 +6580,6 @@ void TypeLocReader::VisitTypeOfTypeLoc(TypeOfTypeLoc TL) {
 
 void TypeLocReader::VisitDecltypeTypeLoc(DecltypeTypeLoc TL) {
   TL.setNameLoc(ReadSourceLocation());
-}
-
-void TypeLocReader::VisitUnaryTransformTypeLoc(UnaryTransformTypeLoc TL) {
-  TL.setKWLoc(ReadSourceLocation());
-  TL.setLParenLoc(ReadSourceLocation());
-  TL.setRParenLoc(ReadSourceLocation());
-  TL.setUnderlyingTInfo(GetTypeSourceInfo());
 }
 
 void TypeLocReader::VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {

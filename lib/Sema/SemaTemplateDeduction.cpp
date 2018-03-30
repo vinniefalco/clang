@@ -1945,7 +1945,6 @@ DeduceTemplateArgumentsByTypeMatch(Sema &S,
     case Type::DependentName:
     case Type::UnresolvedUsing:
     case Type::Decltype:
-    case Type::UnaryTransform:
     case Type::TransformTrait:
     case Type::Auto:
     case Type::DeducedTemplateSpecialization:
@@ -5358,18 +5357,15 @@ MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
                                  OnlyDeduced, Depth, Used);
     break;
 
-  case Type::UnaryTransform:
-    if (!OnlyDeduced)
-      MarkUsedTemplateParameters(Ctx,
-                                 cast<UnaryTransformType>(T)->getUnderlyingType(),
-                                 OnlyDeduced, Depth, Used);
-    break;
   case Type::TransformTrait: {
     const TransformTraitType *TT = cast<TransformTraitType>(T);
     if (!OnlyDeduced) {
+      // FIXME(EricWF): Do we mark the input args as used unconditionally?
       for (auto Ty : TT->getArgs()) {
         MarkUsedTemplateParameters(Ctx, Ty, OnlyDeduced, Depth, Used);
       }
+      MarkUsedTemplateParameters(Ctx, TT->getTransformedType(), OnlyDeduced,
+                                 Depth, Used);
     }
     break;
   }

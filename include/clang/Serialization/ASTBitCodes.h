@@ -1067,8 +1067,8 @@ namespace serialization {
       /// \brief A AutoType record.
       TYPE_AUTO = 38,
 
-      /// \brief A UnaryTransformType record.
-      TYPE_UNARY_TRANSFORM = 39,
+      /// \brief A TransformTraitType record.
+      TYPE_TRANSFORM_TRAIT = 39,
 
       /// \brief An AtomicType record.
       TYPE_ATOMIC = 40,
@@ -1092,10 +1092,7 @@ namespace serialization {
       TYPE_DEPENDENT_SIZED_EXT_VECTOR = 46,
 
       /// \brief A DependentAddressSpaceType record.
-      TYPE_DEPENDENT_ADDRESS_SPACE = 47,
-
-      /// \brief A TransformTraitType record
-      TYPE_TRANSFORM_TRAIT = 48
+      TYPE_DEPENDENT_ADDRESS_SPACE = 47
     };
 
     /// \brief The type IDs for special types constructed by semantic

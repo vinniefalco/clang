@@ -1492,16 +1492,6 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
     break;
   }
   case DeclSpec::TST_underlyingType:
-    Result = S.GetTypeFromParser(DS.getRepAsType());
-    assert(!Result.isNull() && "Didn't get a type for __underlying_type?");
-    Result = S.BuildUnaryTransformType(Result,
-                                       UnaryTransformType::EnumUnderlyingType,
-                                       DS.getTypeSpecTypeLoc());
-    if (Result.isNull()) {
-      Result = Context.IntTy;
-      declarator.setInvalidType(true);
-    }
-    break;
   case DeclSpec::TST_rawInvocationType: {
     // FIXME(EricWF)
     ArrayRef<ParsedType> ParsedArgs = DS.getRepAsTypeList();
@@ -1512,12 +1502,23 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
       assert(!NewArg.isNull());
       Args.push_back(NewArg);
     }
+    TransformTraitType::TTKind TKind;
+    switch (DS.getTypeSpecType()) {
+    case DeclSpec::TST_rawInvocationType:
+      TKind = TransformTraitType::EnumRawInvocationType;
+      break;
+    case DeclSpec::TST_underlyingType:
+      TKind = TransformTraitType::EnumUnderlyingType;
+      break;
+    default:
+      llvm_unreachable("unhandled case");
+    }
 
-    Result = S.BuildTransformTraitType(
-        Args, TransformTraitType::EnumRawInvocationType,
-        DS.getTypeSpecTypeLoc());
-    if (Result.isNull())
+    Result = S.BuildTransformTraitType(Args, TKind, DS.getTypeSpecTypeLoc());
+    if (Result.isNull()) {
+      Result = Context.IntTy;
       declarator.setInvalidType(true);
+    }
     break;
   }
   case DeclSpec::TST_auto:
@@ -5328,16 +5329,6 @@ namespace {
       Sema::GetTypeFromParser(DS.getRepAsType(), &TInfo);
       TL.setUnderlyingTInfo(TInfo);
     }
-    void VisitUnaryTransformTypeLoc(UnaryTransformTypeLoc TL) {
-      // FIXME: This holds only because we only have one unary transform.
-      assert(DS.getTypeSpecType() == DeclSpec::TST_underlyingType);
-      TL.setKWLoc(DS.getTypeSpecTypeLoc());
-      TL.setParensRange(DS.getTypeofParensRange());
-      assert(DS.getRepAsType());
-      TypeSourceInfo *TInfo = nullptr;
-      Sema::GetTypeFromParser(DS.getRepAsType(), &TInfo);
-      TL.setUnderlyingTInfo(TInfo);
-    }
     void VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {
       assert(DS.getTypeSpecType() == DeclSpec::TST_underlyingType ||
              DS.getTypeSpecType() == DeclSpec::TST_rawInvocationType);
@@ -8001,39 +7992,15 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
   return Context.getDecltypeType(E, getDecltypeForExpr(*this, E));
 }
 
-QualType Sema::BuildUnaryTransformType(QualType BaseType,
-                                       UnaryTransformType::UTTKind UKind,
-                                       SourceLocation Loc) {
-  switch (UKind) {
-  case UnaryTransformType::EnumUnderlyingType:
-    if (!BaseType->isDependentType() && !BaseType->isEnumeralType()) {
-      Diag(Loc, diag::err_only_enums_have_underlying_types);
-      return QualType();
-    } else {
-      QualType Underlying = BaseType;
-      if (!BaseType->isDependentType()) {
-        // The enum could be incomplete if we're parsing its definition or
-        // recovering from an error.
-        NamedDecl *FwdDecl = nullptr;
-        if (BaseType->isIncompleteType(&FwdDecl)) {
-          Diag(Loc, diag::err_underlying_type_of_incomplete_enum) << BaseType;
-          Diag(FwdDecl->getLocation(), diag::note_forward_declaration) << FwdDecl;
-          return QualType();
-        }
+static OpaqueValueExpr createValueForArg(Sema &S, QualType Ty,
+                                         SourceLocation Loc) {
+  ASTContext &Context = S.Context;
 
-        EnumDecl *ED = BaseType->getAs<EnumType>()->getDecl();
-        assert(ED && "EnumType has no EnumDecl");
+  if (Ty->isObjectType() || Ty->isFunctionType())
+    Ty = Context.getRValueReferenceType(Ty);
 
-        DiagnoseUseOfDecl(ED, Loc);
-
-        Underlying = ED->getIntegerType();
-        assert(!Underlying.isNull());
-      }
-      return Context.getUnaryTransformType(BaseType, Underlying,
-                                        UnaryTransformType::EnumUnderlyingType);
-    }
-  }
-  llvm_unreachable("unknown unary transform type");
+  return OpaqueValueExpr(Loc, Ty.getNonLValueExprType(Context),
+                         Expr::getValueKindForType(Ty));
 }
 
 static const FunctionType *
@@ -8041,21 +8008,13 @@ computeCallOperatorOverload(Sema &SemaRef, SourceLocation Loc, QualType FnType,
                             ArrayRef<QualType> Args) {
   ASTContext &Context = SemaRef.Context;
 
-  if (FnType->isObjectType() || FnType->isFunctionType())
-    FnType = Context.getRValueReferenceType(FnType);
-  OpaqueValueExpr OpaqueFnExpr =
-      OpaqueValueExpr(Loc, FnType.getNonLValueExprType(Context),
-                      Expr::getValueKindForType(FnType));
+  OpaqueValueExpr OpaqueFnExpr = createValueForArg(SemaRef, FnType, Loc);
 
   SmallVector<OpaqueValueExpr, 2> OpaqueArgExprs;
   SmallVector<Expr *, 2> ArgExprs;
 
   for (auto ArgTy : Args) {
-    if (ArgTy->isObjectType() || ArgTy->isFunctionType())
-      ArgTy = Context.getRValueReferenceType(ArgTy);
-    OpaqueArgExprs.push_back(
-        OpaqueValueExpr(SourceLocation(), ArgTy.getNonLValueExprType(Context),
-                        Expr::getValueKindForType(ArgTy)));
+    OpaqueArgExprs.push_back(createValueForArg(SemaRef, ArgTy, Loc));
   }
   OpaqueArgExprs.reserve(OpaqueArgExprs.size());
   for (Expr &E : OpaqueArgExprs)
@@ -8079,6 +8038,38 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
                                        TransformTraitType::TTKind TKind,
                                        SourceLocation Loc) {
   switch (TKind) {
+  case TransformTraitType::EnumUnderlyingType: {
+    assert(AllArgTypes.size() == 1 &&
+           "underlying_type takes only a single argument");
+    QualType BaseType = AllArgTypes[0];
+    if (!BaseType->isDependentType() && !BaseType->isEnumeralType()) {
+      Diag(Loc, diag::err_only_enums_have_underlying_types);
+      return QualType();
+    } else {
+      QualType Underlying = BaseType;
+      if (!BaseType->isDependentType()) {
+        // The enum could be incomplete if we're parsing its definition or
+        // recovering from an error.
+        NamedDecl *FwdDecl = nullptr;
+        if (BaseType->isIncompleteType(&FwdDecl)) {
+          Diag(Loc, diag::err_underlying_type_of_incomplete_enum) << BaseType;
+          Diag(FwdDecl->getLocation(), diag::note_forward_declaration)
+              << FwdDecl;
+          return QualType();
+        }
+
+        EnumDecl *ED = BaseType->getAs<EnumType>()->getDecl();
+        assert(ED && "EnumType has no EnumDecl");
+
+        DiagnoseUseOfDecl(ED, Loc);
+
+        Underlying = ED->getIntegerType();
+        assert(!Underlying.isNull());
+      }
+      return Context.getTransformTraitType(
+          BaseType, Underlying, TransformTraitType::EnumUnderlyingType);
+    }
+  }
   case TransformTraitType::EnumRawInvocationType: {
     bool IsDependent =
         std::any_of(AllArgTypes.begin(), AllArgTypes.end(),
