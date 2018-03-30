@@ -5345,10 +5345,14 @@ namespace {
              DS.getTypeSpecType() == DeclSpec::TST_rawInvocationType);
       TL.setKWLoc(DS.getTypeSpecTypeLoc());
       TL.setParensRange(DS.getTypeofParensRange());
-      assert(DS.getRepAsType());
-      TypeSourceInfo *TInfo = nullptr;
-      Sema::GetTypeFromParser(DS.getRepAsType(), &TInfo);
-      TL.setTransformedTInfo(TInfo);
+      ArrayRef<ParsedType> ParsedArgs = DS.getRepAsTypeList();
+      SmallVector<TypeSourceInfo *, 2> ArgInfo;
+      for (auto PT : ParsedArgs) {
+        TypeSourceInfo *TInfo = nullptr;
+        Sema::GetTypeFromParser(PT, &TInfo);
+        ArgInfo.push_back(TInfo);
+      }
+      TL.setArgTInfo(ArgInfo);
     }
     void VisitBuiltinTypeLoc(BuiltinTypeLoc TL) {
       // By default, use the source location of the type specifier.
