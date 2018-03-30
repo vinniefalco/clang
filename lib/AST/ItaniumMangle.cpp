@@ -3264,7 +3264,6 @@ void CXXNameMangler::mangleType(const TransformTraitType *T) {
     }
   }
 
-  mangleType(T->getBaseType());
   for (auto Ty : T->getArgs())
     mangleType(Ty);
 }

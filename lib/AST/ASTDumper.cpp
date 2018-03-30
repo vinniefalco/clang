@@ -376,7 +376,6 @@ namespace  {
         OS << " raw_invocation_type";
         break;
       }
-      dumpTypeAsChild(T->getBaseType());
       for (auto Ty : T->getArgs())
         dumpTypeAsChild(Ty);
     }

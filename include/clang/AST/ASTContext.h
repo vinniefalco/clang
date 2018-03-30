@@ -1483,7 +1483,7 @@ public:
                                  UnaryTransformType::UTTKind UKind) const;
 
   /// \brief variadic type transforms
-  QualType getTransformTraitType(QualType BaseType, ArrayRef<QualType> ArgTypes,
+  QualType getTransformTraitType(ArrayRef<QualType> ArgTypes,
                                  QualType TransformedType,
                                  TransformTraitType::TTKind TKind) const;
 

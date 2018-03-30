@@ -4679,20 +4679,24 @@ QualType ASTContext::getUnaryTransformType(QualType BaseType,
 
 /// getTransformTraitType - We don't unique these, since the memory
 /// savings are minimal and these are rare.
-QualType ASTContext::getTransformTraitType(
-    QualType BaseType, ArrayRef<QualType> ArgTypes, QualType TransformedType,
-    TransformTraitType::TTKind Kind) const {
+QualType
+ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
+                                  QualType TransformedType,
+                                  TransformTraitType::TTKind Kind) const {
   TransformTraitType *ut = nullptr;
 
-  if (BaseType->isDependentType()) {
+  bool IsDependent =
+      std::any_of(ArgTypes.begin(), ArgTypes.end(),
+                  [](QualType T) { return T->isDependentType(); });
+
+  if (IsDependent) {
     SmallVector<QualType, 2> CanonArgs;
     CanonArgs.reserve(ArgTypes.size());
     for (auto Ty : ArgTypes)
       CanonArgs.push_back(getCanonicalType(Ty));
     // Look in the folding set for an existing type.
     llvm::FoldingSetNodeID ID;
-    DependentTransformTraitType::Profile(ID, getCanonicalType(BaseType),
-                                         CanonArgs, Kind);
+    DependentTransformTraitType::Profile(ID, CanonArgs, Kind);
 
     void *InsertPos = nullptr;
     DependentTransformTraitType *Canon =
@@ -4700,16 +4704,16 @@ QualType ASTContext::getTransformTraitType(
 
     if (!Canon) {
       // Build a new, canonical __raw_invocation_type(type...) type.
-      Canon = new (*this, TypeAlignment) DependentTransformTraitType(
-          *this, getCanonicalType(BaseType), CanonArgs, Kind);
+      Canon = new (*this, TypeAlignment)
+          DependentTransformTraitType(*this, CanonArgs, Kind);
       DependentTransformTraitTypes.InsertNode(Canon, InsertPos);
     }
-    ut = new (*this, TypeAlignment) TransformTraitType(
-        BaseType, ArgTypes, QualType(), Kind, QualType(Canon, 0));
+    ut = new (*this, TypeAlignment)
+        TransformTraitType(ArgTypes, QualType(), Kind, QualType(Canon, 0));
   } else {
     QualType CanonType = getCanonicalType(TransformedType);
-    ut = new (*this, TypeAlignment) TransformTraitType(
-        BaseType, ArgTypes, TransformedType, Kind, CanonType);
+    ut = new (*this, TypeAlignment)
+        TransformTraitType(ArgTypes, TransformedType, Kind, CanonType);
   }
   Types.push_back(ut);
   return QualType(ut, 0);

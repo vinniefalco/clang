@@ -8017,6 +8017,25 @@ QualType Sema::BuildUnaryTransformType(QualType BaseType,
   llvm_unreachable("unknown unary transform type");
 }
 
+QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
+                                       TransformTraitType::TTKind TKind,
+                                       SourceLocation Loc) {
+  switch (TKind) {
+  case TransformTraitType::EnumRawInvocationType:
+    bool IsDependent =
+        std::any_of(ArgTypes.begin(), ArgTypes.end(),
+                    [](QualType T) { return T->isDependentType(); });
+    QualType Underlying = Context.DependentTy;
+    if (!IsDependent) {
+      // FIXME: implement solution
+    }
+    return Context.getTransformTraitType(
+        ArgTypes, Underlying, TransformTraitType::EnumRawInvocationType);
+  }
+}
+llvm_unreachable("unknown unary transform type");
+}
+
 QualType Sema::BuildAtomicType(QualType T, SourceLocation Loc) {
   if (!T->isDependentType()) {
     // FIXME: It isn't entirely clear whether incomplete atomic types
