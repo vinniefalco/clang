@@ -1051,6 +1051,55 @@ void Parser::ParseUnderlyingTypeSpecifier(DeclSpec &DS) {
   DS.setTypeofParensRange(T.getRange());
 }
 
+void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
+  assert((Tok.is(tok::kw___underlying_type) ||
+          Tok.is(tok::kw___raw_invocation_type) &&
+         "Not a transformation trait type specifier");
+
+  Token SavedTok = Tok;
+
+  SourceLocation StartLoc = ConsumeToken();
+  BalancedDelimiterTracker Parens(*this, tok::l_paren);
+  if (Parens.expectAndConsume()) {
+    return;
+  }
+  SmallVector<ParsedType, 2> Args;
+  do {
+    // Parse the next type.
+    TypeResult Ty = ParseTypeName();
+    if (Ty.isInvalid()) {
+      Parens.skipToEnd();
+      return ExprError();
+    }
+
+    // Parse the ellipsis, if present.
+    if (Tok.is(tok::ellipsis)) {
+      Ty = Actions.ActOnPackExpansion(Ty.get(), ConsumeToken());
+      if (Ty.isInvalid()) {
+        Parens.skipToEnd();
+        return ExprError();
+      }
+    }
+
+    // Add this type to the list of arguments.
+    Args.push_back(Ty.get());
+  } while (TryConsumeToken(tok::comma));
+
+  if (Parens.consumeClose())
+    return ExprError();
+
+  SourceLocation EndLoc = Parens.getCloseLocation();
+
+ // TST
+  const char *PrevSpec = nullptr;
+  unsigned DiagID;
+  if (DS.SetTypeSpecType(DeclSpec::TST_underlyingType, StartLoc, PrevSpec,
+                         DiagID, Result.get(),
+                         Actions.getASTContext().getPrintingPolicy()))
+    Diag(StartLoc, DiagID) << PrevSpec;
+    DS.setTypeofParensRange(Parens.getRange());
+}
+
 /// ParseBaseTypeSpecifier - Parse a C++ base-type-specifier which is either a
 /// class name or decltype-specifier. Note that we only check that the result 
 /// names a type; semantic analysis will need to verify that the type names a 
