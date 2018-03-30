@@ -6605,7 +6605,6 @@ void TypeLocReader::VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {
   for (unsigned I = 0; I < Size; ++I)
     ArgTInfo.push_back(GetTypeSourceInfo());
   TL.setArgTInfo(ArgTInfo);
-  TL.setTransformedTInfo(GetTypeSourceInfo());
 }
 
 void TypeLocReader::VisitAutoTypeLoc(AutoTypeLoc TL) {

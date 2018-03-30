@@ -755,7 +755,6 @@ void TypeLocWriter::VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {
   Record.push_back(ArgTInfo.size());
   for (auto *TSI : ArgTInfo)
     Record.AddTypeSourceInfo(TSI);
-  Record.AddTypeSourceInfo(TL.getTransformedTInfo());
 }
 
 void TypeLocWriter::VisitAutoTypeLoc(AutoTypeLoc TL) {
