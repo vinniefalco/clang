@@ -185,6 +185,7 @@ bool TypePrinter::canPrefixQualifiers(const Type *T,
     case Type::TypeOf:
     case Type::Decltype:
     case Type::UnaryTransform:
+    case Type::TransformTrait:
     case Type::Record:
     case Type::Enum:
     case Type::Elaborated:
@@ -902,6 +903,37 @@ void TypePrinter::printUnaryTransformAfter(const UnaryTransformType *T,
   }
 
   printAfter(T->getBaseType(), OS);
+}
+
+void TypePrinter::printTransformTraitBefore(const TransformTraitType *T,
+                                            raw_ostream &OS) {
+  IncludeStrongLifetimeRAII Strong(Policy);
+
+  switch (T->getTTKind()) {
+  case TransformTraitType::EnumRawInvocationType:
+    OS << "__raw_invocation_type(";
+    for (unsigned I = 0; I != T->getNumArgs(); ++I) {
+      print(T->getArg(I), OS, StringRef());
+      if ((I + 1) != T->getNumArgs())
+        OS << ", ";
+    }
+    OS << ')';
+    spaceBeforePlaceHolder(OS);
+    return;
+  }
+  llvm_unreachable("transformation trait not handled");
+}
+
+void TypePrinter::printTransformTraitAfter(const TransformTraitType *T,
+                                           raw_ostream &OS) {
+  IncludeStrongLifetimeRAII Strong(Policy);
+
+  switch (T->getTTKind()) {
+  case TransformTraitType::EnumRawInvocationType:
+    return;
+  }
+
+  llvm_unreachable("transformation trait not handled");
 }
 
 void TypePrinter::printAutoBefore(const AutoType *T, raw_ostream &OS) { 

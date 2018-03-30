@@ -505,6 +505,20 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
       return false;
     break;
 
+  case Type::TransformTrait: {
+    const TransformTraitType *TT1 = cast<TransformTraitType>(T1);
+    const TransformTraitType *TT2 = cast<TransformTraitType>(T2);
+    if (TT1->getNumArgs() != TT2->getNumArgs())
+      return false;
+    for (unsigned I = 0; I < TT1->getNumArgs(); ++I) {
+      if (!IsStructurallyEquivalent(Context, TT1->getArg(I), TT2->getArg(I)))
+        return false;
+    }
+    if (!IsStructurallyEquivalent(Context, TT1->getTransformedType(),
+                                  TT2->getTransformedType()))
+      return false;
+    break;
+  }
   case Type::Decltype:
     if (!IsStructurallyEquivalent(Context,
                                   cast<DecltypeType>(T1)->getUnderlyingExpr(),
