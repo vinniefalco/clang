@@ -810,7 +810,17 @@ bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
       return true;
     break;
   }
-      
+
+  case TST_rawInvocationType: {
+    ArrayRef<ParsedType> Args = DS.getRepAsTypeList();
+    for (auto PT : Args) {
+      QualType T = PT.get();
+      if (!T.isNull() && T->containsUnexpandedParemeterPack())
+        return true;
+    }
+    break;
+  }
+
   case TST_typeofExpr:
   case TST_decltype:
     if (DS.getRepAsExpr() && 
