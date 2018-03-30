@@ -692,6 +692,24 @@ bool DeclSpec::SetTypeSpecType(TST T, SourceLocation TagKwLoc,
   return false;
 }
 
+bool DeclSpec::SetTypeSpecType(TST T, SourceLocation Loc, const char *&PrevSpec,
+                               unsigned &DiagID, ArrayRef<ParsedType> Rep,
+                               const PrintingPolicy &Policy) {
+  assert(isTypeListRep(T) && "T does not store a type");
+
+  if (TypeSpecType != TST_unspecified) {
+    PrevSpec = DeclSpec::getSpecifierName((TST)TypeSpecType, Policy);
+    DiagID = diag::err_invalid_decl_spec_combination;
+    return true;
+  }
+  TypeSpecType = T;
+  TypeListRep = SmallVector<ParsedType, 2>(Rep.begin(), Rep.end());
+  TSTLoc = Loc;
+  TSTNameLoc = Loc;
+  TypeSpecOwned = false;
+  return false;
+}
+
 bool DeclSpec::SetTypeSpecType(TST T, SourceLocation Loc,
                                const char *&PrevSpec,
                                unsigned &DiagID,
