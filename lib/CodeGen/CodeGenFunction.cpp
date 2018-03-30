@@ -2094,6 +2094,7 @@ void CodeGenFunction::EmitVariablyModifiedType(QualType type) {
     case Type::Paren:
     case Type::TypeOf:
     case Type::UnaryTransform:
+    case Type::TransformTrait:
     case Type::Attributed:
     case Type::SubstTemplateTypeParm:
     case Type::PackExpansion:
