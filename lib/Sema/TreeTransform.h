@@ -5552,14 +5552,99 @@ template <typename Derived>
 QualType
 TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
                                                     TransformTraitTypeLoc TL) {
+  bool AnyChanged = false;
+  SmallVector<TypeSourceInfo *, 4> NewTypeArgInfos;
+  for (unsigned I = 0; I < TL.getArgTInfo().size(); ++I) {
+    TypeSourceInfo *ArgInfo = TL.getArgInfo(I);
+    TypeLoc ArgLoc = ArgInfo->getTypeLoc();
+    QualType ArgTy = ArgInfo->getType();
+    if (auto PackExpansionLoc = ArgLoc.getAs<PackExpansionTypeLoc>()) {
+      AnyChanged = true;
+
+      // We have a pack expansion. Instantiate it.
+      const auto *PackExpansion =
+          PackExpansionLoc.getType()->castAs<PackExpansionType>();
+      SmallVector<UnexpandedParameterPack, 2> Unexpanded;
+      SemaRef.collectUnexpandedParameterPacks(PackExpansion->getPattern(),
+                                              Unexpanded);
+      assert(!Unexpanded.empty() && "Pack expansion without parameter packs?");
+
+      // Determine whether the set of unexpanded parameter packs can
+      // and should be expanded.
+      TypeLoc PatternLoc = PackExpansionLoc.getPatternLoc();
+      bool Expand = false;
+      bool RetainExpansion = false;
+      Optional<unsigned> NumExpansions = PackExpansion->getNumExpansions();
+      if (getDerived().TryExpandParameterPacks(
+              PackExpansionLoc.getEllipsisLoc(), PatternLoc.getSourceRange(),
+              Unexpanded, Expand, RetainExpansion, NumExpansions))
+        return QualType();
+
+      if (!Expand) {
+        // We can't expand this pack expansion into separate arguments yet;
+        // just substitute into the pattern and create a new pack expansion
+        // type.
+        Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), -1);
+
+        TypeLocBuilder TypeArgBuilder;
+        TypeArgBuilder.reserve(PatternLoc.getFullDataSize());
+        QualType NewPatternType =
+            getDerived().TransformType(TypeArgBuilder, PatternLoc);
+        if (NewPatternType.isNull())
+          return QualType();
+
+        QualType NewExpansionType =
+            SemaRef.Context.getPackExpansionType(NewPatternType, NumExpansions);
+        auto NewExpansionLoc = TLB.push<PackExpansionTypeLoc>(NewExpansionType);
+        NewExpansionLoc.setEllipsisLoc(PackExpansionLoc.getEllipsisLoc());
+        NewTypeArgInfos.push_back(TypeArgBuilder.getTypeSourceInfo(
+            SemaRef.Context, NewExpansionType));
+        continue;
+      }
+
+      // Substitute into the pack expansion pattern for each slice of the
+      // pack.
+      for (unsigned ArgIdx = 0; ArgIdx != *NumExpansions; ++ArgIdx) {
+        Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(getSema(), ArgIdx);
+
+        TypeLocBuilder TypeArgBuilder;
+        TypeArgBuilder.reserve(PatternLoc.getFullDataSize());
+
+        QualType NewTypeArg =
+            getDerived().TransformType(TypeArgBuilder, PatternLoc);
+        if (NewTypeArg.isNull())
+          return QualType();
+
+        NewTypeArgInfos.push_back(
+            TypeArgBuilder.getTypeSourceInfo(SemaRef.Context, NewTypeArg));
+      }
+
+      continue;
+    }
+    TypeLocBuilder TypeArgBuilder;
+    TypeArgBuilder.reserve(ArgLoc.getFullDataSize());
+    QualType NewTypeArg = getDerived().TransformType(TypeArgBuilder, ArgLoc);
+    if (NewTypeArg.isNull())
+      return QualType();
+
+    // If nothing changed, just keep the old TypeSourceInfo.
+    if (NewTypeArg == ArgTy) {
+      NewTypeArgInfos.push_back(ArgInfo);
+      continue;
+    }
+
+    NewTypeArgInfos.push_back(
+        TypeArgBuilder.getTypeSourceInfo(SemaRef.Context, NewTypeArg));
+    AnyChanged = true;
+  }
+
   QualType Result = TL.getType();
-  if (Result->isDependentType()) {
+  if (getDerived().AlwaysRebuild() || Result->isDependentType() || AnyChanged) {
     const TransformTraitType *T = TL.getTypePtr();
     SmallVector<QualType, 2> Args;
-    for (auto *TyInfo : TL.getArgTInfo()) {
-      QualType NewTy = getDerived().TransformType(TyInfo)->getType();
-      if (NewTy.isNull())
-        return QualType();
+    for (auto *TyInfo : NewTypeArgInfos) {
+      QualType NewTy = TyInfo->getType();
+      assert(!NewTy.isNull());
       Args.push_back(NewTy);
     }
     Result = getDerived().RebuildTransformTraitType(Args, T->getTTKind(),
@@ -5571,7 +5656,8 @@ TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
   TransformTraitTypeLoc NewTL = TLB.push<TransformTraitTypeLoc>(Result);
   NewTL.setKWLoc(TL.getKWLoc());
   NewTL.setParensRange(TL.getParensRange());
-  NewTL.setArgTInfo(TL.getArgTInfo());
+  for (unsigned I = 0; I < TL.getArgTInfo().size(); ++I)
+    NewTL.setArgInfo(I, NewTypeArgInfos[I]);
 
   return Result;
 }
