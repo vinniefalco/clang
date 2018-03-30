@@ -31,7 +31,8 @@ using Fn = T;
 using MemFn = int (Callable::*)(int, void *);
 
 using Test1 = __raw_invocation_type(Callable, int);
+Printer<InvokeT<Callable(int)>> p;
 
-//static_assert(__is_same(InvokeT<Callable(int)>, int(int, int *)), "");
+static_assert(__is_same(InvokeT<Callable(int)>, int(int, int)), "");
 //static_assert(__is_same(InvokeT<Fn<int (*)(int)>(void *)>, int(int)), "");
 //static_assert(__is_same(InvokeT<MemFn(Callable &, int, void *)>, int(Callable &, int)), "");
