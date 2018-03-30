@@ -3725,6 +3725,9 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       ParseUnderlyingTypeSpecifier(DS);
       continue;
 
+    case tok::kw___raw_invocation_type:
+      ParseTransformTraitTypeSpecifier(DS);
+
     case tok::kw__Atomic:
       // C11 6.7.2.4/4:
       //   If the _Atomic keyword is immediately followed by a left parenthesis,
