@@ -5297,7 +5297,11 @@ bool UnnamedLocalNoLinkageFinder::VisitUnaryTransformType(
 }
 
 bool UnnamedLocalNoLinkageFinder::VisitTransformTraitType(
-    const TransformTraitType *) {
+    const TransformTraitType *T) {
+  for (const auto &QT : T->getArgs()) {
+    if (Visit(QT))
+      return true;
+  }
   return false;
 }
 bool UnnamedLocalNoLinkageFinder::VisitAutoType(const AutoType *T) {

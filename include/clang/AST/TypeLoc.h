@@ -2002,7 +2002,7 @@ public:
 
   void setArgTInfo(ArrayRef<TypeSourceInfo *> ArgInfo) {
     SmallVector<TypeSourceInfo *, 2> NewArgs(ArgInfo.begin(), ArgInfo.end());
-    getLocalData()->ArgTInfo = std::move(NewArgs);
+    getLocalData()->ArgTInfo = NewArgs;
   }
 
   SourceRange getLocalSourceRange() const {

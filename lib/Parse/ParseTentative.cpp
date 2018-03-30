@@ -162,7 +162,8 @@ Parser::TPResult Parser::TryConsumeDeclarationSpecifier() {
     // Fall through.
   case tok::kw_typeof:
   case tok::kw___attribute:
-  case tok::kw___underlying_type: {
+  case tok::kw___underlying_type:
+  case tok::kw___raw_invocation_type: {
     ConsumeToken();
     if (Tok.isNot(tok::l_paren))
       return TPResult::Error;

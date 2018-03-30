@@ -5554,7 +5554,8 @@ TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
                                                     TransformTraitTypeLoc TL) {
   bool AnyChanged = false;
   SmallVector<TypeSourceInfo *, 4> NewTypeArgInfos;
-  for (unsigned I = 0; I < TL.getArgTInfo().size(); ++I) {
+  unsigned Size = TL.getArgTInfo().size();
+  for (unsigned I = 0; I < Size; ++I) {
     TypeSourceInfo *ArgInfo = TL.getArgInfo(I);
     TypeLoc ArgLoc = ArgInfo->getTypeLoc();
     QualType ArgTy = ArgInfo->getType();
