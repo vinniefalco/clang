@@ -453,6 +453,17 @@ void UnaryTransformTypeLoc::initializeLocal(ASTContext &Context,
         Context.getTrivialTypeSourceInfo(getTypePtr()->getBaseType(), Loc));
 }
 
+void TransformTraitTypeLoc::initializeLocal(ASTContext &Context,
+                                            SourceLocation Loc) {
+  setKWLoc(Loc);
+  setRParenLoc(Loc);
+  setLParenLoc(Loc);
+  SmallVector<TypeSourceInfo *, 2> Args;
+  for (auto Ty : getTypePtr()->getArgs())
+    Args.push_back(Context.getTrivialTypeSourceInfo(Ty, Loc));
+  this->setArgTInfo(Args);
+}
+
 void ElaboratedTypeLoc::initializeLocal(ASTContext &Context, 
                                         SourceLocation Loc) {
   setElaboratedKeywordLoc(Loc);

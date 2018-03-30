@@ -1502,7 +1502,18 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
       declarator.setInvalidType(true);
     }
     break;
-
+  case DeclSpec::TST_rawInvocationType:
+    // FIXME(EricWF)
+    Result = S.GetTypeFromParser(DS.getRepAsType());
+    assert(!Result.isNull() && "Didn't get a type for __raw_invocation_type?");
+    Result = S.BuildTransformTraitType(
+        Result, TransformTraitType::EnumRawInvocationType,
+        DS.getTypeSpecTypeLoc());
+    if (Result.isNull()) {
+      Result = Context.IntTy;
+      declarator.setInvalidType(true);
+    }
+    break;
   case DeclSpec::TST_auto:
     Result = Context.getAutoType(QualType(), AutoTypeKeyword::Auto, false);
     break;
@@ -5321,6 +5332,16 @@ namespace {
       Sema::GetTypeFromParser(DS.getRepAsType(), &TInfo);
       TL.setUnderlyingTInfo(TInfo);
     }
+    void VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {
+      assert(DS.getTypeSpecType() == DeclSpec::TST_underlyingType ||
+             DS.getTypeSpecType() == DeclSpec::TST_rawInvocationType);
+      TL.setKWLoc(DS.getTypeSpecTypeLoc());
+      TL.setParensRange(DS.getTypeofParensRange());
+      assert(DS.getRepAsType());
+      TypeSourceInfo *TInfo = nullptr;
+      Sema::GetTypeFromParser(DS.getRepAsType(), &TInfo);
+      TL.setTransformedTInfo(TInfo);
+    }
     void VisitBuiltinTypeLoc(BuiltinTypeLoc TL) {
       // By default, use the source location of the type specifier.
       TL.setBuiltinLoc(DS.getTypeSpecTypeLoc());
@@ -8011,8 +8032,9 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
   switch (TKind) {
   case TransformTraitType::EnumRawInvocationType:
     bool IsDependent =
-        std::any_of(ArgTypes.begin(), ArgTypes.end(),
-                    [](QualType T) { return T->isDependentType(); });
+        std::any_of(ArgTypes.begin(), ArgTypes.end(), [](TypeSourceInfo *T) {
+          return T->getType()->isDependentType();
+        });
     QualType Underlying = Context.DependentTy;
     if (!IsDependent) {
       // FIXME: implement solution

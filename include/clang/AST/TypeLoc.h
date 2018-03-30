@@ -2008,10 +2008,67 @@ public:
   void initializeLocal(ASTContext &Context, SourceLocation Loc);
 };
 
+#if 1
+
+struct TransformTraitTypeLocInfo {
+  // FIXME: While there's only one unary transform right now, future ones may
+  // need different representations
+  SourceLocation KWLoc, LParenLoc, RParenLoc;
+  SmallVector<TypeSourceInfo *, 2> ArgTInfo;
+  TypeSourceInfo *TransformedTInfo;
+};
+
+class TransformTraitTypeLoc
+    : public ConcreteTypeLoc<UnqualTypeLoc, TransformTraitTypeLoc,
+                             TransformTraitType, TransformTraitTypeLocInfo> {
+public:
+  SourceLocation getKWLoc() const { return getLocalData()->KWLoc; }
+  void setKWLoc(SourceLocation Loc) { getLocalData()->KWLoc = Loc; }
+
+  SourceLocation getLParenLoc() const { return getLocalData()->LParenLoc; }
+  void setLParenLoc(SourceLocation Loc) { getLocalData()->LParenLoc = Loc; }
+
+  SourceLocation getRParenLoc() const { return getLocalData()->RParenLoc; }
+  void setRParenLoc(SourceLocation Loc) { getLocalData()->RParenLoc = Loc; }
+
+  ArrayRef<TypeSourceInfo *> getArgTInfo() const {
+    return getLocalData()->ArgTInfo;
+  }
+
+  void setArgTInfo(ArrayRef<TypeSourceInfo *> ArgInfo) {
+    getLocalData()->ArgTInfo =
+        SmallVector<TypeSourceInfo *, 2>(ArgInfo.begin(), ArgInfo.end());
+  }
+
+  TypeSourceInfo *getTransformedTInfo() const {
+    return getLocalData()->TransformedTInfo;
+  }
+
+  void setTransformedTInfo(TypeSourceInfo *TInfo) {
+    getLocalData()->TransformedTInfo = TInfo;
+  }
+
+  SourceRange getLocalSourceRange() const {
+    return SourceRange(getKWLoc(), getRParenLoc());
+  }
+
+  SourceRange getParensRange() const {
+    return SourceRange(getLParenLoc(), getRParenLoc());
+  }
+
+  void setParensRange(SourceRange Range) {
+    setLParenLoc(Range.getBegin());
+    setRParenLoc(Range.getEnd());
+  }
+
+  void initializeLocal(ASTContext &Context, SourceLocation Loc);
+};
+
+#else
 class TransformTraitTypeLoc
     : public InheritingConcreteTypeLoc<
           UnaryTransformTypeLoc, TransformTraitTypeLoc, TransformTraitType> {};
-
+#endif
 class DeducedTypeLoc
     : public InheritingConcreteTypeLoc<TypeSpecTypeLoc, DeducedTypeLoc,
                                        DeducedType> {};
