@@ -5560,8 +5560,8 @@ TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
       QualType NewTy = getDerived().TransformType(Ty);
       Args.push_back(NewTy);
     }
-    Result = getDerived().RebuildUnaryTransformType(Args, T->getTTKind(),
-                                                    TL.getKWLoc());
+    Result = getDerived().RebuilTransformTraitType(Args, T->getTTKind(),
+                                                   TL.getKWLoc());
     if (Result.isNull())
       return QualType();
   }
