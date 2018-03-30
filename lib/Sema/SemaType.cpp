@@ -8034,20 +8034,41 @@ QualType Sema::BuildUnaryTransformType(QualType BaseType,
   llvm_unreachable("unknown unary transform type");
 }
 
-QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
+QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
                                        TransformTraitType::TTKind TKind,
                                        SourceLocation Loc) {
   switch (TKind) {
   case TransformTraitType::EnumRawInvocationType: {
     bool IsDependent =
-        std::any_of(ArgTypes.begin(), ArgTypes.end(),
+        std::any_of(AllArgTypes.begin(), AllArgTypes.end(),
                     [](QualType T) { return T->isDependentType(); });
     QualType Underlying = Context.DependentTy;
     if (!IsDependent) {
-      // FIXME: implement solution
+      assert(AllArgTypes.size() >= 2);
+      QualType FnType = AllArgTypes[0];
+      ArrayRef<QualType> Args(AllArgTypes.begin() + 1, AllArgTypes.end());
+      const FunctionType *CalleeType = nullptr;
+      if (FnType->isFunctionPointerType()) {
+        CalleeType = FnType->getAs<PointerType>()
+                         ->getPointeeType()
+                         ->castAs<FunctionType>();
+      } else if (FnType->isMemberFunctionPointerType()) {
+        CalleeType = FnType->getAs<MemberPointerType>()
+                         ->getPointeeType()
+                         ->castAs<FunctionType>();
+      } else if (FnType->isMemberDataPointerType()) {
+        assert(false && "FIXME");
+      } else if (FnType->isRecordType()) {
+        CalleeType = computeCallOperatorOverload(SemaRef, TemplateLoc,
+                                                 TemplateArgs, Fn, Ts);
+      } else {
+        assert(false && "unhandled case");
+      }
+
+      Underlying = QualType(CalleeType, 0);
     }
     return Context.getTransformTraitType(
-        ArgTypes, Underlying, TransformTraitType::EnumRawInvocationType);
+        AllArgTypes, Underlying, TransformTraitType::EnumRawInvocationType);
   }
   }
 

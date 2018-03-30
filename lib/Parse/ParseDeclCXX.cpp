@@ -1051,6 +1051,21 @@ void Parser::ParseUnderlyingTypeSpecifier(DeclSpec &DS) {
   DS.setTypeofParensRange(T.getRange());
 }
 
+struct TransformTraitInfo {
+  int Arity;
+  bool AllowGreaterArity;
+  DeclSpec::TST TypeSpecType;
+};
+
+static TransformTraitInfo GetTraitInfo(tok::TokenKind Kind) {
+  switch (Kind) {
+  case tok::kw___raw_invocation_type:
+    return {1, true, DeclSpec::TST_rawInvocationType};
+  default:
+    llvm_unreachable("unhandled case");
+  }
+}
+
 void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   assert((Tok.is(tok::kw___underlying_type) ||
           Tok.is(tok::kw___raw_invocation_type)) &&
@@ -1089,12 +1104,25 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     return;
 
   SourceLocation EndLoc = Parens.getCloseLocation();
+  TransformTraitInfo Info = GetTraitInfo(SavedTok.getKind());
 
- // TST
+  if (Info.Arity && ((!Info.AllowGreaterArity && Args.size() != Info.Arity) ||
+                     (Info.AllowGreaterArity && Args.size() < Info.Arity))) {
+    Diag(EndLoc, diag::err_type_trait_arity)
+        << Info.Arity << 0 << (Info.Arity > 1) << (int)Args.size()
+        << SourceRange(StartLoc);
+    return;
+  }
+
+  if (!Info.Arity && Args.empty()) {
+    Diag(EndLoc, diag::err_type_trait_arity)
+        << 1 << 1 << 1 << (int)Args.size() << SourceRange(StartLoc);
+    return;
+  }
+  // TST
   const char *PrevSpec = nullptr;
   unsigned DiagID;
-  if (DS.SetTypeSpecType(DeclSpec::TST_underlyingType, StartLoc, PrevSpec,
-                         DiagID, Args,
+  if (DS.SetTypeSpecType(Info.TypeSpecType, StartLoc, PrevSpec, DiagID, Args,
                          Actions.getASTContext().getPrintingPolicy()))
     Diag(StartLoc, DiagID) << PrevSpec;
     DS.setTypeofParensRange(Parens.getRange());
