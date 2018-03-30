@@ -4046,7 +4046,6 @@ public:
 
 private:
   /// The untransformed type.
-  QualType BaseType;
   SmallVector<QualType, 2> ArgTypes;
 
   /// The transformed type if not dependent, otherwise the same as BaseType.
@@ -4055,9 +4054,8 @@ private:
 protected:
   friend class ASTContext;
 
-  TransformTraitType(QualType BaseTy, ArrayRef<QualType> ArgTy,
-                     QualType TransformedTy, TTKind TKind,
-                     QualType CanonicalTy);
+  TransformTraitType(ArrayRef<QualType> ArgTy, QualType TransformedTy,
+                     TTKind TKind, QualType CanonicalTy);
 
 public:
   bool isSugared() const { return !isDependentType(); }
@@ -4067,7 +4065,6 @@ public:
   ArrayRef<QualType> getArgs() const { return ArgTypes; }
 
   QualType getTransformedType() const { return TransformedType; }
-  QualType getBaseType() const { return BaseType; }
   QualType getArg(unsigned N) const {
     assert(N < ArgTypes.size() && "invalid index");
     return ArgTypes[N];
@@ -4091,16 +4088,15 @@ public:
 class DependentTransformTraitType : public TransformTraitType,
                                     public llvm::FoldingSetNode {
 public:
-  DependentTransformTraitType(const ASTContext &C, QualType BaseType,
-                              ArrayRef<QualType> ArgTypes, TTKind TKind);
+  DependentTransformTraitType(const ASTContext &C, ArrayRef<QualType> ArgTypes,
+                              TTKind TKind);
 
   void Profile(llvm::FoldingSetNodeID &ID) {
-    Profile(ID, getBaseType(), getArgs(), getTTKind());
+    Profile(ID, getArgs(), getTTKind());
   }
 
-  static void Profile(llvm::FoldingSetNodeID &ID, QualType BaseType,
-                      ArrayRef<QualType> ArgTypes, TTKind TKind) {
-    ID.AddPointer(BaseType.getAsOpaquePtr());
+  static void Profile(llvm::FoldingSetNodeID &ID, ArrayRef<QualType> ArgTypes,
+                      TTKind TKind) {
     ID.AddInteger((unsigned)ArgTypes.size());
     for (auto Ty : ArgTypes)
       ID.AddPointer(Ty.getAsOpaquePtr());

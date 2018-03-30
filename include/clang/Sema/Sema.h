@@ -1646,6 +1646,10 @@ public:
   QualType BuildUnaryTransformType(QualType BaseType,
                                    UnaryTransformType::UTTKind UKind,
                                    SourceLocation Loc);
+  QualType BuildTransformTraitType(QualType BaseType,
+                                   ArrayRef<QualType> ArgTypes,
+                                   TransformTraitType::TTKind Kind,
+                                   SourceLocation Loc);
 
   //===--------------------------------------------------------------------===//
   // Symbol table / Decl tracking callbacks: SemaDecl.cpp.
