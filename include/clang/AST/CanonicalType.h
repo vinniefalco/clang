@@ -548,7 +548,6 @@ struct CanProxyAdaptor<UnaryTransformType>
 template <>
 struct CanProxyAdaptor<TransformTraitType>
     : public CanProxyBase<TransformTraitType> {
-  LLVM_CLANG_CANPROXY_TYPE_ACCESSOR(getBaseType)
   LLVM_CLANG_CANPROXY_TYPE_ACCESSOR(getTransformedType)
 
   CanQualType getArg(unsigned i) const {

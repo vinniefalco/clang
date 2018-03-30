@@ -366,7 +366,6 @@ void ASTTypeWriter::VisitUnaryTransformType(const UnaryTransformType *T) {
 }
 
 void ASTTypeWriter::VisitTransformTraitType(const TransformTraitType *T) {
-  Record.AddTypeRef(T->getBaseType());
   auto ArgTys = T->getArgs();
   Record.push_back(ArgTys.size());
   for (auto Ty : ArgTys)

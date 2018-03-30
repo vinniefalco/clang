@@ -3056,16 +3056,11 @@ DependentUnaryTransformType::DependentUnaryTransformType(const ASTContext &C,
                                                          UTTKind UKind)
      : UnaryTransformType(BaseType, C.DependentTy, UKind, QualType()) {}
 
-TransformTraitType::TransformTraitType(QualType BaseType,
-                                       ArrayRef<QualType> ArgTys,
+TransformTraitType::TransformTraitType(ArrayRef<QualType> ArgTys,
                                        QualType TransformedTy, TTKind TKind,
                                        QualType CanonicalType)
-    : Type(TransformTrait, CanonicalType, BaseType->isDependentType(),
-           BaseType->isInstantiationDependentType(),
-           BaseType->isVariablyModifiedType(),
-           BaseType->containsUnexpandedParameterPack()),
-      BaseType(BaseType), ArgTypes(ArgTys.begin(), ArgTys.end()),
-      TransformedType(TransformedTy) {
+    : Type(TransformTrait, CanonicalType, false, false, false, false),
+      ArgTypes(ArgTys.begin(), ArgTys.end()), TransformedType(TransformedTy) {
   TransformTraitTypeBits.TTKind = TKind;
   for (QualType T : ArgTypes) {
     if (T->isDependentType())
@@ -3080,9 +3075,8 @@ TransformTraitType::TransformTraitType(QualType BaseType,
 }
 
 DependentTransformTraitType::DependentTransformTraitType(
-    const ASTContext &C, QualType BaseType, ArrayRef<QualType> ArgTys,
-    TTKind TKind)
-    : TransformTraitType(BaseType, ArgTys, C.DependentTy, TKind, QualType()) {}
+    const ASTContext &C, ArrayRef<QualType> ArgTys, TTKind TKind)
+    : TransformTraitType(ArgTys, C.DependentTy, TKind, QualType()) {}
 
 TagType::TagType(TypeClass TC, const TagDecl *D, QualType can)
     : Type(TC, can, D->isDependentType(),

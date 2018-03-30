@@ -6100,7 +6100,6 @@ QualType ASTReader::readTypeRecord(unsigned Index) {
   }
 
   case TYPE_TRANSFORM_TRAIT: {
-    QualType BaseType = readType(*Loc.F, Record, Idx);
     SmallVector<QualType, 2> ArgTypes;
     unsigned NumArgs = (unsigned)Record[Idx++];
     for (unsigned I = 0; I < NumArgs; ++I)
@@ -6108,8 +6107,7 @@ QualType ASTReader::readTypeRecord(unsigned Index) {
     QualType TransformedType = readType(*Loc.F, Record, Idx);
     TransformTraitType::TTKind TKind =
         (TransformTraitType::TTKind)Record[Idx++];
-    return Context.getTransformTraitType(BaseType, ArgTypes, TransformedType,
-                                         TKind);
+    return Context.getTransformTraitType(ArgTypes, TransformedType, TKind);
   }
 
   case TYPE_AUTO: {
