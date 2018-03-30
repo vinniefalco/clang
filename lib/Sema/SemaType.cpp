@@ -8120,17 +8120,38 @@ static bool checkCallToMemberFunctionType(Sema &S, SourceLocation Loc,
 }
 
 static QualType processCalleeTypeForArgs(Sema &S,
-                                         const FunctionType *CalleeType,
+                                         const FunctionType *RawCalleeType,
                                          RawInvocationKind Kind,
                                          SourceLocation Loc,
                                          ArrayRef<QualType> AllArgTypes) {
-  assert(isa<FunctionProtoType>(CalleeType));
+  assert(isa<FunctionProtoType>(RawCalleeType));
+  const FunctionProtoType *CalleeType =
+      dyn_cast<FunctionProtoType>(RawCalleeType);
   QualType Return = CalleeType->getReturnType();
   SmallVector<QualType, 4> Args;
+  unsigned ArgIdx = 1;
+  if (Kind == RIT_MemberFunction) {
+    Args.push_back(AllArgTypes[1]);
+    ArgIdx = 2;
+  }
+
+  bool InVarArgs = false;
+  for (unsigned I = ArgIdx, N = AllArgTypes.size(); I < N; ++I) {
+    unsigned ProtoIdx = I - ArgIdx;
+    if (InVarArgs ||
+        (ProtoIdx >= CalleeType->getNumParams() && CalleeType->isVariadic())) {
+      InVarArgs = true;
+      Args.push_back(AllArgTypes[I]);
+      continue;
+    }
+    assert(ProtoIdx < CalleeType->getNumParams());
+    Args.push_back(CalleeType->getParamType(ParamIdx));
+  }
   FunctionProtoType::ExtProtoInfo ProtoInfo;
   if (const auto *FnProtoT = dyn_cast<FunctionProtoType>(CalleeType))
     ProtoInfo = FnProtoT->getExtProtoInfo();
-  return S.BuildFunctionType(Return, Args, Loc, nullptr, ProtoInfo);
+  return S.BuildFunctionType(Return, Args, Loc, nullptr,
+                             CalleeType->getExtProtoInfo());
 }
 
 QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
