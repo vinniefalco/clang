@@ -3722,9 +3722,6 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       continue;
 
     case tok::kw___underlying_type:
-      ParseUnderlyingTypeSpecifier(DS);
-      continue;
-
     case tok::kw___raw_invocation_type:
       ParseTransformTraitTypeSpecifier(DS);
       continue;

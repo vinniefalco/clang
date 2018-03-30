@@ -1643,9 +1643,7 @@ public:
   /// context, such as when building a type for decltype(auto).
   QualType BuildDecltypeType(Expr *E, SourceLocation Loc,
                              bool AsUnevaluated = true);
-  QualType BuildUnaryTransformType(QualType BaseType,
-                                   UnaryTransformType::UTTKind UKind,
-                                   SourceLocation Loc);
+
   QualType BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
                                    TransformTraitType::TTKind Kind,
                                    SourceLocation Loc);

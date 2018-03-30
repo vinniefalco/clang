@@ -3981,68 +3981,9 @@ public:
 };
 
 /// A unary type transform, which is a type constructed from another.
-class UnaryTransformType : public Type {
-public:
-  enum UTTKind {
-    EnumUnderlyingType
-  };
-
-private:
-  /// The untransformed type.
-  QualType BaseType;
-
-  /// The transformed type if not dependent, otherwise the same as BaseType.
-  QualType UnderlyingType;
-
-  UTTKind UKind;
-
-protected:
-  friend class ASTContext;
-
-  UnaryTransformType(QualType BaseTy, QualType UnderlyingTy, UTTKind UKind,
-                     QualType CanonicalTy);
-
-public:
-  bool isSugared() const { return !isDependentType(); }
-  QualType desugar() const { return UnderlyingType; }
-
-  QualType getUnderlyingType() const { return UnderlyingType; }
-  QualType getBaseType() const { return BaseType; }
-
-  UTTKind getUTTKind() const { return UKind; }
-
-  static bool classof(const Type *T) {
-    return T->getTypeClass() == UnaryTransform;
-  }
-};
-
-/// \brief Internal representation of canonical, dependent
-/// __underlying_type(type) types.
-///
-/// This class is used internally by the ASTContext to manage
-/// canonical, dependent types, only. Clients will only see instances
-/// of this class via UnaryTransformType nodes.
-class DependentUnaryTransformType : public UnaryTransformType,
-                                    public llvm::FoldingSetNode {
-public:
-  DependentUnaryTransformType(const ASTContext &C, QualType BaseType,
-                              UTTKind UKind);
-
-  void Profile(llvm::FoldingSetNodeID &ID) {
-    Profile(ID, getBaseType(), getUTTKind());
-  }
-
-  static void Profile(llvm::FoldingSetNodeID &ID, QualType BaseType,
-                      UTTKind UKind) {
-    ID.AddPointer(BaseType.getAsOpaquePtr());
-    ID.AddInteger((unsigned)UKind);
-  }
-};
-
-/// A unary type transform, which is a type constructed from another.
 class TransformTraitType : public Type {
 public:
-  enum TTKind { EnumRawInvocationType };
+  enum TTKind { EnumRawInvocationType, EnumUnderlyingType };
 
 private:
   /// The untransformed type.

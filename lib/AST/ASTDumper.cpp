@@ -362,18 +362,12 @@ namespace  {
     void VisitDecltypeType(const DecltypeType *T) {
       dumpStmt(T->getUnderlyingExpr());
     }
-    void VisitUnaryTransformType(const UnaryTransformType *T) {
-      switch (T->getUTTKind()) {
-      case UnaryTransformType::EnumUnderlyingType:
-        OS << " underlying_type";
-        break;
-      }
-      dumpTypeAsChild(T->getBaseType());
-    }
     void VisitTransformTraitType(const TransformTraitType *T) {
       switch (T->getTTKind()) {
       case TransformTraitType::EnumRawInvocationType:
         OS << " raw_invocation_type";
+      case TransformTraitType::EnumUnderlyingType:
+        OS << " underlying_type";
         break;
       }
       for (auto Ty : T->getArgs())

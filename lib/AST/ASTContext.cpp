@@ -2984,7 +2984,6 @@ QualType ASTContext::getVariableArrayDecayedType(QualType type) const {
   case Type::TypeOfExpr:
   case Type::TypeOf:
   case Type::Decltype:
-  case Type::UnaryTransform:
   case Type::TransformTrait:
   case Type::DependentName:
   case Type::InjectedClassName:
@@ -4638,43 +4637,6 @@ QualType ASTContext::getDecltypeType(Expr *e, QualType UnderlyingType) const {
   }
   Types.push_back(dt);
   return QualType(dt, 0);
-}
-
-/// getUnaryTransformationType - We don't unique these, since the memory
-/// savings are minimal and these are rare.
-QualType ASTContext::getUnaryTransformType(QualType BaseType,
-                                           QualType UnderlyingType,
-                                           UnaryTransformType::UTTKind Kind)
-    const {
-  UnaryTransformType *ut = nullptr;
-
-  if (BaseType->isDependentType()) {
-    // Look in the folding set for an existing type.
-    llvm::FoldingSetNodeID ID;
-    DependentUnaryTransformType::Profile(ID, getCanonicalType(BaseType), Kind);
-
-    void *InsertPos = nullptr;
-    DependentUnaryTransformType *Canon
-      = DependentUnaryTransformTypes.FindNodeOrInsertPos(ID, InsertPos);
-
-    if (!Canon) {
-      // Build a new, canonical __underlying_type(type) type.
-      Canon = new (*this, TypeAlignment)
-             DependentUnaryTransformType(*this, getCanonicalType(BaseType),
-                                         Kind);
-      DependentUnaryTransformTypes.InsertNode(Canon, InsertPos);
-    }
-    ut = new (*this, TypeAlignment) UnaryTransformType (BaseType,
-                                                        QualType(), Kind,
-                                                        QualType(Canon, 0));
-  } else {
-    QualType CanonType = getCanonicalType(UnderlyingType);
-    ut = new (*this, TypeAlignment) UnaryTransformType (BaseType,
-                                                        UnderlyingType, Kind,
-                                                        CanonType);
-  }
-  Types.push_back(ut);
-  return QualType(ut, 0);
 }
 
 /// getTransformTraitType - We don't unique these, since the memory

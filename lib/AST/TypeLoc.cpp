@@ -444,15 +444,6 @@ void TypeOfTypeLoc::initializeLocal(ASTContext &Context,
       getUnderlyingType(), Loc);
 }
 
-void UnaryTransformTypeLoc::initializeLocal(ASTContext &Context,
-                                       SourceLocation Loc) {
-    setKWLoc(Loc);
-    setRParenLoc(Loc);
-    setLParenLoc(Loc);
-    this->setUnderlyingTInfo(
-        Context.getTrivialTypeSourceInfo(getTypePtr()->getBaseType(), Loc));
-}
-
 void TransformTraitTypeLoc::initializeLocal(ASTContext &Context,
                                             SourceLocation Loc) {
   setKWLoc(Loc);

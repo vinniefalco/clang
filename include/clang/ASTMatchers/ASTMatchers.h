@@ -5259,7 +5259,11 @@ extern const AstTypeMatcher<TemplateSpecializationType>
 /// \endcode
 /// unaryTransformType()
 ///   matches "__underlying_type(T)"
-extern const AstTypeMatcher<UnaryTransformType> unaryTransformType;
+AST_MATCHER(Type, unaryTransformType) {
+  if (const auto *T = Node.getAs<TransformTraitType>())
+    return T->getNumArgs() == 1;
+  return false;
+}
 
 /// \brief Matches record types (e.g. structs, classes).
 ///

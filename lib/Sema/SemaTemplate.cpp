@@ -5291,19 +5291,11 @@ bool UnnamedLocalNoLinkageFinder::VisitDecltypeType(const DecltypeType*) {
   return false;
 }
 
-bool UnnamedLocalNoLinkageFinder::VisitUnaryTransformType(
-                                                    const UnaryTransformType*) {
+bool UnnamedLocalNoLinkageFinder::VisitTransformTraitType(
+    const TransformTraitType *) {
   return false;
 }
 
-bool UnnamedLocalNoLinkageFinder::VisitTransformTraitType(
-    const TransformTraitType *T) {
-  for (const auto &QT : T->getArgs()) {
-    if (Visit(QT))
-      return true;
-  }
-  return false;
-}
 bool UnnamedLocalNoLinkageFinder::VisitAutoType(const AutoType *T) {
   return Visit(T->getDeducedType());
 }

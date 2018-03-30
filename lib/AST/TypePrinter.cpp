@@ -184,7 +184,6 @@ bool TypePrinter::canPrefixQualifiers(const Type *T,
     case Type::TypeOfExpr:
     case Type::TypeOf:
     case Type::Decltype:
-    case Type::UnaryTransform:
     case Type::TransformTrait:
     case Type::Record:
     case Type::Enum:
@@ -880,34 +879,7 @@ void TypePrinter::printDecltypeBefore(const DecltypeType *T, raw_ostream &OS) {
   OS << ')';
   spaceBeforePlaceHolder(OS);
 }
-void TypePrinter::printDecltypeAfter(const DecltypeType *T, raw_ostream &OS) { } 
-
-void TypePrinter::printUnaryTransformBefore(const UnaryTransformType *T,
-                                            raw_ostream &OS) {
-  IncludeStrongLifetimeRAII Strong(Policy);
-
-  switch (T->getUTTKind()) {
-    case UnaryTransformType::EnumUnderlyingType:
-      OS << "__underlying_type(";
-      print(T->getBaseType(), OS, StringRef());
-      OS << ')';
-      spaceBeforePlaceHolder(OS);
-      return;
-  }
-
-  printBefore(T->getBaseType(), OS);
-}
-void TypePrinter::printUnaryTransformAfter(const UnaryTransformType *T,
-                                           raw_ostream &OS) {
-  IncludeStrongLifetimeRAII Strong(Policy);
-
-  switch (T->getUTTKind()) {
-    case UnaryTransformType::EnumUnderlyingType:
-      return;
-  }
-
-  printAfter(T->getBaseType(), OS);
-}
+void TypePrinter::printDecltypeAfter(const DecltypeType *T, raw_ostream &OS) {}
 
 void TypePrinter::printTransformTraitBefore(const TransformTraitType *T,
                                             raw_ostream &OS) {
@@ -916,15 +888,19 @@ void TypePrinter::printTransformTraitBefore(const TransformTraitType *T,
   switch (T->getTTKind()) {
   case TransformTraitType::EnumRawInvocationType:
     OS << "__raw_invocation_type(";
-    for (unsigned I = 0; I != T->getNumArgs(); ++I) {
-      print(T->getArg(I), OS, StringRef());
-      if ((I + 1) != T->getNumArgs())
-        OS << ", ";
+    break;
+  case TransformTraitType::EnumUnderlyingType:
+    OS << "__underlying_type(";
+    break;
+  }
+  for (unsigned I = 0; I != T->getNumArgs(); ++I) {
+    print(T->getArg(I), OS, StringRef());
+    if ((I + 1) != T->getNumArgs())
+      OS << ", ";
     }
     OS << ')';
     spaceBeforePlaceHolder(OS);
     return;
-  }
   llvm_unreachable("transformation trait not handled");
 }
 
@@ -934,6 +910,7 @@ void TypePrinter::printTransformTraitAfter(const TransformTraitType *T,
 
   switch (T->getTTKind()) {
   case TransformTraitType::EnumRawInvocationType:
+  case TransformTraitType::EnumUnderlyingType:
     return;
   }
 
