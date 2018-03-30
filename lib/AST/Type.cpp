@@ -3698,6 +3698,7 @@ bool Type::canHaveNullability(bool ResultIfUnknown) const {
   case Type::TypeOf:
   case Type::Decltype:
   case Type::UnaryTransform:
+  case Type::TransformTrait:
   case Type::TemplateTypeParm:
   case Type::SubstTemplateTypeParmPack:
   case Type::DependentName:
