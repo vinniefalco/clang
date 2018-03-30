@@ -5556,8 +5556,10 @@ TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
   if (Result->isDependentType()) {
     const TransformTraitType *T = TL.getTypePtr();
     SmallVector<QualType, 2> Args;
-    for (auto Ty : T->getArgs()) {
-      QualType NewTy = getDerived().TransformType(Ty);
+    for (auto *TyInfo : TL.getArgTInfo()) {
+      QualType NewTy = getDerived().TransformType(TyInfo)->getType();
+      if (NewTy.isNull())
+        return QualType();
       Args.push_back(NewTy);
     }
     Result = getDerived().RebuildTransformTraitType(Args, T->getTTKind(),
@@ -5570,7 +5572,7 @@ TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
   NewTL.setKWLoc(TL.getKWLoc());
   NewTL.setParensRange(TL.getParensRange());
   NewTL.setArgTInfo(TL.getArgTInfo());
-  NewTL.setTransformedTInfo(TL.getTransformedTInfo());
+
   return Result;
 }
 
