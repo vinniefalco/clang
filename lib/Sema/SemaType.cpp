@@ -1502,7 +1502,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
       declarator.setInvalidType(true);
     }
     break;
-  case DeclSpec::TST_rawInvocationType:
+  case DeclSpec::TST_rawInvocationType: {
     // FIXME(EricWF)
     ArrayRef<ParsedType> ParsedArgs = DS.getRepAsTypeList();
     SmallVector<QualType, 2> Args;
@@ -1521,6 +1521,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
       declarator.setInvalidType(true);
     }
     break;
+  }
   case DeclSpec::TST_auto:
     Result = Context.getAutoType(QualType(), AutoTypeKeyword::Auto, false);
     break;
@@ -8037,7 +8038,7 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
                                        TransformTraitType::TTKind TKind,
                                        SourceLocation Loc) {
   switch (TKind) {
-  case TransformTraitType::EnumRawInvocationType:
+  case TransformTraitType::EnumRawInvocationType: {
     bool IsDependent =
         std::any_of(ArgTypes.begin(), ArgTypes.end(), [](TypeSourceInfo *T) {
           return T->getType()->isDependentType();
@@ -8049,8 +8050,9 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
     return Context.getTransformTraitType(
         ArgTypes, Underlying, TransformTraitType::EnumRawInvocationType);
   }
-}
-llvm_unreachable("unknown unary transform type");
+  }
+
+  llvm_unreachable("unknown unary transform type");
 }
 
 QualType Sema::BuildAtomicType(QualType T, SourceLocation Loc) {
