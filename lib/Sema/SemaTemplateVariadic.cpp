@@ -815,7 +815,7 @@ bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
     ArrayRef<ParsedType> Args = DS.getRepAsTypeList();
     for (auto PT : Args) {
       QualType T = PT.get();
-      if (!T.isNull() && T->containsUnexpandedParemeterPack())
+      if (!T.isNull() && T->containsUnexpandedParameterPack())
         return true;
     }
     break;
