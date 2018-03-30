@@ -1053,7 +1053,7 @@ void Parser::ParseUnderlyingTypeSpecifier(DeclSpec &DS) {
 
 void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   assert((Tok.is(tok::kw___underlying_type) ||
-          Tok.is(tok::kw___raw_invocation_type) &&
+          Tok.is(tok::kw___raw_invocation_type)) &&
          "Not a transformation trait type specifier");
 
   Token SavedTok = Tok;
@@ -1069,7 +1069,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     TypeResult Ty = ParseTypeName();
     if (Ty.isInvalid()) {
       Parens.skipToEnd();
-      return ExprError();
+      return;
     }
 
     // Parse the ellipsis, if present.
@@ -1077,7 +1077,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
       Ty = Actions.ActOnPackExpansion(Ty.get(), ConsumeToken());
       if (Ty.isInvalid()) {
         Parens.skipToEnd();
-        return ExprError();
+        return;
       }
     }
 
@@ -1086,7 +1086,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   } while (TryConsumeToken(tok::comma));
 
   if (Parens.consumeClose())
-    return ExprError();
+    return;
 
   SourceLocation EndLoc = Parens.getCloseLocation();
 
@@ -1094,7 +1094,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   const char *PrevSpec = nullptr;
   unsigned DiagID;
   if (DS.SetTypeSpecType(DeclSpec::TST_underlyingType, StartLoc, PrevSpec,
-                         DiagID, Result.get(),
+                         DiagID, Args,
                          Actions.getASTContext().getPrintingPolicy()))
     Diag(StartLoc, DiagID) << PrevSpec;
     DS.setTypeofParensRange(Parens.getRange());
