@@ -3727,6 +3727,7 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
 
     case tok::kw___raw_invocation_type:
       ParseTransformTraitTypeSpecifier(DS);
+      continue;
 
     case tok::kw__Atomic:
       // C11 6.7.2.4/4:
