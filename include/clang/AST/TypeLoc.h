@@ -1971,7 +1971,6 @@ struct TransformTraitTypeLocInfo {
   // need different representations
   SourceLocation KWLoc, LParenLoc, RParenLoc;
   SmallVector<TypeSourceInfo *, 2> ArgTInfo;
-  TypeSourceInfo *TransformedTInfo;
 };
 
 class TransformTraitTypeLoc
@@ -1991,17 +1990,19 @@ public:
     return getLocalData()->ArgTInfo;
   }
 
+  TypeSourceInfo *getArgInfo(unsigned I) {
+    assert(I < getArgTInfo().size());
+    return getLocalData()->ArgTInfo[I];
+  }
+
+  void setArgInfo(unsigned I, TypeSourceInfo *Info) {
+    assert(I < getArgTInfo().size());
+    getLocalData()->ArgTInfo[I] = Info;
+  }
+
   void setArgTInfo(ArrayRef<TypeSourceInfo *> ArgInfo) {
     SmallVector<TypeSourceInfo *, 2> NewArgs(ArgInfo.begin(), ArgInfo.end());
     getLocalData()->ArgTInfo = std::move(NewArgs);
-  }
-
-  TypeSourceInfo *getTransformedTInfo() const {
-    return getLocalData()->TransformedTInfo;
-  }
-
-  void setTransformedTInfo(TypeSourceInfo *TInfo) {
-    getLocalData()->TransformedTInfo = TInfo;
   }
 
   SourceRange getLocalSourceRange() const {
