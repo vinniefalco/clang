@@ -1278,10 +1278,9 @@ DEF_TRAVERSE_TYPELOC(UnaryTransformType, {
   TRY_TO(TraverseTypeLoc(TL.getUnderlyingTInfo()->getTypeLoc()));
 })
 DEF_TRAVERSE_TYPELOC(TransformTraitType, {
-  TRY_TO(TraverseTypeLoc(TL.getTransformedTInfo()->getTypeLoc()));
   const TransformTraitType *T = TL.getTypePtr();
-  for (auto Ty : T->getArgs()) {
-    TRY_TO(TraverseType(Ty));
+  for (auto *TyInfo : TL.getArgTInfo()) {
+    TRY_TO(TraverseTypeLoc(TyInfo->getTypeLoc()));
   }
 })
 
