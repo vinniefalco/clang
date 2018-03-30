@@ -2,14 +2,6 @@
 
 static_assert(!__is_identifier(__raw_invocation_type), "");
 
-struct Callable {
-  int operator()(int, int * = nullptr);
-  long operator()(long);
-};
-
-int foo(int);
-void *foo(const char *, int &);
-
 template <class Fn>
 struct InvokeType;
 
@@ -21,9 +13,25 @@ struct InvokeType<Fn(Args...)> {
 template <class T>
 using InvokeT = typename InvokeType<T>::type;
 
+template <class... Args, class = __raw_invocation_type(Args...)>
+constexpr bool HasTypeImp(int) { return true; }
+template <class... Args>
+constexpr bool HasTypeImp(long) { return false; }
+
+template <class... Args>
+constexpr bool HasType() { return HasTypeImp<Args...>(0); }
+
 template <class>
 struct Printer;
 //Printer<__invocation_type<Callable, int>> p;
+
+struct Callable {
+  int operator()(int, int * = nullptr);
+  long operator()(long);
+};
+
+int foo(int);
+void *foo(const char *, int &);
 
 template <class T>
 using Fn = T;
@@ -31,10 +39,13 @@ using Fn = T;
 using MemFn = int (Callable::*)(int, void *);
 
 using Test1 = __raw_invocation_type(Callable, int);
-//Printer<InvokeT<MemFn(Callable &, int, void *)>> p;
+static_assert(HasType<int(int *), int *>(), "");
+static_assert(HasType<int (*)(int *), int *>(), "");
+static_assert(HasType<int (&)(int *), int *>(), "");
+
+static_assert(!HasType<int(int *), int>(), "");
 
 static_assert(__is_same(InvokeT<Callable(int)>, int(int, int *)), "");
 static_assert(__is_same(InvokeT<Callable(long)>, long(long)), "");
-
-static_assert(__is_same(InvokeT<Fn<int (*)(int)>(void *)>, int(int)), "");
+static_assert(__is_same(InvokeT<Fn<int (*)(int)>(long)>, int(int)), "");
 static_assert(__is_same(InvokeT<MemFn(Callable &, int, void *)>, int(int, void *)), "");
