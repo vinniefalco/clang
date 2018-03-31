@@ -31,10 +31,14 @@ static_assert(is_same_type<char, decltype(h)>::value,
 
 template <class... Args>
 struct TestParse {
+  // expected-error@+2 {{type trait requires 1 argument; have 0 arguments}}
+  // expected-error@+1 {{type trait requires 1 argument; have 2 arguments}}
   using type = __underlying_type(Args...);
 };
 static_assert(is_same_type<TestParse<f>::type, char>::value, "wrong type");
-template struct TestParse<>;
+template struct TestParse<>; // expected-note {{requested here}}
+template struct TestParse<f, f>; // expected-note {{requested here}}
+
 
 template <typename T>
 struct underlying_type {

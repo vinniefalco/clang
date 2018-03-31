@@ -40,9 +40,10 @@ namespace CheckParsing {
   __raw_invocation_type() x;
   template <class ...Args>
   struct R {
+    // expected-error@+1 {{type trait requires 1 or more argument; have 0 arguments}}
     using type = __raw_invocation_type(Args...);
   };
-  template struct R<>;
+  template struct R<>; // expected-note {{requested here}}
 } // namespace CheckParsing
 
 namespace TestNonCallable {
@@ -304,21 +305,21 @@ namespace IncompleteTypeTests {
 } // namespace IncompleteTypeTests
 
 namespace AccessCheckingTests {
+  struct Test {
+    template <class Expect, class... Args>
+    friend void test();
 
-struct Test {
+    void operator()(long);
+
+  private:
+    void operator()(int); // expected-note {{declared private here}}
+  };
+
   template <class Expect, class... Args>
-  friend void test();
-
-  void operator()(long);
-
-private:
-  void operator()(int);
-};
-
-template <class Expect, class... Args>
-void test() {
-  CHECK_SAME(RIT<Args...>, Expect);
-}
-template void test<void(long), Test, long>(); // OK
-template void test<void(int), Test, int>();   // OK
+  void test() {
+    // expected-error@+1 {{'operator()' is a private member of 'AccessCheckingTests::Test'}}
+    CHECK_SAME(__raw_invocation_type(Args...), Expect);
+  }
+  template void test<void(long), Test, long>(); // OK
+  template void test<void(int), Test, int>();   //expected-note {{requested here}}
 } // namespace AccessCheckingTests
