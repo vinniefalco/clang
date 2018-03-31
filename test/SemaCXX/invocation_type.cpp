@@ -23,11 +23,10 @@ constexpr bool HasType() { return HasTypeImp<Args...>(0); }
 
 template <class>
 struct Printer;
-//Printer<__invocation_type<Callable, int>> p;
 
 struct Callable {
-  int operator()(int, int * = nullptr);
-  long operator()(long);
+  int operator()(int, int * = nullptr) const;
+  long operator()(long) const;
 };
 
 int foo(int);
@@ -45,7 +44,20 @@ static_assert(HasType<int (&)(int *), int *>(), "");
 
 static_assert(!HasType<int(int *), int>(), "");
 
-static_assert(__is_same(InvokeT<Callable(int)>, int(int, int *)), "");
+static_assert(__is_same(InvokeT<Callable(int)>, int(int)), "");
+static_assert(__is_same(InvokeT<Callable(int, int *)>, int(int, int *)), "");
+
 static_assert(__is_same(InvokeT<Callable(long)>, long(long)), "");
 static_assert(__is_same(InvokeT<Fn<int (*)(int)>(long)>, int(int)), "");
-static_assert(__is_same(InvokeT<MemFn(Callable &, int, void *)>, int(int, void *)), "");
+static_assert(__is_same(InvokeT<MemFn(Callable &, int, void *)>, int(Callable &, int, void *)), "");
+
+namespace VarargsTest {
+
+struct Obj {
+  void operator()(int, int &, ...);
+};
+Printer<InvokeT<Obj(int, int &, int, int &, int const &, int &&)>> p;
+static_assert(__is_same(InvokeT<Obj(int, int &, int, int &, int const &, int &&)>,
+                        void(int, int &, int, int, int, int)),
+              "");
+} // namespace VarargsTest

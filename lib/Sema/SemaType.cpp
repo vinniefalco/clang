@@ -8002,26 +8002,25 @@ enum RawInvocationKind {
 
 struct RawInvocationInfo {
   RawInvocationKind Kind;
-  const FunctionType *Callee = nullptr;
+  const FunctionProtoType *Callee;
 };
 
 static RawInvocationInfo ClassifyRawInvocationFunction(QualType FnType) {
   if (FnType->isFunctionType())
-    return {RIT_Function, FnType->getAs<FunctionType>()};
+    return {RIT_Function, FnType->getAs<FunctionProtoType>()};
   else if (FnType->isFunctionPointerType()) {
-    return {
-        RIT_Function,
-        FnType->getAs<PointerType>()->getPointeeType()->castAs<FunctionType>()};
+    return {RIT_Function, FnType->getAs<PointerType>()
+                              ->getPointeeType()
+                              ->castAs<FunctionProtoType>()};
   } else if (FnType->isReferenceType() &&
              FnType.getNonReferenceType()->isFunctionType()) {
-    return {RIT_Function, FnType.getNonReferenceType()->getAs<FunctionType>()};
+    return {RIT_Function,
+            FnType.getNonReferenceType()->getAs<FunctionProtoType>()};
   } else if (FnType->isMemberFunctionPointerType()) {
     return {RIT_MemberFunction, FnType->getAs<MemberPointerType>()
                                     ->getPointeeType()
-                                    ->castAs<FunctionType>()};
+                                    ->castAs<FunctionProtoType>()};
   } else if (FnType->isMemberDataPointerType()) {
-    // FIXME(EricWF)
-    assert(false && "FIXME");
     return {RIT_MemberData, nullptr};
   } else if (FnType->isRecordType()) {
     return {RIT_Object, nullptr};
@@ -8031,14 +8030,15 @@ static RawInvocationInfo ClassifyRawInvocationFunction(QualType FnType) {
   llvm_unreachable("unhandled function type");
 }
 
+static QualType adjustInvocationType(Sema &S, QualType Ty) {
+  if (Ty->isObjectType() || Ty->isFunctionType())
+    Ty = S.Context.getRValueReferenceType(Ty);
+  return Ty.getNonLValueExprType(S.Context);
+}
+
 static OpaqueValueExpr createValueForArg(Sema &S, QualType Ty,
                                          SourceLocation Loc) {
-  ASTContext &Context = S.Context;
-
-  if (Ty->isObjectType() || Ty->isFunctionType())
-    Ty = Context.getRValueReferenceType(Ty);
-
-  return OpaqueValueExpr(Loc, Ty.getNonLValueExprType(Context),
+  return OpaqueValueExpr(Loc, adjustInvocationType(S, Ty),
                          Expr::getValueKindForType(Ty));
 }
 
@@ -8052,94 +8052,47 @@ static void createValuesForArgs(Sema &SemaRef, SourceLocation Loc,
     OutExprs.push_back(&Out);
 }
 
-static const FunctionType *
-computeCallToObjectOfClassType(Sema &SemaRef, SourceLocation Loc,
-                               MutableArrayRef<Expr *> AllArgExprs) {
-  ASTContext &Context = SemaRef.Context;
-  Expr *FnExpr = AllArgExprs[0];
-  MutableArrayRef<Expr *> ArgExprs = AllArgExprs.slice(1);
-
-  Sema::ContextRAII TUContext(SemaRef, Context.getTranslationUnitDecl());
-  ExprResult Res =
-      SemaRef.BuildCallToObjectOfClassType(nullptr, FnExpr, Loc, ArgExprs, Loc);
-  if (Res.isInvalid())
-    return nullptr;
-  CallExpr *CE = Res.getAs<CallExpr>();
-
-  const FunctionDecl *FDecl = CE->getDirectCallee();
-  assert(FDecl);
-  const FunctionType *CalleeType = FDecl->getFunctionType();
-  assert(CalleeType);
-  return CalleeType;
-}
-
-static bool checkCallToFunctionType(Sema &S, SourceLocation Loc,
-                                    const FunctionType *Fn,
-                                    ArrayRef<QualType> AllArgTypes,
-                                    ArrayRef<Expr *> AllArgExprs) {
-  ASTContext &Context = S.Context;
-  ArrayRef<Expr *> ArgExprs = AllArgExprs.slice(1);
-  ExprResult Result = S.BuildResolvedCallExpr(AllArgExprs[0], /*NDecl=*/nullptr,
-                                              Loc, ArgExprs, Loc);
-  if (Result.isInvalid())
-    return true;
-  return false;
-}
-
-static bool checkCallToMemberFunctionType(Sema &S, SourceLocation Loc,
-                                          const FunctionType *Fn,
-                                          ArrayRef<QualType> AllArgTypes,
-                                          MutableArrayRef<Expr *> AllArgExprs) {
-  // FIXME(EricWF): Create a better diagnostic
-  assert(AllArgExprs.size() >= 2 && "too few calls to member function");
-  ASTContext &Context = S.Context;
-  Expr *LHS = AllArgExprs[1];
-  Expr *RHS = AllArgExprs[0];
-  ExprResult BinOpRes = S.CreateBuiltinBinOp(Loc, BO_PtrMemD, LHS, RHS);
-  if (BinOpRes.isInvalid())
-    return true;
-
-  MutableArrayRef<Expr *> ArgExprs = AllArgExprs.slice(2);
-  ExprResult Result = S.BuildCallToMemberFunction(
-      /*Scope=*/nullptr, BinOpRes.get(), Loc, ArgExprs, Loc);
-  if (Result.isInvalid())
-    return true;
-  return false;
-}
-
-static QualType processCalleeTypeForArgs(Sema &S,
-                                         const FunctionType *RawCalleeType,
-                                         RawInvocationKind Kind,
+static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
+                                         Expr *Result,
+                                         const FunctionProtoType *CalleeType,
                                          SourceLocation Loc,
-                                         ArrayRef<QualType> AllArgTypes) {
-  assert(isa<FunctionProtoType>(RawCalleeType));
-  const FunctionProtoType *CalleeType =
-      dyn_cast<FunctionProtoType>(RawCalleeType);
-  QualType Return = CalleeType->getReturnType();
+                                         ArrayRef<QualType> AllArgTypes,
+                                         ArrayRef<Expr *> AllArgExprs) {
+  QualType ReturnType;
   SmallVector<QualType, 4> Args;
   unsigned ArgIdx = 1;
-  if (Kind == RIT_MemberFunction) {
-    Args.push_back(AllArgTypes[1]);
-    ArgIdx = 2;
-  }
+  if (Kind == RIT_MemberData) {
+    assert(Result && "require result expression");
+    ReturnType = Result->getType();
+    Args.push_back(adjustInvocationType(S, AllArgTypes[1]));
+  } else {
+    assert(CalleeType && "expect non-null callee type");
+    ReturnType = CalleeType->getCallResultType(S.Context);
 
-  bool InVarArgs = false;
-  for (unsigned I = ArgIdx, N = AllArgTypes.size(); I < N; ++I) {
-    unsigned ProtoIdx = I - ArgIdx;
-    if (InVarArgs ||
-        (ProtoIdx >= CalleeType->getNumParams() && CalleeType->isVariadic())) {
-      InVarArgs = true;
-      Args.push_back(AllArgTypes[I]);
-      continue;
+    if (Kind == RIT_MemberFunction) {
+      Args.push_back(adjustInvocationType(S, AllArgTypes[1]));
+      ArgIdx = 2;
     }
-    assert(ProtoIdx < CalleeType->getNumParams());
-    Args.push_back(CalleeType->getParamType(ParamIdx));
+
+    bool InVarArgs = false;
+    for (unsigned I = ArgIdx, N = AllArgTypes.size(); I < N; ++I) {
+      unsigned ParamIdx = I - ArgIdx;
+      InVarArgs |=
+          ParamIdx >= CalleeType->getNumParams() && CalleeType->isVariadic();
+      if (InVarArgs) {
+        ExprResult ArgRes = S.DefaultArgumentPromotion(AllArgExprs[I]);
+        if (ArgRes.isInvalid())
+          return QualType();
+        Args.push_back(ArgRes.get()->getType());
+        continue;
+      }
+      assert(ParamIdx < CalleeType->getNumParams());
+      Args.push_back(CalleeType->getParamType(ParamIdx));
+    }
   }
-  FunctionProtoType::ExtProtoInfo ProtoInfo;
-  if (const auto *FnProtoT = dyn_cast<FunctionProtoType>(CalleeType))
-    ProtoInfo = FnProtoT->getExtProtoInfo();
-  return S.BuildFunctionType(Return, Args, Loc, nullptr,
-                             CalleeType->getExtProtoInfo());
+  assert(!ReturnType.isNull() && "failed to compute return type");
+  return S.BuildFunctionType(ReturnType, Args, Loc, DeclarationName(),
+                             FunctionProtoType::ExtProtoInfo());
 }
 
 QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
@@ -8193,43 +8146,66 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
       QualType FnType = AllArgTypes[0];
       auto Info = ClassifyRawInvocationFunction(FnType);
 
-      ArrayRef<QualType> Args(AllArgTypes.begin() + 1, AllArgTypes.end());
-      const FunctionType *CalleeType = nullptr;
+      EnterExpressionEvaluationContext Unevaluated(
+          *this, Sema::ExpressionEvaluationContext::Unevaluated);
+      Sema::ContextRAII TUContext(*this, Context.getTranslationUnitDecl());
+      ExprResult Result = ExprError();
       switch (Info.Kind) {
       case RIT_Function: {
-        CalleeType = Info.Callee;
-        if (checkCallToFunctionType(*this, Loc, CalleeType, AllArgTypes,
-                                    ArgExprs))
-          return QualType();
+        ArrayRef<Expr *> CallArgs = ArrayRef<Expr *>(ArgExprs).slice(1);
+        Result = BuildResolvedCallExpr(ArgExprs[0], /*NDecl=*/nullptr, Loc,
+                                       CallArgs, Loc);
         break;
       }
       case RIT_MemberFunction: {
-        CalleeType = Info.Callee;
-        if (checkCallToMemberFunctionType(*this, Loc, CalleeType, AllArgTypes,
-                                          ArgExprs))
+        if (AllArgTypes.size() < 2) {
+          Diag(Loc, diag::err_raw_invocation_type_member_pointer_arity)
+              << 0 << AllArgTypes.size();
           return QualType();
+        }
+        ExprResult BinOpRes =
+            CreateBuiltinBinOp(Loc, BO_PtrMemD, ArgExprs[1], ArgExprs[0]);
+        if (BinOpRes.isInvalid())
+          return QualType();
+
+        MutableArrayRef<Expr *> CallArgs =
+            MutableArrayRef<Expr *>(ArgExprs).slice(2);
+        Result = BuildCallToMemberFunction(
+            /*Scope=*/nullptr, BinOpRes.get(), Loc, CallArgs, Loc);
         break;
       }
       case RIT_MemberData: {
-        assert(false && "TODO");
+        if (AllArgTypes.size() != 2) {
+          Diag(Loc, diag::err_raw_invocation_type_member_pointer_arity)
+              << 1 << AllArgTypes.size();
+          return QualType();
+        }
+        Result = CreateBuiltinBinOp(Loc, BO_PtrMemD, ArgExprs[1], ArgExprs[0]);
         break;
       }
       case RIT_Object: {
-        CalleeType = computeCallToObjectOfClassType(*this, Loc, ArgExprs);
-        if (CalleeType == nullptr)
-          return QualType();
+        MutableArrayRef<Expr *> CallArgs =
+            MutableArrayRef<Expr *>(ArgExprs).slice(1);
+        Result = BuildCallToObjectOfClassType(nullptr, ArgExprs[0], Loc,
+                                              CallArgs, Loc);
+        if (!Result.isInvalid()) {
+          CallExpr *CE = Result.getAs<CallExpr>();
+          assert(CE->getDirectCallee());
+          Info.Callee = CE->getDirectCallee()
+                            ->getFunctionType()
+                            ->castAs<FunctionProtoType>();
+        }
         break;
       }
       case RIT_None: {
-        // FIXME(EricWF)
-        assert(false && "TODO");
-        break;
+        Diag(Loc, diag::err_raw_invocation_type_not_callable) << AllArgTypes[0];
+        return QualType();
       }
       }
-      assert(CalleeType != nullptr && "must have valid callee");
-
-      Underlying =
-          processCalleeTypeForArgs(*this, CalleeType, Info.Kind, AllArgTypes);
+      if (Result.isInvalid())
+        return QualType();
+      Underlying = processCalleeTypeForArgs(*this, Result.get(), Info.Callee,
+                                            Loc, AllArgTypes, AllArgExprs);
       assert(!Underlying.isNull() && "cannot return a null type");
     }
     return Context.getTransformTraitType(
