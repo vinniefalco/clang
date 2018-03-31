@@ -108,6 +108,10 @@ def err_attribute_not_type_attr : Error<
   "%0 attribute cannot be applied to types">;
 def err_enum_template : Error<"enumeration cannot be a template">;
 
+// Type traits
+def err_type_trait_arity : Error<
+  "type trait requires %0%select{| or more| or fewer}1 argument%select{|s}2; have "
+  "%3 argument%s3">;
 }
 
 let CategoryName = "Nullability Issue" in {
@@ -236,3 +240,4 @@ def err_arcmt_nsinvocation_ownership : Error<"NSInvocation's %0 is not safe to b
 def err_omp_more_one_clause : Error<
   "directive '#pragma omp %0' cannot contain more than one '%1' clause%select{| with '%3' name modifier| with 'source' dependence}2">;
 }
+

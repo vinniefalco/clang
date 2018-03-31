@@ -29,6 +29,13 @@ __underlying_type(f) h;
 static_assert(is_same_type<char, decltype(h)>::value,
               "h has the wrong type");
 
+template <class... Args>
+struct TestParse {
+  using type = __underlying_type(Args...);
+};
+static_assert(is_same_type<TestParse<f>::type, char>::value, "wrong type");
+template struct TestParse<>;
+
 template <typename T>
 struct underlying_type {
   typedef __underlying_type(T) type; // expected-error {{only enumeration types}}

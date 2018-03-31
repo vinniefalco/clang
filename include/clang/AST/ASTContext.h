@@ -1476,7 +1476,7 @@ public:
   /// \brief C++11 decltype.
   QualType getDecltypeType(Expr *e, QualType UnderlyingType) const;
 
-  /// \brief variadic type transforms
+  /// \brief type trait transformations
   QualType getTransformTraitType(ArrayRef<QualType> ArgTypes,
                                  QualType TransformedType,
                                  TransformTraitType::TTKind TKind) const;
