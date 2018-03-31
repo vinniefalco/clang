@@ -7305,7 +7305,7 @@ def err_incomplete_type_used_in_type_trait_expr : Error<
   "incomplete type %0 used in type trait expression">;
 
 def err_raw_invocation_type_not_callable : Error<
-  "non-callable type %0 used in __raw_invocation_trait expression">;
+  "non-callable type %0 used in __raw_invocation_type trait">;
 def err_raw_invocation_type_member_pointer_arity : Error <
   "__raw_invocation_type with a pointer to member %select{function|data}0"
    " requires 2%select{ or more|}0 arguments; have "

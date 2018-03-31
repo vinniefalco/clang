@@ -254,3 +254,16 @@ namespace VarargsTest {
   CHECK_SAME(RIT<Fn, short, unsigned char, int &&, long long, char32_t>,
              void(int, int, int, long long, unsigned int));
 } // namespace VarargsTest
+
+namespace IncompleteTypeTests {
+struct Inc;
+// expected-error@+1 {{non-callable type 'void' used in __raw_invocation_type expression}}
+using Test1 = __raw_invocation_type(void);
+// expected-error@+1 {{too many arguments to function call, expected 0, have 1}}
+using Test2 = __raw_invocation_type(int(), void);
+// expected-error@+2 {{cannot pass expression of type 'void' to variadic function}}
+// expected-error@+1 {{argument may not have 'void' type}}
+using Test3 = __raw_invocation_type(int(...), void);
+// OK
+using Test4 = __raw_invocation_type(int(int *), int[]); // OK
+} // namespace IncompleteTypeTests
