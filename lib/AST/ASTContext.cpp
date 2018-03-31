@@ -4649,8 +4649,11 @@ ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
 
   bool IsDependent =
       llvm::any_of(ArgTypes, [](QualType T) { return T->isDependentType(); });
+  assert(IsDependent == TransformedType->isDependentType());
 
   if (IsDependent) {
+    assert(TransformedType->isDependentType() &&
+           "non-dependent transformed type with dependent argument types");
     SmallVector<QualType, 2> CanonArgs;
     CanonArgs.reserve(ArgTypes.size());
     for (auto Ty : ArgTypes)

@@ -2093,7 +2093,7 @@ void CodeGenFunction::EmitVariablyModifiedType(QualType type) {
 
     case Type::Paren:
     case Type::TypeOf:
-    case Type::TransformTrait: // FIXME(EricWF) Is this right?
+    case Type::TransformTrait:
     case Type::Attributed:
     case Type::SubstTemplateTypeParm:
     case Type::PackExpansion:
