@@ -77,17 +77,38 @@ static_assert(!HasType<EC>(), "");
 static_assert(!HasType<EC, EC>(), "");
 } // namespace TestNonCallable
 
-namespace VarargsTest {
-struct Obj {
-  void operator()(int, int &, ...);
-};
-CHECK_SAME(RIT<Obj, int, int &, int, int &, int const &, int &&>,
-           void(int, int &, int, int, int, int));
+namespace FuncTest {
+  using F0 = int();
+  using F1 = long(int);
+  using F2 = unsigned(void*, const char*);
+  CHECK_SAME(RIT<F0>, int());
+  CHECK_SAME(RIT<F1, char>, long(int));
+  CHECK_SAME(RIT<F2, int*, const char*>, unsigned(void*, const char*));
 
-using Fn = void(...);
-CHECK_SAME(RIT<Fn, short, unsigned char, int &&, long long, char32_t>,
-           void(int, int, int, long long, unsigned int));
-} // namespace VarargsTest
+  struct Tag {};
+  // test return types
+  using FV = Tag();
+  using FL = Tag&();
+  using FCL = Tag const&();
+  using FR = Tag&&();
+  using FCR = Tag const&&();
+  CHECK_SAME(RIT<FV>, Tag());
+  CHECK_SAME(RIT<FL>, Tag&());
+  CHECK_SAME(RIT<FCL>, Tag const&());
+  CHECK_SAME(RIT<FR>, Tag&&());
+  CHECK_SAME(RIT<FCR>, Tag const&&());
+
+  // test function value categories
+  using FPure = int(int);
+  using FPtr = int(*)(int);
+  using FLRef = int(&)(int);
+  using FRRef = int(&&)(int);
+  CHECK_SAME(RIT<FPure, int>, int(int));
+  CHECK_SAME(RIT<FPtr, int>, int(int));
+  CHECK_SAME(RIT<FLRef, int>, int(int));
+  CHECK_SAME(RIT<FRRef, int>, int(int));
+
+}
 
 namespace MemObjTest {
 
@@ -121,3 +142,16 @@ template void test<AF1, B &, int &(B &)>();
 static_assert(!HasType<AF1, C>(), "");
 static_assert(!HasType<BF1, A>(), "");
 } // namespace MemObjTest
+
+
+namespace VarargsTest {
+struct Obj {
+  void operator()(int, int &, ...);
+};
+CHECK_SAME(RIT<Obj, int, int &, int, int &, int const &, int &&>,
+           void(int, int &, int, int, int, int));
+
+using Fn = void(...);
+CHECK_SAME(RIT<Fn, short, unsigned char, int &&, long long, char32_t>,
+           void(int, int, int, long long, unsigned int));
+} // namespace VarargsTest
