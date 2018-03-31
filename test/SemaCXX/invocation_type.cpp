@@ -42,7 +42,7 @@ namespace CheckParsing {
   struct R {
     using type = __raw_invocation_type(Args...);
   };
-  //template struct R<>;
+  template struct R<>;
 } // namespace CheckParsing
 
 namespace TestNonCallable {
@@ -299,6 +299,8 @@ namespace IncompleteTypeTests {
   // expected-error@+1 {{no viable conversion from 'IncompleteTypeTests::Inc' to 'int'}}
   using Test13 = __raw_invocation_type(void(int), Inc&);
 
+  // Test that incomplete type diagnostics are subject to SFINAE
+  CHECK_NO_TYPE(void(...), Inc, Inc);
 } // namespace IncompleteTypeTests
 
 namespace AccessCheckingTests {

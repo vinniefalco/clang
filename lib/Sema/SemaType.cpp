@@ -8031,7 +8031,7 @@ static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
                                          ExprResult CallResult,
                                          const FunctionProtoType *CalleeType,
                                          SourceLocation Loc,
-                                         ArrayRef<QualType> AllArgTypes,
+                                         ArrayRef<QualType> ArgTypes,
                                          ArrayRef<Expr *> AllArgExprs) {
   if (CallResult.isInvalid())
     return QualType();
@@ -8102,7 +8102,7 @@ static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
 static bool diagnoseTransformTraitArity(Sema &S,
                                         TransformTraitType::TTKind Kind,
                                         SourceLocation Loc, unsigned NumArgs) {
-  int MinArity, MaxArity;
+  unsigned MinArity, MaxArity;
   switch (Kind) {
   case TransformTraitType::EnumUnderlyingType:
     MinArity = MaxArity = 1;
@@ -8136,50 +8136,48 @@ static bool diagnoseTransformTraitArity(Sema &S,
   return false;
 }
 
-QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
+QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
                                        TransformTraitType::TTKind TKind,
                                        SourceLocation Loc) {
-  if (diagnoseTransformTraitArity(*this, TKind, Loc, AllArgTypes.size()))
+  if (diagnoseTransformTraitArity(*this, TKind, Loc, ArgTypes.size()))
     return QualType();
   switch (TKind) {
   case TransformTraitType::EnumUnderlyingType: {
-    assert(AllArgTypes.size() == 1 &&
+    assert(ArgTypes.size() == 1 &&
            "underlying_type takes only a single argument");
-    QualType BaseType = AllArgTypes[0];
+    QualType BaseType = ArgTypes[0];
     if (!BaseType->isDependentType() && !BaseType->isEnumeralType()) {
       Diag(Loc, diag::err_only_enums_have_underlying_types);
       return QualType();
-    } else {
-      QualType Underlying = BaseType;
-      if (!BaseType->isDependentType()) {
-        // The enum could be incomplete if we're parsing its definition or
-        // recovering from an error.
-        NamedDecl *FwdDecl = nullptr;
-        if (BaseType->isIncompleteType(&FwdDecl)) {
-          Diag(Loc, diag::err_underlying_type_of_incomplete_enum) << BaseType;
-          Diag(FwdDecl->getLocation(), diag::note_forward_declaration)
-              << FwdDecl;
-          return QualType();
-        }
-
-        EnumDecl *ED = BaseType->getAs<EnumType>()->getDecl();
-        assert(ED && "EnumType has no EnumDecl");
-
-        DiagnoseUseOfDecl(ED, Loc);
-
-        Underlying = ED->getIntegerType();
-        assert(!Underlying.isNull());
-      }
-      return Context.getTransformTraitType(
-          BaseType, Underlying, TransformTraitType::EnumUnderlyingType);
     }
+    QualType Underlying = BaseType;
+    if (!BaseType->isDependentType()) {
+      // The enum could be incomplete if we're parsing its definition or
+      // recovering from an error.
+      NamedDecl *FwdDecl = nullptr;
+      if (BaseType->isIncompleteType(&FwdDecl)) {
+        Diag(Loc, diag::err_underlying_type_of_incomplete_enum) << BaseType;
+        Diag(FwdDecl->getLocation(), diag::note_forward_declaration) << FwdDecl;
+        return QualType();
+      }
+
+      EnumDecl *ED = BaseType->getAs<EnumType>()->getDecl();
+      assert(ED && "EnumType has no EnumDecl");
+
+      DiagnoseUseOfDecl(ED, Loc);
+
+      Underlying = ED->getIntegerType();
+      assert(!Underlying.isNull());
+    }
+    return Context.getTransformTraitType(
+        BaseType, Underlying, TransformTraitType::EnumUnderlyingType);
   }
   case TransformTraitType::EnumRawInvocationType: {
-    assert(AllArgTypes.size() >= 1);
+    assert(ArgTypes.size() >= 1);
     // Precondition: T and all types in the parameter pack Args shall be
     // complete types, (possibly cv-qualified) void, or arrays of
     // unknown bound.
-    for (const auto ArgTy : AllArgTypes) {
+    for (const auto ArgTy : ArgTypes) {
       if (ArgTy->isVoidType() || ArgTy->isIncompleteArrayType())
         continue;
 
@@ -8188,16 +8186,16 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
         return QualType();
     }
 
-    bool IsDependent = llvm::any_of(
-        AllArgTypes, [](QualType T) { return T->isDependentType(); });
+    bool IsDependent =
+        llvm::any_of(ArgTypes, [](QualType T) { return T->isDependentType(); });
 
     if (IsDependent)
       return Context.getTransformTraitType(
-          AllArgTypes, Context.DependentTy,
+          ArgTypes, Context.DependentTy,
           TransformTraitType::EnumRawInvocationType);
 
     SmallVector<OpaqueValueExpr, 4> ArgValues;
-    for (auto Ty : AllArgTypes) {
+    for (auto Ty : ArgTypes) {
       if (Ty->isObjectType() || Ty->isFunctionType())
         Ty = Context.getRValueReferenceType(Ty);
       ArgValues.push_back(OpaqueValueExpr(Loc, Ty.getNonLValueExprType(Context),
@@ -8209,7 +8207,7 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
     for (OpaqueValueExpr &OE : ArgValues)
       ArgExprs.push_back(&OE);
 
-    auto Info = ClassifyRawInvocationFunction(AllArgTypes[0]);
+    auto Info = ClassifyRawInvocationFunction(ArgTypes[0]);
 
     EnterExpressionEvaluationContext Unevaluated(
         *this, Sema::ExpressionEvaluationContext::Unevaluated);
@@ -8224,9 +8222,9 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
       break;
     }
     case RIT_MemberFunction: {
-      if (AllArgTypes.size() < 2) {
+      if (ArgTypes.size() < 2) {
         Diag(Loc, diag::err_raw_invocation_type_member_pointer_arity)
-            << 0 << (int)AllArgTypes.size();
+            << 0 << (int)ArgTypes.size();
         return QualType();
       }
       ExprResult BinOpRes =
@@ -8241,9 +8239,9 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
       break;
     }
     case RIT_MemberData: {
-      if (AllArgTypes.size() != 2) {
+      if (ArgTypes.size() != 2) {
         Diag(Loc, diag::err_raw_invocation_type_member_pointer_arity)
-            << 1 << (int)AllArgTypes.size();
+            << 1 << (int)ArgTypes.size();
         return QualType();
       }
       Result = CreateBuiltinBinOp(Loc, BO_PtrMemD, ArgExprs[1], ArgExprs[0]);
@@ -8264,19 +8262,19 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
       break;
     }
     case RIT_None: {
-      Diag(Loc, diag::err_raw_invocation_type_not_callable) << AllArgTypes[0];
+      Diag(Loc, diag::err_raw_invocation_type_not_callable) << ArgTypes[0];
       return QualType();
     }
     }
     QualType Underlying = processCalleeTypeForArgs(
-        *this, Info.Kind, Result, Info.Callee, Loc, AllArgTypes, ArgExprs);
+        *this, Info.Kind, Result, Info.Callee, Loc, ArgTypes, ArgExprs);
     if (Underlying.isNull())
       return QualType();
 
     assert(!Underlying.isNull() && "cannot return a null type");
 
     return Context.getTransformTraitType(
-        AllArgTypes, Underlying, TransformTraitType::EnumRawInvocationType);
+        ArgTypes, Underlying, TransformTraitType::EnumRawInvocationType);
   }
   }
 

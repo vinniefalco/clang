@@ -1041,35 +1041,32 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
 
   SourceLocation StartLoc = ConsumeToken();
   BalancedDelimiterTracker Parens(*this, tok::l_paren);
-  if (Parens.expectAndConsume()) {
+  if (Parens.expectAndConsume())
     return;
-  }
-  bool HasNoArgs = Tok.is(tok::r_paren);
+
   SmallVector<ParsedType, 2> Args;
-  do {
-    if (HasNoArgs)
-      break;
-
-    // Parse the next type.
-    TypeResult Ty = ParseTypeName();
-    if (Ty.isInvalid()) {
-      Parens.skipToEnd();
-      return;
-    }
-
-    // Parse the ellipsis, if present.
-    if (Tok.is(tok::ellipsis)) {
-      Ty = Actions.ActOnPackExpansion(Ty.get(), ConsumeToken());
+  if (Tok.isNot(tok::r_paren)) {
+    do {
+      // Parse the next type.
+      TypeResult Ty = ParseTypeName();
       if (Ty.isInvalid()) {
         Parens.skipToEnd();
         return;
       }
-    }
 
-    // Add this type to the list of arguments.
-    Args.push_back(Ty.get());
-  } while (TryConsumeToken(tok::comma));
+      // Parse the ellipsis, if present.
+      if (Tok.is(tok::ellipsis)) {
+        Ty = Actions.ActOnPackExpansion(Ty.get(), ConsumeToken());
+        if (Ty.isInvalid()) {
+          Parens.skipToEnd();
+          return;
+        }
+      }
 
+      // Add this type to the list of arguments.
+      Args.push_back(Ty.get());
+    } while (TryConsumeToken(tok::comma));
+  }
   if (Parens.consumeClose())
     return;
 

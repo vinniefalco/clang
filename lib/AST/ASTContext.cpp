@@ -4636,8 +4636,7 @@ ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
   TransformTraitType *ut = nullptr;
 
   bool IsDependent =
-      std::any_of(ArgTypes.begin(), ArgTypes.end(),
-                  [](QualType T) { return T->isDependentType(); });
+      llvm::any_of(ArgTypes, [](QualType T) { return T->isDependentType(); });
 
   if (IsDependent) {
     SmallVector<QualType, 2> CanonArgs;
