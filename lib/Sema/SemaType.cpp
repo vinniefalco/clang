@@ -8030,52 +8030,55 @@ static RawInvocationInfo ClassifyRawInvocationFunction(QualType FnType) {
   llvm_unreachable("unhandled function type");
 }
 
-static QualType adjustInvocationType(Sema &S, QualType Ty) {
-  if (Ty->isObjectType() || Ty->isFunctionType())
-    Ty = S.Context.getRValueReferenceType(Ty);
-  return Ty.getNonLValueExprType(S.Context);
-}
-
-static OpaqueValueExpr createValueForArg(Sema &S, QualType Ty,
-                                         SourceLocation Loc) {
-  return OpaqueValueExpr(Loc, adjustInvocationType(S, Ty),
-                         Expr::getValueKindForType(Ty));
-}
-
-static void createValuesForArgs(Sema &SemaRef, SourceLocation Loc,
-                                ArrayRef<QualType> InArgs,
-                                SmallVectorImpl<OpaqueValueExpr> &OutArgs,
-                                SmallVectorImpl<Expr *> &OutExprs) {
-  for (auto T : InArgs)
-    OutArgs.push_back(createValueForArg(SemaRef, T, Loc));
-  for (auto &Out : OutArgs)
-    OutExprs.push_back(&Out);
-}
-
 static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
                                          Expr *Result,
                                          const FunctionProtoType *CalleeType,
                                          SourceLocation Loc,
                                          ArrayRef<QualType> AllArgTypes,
                                          ArrayRef<Expr *> AllArgExprs) {
+  auto adjustTy = [&](const Expr *E) {
+    QualType T = E->getType();
+    switch (E->getValueKind()) {
+    //     - otherwise, if e is an xvalue, decltype(e) is T&&, where T is the
+    //       type of e;
+    case VK_XValue:
+      T = S.Context.getRValueReferenceType(T);
+      break;
+    //     - otherwise, if e is an lvalue, decltype(e) is T&, where T is the
+    //       type of e;
+    case VK_LValue:
+      T = S.Context.getLValueReferenceType(T);
+      break;
+    //  - otherwise, decltype(e) is the type of e.
+    case VK_RValue:
+      break;
+    }
+
+    return T;
+  };
+  auto getArgTy = [&](unsigned Idx) {
+    assert(Idx < AllArgExprs.size());
+    Expr *E = AllArgExprs[Idx];
+    return adjustTy(E);
+  };
   QualType ReturnType;
   SmallVector<QualType, 4> Args;
   unsigned ArgIdx = 1;
   if (Kind == RIT_MemberData) {
     assert(Result && "require result expression");
-    ReturnType = Result->getType();
-    Args.push_back(adjustInvocationType(S, AllArgTypes[1]));
+    ReturnType = adjustTy(Result);
+    Args.push_back(getArgTy(1));
   } else {
     assert(CalleeType && "expect non-null callee type");
     ReturnType = CalleeType->getCallResultType(S.Context);
 
     if (Kind == RIT_MemberFunction) {
-      Args.push_back(adjustInvocationType(S, AllArgTypes[1]));
+      Args.push_back(getArgTy(1));
       ArgIdx = 2;
     }
 
     bool InVarArgs = false;
-    for (unsigned I = ArgIdx, N = AllArgTypes.size(); I < N; ++I) {
+    for (unsigned I = ArgIdx, N = AllArgExprs.size(); I < N; ++I) {
       unsigned ParamIdx = I - ArgIdx;
       InVarArgs |=
           ParamIdx >= CalleeType->getNumParams() && CalleeType->isVariadic();
@@ -8137,18 +8140,28 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
                     [](QualType T) { return T->isDependentType(); });
     QualType Underlying = Context.DependentTy;
     if (!IsDependent) {
-      assert(AllArgTypes.size() >= 2);
+      assert(AllArgTypes.size() >= 1);
 
       SmallVector<OpaqueValueExpr, 4> ArgValues;
-      SmallVector<Expr *, 4> ArgExprs;
-      createValuesForArgs(*this, Loc, AllArgTypes, ArgValues, ArgExprs);
+      for (auto Ty : AllArgTypes) {
+        if (Ty->isObjectType() || Ty->isFunctionType())
+          Ty = Context.getRValueReferenceType(Ty);
+        ArgValues.push_back(OpaqueValueExpr(Loc,
+                                            Ty.getNonLValueExprType(Context),
+                                            Expr::getValueKindForType(Ty)));
+      }
 
-      QualType FnType = AllArgTypes[0];
-      auto Info = ClassifyRawInvocationFunction(FnType);
+      SmallVector<Expr *, 4> ArgExprs;
+      ArgExprs.reserve(ArgValues.size());
+      for (OpaqueValueExpr &OE : ArgValues)
+        ArgExprs.push_back(&OE);
+
+      auto Info = ClassifyRawInvocationFunction(AllArgTypes[0]);
 
       EnterExpressionEvaluationContext Unevaluated(
           *this, Sema::ExpressionEvaluationContext::Unevaluated);
       Sema::ContextRAII TUContext(*this, Context.getTranslationUnitDecl());
+
       ExprResult Result = ExprError();
       switch (Info.Kind) {
       case RIT_Function: {
@@ -8160,7 +8173,7 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
       case RIT_MemberFunction: {
         if (AllArgTypes.size() < 2) {
           Diag(Loc, diag::err_raw_invocation_type_member_pointer_arity)
-              << 0 << AllArgTypes.size();
+              << 0 << (int)AllArgTypes.size();
           return QualType();
         }
         ExprResult BinOpRes =
@@ -8177,7 +8190,7 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
       case RIT_MemberData: {
         if (AllArgTypes.size() != 2) {
           Diag(Loc, diag::err_raw_invocation_type_member_pointer_arity)
-              << 1 << AllArgTypes.size();
+              << 1 << (int)AllArgTypes.size();
           return QualType();
         }
         Result = CreateBuiltinBinOp(Loc, BO_PtrMemD, ArgExprs[1], ArgExprs[0]);
@@ -8204,8 +8217,9 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
       }
       if (Result.isInvalid())
         return QualType();
-      Underlying = processCalleeTypeForArgs(*this, Result.get(), Info.Callee,
-                                            Loc, AllArgTypes, AllArgExprs);
+      Underlying =
+          processCalleeTypeForArgs(*this, Info.Kind, Result.get(), Info.Callee,
+                                   Loc, AllArgTypes, ArgExprs);
       assert(!Underlying.isNull() && "cannot return a null type");
     }
     return Context.getTransformTraitType(
