@@ -38,6 +38,11 @@ namespace CheckParsing {
   // expected-error@+2 {{type trait requires 1 or more argument; have 0 arguments}}
   // expected-error@+1 {{C++ requires a type specifier for all declarations}}
   __raw_invocation_type() x;
+  template <class ...Args>
+  struct R {
+    using type = __raw_invocation_type(Args...);
+  };
+  template struct R<>;
 } // namespace CheckParsing
 
 namespace TestNonCallable {
@@ -241,6 +246,15 @@ namespace ObjectTests {
   CHECK_SAME(RIT<const RefTest &>, Tag<2>());
   CHECK_SAME(RIT<const RefTest>, Tag<3>());
   CHECK_SAME(RIT<const RefTest &&>, Tag<3>());
+  struct Str {
+    Str(const char*);
+  };
+  struct OvlRes {
+    void operator()(const char*);
+    void operator()(const void*);
+    void operator()(Str);
+  };
+  CHECK_SAME(RIT<OvlRes, char*>, void(const char*));
 } // namespace ObjectTests
 
 namespace VarargsTest {
