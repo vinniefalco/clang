@@ -266,4 +266,7 @@ namespace IncompleteTypeTests {
   using Test3 = __raw_invocation_type(int(...), void);
   // OK
   using Test4 = __raw_invocation_type(int(int *), int[]); // OK
+  using Test5 = __raw_invocation_type(void(...), Inc);
+  using Test6 = __raw_invocation_type(void(Inc&), Inc&);
+
 } // namespace IncompleteTypeTests
