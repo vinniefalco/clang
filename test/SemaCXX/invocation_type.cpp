@@ -256,8 +256,9 @@ namespace VarargsTest {
 } // namespace VarargsTest
 
 namespace IncompleteTypeTests {
-  struct Inc;
-  // expected-error@+1 {{non-callable type 'void' used in __raw_invocation_type expression}}
+  struct Inc; // expected-note 1+ {{forward declaration}}
+
+  // expected-error@+1 {{non-callable type 'void' used in __raw_invocation_type trait}}
   using Test1 = __raw_invocation_type(void);
   // expected-error@+1 {{too many arguments to function call, expected 0, have 1}}
   using Test2 = __raw_invocation_type(int(), void);
@@ -265,8 +266,17 @@ namespace IncompleteTypeTests {
   // expected-error@+1 {{argument may not have 'void' type}}
   using Test3 = __raw_invocation_type(int(...), void);
   // OK
-  using Test4 = __raw_invocation_type(int(int *), int[]); // OK
-  using Test5 = __raw_invocation_type(void(...), Inc);
-  using Test6 = __raw_invocation_type(void(Inc&), Inc&);
+  using Test4 = __raw_invocation_type(int(int *), int[]);
+  using Test5 = __raw_invocation_type(int(Inc*), Inc[]);
+  // expected-error@+1 {{incomplete type 'IncompleteTypeTests::Inc [3]' used in type trait expression}}
+  using Test6 = __raw_invocation_type(int(void*), Inc[3]);
+  // expected-error@+1 {{incomplete type 'IncompleteTypeTests::Inc' used in type trait expression}}
+  using Test7 = __raw_invocation_type(void(...), Inc);
+  // OK
+  using Test8 = __raw_invocation_type(void(Inc&), Inc&);
+  // expected-error@+1 {{incomplete type 'IncompleteTypeTests::Inc' used in type trait expression}}
+  using Test9 = __raw_invocation_type(Inc);
+  // expected-error@+1 {{incomplete type in call to object of type 'IncompleteTypeTests::Inc'}}
+  using Test10 = __raw_invocation_type(Inc&);
 
 } // namespace IncompleteTypeTests
