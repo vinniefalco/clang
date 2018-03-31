@@ -8018,16 +8018,13 @@ struct RawInvocationInfo {
 };
 
 static RawInvocationInfo ClassifyRawInvocationFunction(QualType FnType) {
+  FnType = FnType.getNonReferenceType();
   if (FnType->isFunctionType())
     return {RIT_Function, FnType->getAs<FunctionProtoType>()};
   else if (FnType->isFunctionPointerType()) {
     return {RIT_Function, FnType->getAs<PointerType>()
                               ->getPointeeType()
                               ->castAs<FunctionProtoType>()};
-  } else if (FnType->isReferenceType() &&
-             FnType.getNonReferenceType()->isFunctionType()) {
-    return {RIT_Function,
-            FnType.getNonReferenceType()->getAs<FunctionProtoType>()};
   } else if (FnType->isMemberFunctionPointerType()) {
     return {RIT_MemberFunction, FnType->getAs<MemberPointerType>()
                                     ->getPointeeType()
