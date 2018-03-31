@@ -1,6 +1,8 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
 
 static_assert(!__is_identifier(__raw_invocation_type), "");
+static_assert(__is_identifier(raw_invocation_type), "");
+static_assert(__has_feature(raw_invocation_type), "");
 
 template <class Tp>
 Tp &&Declval();
@@ -31,6 +33,12 @@ struct Printer;
 #define CHECK_HAS_TYPE(...) static_assert(HasType<__VA_ARGS__>(), "");
 #define CHECK_NO_TYPE(...) static_assert(!HasType<__VA_ARGS__>(), "");
 #define CHECK_SAME(...) static_assert(__is_same(__VA_ARGS__), "")
+
+namespace CheckParsing {
+// expected-error@+2 {{expected a type}}
+// expected-error@+1 {{C++ requires a type specifier for all declarations}}
+__raw_invocation_type() x;
+} // namespace CheckParsing
 
 namespace TestNonCallable {
   static_assert(!HasType<void>(), "");
@@ -85,6 +93,11 @@ namespace FuncTest {
   CHECK_SAME(RIT<FPtr, int>, int(int));
   CHECK_SAME(RIT<FLRef, int>, int(int));
   CHECK_SAME(RIT<FRRef, int>, int(int));
+
+  // test that the actual function return type is returned, and not the type of
+  // the call expression.
+  using FCI = const int();
+  CHECK_SAME(RIT<FCI>, const int());
 } // namespace FuncTest
 
 namespace MemFuncTests {
@@ -162,7 +175,6 @@ namespace MemObjTest {
   struct C {};
   using AF1 = int(A::*);
   using BF1 = long(B::*);
-  //using AF2 =  (A::*);
 
   // expected-error@+1 {{__raw_invocation_type with a pointer to member data requires 2 arguments; have 1 argument}}
   using Fail1 = __raw_invocation_type(AF1);
@@ -186,6 +198,11 @@ namespace MemObjTest {
 
   static_assert(!HasType<AF1, C>(), "");
   static_assert(!HasType<BF1, A>(), "");
+
+  using AFC = const int(A::*);
+  template void test<AFC, A &, const int &(A &)>();
+  template void test<AFC, const A &, const int &(const A &)>();
+  template void test<AFC, A &&, const int && (A &&)>();
 } // namespace MemObjTest
 
 namespace ObjectTests {
