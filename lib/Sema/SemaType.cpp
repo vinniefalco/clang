@@ -8082,7 +8082,7 @@ static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
     Args.push_back(getArgTy(1));
   } else {
     assert(CalleeType && "expect non-null callee type");
-    ReturnType = CalleeType->getCallResultType(S.Context);
+    ReturnType = CalleeType->getReturnType();
 
     if (Kind == RIT_MemberFunction) {
       Args.push_back(getArgTy(1));
