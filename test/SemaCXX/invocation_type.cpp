@@ -323,3 +323,14 @@ namespace AccessCheckingTests {
   template void test<void(long), Test, long>(); // OK
   template void test<void(int), Test, int>();   //expected-note {{requested here}}
 } // namespace AccessCheckingTests
+
+namespace DeductionTests {
+  template <class Fn>
+  void foo(Fn, __raw_invocation_type(Fn, int)) {}
+
+  int func(int = 0) { return 42; }
+  void bar() {
+    auto fn = &func;
+    foo(fn, fn);
+  }
+}
