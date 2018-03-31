@@ -1493,7 +1493,6 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
   }
   case DeclSpec::TST_underlyingType:
   case DeclSpec::TST_rawInvocationType: {
-    // FIXME(EricWF)
     ArrayRef<ParsedType> ParsedArgs = DS.getRepAsTypeList();
     SmallVector<QualType, 2> Args;
     Args.reserve(ParsedArgs.size());
