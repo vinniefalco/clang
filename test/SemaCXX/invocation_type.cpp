@@ -98,7 +98,7 @@ namespace MemFuncTests {
   using BF1 = long (B::*)(long);
   using BF2 = int && (B::*)(const char *, const char *);
 
-  // expected-error@+1 {{__raw_invocation_type with a member function pointer requires 2 or more arguments; have 1 argument}}
+  // expected-error@+1 {{__raw_invocation_type with a pointer to member function requires 2 or more arguments; have 1 argument}}
   using Fail1 = __raw_invocation_type(AF1);
 
   CHECK_SAME(RIT<AF0, A>, void(A &&));
@@ -164,10 +164,10 @@ namespace MemObjTest {
   using BF1 = long(B::*);
   //using AF2 =  (A::*);
 
-  // expected-error@+1 {{__raw_invocation_type with a member data pointer requires 2 arguments; have 1 argument}}
+  // expected-error@+1 {{__raw_invocation_type with a pointer to member data requires 2 arguments; have 1 argument}}
   using Fail1 = __raw_invocation_type(AF1);
 
-  // expected-error@+1 {{__raw_invocation_type with a member data pointer requires 2 arguments; have 3 arguments}}
+  // expected-error@+1 {{__raw_invocation_type with a pointer to member data requires 2 arguments; have 3 arguments}}
   using Fail2 = __raw_invocation_type(AF1, A, A);
 
   template <class MemFn, class Arg, class Expect>
@@ -200,6 +200,30 @@ namespace ObjectTests {
   CHECK_SAME(RIT<Callable, int, int *>, int(int, int *));
   CHECK_SAME(RIT<Callable, long>, long(long));
   CHECK_SAME(RIT<int (*)(int), long>, int(int));
+
+  template <int>
+  struct Tag {};
+  struct CVTest {
+    Tag<0> operator()();
+    Tag<1> operator()() const;
+    Tag<2> operator()() const volatile;
+  };
+  CHECK_SAME(RIT<CVTest>, Tag<0>());
+  CHECK_SAME(RIT<const CVTest>, Tag<1>());
+  CHECK_SAME(RIT<const volatile CVTest>, Tag<2>());
+
+  struct RefTest {
+    Tag<0> operator()() &;
+    Tag<1> operator()() &&;
+    Tag<2> operator()() const &;
+    Tag<3> operator()() const &&;
+  };
+  CHECK_SAME(RIT<RefTest &>, Tag<0>());
+  CHECK_SAME(RIT<RefTest>, Tag<1>());
+  CHECK_SAME(RIT<RefTest &&>, Tag<1>());
+  CHECK_SAME(RIT<const RefTest &>, Tag<2>());
+  CHECK_SAME(RIT<const RefTest>, Tag<3>());
+  CHECK_SAME(RIT<const RefTest &&>, Tag<3>());
 } // namespace ObjectTests
 
 namespace VarargsTest {
