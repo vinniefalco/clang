@@ -1075,11 +1075,26 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
 
   SourceLocation EndLoc = Parens.getCloseLocation();
 
-  if ((Info.MinArity && Args.size() < Info.MinArity) ||
-      (Info.MaxArity && Args.size() > Info.MaxArity)) {
+  struct DiagInfo {
+    unsigned ReqNumArgs;
+    unsigned SelectOne;
+  };
+  auto DiagSelect = [&]() -> Optional<DiagInfo> {
+    if (Info.MinArity && Info.MinArity == Info.MaxArity &&
+        Info.MinArity != Args.size())
+      return DiagInfo{Info.MinArity, 0};
+    if (Info.MinArity && Args.size() < Info.MinArity)
+      return DiagInfo{Info.MinArity, 1};
+    if (Info.MaxArity && Args.size() > Info.MaxArity)
+      return DiagInfo{Info.MaxArity, 2};
+    return {};
+  }();
+
+  if (DiagSelect.hasValue()) {
+    auto &Info = DiagSelect.getValue();
     Diag(EndLoc, diag::err_type_trait_arity)
-        << Info.MinArity << (Info.MaxArity > Info.MinArity || !Info.MaxArity)
-        << (Info.MinArity != 1) << (int)Args.size() << SourceRange(StartLoc);
+        << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
+        << (int)Args.size() << SourceRange(StartLoc);
     return;
   }
 

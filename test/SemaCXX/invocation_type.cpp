@@ -42,7 +42,7 @@ namespace CheckParsing {
   struct R {
     using type = __raw_invocation_type(Args...);
   };
-  template struct R<>;
+  //template struct R<>;
 } // namespace CheckParsing
 
 namespace TestNonCallable {
@@ -300,3 +300,23 @@ namespace IncompleteTypeTests {
   using Test13 = __raw_invocation_type(void(int), Inc&);
 
 } // namespace IncompleteTypeTests
+
+namespace AccessCheckingTests {
+
+struct Test {
+  template <class Expect, class... Args>
+  friend void test();
+
+  void operator()(long);
+
+private:
+  void operator()(int);
+};
+
+template <class Expect, class... Args>
+void test() {
+  CHECK_SAME(RIT<Args...>, Expect);
+}
+template void test<void(long), Test, long>(); // OK
+template void test<void(int), Test, int>();   // OK
+} // namespace AccessCheckingTests

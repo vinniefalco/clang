@@ -8099,9 +8099,48 @@ static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
                              FunctionProtoType::ExtProtoInfo());
 }
 
+static bool diagnoseTransformTraitArity(Sema &S,
+                                        TransformTraitType::TTKind Kind,
+                                        SourceLocation Loc, unsigned NumArgs) {
+  int MinArity, MaxArity;
+  switch (Kind) {
+  case TransformTraitType::EnumUnderlyingType:
+    MinArity = MaxArity = 1;
+    break;
+  case TransformTraitType::EnumRawInvocationType:
+    MinArity = 1;
+    MaxArity = 0;
+    break;
+  }
+  struct DiagInfo {
+    unsigned ReqNumArgs;
+    unsigned SelectOne;
+  };
+  auto DiagSelect = [&]() -> Optional<DiagInfo> {
+    if (MinArity && MinArity == MaxArity && MinArity != NumArgs)
+      return DiagInfo{MinArity, 0};
+    if (MinArity && NumArgs < MinArity)
+      return DiagInfo{MinArity, 1};
+    if (MaxArity && NumArgs > MaxArity)
+      return DiagInfo{MinArity, 2};
+    return {};
+  }();
+
+  if (DiagSelect.hasValue()) {
+    auto &Info = DiagSelect.getValue();
+    S.Diag(Loc, diag::err_type_trait_arity)
+        << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
+        << (int)NumArgs << SourceRange(Loc);
+    return true;
+  }
+  return false;
+}
+
 QualType Sema::BuildTransformTraitType(ArrayRef<QualType> AllArgTypes,
                                        TransformTraitType::TTKind TKind,
                                        SourceLocation Loc) {
+  if (diagnoseTransformTraitArity(*this, TKind, Loc, AllArgTypes.size()))
+    return QualType();
   switch (TKind) {
   case TransformTraitType::EnumUnderlyingType: {
     assert(AllArgTypes.size() == 1 &&

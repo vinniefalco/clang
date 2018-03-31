@@ -884,7 +884,7 @@ def err_type_safety_unknown_flag : Error<
 
 // Type traits
 def err_type_trait_arity : Error<
-  "type trait requires %0%select{| or more}1 argument%select{|s}2; have "
+  "type trait requires %0%select{| or more| or fewer}1 argument%select{|s}2; have "
   "%3 argument%s3">;
 
 // Language specific pragmas
