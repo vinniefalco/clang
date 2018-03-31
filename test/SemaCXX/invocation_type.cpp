@@ -35,7 +35,7 @@ struct Printer;
 #define CHECK_SAME(...) static_assert(__is_same(__VA_ARGS__), "")
 
 namespace CheckParsing {
-// expected-error@+2 {{expected a type}}
+// expected-error@+2 {{type trait requires 1 or more argument; have 0 arguments}}
 // expected-error@+1 {{C++ requires a type specifier for all declarations}}
 __raw_invocation_type() x;
 } // namespace CheckParsing
