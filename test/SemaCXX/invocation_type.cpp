@@ -278,5 +278,11 @@ namespace IncompleteTypeTests {
   using Test9 = __raw_invocation_type(Inc);
   // expected-error@+1 {{incomplete type in call to object of type 'IncompleteTypeTests::Inc'}}
   using Test10 = __raw_invocation_type(Inc&);
+  // TODO: Is this OK?
+  using Test11 = __raw_invocation_type(void(...), Inc&);
+  // expected-error@+1 {{argument type 'IncompleteTypeTests::Inc' is incomplete}}
+  using Test12 = __raw_invocation_type(void(Inc), Inc&);
+  // expected-error@+1 {{no viable conversion from 'IncompleteTypeTests::Inc' to 'int'}}
+  using Test13 = __raw_invocation_type(void(int), Inc&);
 
 } // namespace IncompleteTypeTests
