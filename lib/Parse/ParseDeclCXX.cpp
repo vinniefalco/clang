@@ -1044,8 +1044,12 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   if (Parens.expectAndConsume()) {
     return;
   }
+  bool HasNoArgs = Tok.is(tok::r_paren);
   SmallVector<ParsedType, 2> Args;
   do {
+    if (HasNoArgs)
+      break;
+
     // Parse the next type.
     TypeResult Ty = ParseTypeName();
     if (Ty.isInvalid()) {
@@ -1074,7 +1078,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   if ((Info.MinArity && Args.size() < Info.MinArity) ||
       (Info.MaxArity && Args.size() > Info.MaxArity)) {
     Diag(EndLoc, diag::err_type_trait_arity)
-        << Info.MinArity << (Info.MaxArity > Info.MinArity)
+        << Info.MinArity << (Info.MaxArity > Info.MinArity || !Info.MaxArity)
         << (Info.MinArity != 1) << (int)Args.size() << SourceRange(StartLoc);
     return;
   }
