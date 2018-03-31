@@ -36,8 +36,8 @@ struct Printer;
 
 namespace CheckParsing {
 // expected-error@+2 {{type trait requires 1 or more argument; have 0 arguments}}
-// expected-error@+1 {{C++ requires a type specifier for all declarations}}
-__raw_invocation_type() x;
+
+using T = __raw_invocation_type();
 } // namespace CheckParsing
 
 namespace TestNonCallable {
