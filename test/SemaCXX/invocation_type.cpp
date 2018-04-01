@@ -103,7 +103,9 @@ namespace FuncTest {
   // test that the actual function return type is returned, and not the type of
   // the call expression.
   using FCI = const int();
-  CHECK_SAME(RIT<FCI>, const int());
+  CHECK_SAME(RIT<FCI>, int());
+  using FLI = const int &();
+  CHECK_SAME(RIT<FLI>, const int&());
 } // namespace FuncTest
 
 namespace MemFuncTests {
@@ -259,6 +261,11 @@ namespace ObjectTests {
 } // namespace ObjectTests
 
 namespace VarargsTest {
+  // LFTS v2 [meta.trans.other]p4
+  //  if an argument tI matches the ellipsis in the function's
+  //  parameter-declaration-clause, the corresponding invocation parameter
+  //  is defined to be the result of applying the default argument promotions
+  //  (C++14 5.2.2) to tI.
   struct Obj {
     void operator()(int, int &, ...);
   };
@@ -325,7 +332,7 @@ namespace AccessCheckingTests {
 } // namespace AccessCheckingTests
 
 namespace DeductionTests {
-  template <class Fn>
+  template <class Fn, class ...Args>
   void foo(Fn, __raw_invocation_type(Fn, int)) {}
 
   int func(int = 0) { return 42; }
@@ -333,4 +340,55 @@ namespace DeductionTests {
     auto fn = &func;
     foo(fn, fn);
   }
+} // namespace DeductionTests
+
+namespace ReturnTypeTests {
+  // LFTS v2 [meta.trans.other]p6
+  // - Let R denote result_of_t<Fn(ArgTypes...)>
+  template <int> struct Tag {};
+  struct Foo {
+    const int operator()();
+    const Tag<1> operator()(Tag<1>);
+    const int& operator()(Tag<2>);
+  };
+  CHECK_SAME(RIT<Foo>, int());
+  CHECK_SAME(RIT<Foo, Tag<1>>, const Tag<1>(Tag<1>));
+  CHECK_SAME(RIT<Foo, Tag<2>>, const int&(Tag<2>));
 }
+
+namespace ParameterTypeTests {
+  struct Foo {
+    void operator()(const int, int[]);
+  };
+  CHECK_SAME(RIT<Foo, int, int*>, void(const int, int[]));
+
+  void foo(const int, int[]);
+  using F1 = void(const int, int[]);
+  CHECK_SAME(RIT<F1, int, int*>, void(const int, int[]));
+
+  using M1 = void(Foo::*)(const int, int[]);
+  CHECK_SAME(RIT<M1, Foo, int, int*>, void(Foo&&, const int, int[]));
+}
+
+namespace DefaultArgumentTests {
+  // LFTS v2 [meta.trans.other]p4 (paraphrased)
+  // Defaulted parameters which do not correspond to an argument are omitted
+  // from the invocation types
+
+  struct Foo {
+    void operator()(int = 0, void* = nullptr);
+  };
+  CHECK_SAME(RIT<Foo>, void());
+  CHECK_SAME(RIT<Foo, int&>, void(int));
+  CHECK_SAME(RIT<Foo, long, int*>, void(int, void*));
+} // namespace DefaultArgumentTests
+
+namespace UnevalContextTests {
+  struct Inc;
+  // Copy-initialization of Inc will only succeed when performed in an unevaluated
+  // context.
+  using Fn = void(*)(...);
+  using Test1a = __raw_invocation_type(void(...), Inc&);
+  using Test1b = decltype(Declval<Fn>()(Declval<Inc&>()));
+  CHECK_SAME(ReturnType<Test1a>::type, Test1b);
+} // namespace UnevalContextTests
