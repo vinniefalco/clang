@@ -4637,7 +4637,6 @@ ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
 
   bool IsDependent =
       llvm::any_of(ArgTypes, [](QualType T) { return T->isDependentType(); });
-  assert(IsDependent == TransformedType->isDependentType());
 
   if (IsDependent) {
     assert(TransformedType->isDependentType() &&
@@ -4663,6 +4662,8 @@ ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
     ut = new (*this, TypeAlignment)
         TransformTraitType(ArgTypes, QualType(), Kind, QualType(Canon, 0));
   } else {
+    assert(!TransformedType->isDependentType() &&
+           "dependent transformed type with non-dependent argument types");
     QualType CanonType = getCanonicalType(TransformedType);
     ut = new (*this, TypeAlignment)
         TransformTraitType(ArgTypes, TransformedType, Kind, CanonType);
