@@ -4639,49 +4639,42 @@ QualType ASTContext::getDecltypeType(Expr *e, QualType UnderlyingType) const {
   return QualType(dt, 0);
 }
 
-/// getTransformTraitType - We don't unique these, since the memory
-/// savings are minimal and these are rare.
+/// getTransformTraitType - Return the uniqued reference to the transform type trait
+/// which has been deduced to the given type, or to the canonical dependent type
+/// for a given set of argument types.
 QualType
 ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
                                   QualType TransformedType,
                                   TransformTraitType::TTKind Kind) const {
-  TransformTraitType *ut = nullptr;
+  bool IsDependent = llvm::any_of(
+      ArgTypes, [](QualType T) { return T->isInstantiationDependentType(); });
 
-  bool IsDependent =
-      llvm::any_of(ArgTypes, [](QualType T) { return T->isDependentType(); });
+  SmallVector<QualType, 2> CanonArgs;
+  CanonArgs.reserve(ArgTypes.size());
+  for (auto Ty : ArgTypes)
+    CanonArgs.push_back(getCanonicalType(Ty));
 
-  if (IsDependent) {
-    assert(TransformedType->isDependentType() &&
-           "non-dependent transformed type with dependent argument types");
-    SmallVector<QualType, 2> CanonArgs;
-    CanonArgs.reserve(ArgTypes.size());
-    for (auto Ty : ArgTypes)
-      CanonArgs.push_back(getCanonicalType(Ty));
-    // Look in the folding set for an existing type.
-    llvm::FoldingSetNodeID ID;
-    DependentTransformTraitType::Profile(ID, CanonArgs, Kind);
+  if (!IsDependent && !TransformedType.isCanonical())
+    TransformedType = getCanonicalType(TransformedType);
 
-    void *InsertPos = nullptr;
-    DependentTransformTraitType *Canon =
-        DependentTransformTraitTypes.FindNodeOrInsertPos(ID, InsertPos);
+  // Look in the folding set for an existing type.
+  llvm::FoldingSetNodeID ID;
+  TransformTraitType::Profile(ID, CanonArgs, Kind);
 
-    if (!Canon) {
-      // Build a new, canonical transformation trait type.
-      Canon = new (*this, TypeAlignment)
-          DependentTransformTraitType(*this, CanonArgs, Kind);
-      DependentTransformTraitTypes.InsertNode(Canon, InsertPos);
-    }
-    ut = new (*this, TypeAlignment)
-        TransformTraitType(ArgTypes, QualType(), Kind, QualType(Canon, 0));
-  } else {
-    assert(!TransformedType->isDependentType() &&
-           "dependent transformed type with non-dependent argument types");
-    QualType CanonType = getCanonicalType(TransformedType);
-    ut = new (*this, TypeAlignment)
-        TransformTraitType(ArgTypes, TransformedType, Kind, CanonType);
-  }
-  Types.push_back(ut);
-  return QualType(ut, 0);
+  void *InsertPos = nullptr;
+  TransformTraitType *Canon =
+      TransformTraitTypes.FindNodeOrInsertPos(ID, InsertPos);
+  if (Canon)
+    return QualType(Canon, 0);
+
+  // Build a new, canonical transformation trait type.
+  Canon = new (*this, TypeAlignment)
+      TransformTraitType(CanonArgs, IsDependent ? DependentTy : TransformedType,
+                         Kind, IsDependent ? QualType() : TransformedType);
+
+  TransformTraitTypes.InsertNode(Canon, InsertPos);
+  Types.push_back(Canon);
+  return QualType(Canon, 0);
 }
 
 /// getAutoType - Return the uniqued reference to the 'auto' type which has been

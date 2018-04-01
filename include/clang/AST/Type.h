@@ -3981,7 +3981,8 @@ public:
 };
 
 /// A unary type transform, which is a type constructed from another.
-class TransformTraitType : public Type {
+class TransformTraitType : public Type,
+                           public llvm::FoldingSetNode {
 public:
   enum TTKind { EnumUnderlyingType };
 
@@ -4015,23 +4016,6 @@ public:
     return static_cast<TTKind>(TransformTraitTypeBits.TTKind);
   }
 
-  static bool classof(const Type *T) {
-    return T->getTypeClass() == TransformTrait;
-  }
-};
-
-/// \brief Internal representation of canonical, dependent
-/// __underlying_type(type) types.
-///
-/// This class is used internally by the ASTContext to manage
-/// canonical, dependent types, only. Clients will only see instances
-/// of this class via TransformTraitType nodes.
-class DependentTransformTraitType : public TransformTraitType,
-                                    public llvm::FoldingSetNode {
-public:
-  DependentTransformTraitType(const ASTContext &C, ArrayRef<QualType> ArgTypes,
-                              TTKind TKind);
-
   void Profile(llvm::FoldingSetNodeID &ID) {
     Profile(ID, getArgs(), getTTKind());
   }
@@ -4042,6 +4026,10 @@ public:
     for (auto Ty : ArgTypes)
       ID.AddPointer(Ty.getAsOpaquePtr());
     ID.AddInteger((unsigned)TKind);
+  }
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == TransformTrait;
   }
 };
 
