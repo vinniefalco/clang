@@ -8038,7 +8038,7 @@ static RawInvocationInfo ClassifyRawInvocationFunction(QualType FnType) {
   llvm_unreachable("unhandled function type");
 }
 
-static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
+static QualType computeRawInvocationType(Sema &S, RawInvocationKind Kind,
                                          ExprResult CallResult,
                                          const FunctionProtoType *CalleeType,
                                          SourceLocation Loc,
@@ -8047,44 +8047,43 @@ static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
   if (CallResult.isInvalid())
     return QualType();
   Expr *Result = CallResult.get();
-
   auto adjustTy = [&](const Expr *E) {
     QualType T = E->getType();
     switch (E->getValueKind()) {
-    //     - otherwise, if e is an xvalue, decltype(e) is T&&, where T is the
-    //       type of e;
     case VK_XValue:
       T = S.Context.getRValueReferenceType(T);
       break;
-    //     - otherwise, if e is an lvalue, decltype(e) is T&, where T is the
-    //       type of e;
     case VK_LValue:
       T = S.Context.getLValueReferenceType(T);
       break;
-    //  - otherwise, decltype(e) is the type of e.
     case VK_RValue:
       break;
     }
-
     return T;
   };
+
   auto getArgTy = [&](unsigned Idx) {
     assert(Idx < AllArgExprs.size());
     Expr *E = AllArgExprs[Idx];
     return adjustTy(E);
   };
-  QualType ReturnType;
+
   SmallVector<QualType, 4> Args;
-  unsigned ArgIdx = 1;
+
   if (Kind == RIT_MemberData) {
-    assert(Result && "require result expression");
-    ReturnType = adjustTy(Result);
+    // LFTS v2 [meta.trans.other]p3
+    // When N == 1 and f is a pointer to member data of a class T the
+    // invocation parameter is U1.
     Args.push_back(getArgTy(1));
   } else {
     assert(CalleeType && "expect non-null callee type");
-    ReturnType = CalleeType->getReturnType();
 
+    unsigned ArgIdx = 1;
     if (Kind == RIT_MemberFunction) {
+      // LFTS v2 [meta.trans.other]
+      // When f is a pointer to a member function of a class T the invocation
+      // parameters are U1 followed by the parameters of f matched by t2, ...,
+      // tN.
       Args.push_back(getArgTy(1));
       ArgIdx = 2;
     }
@@ -8092,6 +8091,11 @@ static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
     bool InVarArgs = false;
     for (unsigned I = ArgIdx, N = AllArgExprs.size(); I < N; ++I) {
       unsigned ParamIdx = I - ArgIdx;
+      // LFTS v2 [meta.trans.other]p4
+      //  if an argument tI matches the ellipsis in the function's
+      //  parameter-declaration-clause, the corresponding invocation parameter
+      //  is defined to be the result of applying the default argument
+      //  promotions (C++14 5.2.2) to tI.
       InVarArgs |=
           ParamIdx >= CalleeType->getNumParams() && CalleeType->isVariadic();
       if (InVarArgs) {
@@ -8102,10 +8106,18 @@ static QualType processCalleeTypeForArgs(Sema &S, RawInvocationKind Kind,
         continue;
       }
       assert(ParamIdx < CalleeType->getNumParams());
+      // LFTS v2 [meta.trans.other]p3
+      // In all other cases, the invocation parameters are the parameters of
+      // f matching t1, ... tN.
       Args.push_back(CalleeType->getParamType(ParamIdx));
     }
   }
+  // LFTS v2 [meta.trans.other]p6
+  // - Let R denote result_of_t<Fn(ArgTypes...)>.
+  QualType ReturnType = adjustTy(Result);
   assert(!ReturnType.isNull() && "failed to compute return type");
+
+  // Then the type shall name the function type R(T1, T2, ...).
   return S.BuildFunctionType(ReturnType, Args, Loc, DeclarationName(),
                              FunctionProtoType::ExtProtoInfo());
 }
@@ -8277,7 +8289,7 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
       return QualType();
     }
     }
-    QualType Underlying = processCalleeTypeForArgs(
+    QualType Underlying = computeRawInvocationType(
         *this, Info.Kind, Result, Info.Callee, Loc, ArgTypes, ArgExprs);
     if (Underlying.isNull())
       return QualType();
