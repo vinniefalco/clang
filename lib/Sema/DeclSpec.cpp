@@ -369,10 +369,6 @@ bool Declarator::isDeclarationOfFunction() const {
     case TST_underlyingType:
       return false;
 
-    case TST_rawInvocationType:
-      // __raw_invocation_type always produces a function type.
-      return true;
-
     case TST_typename:
     case TST_typeofType: {
       QualType QT = DS.getRepAsType().get();
@@ -531,8 +527,6 @@ const char *DeclSpec::getSpecifierName(DeclSpec::TST T,
   case DeclSpec::TST_decltype:    return "(decltype)";
   case DeclSpec::TST_decltype_auto: return "decltype(auto)";
   case DeclSpec::TST_underlyingType: return "__underlying_type";
-  case DeclSpec::TST_rawInvocationType:
-    return "__raw_invocation_type";
   case DeclSpec::TST_unknown_anytype: return "__unknown_anytype";
   case DeclSpec::TST_atomic: return "_Atomic";
 #define GENERIC_IMAGE_TYPE(ImgType, Id) \

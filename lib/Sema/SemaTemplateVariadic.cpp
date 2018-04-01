@@ -803,7 +803,6 @@ bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
   switch (DS.getTypeSpecType()) {
   case TST_typename:
   case TST_typeofType:
-  case TST_underlyingType:
   case TST_atomic: {
     QualType T = DS.getRepAsType().get();
     if (!T.isNull() && T->containsUnexpandedParameterPack())
@@ -811,7 +810,7 @@ bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
     break;
   }
 
-  case TST_rawInvocationType: {
+  case TST_underlyingType: {
     ArrayRef<ParsedType> Args = DS.getRepAsTypeList();
     for (auto PT : Args) {
       QualType T = PT.get();

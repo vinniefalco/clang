@@ -1243,7 +1243,6 @@ static bool HasFeature(const Preprocessor &PP, StringRef Feature) {
       //.Case("cxx_runtime_arrays", LangOpts.CPlusPlusTSArrays)
       //.Case("cxx_concepts", LangOpts.CPlusPlusTSConcepts)
       // FIXME: Should this be __has_feature or __has_extension?
-      //.Case("raw_invocation_type", LangOpts.CPlusPlus)
       // Type traits
       // N.B. Additional type traits should not be added to the following list.
       // Instead, they should be detected by has_extension.
@@ -1277,7 +1276,6 @@ static bool HasFeature(const Preprocessor &PP, StringRef Feature) {
       .Case("safe_stack", LangOpts.Sanitize.has(SanitizerKind::SafeStack))
       .Case("tls", PP.getTargetInfo().isTLSSupported())
       .Case("underlying_type", LangOpts.CPlusPlus)
-      .Case("raw_invocation_type", LangOpts.CPlusPlus)
       .Default(false);
 }
 

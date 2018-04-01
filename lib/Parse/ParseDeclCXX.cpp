@@ -1027,8 +1027,6 @@ struct TransformTraitInfo {
 
 static TransformTraitInfo GetTraitInfo(tok::TokenKind Kind) {
   switch (Kind) {
-  case tok::kw___raw_invocation_type:
-    return {1, 0, DeclSpec::TST_rawInvocationType};
   case tok::kw___underlying_type:
     return {1, 1, DeclSpec::TST_underlyingType};
   default:

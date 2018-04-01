@@ -364,8 +364,6 @@ namespace  {
     }
     void VisitTransformTraitType(const TransformTraitType *T) {
       switch (T->getTTKind()) {
-      case TransformTraitType::EnumRawInvocationType:
-        OS << " raw_invocation_type";
       case TransformTraitType::EnumUnderlyingType:
         OS << " underlying_type";
         break;

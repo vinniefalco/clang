@@ -3983,7 +3983,7 @@ public:
 /// A unary type transform, which is a type constructed from another.
 class TransformTraitType : public Type {
 public:
-  enum TTKind { EnumRawInvocationType, EnumUnderlyingType };
+  enum TTKind { EnumUnderlyingType };
 
 private:
   /// The untransformed type.

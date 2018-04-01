@@ -70,7 +70,6 @@ namespace clang {
     TST_typeofExpr,
     TST_decltype,          // C++11 decltype
     TST_underlyingType,    // __underlying_type for C++11
-    TST_rawInvocationType, // __raw_invocation_type for C++17
     TST_auto,              // C++11 auto
     TST_decltype_auto,     // C++1y decltype(auto)
     TST_auto_type,         // __auto_type extension

@@ -886,9 +886,6 @@ void TypePrinter::printTransformTraitBefore(const TransformTraitType *T,
   IncludeStrongLifetimeRAII Strong(Policy);
 
   switch (T->getTTKind()) {
-  case TransformTraitType::EnumRawInvocationType:
-    OS << "__raw_invocation_type(";
-    break;
   case TransformTraitType::EnumUnderlyingType:
     OS << "__underlying_type(";
     break;
@@ -909,7 +906,6 @@ void TypePrinter::printTransformTraitAfter(const TransformTraitType *T,
   IncludeStrongLifetimeRAII Strong(Policy);
 
   switch (T->getTTKind()) {
-  case TransformTraitType::EnumRawInvocationType:
   case TransformTraitType::EnumUnderlyingType:
     return;
   }

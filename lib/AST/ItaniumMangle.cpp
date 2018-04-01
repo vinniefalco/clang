@@ -3241,9 +3241,6 @@ void CXXNameMangler::mangleType(const TransformTraitType *T) {
     Out << 'U';
 
     switch (T->getTTKind()) {
-    case TransformTraitType::EnumRawInvocationType:
-      Out << "3rit";
-      break;
     case TransformTraitType::EnumUnderlyingType:
       Out << "3eut";
       break;

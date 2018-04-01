@@ -4666,7 +4666,7 @@ ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
         DependentTransformTraitTypes.FindNodeOrInsertPos(ID, InsertPos);
 
     if (!Canon) {
-      // Build a new, canonical __raw_invocation_type(type...) type.
+      // Build a new, canonical transformation trait type.
       Canon = new (*this, TypeAlignment)
           DependentTransformTraitType(*this, CanonArgs, Kind);
       DependentTransformTraitTypes.InsertNode(Canon, InsertPos);
