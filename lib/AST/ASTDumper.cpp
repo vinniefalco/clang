@@ -366,6 +366,7 @@ namespace  {
       switch (T->getTTKind()) {
       case TransformTraitType::EnumRawInvocationType:
         OS << " raw_invocation_type";
+        break;
       case TransformTraitType::EnumUnderlyingType:
         OS << " underlying_type";
         break;

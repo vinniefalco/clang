@@ -500,7 +500,7 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
 
   case Type::TransformTrait: {
     const TransformTraitType *TT1 = cast<TransformTraitType>(T1);
-    const TransformTraitType *TT2 = cast<TransformTraitType>(T2);
+    const TransformTraitType *TT2 = cast<TransformTraitType>(T1);
     if (TT1->getNumArgs() != TT2->getNumArgs())
       return false;
     for (unsigned I = 0; I < TT1->getNumArgs(); ++I) {
