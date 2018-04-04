@@ -20,7 +20,6 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
-#include "clang/AST/ExprCXX.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/AST/TypeLocVisitor.h"
 #include "clang/Basic/PartialDiagnostic.h"
@@ -8065,9 +8064,6 @@ static QualType computeRawInvocationType(Sema &S, RawInvocationKind Kind,
     // invocation parameter is U1.
     Args.push_back(getArgTy(1));
   } else {
-    auto *TheCall = dyn_cast<CallExpr>(Result);
-    assert(TheCall);
-
     assert(CalleeType && "expect non-null callee type");
 
     unsigned ArgIdx = 1;
@@ -8076,10 +8072,9 @@ static QualType computeRawInvocationType(Sema &S, RawInvocationKind Kind,
       // When f is a pointer to a member function of a class T the invocation
       // parameters are U1 followed by the parameters of f matched by t2, ...,
       // tN.
-      Args.push_back(getArgTy(ArgIdx++));
+      Args.push_back(getArgTy(1));
+      ArgIdx = 2;
     }
-
-    assert(TheCall->getNumArgs() >= AllArgExprs.size() - ArgIdx);
 
     bool InVarArgs = false;
     for (unsigned I = ArgIdx, N = AllArgExprs.size(); I < N; ++I) {
@@ -8092,7 +8087,10 @@ static QualType computeRawInvocationType(Sema &S, RawInvocationKind Kind,
       InVarArgs |=
           ParamIdx >= CalleeType->getNumParams() && CalleeType->isVariadic();
       if (InVarArgs) {
-        Args.push_back(TheCall->getArg(ParamIdx)->getType());
+        ExprResult ArgRes = S.DefaultArgumentPromotion(AllArgExprs[I]);
+        if (ArgRes.isInvalid())
+          return QualType();
+        Args.push_back(ArgRes.get()->getType());
         continue;
       }
       assert(ParamIdx < CalleeType->getNumParams());

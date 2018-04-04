@@ -3083,6 +3083,10 @@ TransformTraitType::TransformTraitType(ArrayRef<QualType> ArgTys,
   }
 }
 
+DependentTransformTraitType::DependentTransformTraitType(
+    const ASTContext &C, ArrayRef<QualType> ArgTys, TTKind TKind)
+    : TransformTraitType(ArgTys, C.DependentTy, TKind, QualType()) {}
+
 TagType::TagType(TypeClass TC, const TagDecl *D, QualType can)
     : Type(TC, can, D->isDependentType(),
            /*InstantiationDependent=*/D->isDependentType(),
