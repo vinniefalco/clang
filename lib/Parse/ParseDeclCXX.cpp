@@ -1044,6 +1044,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     return;
 
   SmallVector<ParsedType, 2> Args;
+  bool HasPackExpand = false;
   if (Tok.isNot(tok::r_paren)) {
     do {
       // Parse the next type.
@@ -1055,6 +1056,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
 
       // Parse the ellipsis, if present.
       if (Tok.is(tok::ellipsis)) {
+        HasPackExpand = true;
         Ty = Actions.ActOnPackExpansion(Ty.get(), ConsumeToken());
         if (Ty.isInvalid()) {
           Parens.skipToEnd();
@@ -1069,8 +1071,6 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   if (Parens.consumeClose())
     return;
 
-<<<<<<< HEAD
-=======
   SourceLocation EndLoc = Parens.getCloseLocation();
 
   struct DiagInfo {
@@ -1078,10 +1078,14 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     unsigned SelectOne;
   };
   auto DiagSelect = [&]() -> Optional<DiagInfo> {
-    if (Info.Arity && !Info.IsVariadic &&
+    // We can't perform any trait arity diagnostics while there are unexpanded
+    // parameter packs.
+    if (HasPackExpand)
+      return {};
+    else if (Info.Arity && !Info.IsVariadic &&
         Info.Arity != Args.size())
       return DiagInfo{Info.Arity, 0};
-    if (Info.Arity && Args.size() < Info.Arity)
+    else if (Info.Arity && Args.size() < Info.Arity)
       return DiagInfo{Info.Arity, 1};
     return {};
   }();
@@ -1094,7 +1098,6 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     return;
   }
 
->>>>>>> parent of 1cebe78... remove arity checking at parse time
   // TST
   const char *PrevSpec = nullptr;
   unsigned DiagID;
