@@ -1621,6 +1621,7 @@ protected:
 
     /// The transformation trait kind
     unsigned TTKind : 1;
+    unsigned NumArgs : 31 - NumTypeBits;
   };
 
   union {
@@ -3981,14 +3982,12 @@ public:
 };
 
 /// A unary type transform, which is a type constructed from another.
-class TransformTraitType : public Type,
-                           public llvm::FoldingSetNode {
+class TransformTraitType : public Type {
 public:
   enum TTKind { EnumUnderlyingType };
 
 private:
-  /// The untransformed type.
-  SmallVector<QualType, 2> ArgTypes;
+  QualType *ArgStorage;
 
   /// The transformed type if not dependent, otherwise the same as BaseType.
   QualType TransformedType;
@@ -3996,25 +3995,45 @@ private:
 protected:
   friend class ASTContext;
 
-  TransformTraitType(ArrayRef<QualType> ArgTy, QualType TransformedTy,
-                     TTKind TKind, QualType CanonicalTy);
+  TransformTraitType(const ASTContext &Ctx, ArrayRef<QualType> ArgTy,
+                     QualType TransformedTy, TTKind TKind,
+                     QualType CanonicalTy);
 
 public:
   bool isSugared() const { return !isDependentType(); }
   QualType desugar() const { return TransformedType; }
 
-  unsigned getNumArgs() const { return ArgTypes.size(); }
-  ArrayRef<QualType> getArgs() const { return ArgTypes; }
+  unsigned getNumArgs() const { return TransformTraitTypeBits.NumArgs; }
+  ArrayRef<QualType> getArgs() const {
+    return llvm::makeArrayRef(ArgStorage, getNumArgs());
+  }
 
   QualType getTransformedType() const { return TransformedType; }
   QualType getArg(unsigned N) const {
-    assert(N < ArgTypes.size() && "invalid index");
-    return ArgTypes[N];
+    assert(N < getNumArgs() && "invalid index");
+    return ArgStorage[N];
   }
 
   TTKind getTTKind() const {
     return static_cast<TTKind>(TransformTraitTypeBits.TTKind);
   }
+
+  static bool classof(const Type *T) {
+    return T->getTypeClass() == TransformTrait;
+  }
+};
+
+/// \brief Internal representation of canonical, dependent
+/// __underlying_type(type) types.
+///
+/// This class is used internally by the ASTContext to manage
+/// canonical, dependent types, only. Clients will only see instances
+/// of this class via TransformTraitType nodes.
+class DependentTransformTraitType : public TransformTraitType,
+                                    public llvm::FoldingSetNode {
+public:
+  DependentTransformTraitType(const ASTContext &C, ArrayRef<QualType> ArgTypes,
+                              TTKind TKind);
 
   void Profile(llvm::FoldingSetNodeID &ID) {
     Profile(ID, getArgs(), getTTKind());
@@ -4026,10 +4045,6 @@ public:
     for (auto Ty : ArgTypes)
       ID.AddPointer(Ty.getAsOpaquePtr());
     ID.AddInteger((unsigned)TKind);
-  }
-
-  static bool classof(const Type *T) {
-    return T->getTypeClass() == TransformTrait;
   }
 };
 

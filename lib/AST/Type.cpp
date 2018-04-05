@@ -3065,13 +3065,19 @@ void DependentDecltypeType::Profile(llvm::FoldingSetNodeID &ID,
   E->Profile(ID, Context, true);
 }
 
-TransformTraitType::TransformTraitType(ArrayRef<QualType> ArgTys,
+TransformTraitType::TransformTraitType(const ASTContext &Ctx,
+                                       ArrayRef<QualType> ArgTys,
                                        QualType TransformedTy, TTKind TKind,
                                        QualType CanonicalType)
     : Type(TransformTrait, CanonicalType, false, false, false, false),
-      ArgTypes(ArgTys.begin(), ArgTys.end()), TransformedType(TransformedTy) {
+      TransformedType(TransformedTy) {
   TransformTraitTypeBits.TTKind = TKind;
-  for (QualType T : ArgTypes) {
+  TransformTraitTypeBits.NumArgs = ArgTys.size();
+  ArgStorage = (QualType *)Ctx.Allocate(sizeof(QualType) * ArgTys.size(),
+                                        alignof(QualType));
+  for (unsigned I = 0, NumArgs = ArgTys.size(); I < NumArgs; ++I)
+    new ((void *)ArgStorage + I) QualType(ArgTys[I]);
+  for (QualType T : getArgs()) {
     if (T->isDependentType())
       this->setDependent(true);
     if (T->isInstantiationDependentType())
@@ -3085,7 +3091,7 @@ TransformTraitType::TransformTraitType(ArrayRef<QualType> ArgTys,
 
 DependentTransformTraitType::DependentTransformTraitType(
     const ASTContext &C, ArrayRef<QualType> ArgTys, TTKind TKind)
-    : TransformTraitType(ArgTys, C.DependentTy, TKind, QualType()) {}
+    : TransformTraitType(C, ArgTys, C.DependentTy, TKind, QualType()) {}
 
 TagType::TagType(TypeClass TC, const TagDecl *D, QualType can)
     : Type(TC, can, D->isDependentType(),
