@@ -7989,9 +7989,10 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
 static bool diagnoseTransformTraitArity(Sema &S,
                                         TransformTraitType::TTKind Kind,
                                         SourceLocation Loc, ArrayRef<QualType> Args) {
-  for (auto Ty : Args)
-    if (Ty->containsUnexpandedParameterPack())
-      return false;
+  if (llvm::any_of(Args, [](QualType Ty) {
+        return Ty->containsUnexpandedParameterPack();
+      }))
+    return false;
   unsigned NumArgs = Args.size();
   unsigned Arity;
   bool IsVariadic = false;
