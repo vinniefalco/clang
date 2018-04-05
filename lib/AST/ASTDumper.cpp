@@ -2215,8 +2215,8 @@ void ASTDumper::VisitArrayInitIndexExpr(const ArrayInitIndexExpr *E) {
 
 void ASTDumper::VisitUnaryOperator(const UnaryOperator *Node) {
   VisitExpr(Node);
-  OS << " " << (Node->isPostfix() ? "postfix" : "prefix") << " '"
-     << UnaryOperator::getOpcodeStr(Node->getOpcode()) << "'";
+  OS << " " << (Node->isPostfix() ? "postfix" : "prefix")
+     << " '" << UnaryOperator::getOpcodeStr(Node->getOpcode()) << "'";
   if (!Node->canOverflow())
     OS << " cannot overflow";
 }
