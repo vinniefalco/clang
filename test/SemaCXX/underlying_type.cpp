@@ -34,15 +34,24 @@ template <class ...Args> struct TypeList {};
 template <class ...Args>
 struct TestParse;
 
+template <class ...> struct MyTest {};
+
+template <class ...Args>
+struct TestParse<TypeList<Args...>> {
+  using type = __underlying_type(Args...);
+};
+
 template <class... Args1, class ...Args2>
 struct TestParse<TypeList<Args1...>, TypeList<Args2...>> {
-  // expected-error@+2 {{type trait requires 1 argument; have 0 arguments}}
-  // expected-error@+1 {{type trait requires 1 argument; have 2 arguments}}
+   // expected-error@+1 {{type trait requires 1 argument; have 2 arguments}}
   using type = __underlying_type(Args1..., Args2...);
+  using type2 = typename MyTest<Args1...>::type;
 };
+static_assert(is_same_type<TestParse<TypeList<f>>::type, char>::value, "wrong type");
 static_assert(is_same_type<TestParse<TypeList<f>, TypeList<>>::type, char>::value, "wrong type");
-template struct TestParse<TypeList<>, TypeList<>>; // expected-note {{requested here}}
-template struct TestParse<TypeList<f, f>, TypeList<>>; // expected-note {{requested here}}
+template struct TestParse<TypeList<>, TypeList<>>;
+template struct TestParse<TypeList<f, f>, TypeList<>>;
+
 
 
 template <typename T>
