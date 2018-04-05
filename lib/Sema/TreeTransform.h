@@ -622,9 +622,8 @@ public:
       TypeLocBuilder &TLB, DependentTemplateSpecializationTypeLoc TL,
       NestedNameSpecifierLoc QualifierLoc);
 
-  bool TransformTypeSourceListAndExpandPacks(
-      ArrayRef<TypeSourceInfo *> InArgs, bool &ArgChanged,
-      SmallVectorImpl<TypeSourceInfo *> &Args);
+  bool TransformTypeList(ArrayRef<TypeSourceInfo *> InArgs, bool &ArgChanged,
+                         SmallVectorImpl<TypeSourceInfo *> &Args);
 
   /// \brief Transforms the parameters of a function type into the
   /// given vectors.
@@ -5530,8 +5529,8 @@ TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
                                                     TransformTraitTypeLoc TL) {
   bool AnyChanged = false;
   SmallVector<TypeSourceInfo *, 4> NewTypeArgInfos;
-  if (getDerived().TransformTypeSourceListAndExpandPacks(
-          TL.getArgTInfo(), AnyChanged, NewTypeArgInfos))
+  if (getDerived().TransformTypeList(TL.getArgTInfo(), AnyChanged,
+                                     NewTypeArgInfos))
     return QualType();
 
   QualType Result = TL.getType();
@@ -6284,8 +6283,8 @@ TreeTransform<Derived>::TransformObjCObjectType(TypeLocBuilder &TLB,
 
   // Transform type arguments.
   SmallVector<TypeSourceInfo *, 4> NewTypeArgInfos;
-  if (getDerived().TransformTypeSourceListAndExpandPacks(
-          TL.getTypeArgTInfoRef(), AnyChanged, NewTypeArgInfos))
+  if (getDerived().TransformTypeList(TL.getTypeArgTInfoRef(), AnyChanged,
+                                     NewTypeArgInfos))
     return QualType();
 
   QualType Result = TL.getType();
@@ -10398,7 +10397,7 @@ TreeTransform<Derived>::TransformUnresolvedLookupExpr(
 }
 
 template <typename Derived>
-bool TreeTransform<Derived>::TransformTypeSourceListAndExpandPacks(
+bool TreeTransform<Derived>::TransformTypeList(
     ArrayRef<TypeSourceInfo *> InArgs, bool &ArgChanged,
     SmallVectorImpl<TypeSourceInfo *> &Args) {
   for (unsigned I = 0, N = InArgs.size(); I != N; ++I) {
@@ -10528,8 +10527,7 @@ template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformTypeTraitExpr(TypeTraitExpr *E) {
   bool ArgChanged = false;
   SmallVector<TypeSourceInfo *, 4> Args;
-  if (getDerived().TransformTypeSourceListAndExpandPacks(E->getArgs(),
-                                                         ArgChanged, Args))
+  if (getDerived().TransformTypeList(E->getArgs(), ArgChanged, Args))
     return ExprError();
 
   if (!getDerived().AlwaysRebuild() && !ArgChanged)
