@@ -3238,20 +3238,17 @@ void CXXNameMangler::mangleType(const TransformTraitType *T) {
   // mangle it as the underlying type since they are equivalent.
   if (T->isDependentType()) {
     Out << 'U';
-
     switch (T->getTTKind()) {
     case TransformTraitType::EnumUnderlyingType:
       Out << "3eut";
       break;
     }
-  }
-
-  for (auto Ty : T->getArgs())
-    mangleType(Ty);
-
-  // Disambiguate the end of the argument list.
-  Out << "E";
-
+    for (auto Ty : T->getArgs())
+      mangleType(Ty);
+    // Disambiguate the end of the argument list.
+    Out << "E";
+  } else
+    mangleType(T->getTransformedType());
 }
 
 void CXXNameMangler::mangleType(const AutoType *T) {

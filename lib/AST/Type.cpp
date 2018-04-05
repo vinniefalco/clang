@@ -3076,7 +3076,7 @@ TransformTraitType::TransformTraitType(const ASTContext &Ctx,
   ArgStorage = (QualType *)Ctx.Allocate(sizeof(QualType) * ArgTys.size(),
                                         alignof(QualType));
   for (unsigned I = 0, NumArgs = ArgTys.size(); I < NumArgs; ++I)
-    new ((void *)ArgStorage + I) QualType(ArgTys[I]);
+    new ((void *)(ArgStorage + I)) QualType(ArgTys[I]);
   for (QualType T : getArgs()) {
     if (T->isDependentType())
       this->setDependent(true);

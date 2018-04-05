@@ -1111,7 +1111,6 @@ void fn(T, __underlying_type(T)) {}
 
 template void fn<E>(E, __underlying_type(E));
 // CHECK-LABEL: @_ZN6test552fnINS_1EEEEvT_U3eutS2E_
-// FIXME(EricWF): Add Test
 }
 
 
