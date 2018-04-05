@@ -5546,9 +5546,10 @@ TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
   }
 
   TransformTraitTypeLoc NewTL = TLB.push<TransformTraitTypeLoc>(Result);
+  assert(NewTL.getArgTInfo().size() == TL.getArgTInfo().size());
   NewTL.setKWLoc(TL.getKWLoc());
   NewTL.setParensRange(TL.getParensRange());
-  for (unsigned I = 0; I < TL.getArgTInfo().size(); ++I)
+  for (unsigned I = 0, Size = TL.getArgTInfo().size(); I < Size; ++I)
     NewTL.setArgInfo(I, NewTypeArgInfos[I]);
 
   return Result;
