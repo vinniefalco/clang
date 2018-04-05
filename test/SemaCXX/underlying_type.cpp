@@ -29,15 +29,20 @@ __underlying_type(f) h;
 static_assert(is_same_type<char, decltype(h)>::value,
               "h has the wrong type");
 
-template <class... Args>
-struct TestParse {
+template <class ...Args> struct TypeList {};
+
+template <class ...Args>
+struct TestParse;
+
+template <class... Args1, class ...Args2>
+struct TestParse<TypeList<Args1...>, TypeList<Args2...>> {
   // expected-error@+2 {{type trait requires 1 argument; have 0 arguments}}
   // expected-error@+1 {{type trait requires 1 argument; have 2 arguments}}
-  using type = __underlying_type(Args...);
+  using type = __underlying_type(Args1..., Args2....);
 };
-static_assert(is_same_type<TestParse<f>::type, char>::value, "wrong type");
-template struct TestParse<>; // expected-note {{requested here}}
-template struct TestParse<f, f>; // expected-note {{requested here}}
+static_assert(is_same_type<TestParse<TypeList<f>, TypeList<>>::type, char>::value, "wrong type");
+template struct TestParse<TypeList<>, TypeList<>>; // expected-note {{requested here}}
+template struct TestParse<TypeList<f, f>, TypeList<>>; // expected-note {{requested here}}
 
 
 template <typename T>
