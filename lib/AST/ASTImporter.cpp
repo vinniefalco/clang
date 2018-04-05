@@ -714,7 +714,7 @@ QualType ASTNodeImporter::VisitDecltypeType(const DecltypeType *T) {
 
 
 QualType ASTNodeImporter::VisitTransformTraitType(const TransformTraitType *T) {
-  SmallVector<QualType, 2> ToArgTypes;
+  SmallVector<QualType, 6> ToArgTypes;
   for (auto Ty : T->getArgs()) {
     QualType ToTy = Importer.Import(Ty);
     if (ToTy.isNull())

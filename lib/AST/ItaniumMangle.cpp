@@ -3248,6 +3248,10 @@ void CXXNameMangler::mangleType(const TransformTraitType *T) {
 
   for (auto Ty : T->getArgs())
     mangleType(Ty);
+
+  // Disambiguate the end of the argument list.
+  Out << "E";
+
 }
 
 void CXXNameMangler::mangleType(const AutoType *T) {

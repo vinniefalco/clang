@@ -890,11 +890,9 @@ void TypePrinter::printTransformTraitBefore(const TransformTraitType *T,
     print(T->getArg(I), OS, StringRef());
     if ((I + 1) != T->getNumArgs())
       OS << ", ";
-    }
-    OS << ')';
-    spaceBeforePlaceHolder(OS);
-    return;
-  llvm_unreachable("transformation trait not handled");
+  }
+  OS << ')';
+  spaceBeforePlaceHolder(OS);
 }
 
 void TypePrinter::printTransformTraitAfter(const TransformTraitType *T,

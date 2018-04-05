@@ -5360,12 +5360,8 @@ MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
   case Type::TransformTrait: {
     const TransformTraitType *TT = cast<TransformTraitType>(T);
     if (!OnlyDeduced) {
-      // FIXME(EricWF): Do we mark the input args as used unconditionally?
-      for (auto Ty : TT->getArgs()) {
+      for (auto Ty : TT->getArgs())
         MarkUsedTemplateParameters(Ctx, Ty, OnlyDeduced, Depth, Used);
-      }
-      MarkUsedTemplateParameters(Ctx, TT->getTransformedType(), OnlyDeduced,
-                                 Depth, Used);
     }
     break;
   }

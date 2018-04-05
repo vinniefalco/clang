@@ -7988,7 +7988,11 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
 
 static bool diagnoseTransformTraitArity(Sema &S,
                                         TransformTraitType::TTKind Kind,
-                                        SourceLocation Loc, unsigned NumArgs) {
+                                        SourceLocation Loc, ArrayRef<QualType> Args) {
+  for (auto Ty : Args)
+    if (Ty->containsUnexpandedParameterPack())
+      return false;
+  unsigned NumArgs = Args.size();
   unsigned Arity;
   bool IsVariadic = false;
   switch (Kind) {
@@ -8021,12 +8025,10 @@ static bool diagnoseTransformTraitArity(Sema &S,
 QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
                                        TransformTraitType::TTKind TKind,
                                        SourceLocation Loc) {
-  if (diagnoseTransformTraitArity(*this, TKind, Loc, ArgTypes.size()))
+  if (diagnoseTransformTraitArity(*this, TKind, Loc, ArgTypes))
     return QualType();
   switch (TKind) {
   case TransformTraitType::EnumUnderlyingType: {
-    assert(ArgTypes.size() == 1 &&
-           "underlying_type takes only a single argument");
     QualType BaseType = ArgTypes[0];
     if (!BaseType->isDependentType() && !BaseType->isEnumeralType()) {
       Diag(Loc, diag::err_only_enums_have_underlying_types);
@@ -8051,6 +8053,8 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
       Underlying = ED->getIntegerType();
       assert(!Underlying.isNull());
     }
+    assert(ArgTypes.size() == 1 &&
+           "underlying_type takes only a single argument");
     return Context.getTransformTraitType(
         BaseType, Underlying, TransformTraitType::EnumUnderlyingType);
   }
