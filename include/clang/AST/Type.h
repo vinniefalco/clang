@@ -1621,6 +1621,8 @@ protected:
 
     /// The transformation trait kind
     unsigned TTKind : 1;
+
+    /// The number of type arguments
     unsigned NumArgs : 31 - NumTypeBits;
   };
 

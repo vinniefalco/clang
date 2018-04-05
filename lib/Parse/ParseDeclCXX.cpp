@@ -1020,15 +1020,23 @@ void Parser::AnnotateExistingDecltypeSpecifier(const DeclSpec& DS,
   PP.AnnotateCachedTokens(Tok);
 }
 
-void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
+struct TransformTraitInfo {
+  unsigned Arity;
+  bool IsVariadic;
   DeclSpec::TST TypeSpecType;
-  switch (Tok.getKind()) {
+};
+
+static TransformTraitInfo GetTraitInfo(tok::TokenKind Kind) {
+  switch (Kind) {
   case tok::kw___underlying_type:
-    TypeSpecType = TST_underlyingType;
-    break;
+    return {1, false, DeclSpec::TST_underlyingType};
   default:
-    llvm_unreachable("unhandled transform trait case");
+    llvm_unreachable("Not a transformation trait type specifier");
   }
+}
+
+void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
+  TransformTraitInfo Info = GetTraitInfo(Tok.getKind());
 
   SourceLocation StartLoc = ConsumeToken();
   BalancedDelimiterTracker Parens(*this, tok::l_paren);
@@ -1061,10 +1069,36 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   if (Parens.consumeClose())
     return;
 
+<<<<<<< HEAD
+=======
+  SourceLocation EndLoc = Parens.getCloseLocation();
+
+  struct DiagInfo {
+    unsigned ReqNumArgs;
+    unsigned SelectOne;
+  };
+  auto DiagSelect = [&]() -> Optional<DiagInfo> {
+    if (Info.Arity && !Info.IsVariadic &&
+        Info.Arity != Args.size())
+      return DiagInfo{Info.Arity, 0};
+    if (Info.Arity && Args.size() < Info.Arity)
+      return DiagInfo{Info.Arity, 1};
+    return {};
+  }();
+
+  if (DiagSelect.hasValue()) {
+    auto &Info = DiagSelect.getValue();
+    Diag(EndLoc, diag::err_type_trait_arity)
+        << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
+        << (int)Args.size() << SourceRange(StartLoc);
+    return;
+  }
+
+>>>>>>> parent of 1cebe78... remove arity checking at parse time
   // TST
   const char *PrevSpec = nullptr;
   unsigned DiagID;
-  if (DS.SetTypeSpecType(TypeSpecType, StartLoc, PrevSpec, DiagID, Args,
+  if (DS.SetTypeSpecType(Info.TypeSpecType, StartLoc, PrevSpec, DiagID, Args,
                          Actions.getASTContext().getPrintingPolicy()))
     Diag(StartLoc, DiagID) << PrevSpec;
     DS.setTypeofParensRange(Parens.getRange());

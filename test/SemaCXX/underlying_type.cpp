@@ -38,7 +38,7 @@ template <class... Args1, class ...Args2>
 struct TestParse<TypeList<Args1...>, TypeList<Args2...>> {
   // expected-error@+2 {{type trait requires 1 argument; have 0 arguments}}
   // expected-error@+1 {{type trait requires 1 argument; have 2 arguments}}
-  using type = __underlying_type(Args1..., Args2....);
+  using type = __underlying_type(Args1..., Args2...);
 };
 static_assert(is_same_type<TestParse<TypeList<f>, TypeList<>>::type, char>::value, "wrong type");
 template struct TestParse<TypeList<>, TypeList<>>; // expected-note {{requested here}}
