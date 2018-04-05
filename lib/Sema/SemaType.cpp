@@ -7989,10 +7989,11 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
 static bool diagnoseTransformTraitArity(Sema &S,
                                         TransformTraitType::TTKind Kind,
                                         SourceLocation Loc, unsigned NumArgs) {
-  unsigned MinArity, MaxArity;
+  unsigned Arity;
+  bool IsVariadic = false;
   switch (Kind) {
   case TransformTraitType::EnumUnderlyingType:
-    MinArity = MaxArity = 1;
+    Arity = 1;
     break;
   }
   struct DiagInfo {
@@ -8000,12 +8001,10 @@ static bool diagnoseTransformTraitArity(Sema &S,
     unsigned SelectOne;
   };
   auto DiagSelect = [&]() -> Optional<DiagInfo> {
-    if (MinArity && MinArity == MaxArity && MinArity != NumArgs)
-      return DiagInfo{MinArity, 0};
-    if (MinArity && NumArgs < MinArity)
-      return DiagInfo{MinArity, 1};
-    if (MaxArity && NumArgs > MaxArity)
-      return DiagInfo{MinArity, 2};
+    if (Arity && !IsVariadic && Arity != NumArgs)
+      return DiagInfo{Arity, 0};
+    if (Arity && NumArgs < Arity)
+      return DiagInfo{Arity, 1};
     return {};
   }();
 

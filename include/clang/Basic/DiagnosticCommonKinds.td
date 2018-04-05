@@ -110,7 +110,7 @@ def err_enum_template : Error<"enumeration cannot be a template">;
 
 // Type traits
 def err_type_trait_arity : Error<
-  "type trait requires %0%select{| or more| or fewer}1 argument%select{|s}2; have "
+  "type trait requires %0%select{| or more}1 argument%select{|s}2; have "
   "%3 argument%s3">;
 }
 

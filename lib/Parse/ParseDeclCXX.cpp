@@ -1021,14 +1021,15 @@ void Parser::AnnotateExistingDecltypeSpecifier(const DeclSpec& DS,
 }
 
 struct TransformTraitInfo {
-  unsigned MinArity, MaxArity;
+  unsigned Arity;
+  bool IsVariadic;
   DeclSpec::TST TypeSpecType;
 };
 
 static TransformTraitInfo GetTraitInfo(tok::TokenKind Kind) {
   switch (Kind) {
   case tok::kw___underlying_type:
-    return {1, 1, DeclSpec::TST_underlyingType};
+    return {1, false, DeclSpec::TST_underlyingType};
   default:
     llvm_unreachable("Not a transformation trait type specifier");
   }
@@ -1075,13 +1076,11 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     unsigned SelectOne;
   };
   auto DiagSelect = [&]() -> Optional<DiagInfo> {
-    if (Info.MinArity && Info.MinArity == Info.MaxArity &&
-        Info.MinArity != Args.size())
-      return DiagInfo{Info.MinArity, 0};
-    if (Info.MinArity && Args.size() < Info.MinArity)
-      return DiagInfo{Info.MinArity, 1};
-    if (Info.MaxArity && Args.size() > Info.MaxArity)
-      return DiagInfo{Info.MaxArity, 2};
+    if (Info.Arity && !Info.IsVariadic &&
+        Info.Arity != Args.size())
+      return DiagInfo{Info.Arity, 0};
+    if (Info.Arity && Args.size() < Info.Arity)
+      return DiagInfo{Info.Arity, 1};
     return {};
   }();
 
