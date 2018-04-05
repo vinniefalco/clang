@@ -1061,8 +1061,6 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   if (Parens.consumeClose())
     return;
 
-  SourceLocation EndLoc = Parens.getCloseLocation();
-
   // TST
   const char *PrevSpec = nullptr;
   unsigned DiagID;
