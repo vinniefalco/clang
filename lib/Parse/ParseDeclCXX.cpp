@@ -1027,16 +1027,21 @@ struct TransformTraitInfo {
 };
 
 static TransformTraitInfo GetTraitInfo(tok::TokenKind Kind) {
-  switch (Kind) {
-  case tok::kw___underlying_type:
-    return {1, false, DeclSpec::TST_underlyingType};
-  default:
-    llvm_unreachable("Not a transformation trait type specifier");
-  }
+
 }
 
 void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
-  TransformTraitInfo Info = GetTraitInfo(Tok.getKind());
+
+  auto KindInfo =
+      [&]() -> std::pair<TransformTraitType::TTKind, DeclSpec::TST> {
+    using EnumKind = TransformTraitType::TTKind;
+    switch (Tok.getKind()) {
+    case tok::kw___underlying_type:
+      return {EnumKind::EnumUnderlyingType, DeclSpec::TST_underlyingType};
+    default:
+      llvm_unreachable("Not a transformation trait type specifier");
+    }
+  }();
 
   SourceLocation StartLoc = ConsumeToken();
   BalancedDelimiterTracker Parens(*this, tok::l_paren);
@@ -1073,35 +1078,19 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
 
   SourceLocation EndLoc = Parens.getCloseLocation();
 
-  struct DiagInfo {
-    unsigned ReqNumArgs;
-    unsigned SelectOne;
-  };
-  auto DiagSelect = [&]() -> Optional<DiagInfo> {
-    // We can't perform any trait arity diagnostics while there are unexpanded
-    // parameter packs.
-    if (HasPackExpand)
-      return {};
-    else if (Info.Arity && !Info.IsVariadic &&
-        Info.Arity != Args.size())
-      return DiagInfo{Info.Arity, 0};
-    else if (Info.Arity && Args.size() < Info.Arity)
-      return DiagInfo{Info.Arity, 1};
-    return {};
-  }();
-
-  if (DiagSelect.hasValue()) {
-    auto &Info = DiagSelect.getValue();
-    Diag(EndLoc, diag::err_type_trait_arity)
-        << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
-        << (int)Args.size() << SourceRange(StartLoc);
-    return;
+  if (!HasPackExpand) {
+    auto PDiag = Actions.CheckTransformTraitArity(
+        EndLoc, KindInfo.first, Args.size(), SourceRange(StartLoc));
+    if (PDiag.hasValue()) {
+      Diag(PDiag->first, PDiag->second);
+      return;
+    }
   }
 
   // TST
   const char *PrevSpec = nullptr;
   unsigned DiagID;
-  if (DS.SetTypeSpecType(Info.TypeSpecType, StartLoc, PrevSpec, DiagID, Args,
+  if (DS.SetTypeSpecType(KindInfo.second, StartLoc, PrevSpec, DiagID, Args,
                          Actions.getASTContext().getPrintingPolicy()))
     Diag(StartLoc, DiagID) << PrevSpec;
   DS.setTypeofParensRange(Parens.getRange());

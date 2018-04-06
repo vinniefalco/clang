@@ -15,6 +15,7 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
@@ -75,6 +76,13 @@ DiagnosticBuilder Parser::Diag(SourceLocation Loc, unsigned DiagID) {
 
 DiagnosticBuilder Parser::Diag(const Token &Tok, unsigned DiagID) {
   return Diag(Tok.getLocation(), DiagID);
+}
+
+DiagnosticBuilder Parser::Diag(SourceLocation Loc,
+                               const PartialDiagnostic &PD) {
+  DiagnosticBuilder Builder(Diag(Loc, PD.getDiagID()));
+  PD.Emit(Builder);
+  return Builder;
 }
 
 /// \brief Emits a diagnostic suggesting parentheses surrounding a

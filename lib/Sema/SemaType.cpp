@@ -7986,9 +7986,10 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
   return Context.getDecltypeType(E, getDecltypeForExpr(*this, E));
 }
 
-static bool diagnoseTransformTraitArity(Sema &S,
-                                        TransformTraitType::TTKind Kind,
-                                        SourceLocation Loc, ArrayRef<QualType> Args) {
+Optional<PartialDiagnosticAt>
+Sema::CheckTransformTraitArity(SourceLocation Loc,
+                               TransformTraitType::TTKind Kind,
+                               unsigned NumArgs, SourceRange R) {
   unsigned Arity;
   bool IsVariadic = false;
   switch (Kind) {
@@ -8001,7 +8002,6 @@ static bool diagnoseTransformTraitArity(Sema &S,
     unsigned SelectOne;
   };
 
-  unsigned NumArgs = Args.size();
   auto DiagSelect = [&]() -> Optional<DiagInfo> {
     if (NumArgs == 0)
       return DiagInfo{Arity, 0};
@@ -8014,12 +8014,12 @@ static bool diagnoseTransformTraitArity(Sema &S,
 
   if (DiagSelect.hasValue()) {
     auto Info = DiagSelect.getValue();
-    S.Diag(Loc, diag::err_type_trait_arity)
-        << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
-        << (int)NumArgs << SourceRange(Loc);
-    return true;
+    PartialDiagnostic PD = PDiag(diag::err_type_trait_arity);
+    PD << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
+       << (int)NumArgs << R;
+    PartialDiagnosticAt{Loc, PD};
   }
-  return false;
+  return None;
 }
 
 QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
@@ -8038,8 +8038,12 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
   if (IsInstantDependent)
     return MakeTrait(Context.DependentTy);
 
-  if (diagnoseTransformTraitArity(*this, TKind, Loc, ArgTypes))
+  auto ArityDiag = CheckTransformTraitArity(Context, Loc, TKind,
+                                            ArgTypes.size(), SourceRange(Loc));
+  if (ArityDiag.hasValue()) {
+    Diag(ArityDiag->first, ArityDiag->second);
     return QualType();
+  }
 
   switch (TKind) {
   case TransformTraitType::EnumUnderlyingType: {
