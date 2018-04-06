@@ -1104,7 +1104,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   if (DS.SetTypeSpecType(Info.TypeSpecType, StartLoc, PrevSpec, DiagID, Args,
                          Actions.getASTContext().getPrintingPolicy()))
     Diag(StartLoc, DiagID) << PrevSpec;
-    DS.setTypeofParensRange(Parens.getRange());
+  DS.setTypeofParensRange(Parens.getRange());
 }
 
 /// ParseBaseTypeSpecifier - Parse a C++ base-type-specifier which is either a
