@@ -7989,7 +7989,6 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
 static bool diagnoseTransformTraitArity(Sema &S,
                                         TransformTraitType::TTKind Kind,
                                         SourceLocation Loc, ArrayRef<QualType> Args) {
-
   unsigned Arity;
   bool IsVariadic = false;
   switch (Kind) {
@@ -8029,10 +8028,13 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
   auto MakeTrait = [&](QualType TransformedType) {
     return Context.getTransformTraitType(ArgTypes, TransformedType, TKind);
   };
+
   bool IsInstantDependent = llvm::any_of(ArgTypes, [](QualType Ty) {
     return Ty->isInstantiationDependentType() ||
            Ty->containsUnexpandedParameterPack();
   });
+
+  // Delay all checking while any of the arguments are instantiation dependent.
   if (IsInstantDependent)
     return MakeTrait(Context.DependentTy);
 
