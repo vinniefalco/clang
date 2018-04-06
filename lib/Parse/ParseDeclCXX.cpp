@@ -1037,7 +1037,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     using EnumKind = TransformTraitType::TTKind;
     switch (Tok.getKind()) {
     case tok::kw___underlying_type:
-      return {EnumKind::EnumUnderlyingType, DeclSpec::TST_underlyingType};
+      return {EnumKind::EnumUnderlyingType, clang::TST_underlyingType};
     default:
       llvm_unreachable("Not a transformation trait type specifier");
     }
