@@ -8884,6 +8884,49 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
   return StdExperimentalNamespaceCache;
 }
 
+static const char *getComparisonCategoryName(Sema::ComparisonCategoryKind CCK) {
+  switch (CCK) {
+  case Sema::CCK_WeakEquality:
+    return "weak_equality";
+  case Sema::CCK_StrongEquality:
+    return "strong_equality";
+  case Sema::CCK_PartialOrdering:
+    return "partial_ordering";
+  case Sema::CCK_WeakOrdering:
+    return "weak_ordering";
+  case Sema::CCK_StrongOrdering:
+    return "strong_ordering";
+  }
+  llvm_unreachable("unhandled comparison category kind");
+}
+
+RecordDecl *Sema::getComparisonCategoryType(ComparisonCategoryKind CCK,
+                                            SourceLocation Loc) {
+  if (RecordDecl *CD = lookupComparisonCategoryType(CCK))
+    return CD;
+  Diag(Loc, diag::err_implied_comparison_category_type_not_found)
+      << getComparisonCategoryName(CCK);
+  return nullptr;
+}
+
+RecordDecl *Sema::lookupComparisonCategoryType(ComparisonCategoryKind CCK) {
+  assert(getLangOpts().CPlusPlus &&
+         "Looking for comparison category type outside of C++.");
+  assert(CCK <= CCK_Last);
+  RecordDecl *&CD = ComparisonCategoryTypes[CCK];
+  if (!CD) {
+    if (auto Std = getStdNamespace()) {
+      const char *Name = getComparisonCategoryName(CCK);
+      LookupResult Result(*this, &PP.getIdentifierTable().get(Name),
+                          SourceLocation(), LookupTagName);
+      if (!LookupQualifiedName(Result, Std) ||
+          !(CD = Result.getAsSingle<RecordDecl>()))
+        Result.suppressDiagnostics();
+    }
+  }
+  return CD;
+}
+
 /// \brief Retrieve the special "std" namespace, which may require us to
 /// implicitly define the namespace.
 NamespaceDecl *Sema::getOrCreateStdNamespace() {
@@ -11440,11 +11483,10 @@ buildSingleCopyAssignRecursively(Sema &S, SourceLocation Loc, QualType T,
   // Create the comparison against the array bound.
   llvm::APInt Upper
     = ArrayTy->getSize().zextOrTrunc(S.Context.getTypeSize(SizeType));
-  Expr *Comparison
-    = new (S.Context) BinaryOperator(IterationVarRefRVal.build(S, Loc),
-                     IntegerLiteral::Create(S.Context, Upper, SizeType, Loc),
-                                     BO_NE, S.Context.BoolTy,
-                                     VK_RValue, OK_Ordinary, Loc, FPOptions());
+  Expr *Comparison = new (S.Context) BinaryOperator(
+      IterationVarRefRVal.build(S, Loc),
+      IntegerLiteral::Create(S.Context, Upper, SizeType, Loc), BO_NE,
+      S.Context.BoolTy, VK_RValue, OK_Ordinary, Loc, FPOptions());
 
   // Create the pre-increment of the iteration variable. We can determine
   // whether the increment will overflow based on the value of the array

@@ -9360,7 +9360,7 @@ def err_multiversion_no_other_attrs : Error<
   "attribute 'target' multiversioning cannot be combined with other "
   "attributes">;
 def err_multiversion_diff : Error<
-  "multiversioned function declaration has a different %select{calling convention"
+  "multiversioned function declarationerr_implied_comparison_category_type_not_found has a different %select{calling convention"
   "|return type|constexpr specification|inline specification|storage class|"
   "linkage}0">;
 def err_multiversion_doesnt_support : Error<
@@ -9371,5 +9371,10 @@ def err_multiversion_not_allowed_on_main : Error<
   "'main' cannot be a multiversioned function">;
 def err_multiversion_not_supported : Error<
  "function multiversioning is not supported on the current target">;
+
+// spaceship operator diagnostics
+def err_implied_comparison_category_type_not_found : Error<
+  "%0 type was not found; include <compare> before defining "
+  "or using 'operator<=>'">;
 
 } // end of sema component.

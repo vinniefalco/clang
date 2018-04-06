@@ -869,6 +869,17 @@ public:
   /// \brief The declaration of the dictionaryWithObjects:forKeys:count: method.
   ObjCMethodDecl *DictionaryWithObjectsMethod;
 
+  enum ComparisonCategoryKind {
+    CCK_WeakEquality,
+    CCK_StrongEquality,
+    CCK_PartialOrdering,
+    CCK_WeakOrdering,
+    CCK_StrongOrdering,
+    CCK_Last = CCK_StrongOrdering
+  };
+
+  std::array<RecordDecl *, CCK_Last + 1> ComparisonCategoryTypes = {};
+
   /// \brief id<NSCopying> type.
   QualType QIDNSCopying;
 
@@ -4540,6 +4551,16 @@ public:
 
   CXXRecordDecl *getStdBadAlloc() const;
   EnumDecl *getStdAlignValT() const;
+
+  /// \brief Looks up the RecordDecl for the specified comparison category
+  /// type. If the lookup fails null is returned and no diagnostics are issued.
+  RecordDecl *lookupComparisonCategoryType(ComparisonCategoryKind CCK);
+
+  /// \brief Looks up the RecordDecl for the specified comparison category
+  /// type. If the lookup fails a diagnostic about including <compare> is issued
+  /// and null is returned.
+  RecordDecl *getComparisonCategoryType(ComparisonCategoryKind CCK,
+                                        SourceLocation Loc);
 
   /// \brief Tests whether Ty is an instance of std::initializer_list and, if
   /// it is and Element is not NULL, assigns the element type to Element.

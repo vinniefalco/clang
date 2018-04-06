@@ -9703,6 +9703,22 @@ static void diagnoseTautologicalComparison(Sema &S, SourceLocation Loc,
   }
 }
 
+static QualType computeSpaceshipReturnType(Sema &S, QualType ArgTy,
+                                           SourceLocation Loc) {
+  using CCK = Sema::ComparisonCategoryKind;
+  CCK TypeKind;
+  if (ArgTy->isIntegralType(S.Context)) {
+    TypeKind = CCK::CCK_StrongOrdering;
+  } else if (ArgTy->hasFloatingRepresentation()) {
+    TypeKind = CCK::CCK_PartialOrdering;
+  } else {
+    llvm_unreachable("other types are unimplemented");
+  }
+  if (RecordDecl *CCK_RD = S.getComparisonCategoryType(TypeKind))
+    return QualType(CCK_RD->getTypeForDecl(), 0);
+  return QualType();
+}
+
 static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
                                                  ExprResult &RHS,
                                                  SourceLocation Loc,
@@ -9731,6 +9747,10 @@ static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
   // Check for comparisons of floating point operands using != and ==.
   if (Type->hasFloatingRepresentation() && BinaryOperator::isEqualityOp(Opc))
     S.CheckFloatComparison(Loc, LHS.get(), RHS.get());
+
+  if (Opc == BO_Cmp) {
+    return computeSpaceshipReturnType(S, Type, Loc);
+  }
 
   // The result of comparisons is 'bool' in C++, 'int' in C.
   // FIXME: For BO_Cmp, return the relevant comparison category type.
