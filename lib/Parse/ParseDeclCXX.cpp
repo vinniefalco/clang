@@ -1070,10 +1070,10 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   SourceLocation EndLoc = Parens.getCloseLocation();
 
   if (!HasPackExpand) {
-    auto PDiag = Actions.CheckTransformTraitArity(
-        EndLoc, KindInfo.first, Args.size(), SourceRange(StartLoc));
+    auto PDiag = Actions.CheckTransformTraitArity(KindInfo.first, Args.size(),
+                                                  SourceRange(StartLoc));
     if (PDiag.hasValue()) {
-      Diag(PDiag->first, PDiag->second);
+      Diag(EndLoc, PDiag.getValue());
       return;
     }
   }

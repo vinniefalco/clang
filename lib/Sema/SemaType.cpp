@@ -7986,9 +7986,8 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
   return Context.getDecltypeType(E, getDecltypeForExpr(*this, E));
 }
 
-Optional<PartialDiagnosticAt>
-Sema::CheckTransformTraitArity(SourceLocation Loc,
-                               TransformTraitType::TTKind Kind,
+Optional<PartialDiagnostic>
+Sema::CheckTransformTraitArity(TransformTraitType::TTKind Kind,
                                unsigned NumArgs, SourceRange R) {
   unsigned Arity;
   bool IsVariadic = false;
@@ -7997,11 +7996,11 @@ Sema::CheckTransformTraitArity(SourceLocation Loc,
     Arity = 1;
     break;
   }
+
   struct DiagInfo {
     unsigned ReqNumArgs;
     unsigned SelectOne;
   };
-
   auto DiagSelect = [&]() -> Optional<DiagInfo> {
     if (NumArgs == 0)
       return DiagInfo{Arity, 0};
@@ -8017,7 +8016,7 @@ Sema::CheckTransformTraitArity(SourceLocation Loc,
     PartialDiagnostic PD = PDiag(diag::err_type_trait_arity);
     PD << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
        << (int)NumArgs << R;
-    PartialDiagnosticAt{Loc, PD};
+    return PD;
   }
   return None;
 }
@@ -8038,10 +8037,9 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
   if (IsInstantDependent)
     return MakeTrait(Context.DependentTy);
 
-  auto ArityDiag =
-      CheckTransformTraitArity(Loc, TKind, ArgTypes.size(), SourceRange(Loc));
-  if (ArityDiag.hasValue()) {
-    Diag(ArityDiag->first, ArityDiag->second);
+  if (auto ArityDiag =
+          CheckTransformTraitArity(TKind, ArgTypes.size(), SourceRange(Loc))) {
+    Diag(Loc, ArityDiag.getValue());
     return QualType();
   }
 
