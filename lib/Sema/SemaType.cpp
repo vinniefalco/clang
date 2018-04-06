@@ -8038,8 +8038,8 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
   if (IsInstantDependent)
     return MakeTrait(Context.DependentTy);
 
-  auto ArityDiag = CheckTransformTraitArity(Context, Loc, TKind,
-                                            ArgTypes.size(), SourceRange(Loc));
+  auto ArityDiag =
+      CheckTransformTraitArity(Loc, TKind, ArgTypes.size(), SourceRange(Loc));
   if (ArityDiag.hasValue()) {
     Diag(ArityDiag->first, ArityDiag->second);
     return QualType();
