@@ -1020,15 +1020,6 @@ void Parser::AnnotateExistingDecltypeSpecifier(const DeclSpec& DS,
   PP.AnnotateCachedTokens(Tok);
 }
 
-struct TransformTraitInfo {
-  unsigned Arity;
-  bool IsVariadic;
-  DeclSpec::TST TypeSpecType;
-};
-
-static TransformTraitInfo GetTraitInfo(tok::TokenKind Kind) {
-
-}
 
 void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
 
