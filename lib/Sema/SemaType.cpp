@@ -7989,11 +7989,7 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
 static bool diagnoseTransformTraitArity(Sema &S,
                                         TransformTraitType::TTKind Kind,
                                         SourceLocation Loc, ArrayRef<QualType> Args) {
-  if (llvm::any_of(Args, [](QualType Ty) {
-        return Ty->containsUnexpandedParameterPack();
-      }))
-    return false;
-  unsigned NumArgs = Args.size();
+
   unsigned Arity;
   bool IsVariadic = false;
   switch (Kind) {
@@ -8005,16 +8001,20 @@ static bool diagnoseTransformTraitArity(Sema &S,
     unsigned ReqNumArgs;
     unsigned SelectOne;
   };
+
+  unsigned NumArgs = Args.size();
   auto DiagSelect = [&]() -> Optional<DiagInfo> {
+    if (NumArgs == 0)
+      return DiagInfo{Arity, 0};
     if (Arity && !IsVariadic && Arity != NumArgs)
       return DiagInfo{Arity, 0};
-    if (Arity && NumArgs < Arity)
+    if (Arity && IsVariadic && NumArgs < Arity)
       return DiagInfo{Arity, 1};
     return {};
   }();
 
   if (DiagSelect.hasValue()) {
-    auto &Info = DiagSelect.getValue();
+    auto Info = DiagSelect.getValue();
     S.Diag(Loc, diag::err_type_trait_arity)
         << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
         << (int)NumArgs << SourceRange(Loc);
@@ -8026,38 +8026,45 @@ static bool diagnoseTransformTraitArity(Sema &S,
 QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
                                        TransformTraitType::TTKind TKind,
                                        SourceLocation Loc) {
+  auto MakeTrait = [&](QualType TransformedType) {
+    return Context.getTransformTraitType(ArgTypes, TransformedType, TKind);
+  };
+  bool IsInstantDependent = llvm::any_of(ArgTypes, [](QualType Ty) {
+    return Ty->isInstantiationDependentType() ||
+           Ty->containsUnexpandedParameterPack();
+  });
+  if (IsInstantDependent)
+    return MakeTrait(Context.DependentTy);
+
   if (diagnoseTransformTraitArity(*this, TKind, Loc, ArgTypes))
     return QualType();
+
   switch (TKind) {
   case TransformTraitType::EnumUnderlyingType: {
+    assert(ArgTypes.size() == 1);
+    if (ArgTypes[0]->isDependentType())
+      return MakeTrait(Context.DependentTy);
+
     QualType BaseType = ArgTypes[0];
-    if (!BaseType->isDependentType() && !BaseType->isEnumeralType()) {
+    if (!BaseType->isEnumeralType()) {
       Diag(Loc, diag::err_only_enums_have_underlying_types);
       return QualType();
     }
-    QualType Underlying = BaseType;
-    if (!BaseType->isDependentType()) {
-      // The enum could be incomplete if we're parsing its definition or
-      // recovering from an error.
-      NamedDecl *FwdDecl = nullptr;
-      if (BaseType->isIncompleteType(&FwdDecl)) {
-        Diag(Loc, diag::err_underlying_type_of_incomplete_enum) << BaseType;
-        Diag(FwdDecl->getLocation(), diag::note_forward_declaration) << FwdDecl;
-        return QualType();
-      }
-
-      EnumDecl *ED = BaseType->getAs<EnumType>()->getDecl();
-      assert(ED && "EnumType has no EnumDecl");
-
-      DiagnoseUseOfDecl(ED, Loc);
-
-      Underlying = ED->getIntegerType();
-      assert(!Underlying.isNull());
+    // The enum could be incomplete if we're parsing its definition or
+    // recovering from an error.
+    NamedDecl *FwdDecl = nullptr;
+    if (BaseType->isIncompleteType(&FwdDecl)) {
+      Diag(Loc, diag::err_underlying_type_of_incomplete_enum) << BaseType;
+      Diag(FwdDecl->getLocation(), diag::note_forward_declaration) << FwdDecl;
+      return QualType();
     }
-    assert(ArgTypes.size() == 1 &&
-           "underlying_type takes only a single argument");
-    return Context.getTransformTraitType(
-        BaseType, Underlying, TransformTraitType::EnumUnderlyingType);
+
+    EnumDecl *ED = BaseType->getAs<EnumType>()->getDecl();
+    assert(ED && "EnumType has no EnumDecl");
+
+    DiagnoseUseOfDecl(ED, Loc);
+    assert(!ED->getIntegerType().isNull());
+    return MakeTrait(ED->getIntegerType());
   }
   }
 

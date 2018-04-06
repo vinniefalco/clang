@@ -5528,7 +5528,7 @@ QualType
 TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
                                                     TransformTraitTypeLoc TL) {
   bool AnyChanged = false;
-  SmallVector<TypeSourceInfo *, 4> NewTypeArgInfos;
+  SmallVector<TypeSourceInfo *, 6> NewTypeArgInfos;
   if (getDerived().TransformTypeList(TL.getArgTInfo(), AnyChanged,
                                      NewTypeArgInfos))
     return QualType();
@@ -5536,9 +5536,11 @@ TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
   QualType Result = TL.getType();
   if (getDerived().AlwaysRebuild() || AnyChanged) {
     const TransformTraitType *T = TL.getTypePtr();
-    SmallVector<QualType, 2> Args;
+    SmallVector<QualType, 6> Args;
+    Args.reserve(NewTypeArgInfos.size());
     for (auto *TyInfo : NewTypeArgInfos)
       Args.push_back(TyInfo->getType());
+
     Result = getDerived().RebuildTransformTraitType(Args, T->getTTKind(),
                                                     TL.getKWLoc());
     if (Result.isNull())
@@ -5546,10 +5548,11 @@ TreeTransform<Derived>::TransformTransformTraitType(TypeLocBuilder &TLB,
   }
 
   TransformTraitTypeLoc NewTL = TLB.push<TransformTraitTypeLoc>(Result);
-  assert(NewTL.getArgTInfo().size() == TL.getArgTInfo().size());
+  assert(NewTL.getNumArgs() == NewTypeArgInfos.size());
+
   NewTL.setKWLoc(TL.getKWLoc());
   NewTL.setParensRange(TL.getParensRange());
-  for (unsigned I = 0, Size = TL.getArgTInfo().size(); I < Size; ++I)
+  for (unsigned I = 0, Size = NewTypeArgInfos.size(); I < Size; ++I)
     NewTL.setArgInfo(I, NewTypeArgInfos[I]);
 
   return Result;
