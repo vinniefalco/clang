@@ -4554,22 +4554,19 @@ public:
 
   /// \brief Looks up the RecordDecl for the specified comparison category
   /// type. If the lookup fails null is returned and no diagnostics are issued.
-  CXXRecordDecl *lookupComparisonCategoryType(ComparisonCategoryKind CCK);
+  RecordDecl *lookupComparisonCategoryType(ComparisonCategoryKind CCK);
 
   /// \brief Looks up the RecordDecl for the specified comparison category
   /// type. If the lookup fails a diagnostic about including <compare> is issued
   /// and null is returned.
-  CXXRecordDecl *getComparisonCategoryType(ComparisonCategoryKind CCK,
-                                           SourceLocation Loc);
+  RecordDecl *getComparisonCategoryType(ComparisonCategoryKind CCK,
+                                        SourceLocation Loc);
 
   /// \brief Looks up the RecordDecl for the specified comparison category
   /// type and returns a DeclRefExpr refering to the member specified by Name.
   /// If an error occurs a diagnostic is issued.
   ExprResult getComparisonCategoryMember(ComparisonCategoryKind CCK,
                                          StringRef Name, SourceLocation Loc);
-
-  bool getComparisonCategoryKindForExpr(const Expr *E,
-                                        ComparisonCategoryKind &Kind);
 
   /// \brief Tests whether Ty is an instance of std::initializer_list and, if
   /// it is and Element is not NULL, assigns the element type to Element.

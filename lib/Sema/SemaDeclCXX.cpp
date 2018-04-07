@@ -8900,16 +8900,16 @@ static const char *getComparisonCategoryName(Sema::ComparisonCategoryKind CCK) {
   llvm_unreachable("unhandled comparison category kind");
 }
 
-CXXRecordDecl *Sema::getComparisonCategoryType(ComparisonCategoryKind CCK,
-                                               SourceLocation Loc) {
-  if (CXXRecordDecl *CD = lookupComparisonCategoryType(CCK))
+RecordDecl *Sema::getComparisonCategoryType(ComparisonCategoryKind CCK,
+                                            SourceLocation Loc) {
+  if (RecordDecl *CD = lookupComparisonCategoryType(CCK))
     return CD;
   Diag(Loc, diag::err_implied_comparison_category_type_not_found)
       << getComparisonCategoryName(CCK);
   return nullptr;
 }
 
-CXXRecordDecl *Sema::lookupComparisonCategoryType(ComparisonCategoryKind CCK) {
+RecordDecl *Sema::lookupComparisonCategoryType(ComparisonCategoryKind CCK) {
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
   assert(CCK <= CCK_Last);
@@ -8924,7 +8924,7 @@ CXXRecordDecl *Sema::lookupComparisonCategoryType(ComparisonCategoryKind CCK) {
         Result.suppressDiagnostics();
     }
   }
-  return cast_or_null<CXXRecordDecl>(CD);
+  return CD;
 }
 
 #ifndef NDEBUG
@@ -8998,28 +8998,6 @@ NamespaceDecl *Sema::getOrCreateStdNamespace() {
   }
 
   return getStdNamespace();
-}
-
-bool Sema::getComparisonCategoryKindForExpr(const Expr *E,
-                                            ComparisonCategoryKind &Kind) {
-  assert(E && "expression is null");
-  const auto *Op = dyn_cast<BinaryOperator>(E);
-  if (!Op)
-    return true;
-
-  QualType Type = Op->getType();
-  if (!Type->isRecordType())
-    return true;
-
-  CXXRecordDecl *RD = Type->getAsCXXRecordDecl();
-  assert(RD && "expected c++ class decl");
-  for (unsigned I = 0; I <= static_cast<unsigned>(CCK_Last); ++I) {
-    if (ComparisonCategoryTypes[I] == RD) {
-      Kind = static_cast<ComparisonCategoryKind>(I);
-      return false;
-    }
-  }
-  return true;
 }
 
 bool Sema::isStdInitializerList(QualType Ty, QualType *Element) {

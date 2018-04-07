@@ -3525,7 +3525,7 @@ struct IncDecSubobjectHandler {
       ++Value;
 
       if (!WasNegative && Value.isNegative() && E->canOverflow()) {
-        APSInt ActualValue(Value, /*IsUnsigned*/ true);
+        APSInt ActualValue(Value, /*IsUnsigned*/true);
         return HandleOverflow(Info, E, ActualValue, SubobjType);
       }
     } else {
@@ -3533,7 +3533,7 @@ struct IncDecSubobjectHandler {
 
       if (WasNegative && !Value.isNegative() && E->canOverflow()) {
         unsigned BitWidth = Value.getBitWidth();
-        APSInt ActualValue(Value.sext(BitWidth + 1), /*IsUnsigned*/ false);
+        APSInt ActualValue(Value.sext(BitWidth + 1), /*IsUnsigned*/false);
         ActualValue.setBit(BitWidth);
         return HandleOverflow(Info, E, ActualValue, SubobjType);
       }
@@ -4721,12 +4721,6 @@ public:
       if (!handleLValueToRValueConversion(Info, E, E->getType(), Obj, Result))
         return false;
       return DerivedSuccess(Result, E);
-    }
-
-    case BO_Cmp: {
-      LValue Obj;
-      QualType Type = E->getType();
-      assert(Type->isRecordType());
     }
     }
   }
@@ -9013,8 +9007,7 @@ bool IntExprEvaluator::VisitUnaryOperator(const UnaryOperator *E) {
   case UO_Minus: {
     if (!Visit(E->getSubExpr()))
       return false;
-    if (!Result.isInt())
-      return Error(E);
+    if (!Result.isInt()) return Error(E);
     const APSInt &Value = Result.getInt();
     if (Value.isSigned() && Value.isMinSignedValue() && E->canOverflow() &&
         !HandleOverflow(Info, E, -Value.extend(Value.getBitWidth() + 1),
@@ -10616,6 +10609,7 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
     case BO_AndAssign:
     case BO_XorAssign:
     case BO_OrAssign:
+    case BO_Cmp: // FIXME: Re-enable once we can evaluate this.
       // C99 6.6/3 allows assignments within unevaluated subexpressions of
       // constant expressions, but they can never be ICEs because an ICE cannot
       // contain an lvalue operand.
@@ -10666,11 +10660,6 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
           return ICEDiag(IK_NotICE, E->getLocStart());
         }
       }
-      return Worst(LHSResult, RHSResult);
-    }
-    case BO_Cmp: { // FIXME: Re-enable once we can evaluate this.
-      ICEDiag LHSResult = CheckICE(Exp->getLHS(), Ctx);
-      ICEDiag RHSResult = CheckICE(Exp->getRHS(), Ctx);
       return Worst(LHSResult, RHSResult);
     }
     case BO_LAnd:
