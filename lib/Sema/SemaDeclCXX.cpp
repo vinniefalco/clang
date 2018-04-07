@@ -8980,7 +8980,7 @@ ExprResult Sema::getComparisonCategoryMember(ComparisonCategoryKind CCK,
     llvm_unreachable(
         "handling of ill-formed comparison categories is not implemented");
   }
-  return BuildDeclRefExpr(Member, Member->getType(), VK_LValue, Loc);
+  return BuildDeclRefExpr(Member, Member->getType(), VK_RValue, Loc);
 }
 
 /// \brief Retrieve the special "std" namespace, which may require us to

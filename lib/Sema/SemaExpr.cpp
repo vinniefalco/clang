@@ -9759,10 +9759,12 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
   case NK_Dependent_Narrowing:
     // Implicit conversion to a narrower type, but the expression is
     // value-dependent so we can't tell whether it's actually narrowing.
+  case NK_Not_Narrowing:
+    return false;
+
   case NK_Variable_Narrowing:
     // Implicit conversion to a narrower type, and the value is not a constant
     // expression. We'll diagnose this in a moment.
-  case NK_Not_Narrowing:
     break;
 
   case NK_Constant_Narrowing:
@@ -9776,13 +9778,45 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
         << /*Constant*/ 0 << FromType << ToType;
     return true;
   }
-  return false;
+
+  if (E->isValueDependent()) {
+    return false;
+  }
+
+  // Check the expression is a constant expression.
+  SmallVector<PartialDiagnosticAt, 8> Notes;
+  Expr::EvalResult Eval;
+  Eval.Diag = &Notes;
+
+  if ((ToType->isReferenceType()
+           ? !E->EvaluateAsLValue(Eval, S.Context)
+           : !E->EvaluateAsRValue(Eval, S.Context))
+      /*(RequireInt && !Eval.Val.isInt())*/) {
+    // The expression can't be folded, so we can't keep it at this position in
+    // the AST.
+  } else {
+    if (Notes.empty()) {
+      // It's a constant expression.
+      return false;
+    }
+  }
+
+  // It's not a constant expression. Produce an appropriate diagnostic.
+  if (Notes.size() == 1 &&
+      Notes[0].second.getDiagID() == diag::note_invalid_subexpr_in_const_expr)
+    S.Diag(Notes[0].first, diag::err_expr_not_cce) << Sema::CCEK_CaseValue; // FIXME
+  else {
+    S.Diag(E->getLocStart(), diag::err_expr_not_cce)
+      << Sema::CCEK_CaseValue << E->getSourceRange();
+    for (unsigned I = 0; I < Notes.size(); ++I)
+      S.Diag(Notes[I].first, Notes[I].second);
+  }
+  return true;
 }
 static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
                                                          ExprResult &LHS,
                                                          ExprResult &RHS,
                                                          SourceLocation Loc) {
-
   QualType LHSType = LHS.get()->getType();
   QualType RHSType = RHS.get()->getType();
 

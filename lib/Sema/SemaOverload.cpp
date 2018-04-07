@@ -326,10 +326,11 @@ NarrowingKind StandardConversionSequence::getNarrowingKind(
   case ICK_Floating_Integral:
   FloatingIntegralConversion:
     if (FromType->isRealFloatingType() && ToType->isIntegralType(Ctx)) {
-      return IgnoreFloatToIntegralConversion ? NK_Not_Narrowing
-                                             : NK_Type_Narrowing;
+      return NK_Type_Narrowing;
     } else if (FromType->isIntegralOrUnscopedEnumerationType() &&
                ToType->isRealFloatingType()) {
+      if (IgnoreFloatToIntegralConversion)
+        return NK_Not_Narrowing;
       llvm::APSInt IntConstantValue;
       const Expr *Initializer = IgnoreNarrowingConversion(Converted);
       assert(Initializer && "Unknown conversion expression");
