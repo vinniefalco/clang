@@ -9360,7 +9360,7 @@ def err_multiversion_no_other_attrs : Error<
   "attribute 'target' multiversioning cannot be combined with other "
   "attributes">;
 def err_multiversion_diff : Error<
-  "multiversioned function declarationerr_implied_comparison_category_type_not_found has a different %select{calling convention"
+  "multiversioned function declaration has a different %select{calling convention"
   "|return type|constexpr specification|inline specification|storage class|"
   "linkage}0">;
 def err_multiversion_doesnt_support : Error<
@@ -9376,5 +9376,13 @@ def err_multiversion_not_supported : Error<
 def err_implied_comparison_category_type_not_found : Error<
   "%0 type was not found; include <compare> before defining "
   "or using 'operator<=>'">;
-
+def err_spaceship_argument_narrowing : Error<
+  "argument to 'operator<=>' "
+  "%select{cannot be narrowed from type %1 to %2|"
+  "evaluates to %1, which cannot be narrowed to type %2}0">;
+def err_spaceship_comparison_of_void_ptr : Error<
+  "three-way comparison with void pointer %select{operand type|operand types}0 "
+  "(%1 and %2)">;
+def err_spaceship_comparison_of_invalid_comp_type : Error<
+  "three-way comparison of operands has composite type %0 (%1 and %2)">;
 } // end of sema component.
