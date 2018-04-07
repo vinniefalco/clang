@@ -9721,16 +9721,41 @@ static QualType computeSpaceshipReturnType(Sema &S, QualType ArgTy,
   return QualType();
 }
 
-static bool checkNarrowingConversion(Sema &S, QualType T, Expr *E,
-                                     SourceLocation Loc,
-                                     BinaryOperatorKind Opc) {
-  assert(Opc == BO_Cmp);
+static ImplicitConversionKind castKindToImplicitConversionKind(CastKind CK) {
+  switch (CK) {
+  default:
+    llvm_unreachable("unhandled cast kind");
+  case CK_LValueToRValue:
+    return ICK_Lvalue_To_Rvalue;
+  case CK_ArrayToPointerDecay:
+    return ICK_Array_To_Pointer;
+  case CK_FunctionToPointerDecay:
+    return ICK_Function_To_Pointer;
+  case CK_IntegralCast:
+    return ICK_Integral_Conversion;
+  case CK_FloatingCast:
+    return ICK_Floating_Conversion;
+  case CK_IntegralToFloating:
+  case CK_FloatingToIntegral:
+    return ICK_Floating_Integral;
+  }
+}
+
+static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
+                                     QualType FromType, SourceLocation Loc) {
   // Check for a narrowing implicit conversion.
   StandardConversionSequence SCS;
+  SCS.setToType(0, FromType);
+  SCS.setToType(1, ToType);
+  if (ImplicitCastExpr *ICE = dyn_cast<ImplicitCastExpr>(E)) {
+    auto CastK = ICE->getCastKind();
+    SCS.Second = castKindToImplicitConversionKind(CastK);
+  }
   APValue PreNarrowingValue;
   QualType PreNarrowingType;
-  switch (
-      SCS.getNarrowingKind(S.Context, E, PreNarrowingValue, PreNarrowingType)) {
+  switch (SCS.getNarrowingKind(S.Context, E, PreNarrowingValue,
+                               PreNarrowingType,
+                               /*IgnoreFloatToIntegralConversion*/ true)) {
   case NK_Dependent_Narrowing:
     // Implicit conversion to a narrower type, but the expression is
     // value-dependent so we can't tell whether it's actually narrowing.
@@ -9743,21 +9768,78 @@ static bool checkNarrowingConversion(Sema &S, QualType T, Expr *E,
   case NK_Constant_Narrowing:
     S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 1
-        << PreNarrowingValue.getAsString(S.Context, PreNarrowingType) << T;
+        << PreNarrowingValue.getAsString(S.Context, PreNarrowingType) << ToType;
     return true;
 
   case NK_Type_Narrowing:
     S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
-        << /*Constant*/ 0 << E->getType() << T;
+        << /*Constant*/ 0 << FromType << ToType;
     return true;
   }
   return false;
+}
+static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
+                                                         ExprResult &LHS,
+                                                         ExprResult &RHS,
+                                                         SourceLocation Loc) {
+
+  QualType LHSType = LHS.get()->getType();
+  QualType RHSType = RHS.get()->getType();
+
+  // C++2a [expr.spaceship]p3
+  if (int Count = (LHSType->isBooleanType() + RHSType->isBooleanType())) {
+    // TODO: The spec says that if one but not both of the operands is 'bool'
+    // the program is ill-formed. However, what about bool non-narrowing cases?
+    if (Count != 2) {
+      S.InvalidOperands(Loc, LHS, RHS);
+      return QualType();
+    }
+  }
+
+  QualType Type;
+  if (LHSType->isEnumeralType() || RHSType->isEnumeralType()) {
+    // C++2a [expr.spaceship]p5
+    QualType LHSCanonType =
+        S.Context.getCanonicalType(LHSType).getUnqualifiedType();
+    QualType RHSCanonType =
+        S.Context.getCanonicalType(RHSType).getUnqualifiedType();
+    if (LHSCanonType != RHSCanonType) {
+      S.InvalidOperands(Loc, LHS, RHS);
+      return QualType();
+    }
+    Type = LHSType->getAs<EnumType>()->getDecl()->getIntegerType();
+    assert(Type->isArithmeticType());
+
+    LHS = S.ImpCastExprToType(LHS.get(), Type, CK_BitCast);
+    RHS = S.ImpCastExprToType(RHS.get(), Type, CK_BitCast);
+  } else {
+    // C++2a [expr.spaceship]p4
+    Type = S.UsualArithmeticConversions(LHS, RHS);
+    if (LHS.isInvalid() || RHS.isInvalid())
+      return QualType();
+    if (Type.isNull())
+      return S.InvalidOperands(Loc, LHS, RHS);
+    assert(Type->isArithmeticType());
+
+    bool HasNarrowing = checkNarrowingConversion(S, Type, LHS.get(), LHSType,
+                                                 LHS.get()->getLocStart());
+    HasNarrowing |= checkNarrowingConversion(S, Type, RHS.get(), RHSType,
+                                             RHS.get()->getLocStart());
+    if (HasNarrowing)
+      return QualType();
+  }
+
+  assert(!Type.isNull() && "composite type for <=> has not been set");
+  return computeSpaceshipReturnType(S, Type, Loc);
 }
 
 static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
                                                  ExprResult &RHS,
                                                  SourceLocation Loc,
                                                  BinaryOperatorKind Opc) {
+  if (Opc == BO_Cmp)
+    return checkArithmeticOrEnumeralThreeWayCompare(S, LHS, RHS, Loc);
+
   // C99 6.5.8p3 / C99 6.5.9p4
   QualType Type = S.UsualArithmeticConversions(LHS, RHS);
   if (LHS.isInvalid() || RHS.isInvalid())
@@ -9783,19 +9865,6 @@ static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
   if (Type->hasFloatingRepresentation() && BinaryOperator::isEqualityOp(Opc))
     S.CheckFloatComparison(Loc, LHS.get(), RHS.get());
 
-  QualType LHSType = LHS.get()->getType();
-  QualType RHSType = RHS.get()->getType();
-
-  if (Opc == BO_Cmp) {
-    if (LHSType->isArithmeticType() && RHSType->isArithmeticType()) {
-      bool HasNarrowing =
-          checkNarrowingConversion(S, Type, LHS.get(), Loc, Opc);
-      HasNarrowing |= checkNarrowingConversion(S, Type, RHS.get(), Loc, Opc);
-      if (HasNarrowing)
-        return S.InvalidOperands(Loc, LHS, RHS);
-    }
-    return computeSpaceshipReturnType(S, Type, Loc);
-  }
   // The result of comparisons is 'bool' in C++, 'int' in C.
   return S.Context.getLogicalOperationType();
 }

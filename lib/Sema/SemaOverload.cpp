@@ -288,11 +288,11 @@ static const Expr *IgnoreNarrowingConversion(const Expr *Converted) {
 ///        value of the expression prior to the narrowing conversion.
 /// \param ConstantType  If this is an NK_Constant_Narrowing conversion, the
 ///        type of the expression prior to the narrowing conversion.
-NarrowingKind
-StandardConversionSequence::getNarrowingKind(ASTContext &Ctx,
-                                             const Expr *Converted,
-                                             APValue &ConstantValue,
-                                             QualType &ConstantType) const {
+/// \param IgnoreFloatToIntegralConversion If true type-narrowing conversions
+///        from floating point types to integral types should be ignored.
+NarrowingKind StandardConversionSequence::getNarrowingKind(
+    ASTContext &Ctx, const Expr *Converted, APValue &ConstantValue,
+    QualType &ConstantType, bool IgnoreFloatToIntegralConversion) const {
   assert(Ctx.getLangOpts().CPlusPlus && "narrowing check outside C++");
 
   // C++11 [dcl.init.list]p7:
@@ -326,7 +326,8 @@ StandardConversionSequence::getNarrowingKind(ASTContext &Ctx,
   case ICK_Floating_Integral:
   FloatingIntegralConversion:
     if (FromType->isRealFloatingType() && ToType->isIntegralType(Ctx)) {
-      return NK_Type_Narrowing;
+      return IgnoreFloatToIntegralConversion ? NK_Not_Narrowing
+                                             : NK_Type_Narrowing;
     } else if (FromType->isIntegralOrUnscopedEnumerationType() &&
                ToType->isRealFloatingType()) {
       llvm::APSInt IntConstantValue;

@@ -3,6 +3,8 @@
 
 // RUN: %clang_cc1 -triple x86_64-apple-darwin -fsyntax-only -pedantic -verify -Wsign-compare -std=c++2a %s
 
+#include "Inputs/std-compare.h"
+
 void self_compare() {
   int a;
   int b[3], c[3];
@@ -119,13 +121,15 @@ void test0(long a, unsigned long b) {
   (void)((signed char) a <=> (unsigned char) 0x80000);
 }
 
-void test5(bool b) {
-  (void) (b <=> -10); // expected-warning{{comparison of constant -10 with expression of type 'bool' is always 'std::strong_ordering::greater'}}
-  (void) (b <=> -1); // expected-warning{{comparison of constant -1 with expression of type 'bool' is always 'std::strong_ordering::greater'}}
-  (void) (b <=> 0);
-  (void) (b <=> 1);
-  (void) (b <=> 2); // expected-warning{{comparison of constant 2 with expression of type 'bool' is always 'std::strong_ordering::less'}}
-  (void) (b <=> 10); // expected-warning{{comparison of constant 10 with expression of type 'bool' is always 'std::strong_ordering::less'}}
+void test5(bool b, bool b2) {
+  (void)(b <=> b2);      // OK
+  (void)(true <=> b);    // OK
+  (void)(b <=> -10);     // expected-error {{invalid operands to binary expression ('bool' and 'int')}}
+  (void)(b <=> char(1)); // expected-error {{invalid operands to binary expression ('bool' and 'char')}}
+
+  // FIXME: Should this be accepted when narrowing doesn't occur?
+  (void)(b <=> 0); // expected-error {{invalid operands to binary expression ('bool' and 'int')}}
+  (void)(b <=> 1); // expected-error {{invalid operands to binary expression ('bool' and 'int')}}
 }
 
 void test6(signed char sc) {
@@ -148,7 +152,7 @@ void test7(unsigned long other) {
   (void)((int)other <=> (unsigned)(0x8000'0000));                // expected-warning{{different signs}}
 
   // Common unsigned, other unsigned, constant signed
-  (void)((unsigned long)other <=> (int)(0xffff'ffff));  // expected-warning{{different signs}}
+  (void)((unsigned long)other <=> (int)(0xffff'ffff)); // expected-error {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned long'}}
 
   // Common unsigned, other signed, constant signed
   // Should not be possible as the common type should also be signed.
@@ -171,4 +175,17 @@ void test7(unsigned long other) {
   (void)((unsigned char)other <=> (unsigned short)(0xff));
   (void)((unsigned char)other <=> (unsigned short)(0x100)); // expected-warning{{less}}
   (void)((unsigned short)other <=> (unsigned char)(0xff));
+}
+
+// test void pointer diagnostics
+void test8(void *vp, const void *cvp, int *ip) {
+  (void)(vp <=> cvp); // expected-error {{three-way comparison with void pointer operand types ('void *' and 'const void *')}}
+  (void)(vp <=> ip);  // expected-error {{three-way comparison with void pointer operand type ('void *' and 'int *')}}
+  (void)(ip <=> cvp); // expected-error {{three-way comparison with void pointer operand type ('int *' and 'const void *')}}
+}
+
+void test9(long double ld, double d, float f, int i, long long ll) {
+  (void)(f <=> ll); // OK, floating-point to integer is OK
+  (void)(d <=> ld);
+  (void)(i <=> f);
 }
