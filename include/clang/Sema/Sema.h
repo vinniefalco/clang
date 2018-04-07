@@ -4562,6 +4562,12 @@ public:
   RecordDecl *getComparisonCategoryType(ComparisonCategoryKind CCK,
                                         SourceLocation Loc);
 
+  /// \brief Looks up the RecordDecl for the specified comparison category
+  /// type and returns a DeclRefExpr refering to the member specified by Name.
+  /// If an error occurs a diagnostic is issued.
+  ExprResult getComparisonCategoryMember(ComparisonCategoryKind CCK,
+                                         StringRef Name, SourceLocation Loc);
+
   /// \brief Tests whether Ty is an instance of std::initializer_list and, if
   /// it is and Element is not NULL, assigns the element type to Element.
   bool isStdInitializerList(QualType Ty, QualType *Element);

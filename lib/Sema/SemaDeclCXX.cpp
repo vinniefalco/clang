@@ -8927,6 +8927,62 @@ RecordDecl *Sema::lookupComparisonCategoryType(ComparisonCategoryKind CCK) {
   return CD;
 }
 
+#ifndef NDEBUG
+static void checkComparisonCategoryMember(Sema::ComparisonCategoryKind CCKind,
+                                          StringRef Name) {
+  using CCK = Sema::ComparisonCategoryKind;
+  struct {
+    const char *Name;
+    std::set<CCK> Allowed;
+  } CompareInfo[] = {
+      {"equivalent",
+       {CCK::CCK_WeakEquality, CCK::CCK_StrongEquality,
+        CCK::CCK_PartialOrdering, CCK::CCK_WeakOrdering,
+        CCK::CCK_StrongOrdering}},
+      {"nonequivalent", {CCK::CCK_WeakEquality, CCK::CCK_StrongEquality}},
+      {"equal", {CCK::CCK_StrongEquality, CCK::CCK_StrongOrdering}},
+      {"nonequal", {CCK::CCK_StrongEquality}},
+      {"less",
+       {CCK::CCK_PartialOrdering, CCK::CCK_WeakOrdering,
+        CCK::CCK_StrongOrdering}},
+      {"greater",
+       {CCK::CCK_PartialOrdering, CCK::CCK_WeakOrdering,
+        CCK::CCK_StrongOrdering}},
+      {"unordered", {CCK::CCK_PartialOrdering}}};
+  for (auto &Info : CompareInfo) {
+    if (Info.Name != Name)
+      continue;
+    assert(Info.Allowed.count(CCKind) &&
+           "comparison category type doesn't have the specified member");
+    return;
+  }
+  assert(false && "invalid member name for all comparison categories");
+}
+#endif
+
+ExprResult Sema::getComparisonCategoryMember(ComparisonCategoryKind CCK,
+                                             StringRef Name,
+                                             SourceLocation Loc) {
+#ifndef NDEBUG
+  checkComparisonCategoryMember(CCK, Name);
+#endif
+  RecordDecl *RD = getComparisonCategoryType(CCK, Loc);
+  if (!RD)
+    return ExprError();
+
+  DeclarationName DN = PP.getIdentifierInfo(Name);
+  LookupResult LR(*this, DN, Loc, Sema::LookupMemberName);
+  if (!LookupQualifiedName(LR, RD))
+    return ExprError();
+
+  ValueDecl *Member = LR.getAsSingle<ValueDecl>();
+  if (!Member) {
+    llvm_unreachable(
+        "handling of ill-formed comparison categories is not implemented");
+  }
+  return BuildDeclRefExpr(Member, Member->getType(), VK_LValue, Loc);
+}
+
 /// \brief Retrieve the special "std" namespace, which may require us to
 /// implicitly define the namespace.
 NamespaceDecl *Sema::getOrCreateStdNamespace() {

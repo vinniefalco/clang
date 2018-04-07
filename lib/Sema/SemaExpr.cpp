@@ -9838,9 +9838,11 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     QualType CompositeTy = LHS.get()->getType();
     RecordDecl *CompDecl = nullptr;
     if (CompositeTy->isVoidPointerType()) {
-      Diag(Loc, diag::err_spaceship_comparison_of_void_ptr)
-          << (LHSType->isVoidPointerType() + RHSType->isVoidPointerType() - 1)
-          << LHSType << RHSType;
+      if (!isSFINAEContext()) {
+        Diag(Loc, diag::err_spaceship_comparison_of_void_ptr)
+            << (LHSType->isVoidPointerType() + RHSType->isVoidPointerType() - 1)
+            << LHSType << RHSType;
+      }
       return QualType();
     }
     if (CompositeTy->isFunctionPointerType() ||
@@ -9861,8 +9863,6 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
       return QualType();
     return QualType(CompDecl->getTypeForDecl(), 0);
   };
-
-  QualType ResultTy = Context.getLogicalOperationType();
 
   const Expr::NullPointerConstantKind LHSNullKind =
       LHS.get()->isNullPointerConstant(Context, Expr::NPC_ValueDependentIsNull);
@@ -9898,12 +9898,12 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
       // conformance with the C++ standard.
       diagnoseFunctionPointerToVoidComparison(
           *this, Loc, LHS, RHS, /*isError*/ (bool)isSFINAEContext());
-      
+
       if (isSFINAEContext())
         return QualType();
-      
+
       RHS = ImpCastExprToType(RHS.get(), LHSType, CK_BitCast);
-      return getResultTy();
+      return computeResultTy();
     }
 
     // C++ [expr.eq]p2:
@@ -9973,7 +9973,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
       else
         RHS = ImpCastExprToType(RHS.get(), LHSType, Kind);
     }
-    return ResultTy;
+    return computeResultTy();
   }
 
   if (getLangOpts().CPlusPlus) {
