@@ -9771,12 +9771,12 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
     S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 1
         << PreNarrowingValue.getAsString(S.Context, PreNarrowingType) << ToType;
-    return true;
+    break;
 
   case NK_Type_Narrowing:
     S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 0 << FromType << ToType;
-    return true;
+    break;
   }
 
   if (E->isValueDependent()) {
@@ -10235,13 +10235,13 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
         RHSType->isBlockCompatibleObjCPointerType(Context)) {
       LHS = ImpCastExprToType(LHS.get(), RHSType,
                               CK_BlockPointerToObjCPointerCast);
-      return ResultTy;
+      return computeResultTy();
     } else if (!IsRelational &&
                LHSType->isBlockCompatibleObjCPointerType(Context) &&
                RHSType->isBlockPointerType()) {
       RHS = ImpCastExprToType(RHS.get(), LHSType,
                               CK_BlockPointerToObjCPointerCast);
-      return ResultTy;
+      return computeResultTy();
     }
   }
   if ((LHSType->isAnyPointerType() && RHSType->isIntegerType()) ||
