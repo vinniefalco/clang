@@ -8886,26 +8886,6 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
 }
 
 
-static const char *getComparisonCategoryValueName(ComparisonCategoryValue CCV) {
-  using CCVT = ComparisonCategoryValue;
-  switch (CCV) {
-  case CCVT::Equal:
-    return "equal";
-  case CCVT::Nonequal:
-    return "nonequal";
-  case CCVT::Equivalent:
-    return "equivalent";
-  case CCVT::Nonequivalent:
-    return "nonequivalent";
-  case CCVT::Less:
-    return "less";
-  case CCVT::Greater:
-    return "greater";
-  case CCVT::Unordered:
-    return "unordered";
-  }
-  llvm_unreachable("unhandled case in switch");
-}
 
 bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
   using CCKT = ComparisonCategoryKind;
@@ -8925,27 +8905,13 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
                 End = static_cast<unsigned>(CCKT::Last);
        I <= End; ++I) {
     CCKT CCK = static_cast<CCKT>(I);
-    auto NameClassify = [&]() -> std::pair<const char *, CCCT> {
-      switch (CCK) {
-      case CCKT::WeakEquality:
-        return {"weak_equality", CCCT::None};
-      case CCKT::StrongEquality:
-        return {"strong_equality", CCCT::Strong};
-      case CCKT::PartialOrdering:
-        return {"partial_ordering", CCCT::Ordered | CCCT::Partial};
-      case CCKT::WeakOrdering:
-        return {"weak_ordering", CCCT::Ordered};
-      case CCKT::StrongOrdering:
-        return {"strong_ordering", CCCT::Ordered | CCCT::Strong};
-      }
-      llvm_unreachable("unhandled cases in switch");
-    }();
-    StringRef Name = NameClassify.first;
+
+    StringRef Name = ComparisonCategories::getCategoryString(CCK);
 
     // Build the initial category information
     ComparisonCategoryInfo Info;
     Info.Kind = CCK;
-    Info.Classification = NameClassify.second;
+    Info.Classification = ComparisonCategories::classifyCategory(CCK);
 
     // Lookup the record for the category type
     if (auto Std = getStdNamespace()) {

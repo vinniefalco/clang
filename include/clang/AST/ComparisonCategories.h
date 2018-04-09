@@ -23,6 +23,10 @@
 #include <cassert>
 #include <type_traits>
 
+namespace llvm {
+  class StringRef;
+}
+
 namespace clang {
 
 class DeclRefExpr;
@@ -115,7 +119,10 @@ struct ComparisonCategories {
                  static_cast<unsigned>(ComparisonCategoryKind::Last) + 1>;
 
   static ComparisonCategoryClassification
-  ClassifyKind(ComparisonCategoryKind Kind);
+  classifyCategory(ComparisonCategoryKind Kind);
+
+  static StringRef getCategoryString(ComparisonCategoryKind Kind);
+  static StringRef getValueString(ComparisonCategoryValue Kind);
 
   bool hasData() const { return HasData; }
 

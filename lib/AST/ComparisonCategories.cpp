@@ -42,3 +42,54 @@ ComparisonCategories::getValue(ComparisonCategoryKind Kind,
     return DRE;
   return nullptr;
 }
+
+
+static std::pair<StringRef, ComparisonCategoryClassification>
+getNameAndClassify(ComparisonCategoryKind Kind) {
+  using CCKT = ComparisonCategoryKind ;
+  using CCCT = ComparisonCategoryClassification ;
+  switch (Kind) {
+      case CCKT::WeakEquality:
+        return {"weak_equality", CCCT::None};
+      case CCKT::StrongEquality:
+        return {"strong_equality", CCCT::Strong};
+      case CCKT::PartialOrdering:
+        return {"partial_ordering", CCCT::Ordered | CCCT::Partial};
+      case CCKT::WeakOrdering:
+        return {"weak_ordering", CCCT::Ordered};
+      case CCKT::StrongOrdering:
+        return {"strong_ordering", CCCT::Ordered | CCCT::Strong};
+      }
+      llvm_unreachable("unhandled cases in switch");
+};
+
+
+ComparisonCategoryClassification
+ComparisonCategories::classifyCategory(ComparisonCategoryKind Kind) {
+  return getNameAndClassify(Kind).second;
+}
+
+StringRef ComparisonCategories::getCategoryString(ComparisonCategoryKind Kind) {
+  return getNameAndClassify(Kind).first;
+}
+
+StringRef ComparisonCategories::getValueString(ComparisonCategoryValue Kind) {
+  using CCVT = ComparisonCategoryValue;
+  switch (Kind) {
+  case CCVT::Equal:
+    return "equal";
+  case CCVT::Nonequal:
+    return "nonequal";
+  case CCVT::Equivalent:
+    return "equivalent";
+  case CCVT::Nonequivalent:
+    return "nonequivalent";
+  case CCVT::Less:
+    return "less";
+  case CCVT::Greater:
+    return "greater";
+  case CCVT::Unordered:
+    return "unordered";
+  }
+  llvm_unreachable("unhandled case in switch");
+}
