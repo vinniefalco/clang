@@ -9966,7 +9966,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
             << CompositeTy << LHSType << RHSType;
         return QualType();
       }
-      CompDecl = Context.CompCategories..getDecl(
+      CompDecl = Context.CompCategories.getDecl(
           ComparisonCategoryKind::StrongOrdering);
     } else
       llvm_unreachable("unhandled three-way comparison composite type");
