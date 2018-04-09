@@ -4721,9 +4721,10 @@ public:
       auto &CmpInfo = Info.Ctx.CompCategories.getInfo(Kind);
       bool IsStrong = bool(CmpInfo.Classification &
                            ComparisonCategoryClassification::Strong);
-      ComparisonCategoryResult CmpResult;
+      ComparisonCategoryResult CmpResult = ComparisonCategoryResult::Invalid;
       if (!HandleSpaceshipBinaryOperator(Info, E, CmpResult))
         return Error(E);
+      assert(CmpResult != ComparisonCategoryResult::Invalid);
       if (!IsStrong) {
         if (CmpResult == ComparisonCategoryResult::Equal)
           CmpResult = ComparisonCategoryResult::Equivalent;
@@ -4732,7 +4733,8 @@ public:
       }
       const DeclRefExpr *Value =
           Info.Ctx.CompCategories.getResultValue(Kind, CmpResult);
-      assert(Value);
+
+      assert(Value && "comparison categories not built or ValueKind");
       APValue Res;
       if (!EvaluateAsRValue(Info, Value, Res))
         return Error(E);
@@ -8704,8 +8706,20 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E,
         }
         // Inequalities and subtractions between unrelated pointers have
         // unspecified or undefined behavior.
-        if (!E->isEqualityOp() || E->getOpcode() == BO_Cmp)
-          return Error(E);
+        if (!E->isEqualityOp()) {
+          if (IsSpaceship) {
+            // Compute the type of the comparison based on the result type,
+            // and return an error only if we have a non-equality comparison.
+            auto OptCat =
+                Info.Ctx.CompCategories.getCategoryForType(E->getType());
+            assert(OptCat);
+            auto Classify =
+                Info.Ctx.CompCategories.classifyCategory(OptCat.getValue());
+            if (bool(Classify & ComparisonCategoryClassification::Ordered))
+              return Error(E);
+          } else
+            return Error(E);
+        }
         // A constant address may compare equal to the address of a symbol.
         // The one exception is that address of an object cannot compare equal
         // to a null pointer constant.

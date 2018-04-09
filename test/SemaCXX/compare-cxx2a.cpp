@@ -1,7 +1,7 @@
 // Force x86-64 because some of our heuristics are actually based
 // on integer sizes.
 
-// RUN: %clang_cc1 -triple x86_64-apple-darwin -fsyntax-only -pedantic -verify -Wsign-compare -std=c++2a %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin -fcxx-exceptions -fsyntax-only -pedantic -verify -Wsign-compare -std=c++2a %s
 
 #include "Inputs/std-compare.h"
 
@@ -21,16 +21,16 @@ void test0(long a, unsigned long b) {
 
   // FIXME: <=> should never produce -Wsign-compare warnings. All the possible error
   // cases involve narrowing conversions and so are ill-formed.
-  (void)(a <=> (unsigned long) b); // expected-warning {{comparison of integers of different signs}}
+  (void)(a <=> (unsigned long)b); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
   (void)(a <=> (unsigned int) b);
   (void)(a <=> (unsigned short) b);
   (void)(a <=> (unsigned char) b);
-  (void)((long) a <=> b);  // expected-warning {{comparison of integers of different signs}}
-  (void)((int) a <=> b);  // expected-warning {{comparison of integers of different signs}}
-  (void)((short) a <=> b);  // expected-warning {{comparison of integers of different signs}}
-  (void)((signed char) a <=> b);  // expected-warning {{comparison of integers of different signs}}
-  (void)((long) a <=> (unsigned long) b);  // expected-warning {{comparison of integers of different signs}}
-  (void)((int) a <=> (unsigned int) b);  // expected-warning {{comparison of integers of different signs}}
+  (void)((long)a <=> b);                // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((int)a <=> b);                 // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((short)a <=> b);               // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((signed char)a <=> b);         // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((long)a <=> (unsigned long)b); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((int)a <=> (unsigned int)b);   // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
   (void)((short) a <=> (unsigned short) b);
   (void)((signed char) a <=> (unsigned char) b);
 
@@ -107,7 +107,7 @@ void test0(long a, unsigned long b) {
   (void)((signed char) 0x80000 <=> (unsigned char) b);
 
   // (a,0x80000)
-  (void)(a <=> (unsigned long) 0x80000); // expected-warning {{comparison of integers of different signs}}
+  (void)(a <=> (unsigned long)0x80000); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
   (void)(a <=> (unsigned int) 0x80000);
   (void)(a <=> (unsigned short) 0x80000);
   (void)(a <=> (unsigned char) 0x80000);
@@ -115,8 +115,8 @@ void test0(long a, unsigned long b) {
   (void)((int) a <=> 0x80000);
   (void)((short) a <=> 0x80000); // expected-warning {{comparison of constant 524288 with expression of type 'short' is always 'std::strong_ordering::less'}}
   (void)((signed char) a <=> 0x80000); // expected-warning {{comparison of constant 524288 with expression of type 'signed char' is always 'std::strong_ordering::less'}}
-  (void)((long) a <=> (unsigned long) 0x80000); // expected-warning {{comparison of integers of different signs}}
-  (void)((int) a <=> (unsigned int) 0x80000); // expected-warning {{comparison of integers of different signs}}
+  (void)((long)a <=> (unsigned long)0x80000); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((int)a <=> (unsigned int)0x80000);   // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
   (void)((short) a <=> (unsigned short) 0x80000);
   (void)((signed char) a <=> (unsigned char) 0x80000);
 }
@@ -146,10 +146,10 @@ void test7(unsigned long other) {
   (void)((unsigned long)other <=> (unsigned)(0xffff'ffff));
 
   // Common unsigned, other signed, constant unsigned
-  (void)((int)other <=> (unsigned long)(0xffff'ffff'ffff'ffff)); // expected-warning{{different signs}}
-  (void)((int)other <=> (unsigned long)(0x0000'0000'ffff'ffff)); // expected-warning{{different signs}}
-  (void)((int)other <=> (unsigned long)(0x0000'0000'0fff'ffff)); // expected-warning{{different signs}}
-  (void)((int)other <=> (unsigned)(0x8000'0000));                // expected-warning{{different signs}}
+  (void)((int)other <=> (unsigned long)(0xffff'ffff'ffff'ffff)); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((int)other <=> (unsigned long)(0x0000'0000'ffff'ffff)); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((int)other <=> (unsigned long)(0x0000'0000'0fff'ffff)); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((int)other <=> (unsigned)(0x8000'0000));                // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
 
   // Common unsigned, other unsigned, constant signed
   (void)((unsigned long)other <=> (int)(0xffff'ffff)); // expected-error {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned long'}}
@@ -191,7 +191,7 @@ void test9(long double ld, double d, float f, int i, long long ll) {
 }
 
 void non_constexpr_expr();
-#define CHECK(...) do { if (!(__VA_ARGS__)) return false; } while (false)
+#define CHECK(...) ((__VA_ARGS__) ? void() : throw "error")
 #define CHECK_TYPE(...) static_assert(__is_same(__VA_ARGS__));
 
 enum class StrongEnum {
@@ -200,8 +200,19 @@ enum class StrongEnum {
   TWO = 2
 };
 
-constexpr bool test_constexpr() {
+struct MemPtr {
+  void foo() {}
+  void bar() {}
+};
+using MemPtrT = void (MemPtr::*)();
 
+void test_21() {
+  MemPtrT P1 = &MemPtr::foo;
+  MemPtrT P2 = &MemPtr::foo;
+  (void)(P1 <=> P2);
+}
+
+constexpr bool test_constexpr() {
   {
     auto &EQ = std::strong_ordering::equal;
     auto &LESS = std::strong_ordering::less;
@@ -224,11 +235,36 @@ constexpr bool test_constexpr() {
     auto EQUIV = PO::equivalent;
     auto LESS = PO::less;
     auto GREATER = PO::greater;
-    auto eq = (42.0 <=> 101.0);
-    CHECK_TYPE(decltype(eq), PO);
-    CHECK(eq.test_eq(GREATER));
-  }
 
+    auto eq = (42.0 <=> 42.0);
+    CHECK_TYPE(decltype(eq), PO);
+    CHECK(eq.test_eq(EQUIV));
+
+    auto less = (39.0 <=> 42.0);
+    CHECK_TYPE(decltype(less), PO);
+    CHECK(less.test_eq(LESS));
+
+    auto greater = (-10.123 <=> -101.1);
+    CHECK_TYPE(decltype(greater), PO);
+    CHECK(greater.test_eq(GREATER));
+  }
+#if 1 // FIXME
+  {
+    using SO = std::strong_equality;
+    auto EQ = SO::equal;
+    auto NEQ = SO::nonequal;
+
+    MemPtrT P1 = &MemPtr::foo;
+    MemPtrT P12 = &MemPtr::foo;
+    MemPtrT P2 = &MemPtr::bar;
+    MemPtrT P3 = nullptr;
+
+    auto eq = (P1 <=> P12);
+    //CHECK_TYPE(decltype(eq), SO);
+    //CHECK(eq.test_eq(EQ));
+    CHECK(eq.test_eq(EQ));
+  }
+#endif
   return true;
 }
-static_assert(test_constexpr());
+constexpr bool res = test_constexpr();

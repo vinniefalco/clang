@@ -44,6 +44,7 @@ enum class ComparisonCategoryKind : unsigned char {
 };
 
 enum class ComparisonCategoryResult : unsigned char {
+  Invalid, // Internal implementation detail
   Equal,
   Equivalent,
   Nonequivalent,

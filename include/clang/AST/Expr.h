@@ -3014,23 +3014,28 @@ private:
   // This is only meaningful for operations on floating point types and 0
   // otherwise.
   unsigned FPFeatures : 2;
+
+  // When Opc is BO_Cmp, this is set only when the comparison category is an
+  // ordered comparison. Otherwise the comparison is an equality comparison.
+  unsigned IsCmpOrdered : 1;
+
   SourceLocation OpLoc;
 
   enum { LHS, RHS, END_EXPR };
   Stmt* SubExprs[END_EXPR];
 public:
-
   BinaryOperator(Expr *lhs, Expr *rhs, Opcode opc, QualType ResTy,
-                 ExprValueKind VK, ExprObjectKind OK,
-                 SourceLocation opLoc, FPOptions FPFeatures)
-    : Expr(BinaryOperatorClass, ResTy, VK, OK,
-           lhs->isTypeDependent() || rhs->isTypeDependent(),
-           lhs->isValueDependent() || rhs->isValueDependent(),
-           (lhs->isInstantiationDependent() ||
-            rhs->isInstantiationDependent()),
-           (lhs->containsUnexpandedParameterPack() ||
-            rhs->containsUnexpandedParameterPack())),
-      Opc(opc), FPFeatures(FPFeatures.getInt()), OpLoc(opLoc) {
+                 ExprValueKind VK, ExprObjectKind OK, SourceLocation opLoc,
+                 FPOptions FPFeatures)
+      : Expr(BinaryOperatorClass, ResTy, VK, OK,
+             lhs->isTypeDependent() || rhs->isTypeDependent(),
+             lhs->isValueDependent() || rhs->isValueDependent(),
+             (lhs->isInstantiationDependent() ||
+              rhs->isInstantiationDependent()),
+             (lhs->containsUnexpandedParameterPack() ||
+              rhs->containsUnexpandedParameterPack())),
+        Opc(opc), FPFeatures(FPFeatures.getInt()), IsCmpOrdered(false),
+        OpLoc(opLoc) {
     SubExprs[LHS] = lhs;
     SubExprs[RHS] = rhs;
     assert(!isCompoundAssignmentOp() &&
@@ -3089,10 +3094,16 @@ public:
   bool isBitwiseOp() const { return isBitwiseOp(getOpcode()); }
 
   static bool isRelationalOp(Opcode Opc) { return Opc >= BO_LT && Opc<=BO_GE; }
-  bool isRelationalOp() const { return isRelationalOp(getOpcode()); }
+  bool isRelationalOp() const {
+    return isRelationalOp(getOpcode()) ||
+           (getOpcode() == BO_Cmp && IsCmpOrdered);
+  }
 
   static bool isEqualityOp(Opcode Opc) { return Opc == BO_EQ || Opc == BO_NE; }
-  bool isEqualityOp() const { return isEqualityOp(getOpcode()); }
+  bool isEqualityOp() const {
+    return isEqualityOp(getOpcode()) ||
+           (getOpcode() == BO_Cmp && !IsCmpOrdered);
+  }
 
   static bool isComparisonOp(Opcode Opc) { return Opc >= BO_Cmp && Opc<=BO_NE; }
   bool isComparisonOp() const { return isComparisonOp(getOpcode()); }
@@ -3152,6 +3163,9 @@ public:
   bool isShiftAssignOp() const {
     return isShiftAssignOp(getOpcode());
   }
+
+  void setIsCmpOrdered(bool Val = true) { IsCmpOrdered = Val; }
+  bool getIsCmpOrdered() const { return IsCmpOrdered; }
 
   // Return true if a binary operator using the specified opcode and operands
   // would match the 'p = (i8*)nullptr + n' idiom for casting a pointer-sized

@@ -37,6 +37,8 @@ const DeclRefExpr *
 ComparisonCategories::getResultValue(ComparisonCategoryKind Kind,
                                      ComparisonCategoryResult ValueKind) const {
   assert(hasData() && "comparison category data not built");
+  assert(ValueKind != ComparisonCategoryResult::Invalid &&
+         "invalid result kind");
   auto &Info = getInfo(Kind);
   if (auto *DRE = Info.Objects.lookup(static_cast<char>(ValueKind)))
     return DRE;
@@ -90,6 +92,8 @@ StringRef ComparisonCategories::getResultString(ComparisonCategoryResult Kind) {
     return "greater";
   case CCVT::Unordered:
     return "unordered";
+  case CCVT::Invalid:
+    return "invalid";
   }
   llvm_unreachable("unhandled case in switch");
 }

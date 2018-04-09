@@ -9753,7 +9753,6 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
     auto CastK = ICE->getCastKind();
     SCS.Second = castKindToImplicitConversionKind(CastK);
   }
-  bool Diagnosed = false;
   APValue PreNarrowingValue;
   QualType PreNarrowingType;
   switch (SCS.getNarrowingKind(S.Context, E, PreNarrowingValue,
@@ -9802,14 +9801,14 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
   S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 0 << FromType << ToType;
   // It's not a constant expression. Produce an appropriate diagnostic.
-  if (Notes.size() == 1 &&
+  if (Notes.size() >= 1 &&
       Notes[0].second.getDiagID() == diag::note_invalid_subexpr_in_const_expr)
     S.Diag(Notes[0].first, diag::note_spaceship_operand_not_cce);
   else {
-    S.Diag(E->getLocStart(), diag::note_spaceship_operand_not_cce)
-        << /*Constant*/ 0 << FromType << ToType;
-    for (unsigned I = 0; I < Notes.size(); ++I)
-      S.Diag(Notes[I].first, Notes[I].second);
+    S.Diag(E->getLocStart(), diag::note_spaceship_operand_not_cce);
+    // FIXME: Re-enable these notes?
+    // for (unsigned I = 0; I < Notes.size(); ++I)
+    //  S.Diag(Notes[I].first, Notes[I].second);
   }
   return true;
 }
@@ -9944,6 +9943,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
       return QualType();
 
     QualType CompositeTy = LHS.get()->getType();
+    assert(!CompositeTy->isReferenceType());
     const RecordDecl *CompDecl = nullptr;
     if (CompositeTy->isVoidPointerType()) {
       if (!isSFINAEContext()) {
@@ -10047,7 +10047,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     if (Context.typesAreCompatible(LCanPointeeTy.getUnqualifiedType(),
                                    RCanPointeeTy.getUnqualifiedType())) {
       // Valid unless a relational comparison of function pointers
-      if (IsRelational && LCanPointeeTy->isFunctionType()) {
+      if ((IsRelational && !IsSpaceship) && LCanPointeeTy->isFunctionType()) {
         Diag(Loc, diag::ext_typecheck_ordered_comparison_of_function_pointers)
           << LHSType << RHSType << LHS.get()->getSourceRange()
           << RHS.get()->getSourceRange();
@@ -10142,7 +10142,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // C++ [expr.eq]p2:
     //   If at least one operand is a pointer to member, [...] bring them to
     //   their composite pointer type.
-    if (!IsRelational &&
+    if ((!IsRelational || IsSpaceship) &&
         (LHSType->isMemberPointerType() || RHSType->isMemberPointerType())) {
       if (convertPointersToCompositeType(*this, Loc, LHS, RHS))
         return QualType();
@@ -11888,7 +11888,8 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
   ExprValueKind VK = VK_RValue;
   ExprObjectKind OK = OK_Ordinary;
   bool ConvertHalfVec = false;
-
+  // If the binary operator is <=> and it's an ordered comparison.
+  bool IsCmpOrdered = false;
   std::tie(LHS, RHS) = CorrectDelayedTyposInBinOp(*this, Opc, LHSExpr, RHSExpr);
   if (!LHS.isUsable() || !RHS.isUsable())
     return ExprError();
@@ -11974,6 +11975,12 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
     ConvertHalfVec = true;
     ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc, true);
     assert(ResultTy.isNull() || ResultTy->getAsCXXRecordDecl());
+    if (!ResultTy.isNull()) {
+      auto &CC = Context.CompCategories;
+      auto Classify =
+          CC.classifyCategory(CC.getCategoryForType(ResultTy).getValue());
+      IsCmpOrdered = bool(Classify & ComparisonCategoryClassification::Ordered);
+    }
     break;
   case BO_And:
     checkObjCPointerIntrospection(*this, LHS, RHS, OpLoc);
@@ -12079,8 +12086,11 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
     if (ConvertHalfVec)
       return convertHalfVecBinOp(*this, LHS, RHS, Opc, ResultTy, VK, OK, false,
                                  OpLoc, FPFeatures);
-    return new (Context) BinaryOperator(LHS.get(), RHS.get(), Opc, ResultTy, VK,
-                                        OK, OpLoc, FPFeatures);
+    BinaryOperator *Op = new (Context) BinaryOperator(
+        LHS.get(), RHS.get(), Opc, ResultTy, VK, OK, OpLoc, FPFeatures);
+    if (Opc == BO_Cmp)
+      Op->setIsCmpOrdered(IsCmpOrdered);
+    return Op;
   }
 
   // Handle compound assignments.

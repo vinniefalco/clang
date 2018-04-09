@@ -689,6 +689,7 @@ void ASTStmtReader::VisitBinaryOperator(BinaryOperator *E) {
   E->setOpcode((BinaryOperator::Opcode)Record.readInt());
   E->setOperatorLoc(ReadSourceLocation());
   E->setFPFeatures(FPOptions(Record.readInt()));
+  E->setIsCmpOrdered(Record.readInt());
 }
 
 void ASTStmtReader::VisitCompoundAssignOperator(CompoundAssignOperator *E) {
