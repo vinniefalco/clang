@@ -8955,7 +8955,7 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
       Result.suppressDiagnostics();
     }
     if (!Info.CCDecl) {
-      Diag(Loc, diag::err_implied_comparison_category_type_not_found) <<.Name;
+      Diag(Loc, diag::err_implied_comparison_category_type_not_found) << Name;
       return true;
     }
 
