@@ -38,7 +38,7 @@ ComparisonCategories::getValue(ComparisonCategoryKind Kind,
                                ComparisonCategoryValue ValueKind) const {
   assert(hasData() && "comparison category data not built");
   auto &Info = getInfo(Kind);
-  if (auto *DRE = Info.Objects.lookup(static_cast<char>(ValueKind))
+  if (auto *DRE = Info.Objects.lookup(static_cast<char>(ValueKind)))
     return DRE;
   return nullptr;
 }

@@ -18,6 +18,7 @@
 #include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
+#include "clang/Basic/LLVM.h"
 #include <array>
 #include <cassert>
 #include <type_traits>
