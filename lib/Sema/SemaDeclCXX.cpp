@@ -8885,8 +8885,6 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
   return StdExperimentalNamespaceCache;
 }
 
-
-
 bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
   using CCKT = ComparisonCategoryKind;
   using CCVT = ComparisonCategoryValue;
