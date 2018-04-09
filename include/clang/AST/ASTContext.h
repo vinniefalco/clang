@@ -18,6 +18,7 @@
 #include "clang/AST/ASTTypeTraits.h"
 #include "clang/AST/CanonicalType.h"
 #include "clang/AST/CommentCommandTraits.h"
+#include "clang/AST/ComparisonCategories.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclarationName.h"
@@ -387,46 +388,9 @@ class ASTContext : public RefCountedBase<ASTContext> {
   llvm::DenseMap<Module*, PerModuleInitializers*> ModuleInitializers;
 
 public:
-  enum ComparisonCategoryKind : unsigned char {
-    CCK_WeakEquality,
-    CCK_StrongEquality,
-    CCK_PartialOrdering,
-    CCK_WeakOrdering,
-    CCK_StrongOrdering,
-    CCK_Last = CCK_StrongOrdering,
-    CCK_First = CCK_WeakEquality
-  };
-  enum ComparisonCategoryValue : unsigned char {
-    CCV_Equal,
-    CCV_Equivalent,
-    CCV_Nonequivalent,
-    CCV_Nonequal,
-    CCV_Less,
-    CCV_Greater,
-    CCV_Unordered,
-  };
-  enum ComparisonCategoryClassification : unsigned char {
-    CCC_None = 0,
-    CCC_Strong = 1 << 0,
-    CCC_Ordered = 1 << 1,
-    CCC_Partial = 1 << 2
-  };
-  struct ComparisonCategoryInfo {
-    const char *Name = nullptr;
-
-    /// \brief The declaration for the comparison category type from the
-    /// standard library.
-    RecordDecl *CCDecl = nullptr;
-
-    ComparisonCategoryClassification Classification;
-
-    /// \brief A map containing the comparison category values built from the
-    /// standard library. The key is a value of ComparisonCategoryValue.
-    llvm::DenseMap<char, DeclRefExpr *> Objects;
-  };
-
   using ComparisonCategoryInfoList =
-      std::array<ComparisonCategoryInfo, CCK_Last + 1>;
+      std::array<ComparisonCategoryInfo,
+                 static_cast<unsigned>(ComparisonCategoryKind::Size)>;
 
 private:
   bool ComparisonCategoriesBuilt = false;
@@ -439,7 +403,7 @@ public:
   getComparisonCategoryInfo(ComparisonCategoryKind Kind) const {
     assert(ComparisonCategoriesBuilt &&
            "comparison category information not yet built");
-    return ComparisonCategoryData[Kind];
+    return ComparisonCategoryData[static_cast<unsigned>(Kind)];
   }
 
   void setComparisonCategoryData(ComparisonCategoryInfoList &&NewData) {

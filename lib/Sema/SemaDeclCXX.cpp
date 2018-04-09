@@ -17,6 +17,7 @@
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/CharUnits.h"
+#include "clang/AST/ComparisonCategories.h"
 #include "clang/AST/EvaluatedExprVisitor.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/RecordLayout.h"
@@ -8884,28 +8885,23 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
   return StdExperimentalNamespaceCache;
 }
 
-using ComparisonCategoryKind = ASTContext::ComparisonCategoryKind;
-using ComparisonCategoryValue = ASTContext::ComparisonCategoryValue;
-using ComparisonCategoryClassification =
-    ASTContext::ComparisonCategoryClassification;
-using ComparisonCategoryInfo = ASTContext::ComparisonCategoryInfo;
 
 static const char *getComparisonCategoryValueName(ComparisonCategoryValue CCV) {
   using CCVT = ComparisonCategoryValue;
   switch (CCV) {
-  case CCVT::CCV_Equal:
+  case CCVT::Equal:
     return "equal";
-  case CCVT::CCV_Nonequal:
+  case CCVT::Nonequal:
     return "nonequal";
-  case CCVT::CCV_Equivalent:
+  case CCVT::Equivalent:
     return "equivalent";
-  case CCVT::CCV_Nonequivalent:
+  case CCVT::Nonequivalent:
     return "nonequivalent";
-  case CCVT::CCV_Less:
+  case CCVT::Less:
     return "less";
-  case CCVT::CCV_Greater:
+  case CCVT::Greater:
     return "greater";
-  case CCVT::CCV_Unordered:
+  case CCVT::Unordered:
     return "unordered";
   }
   llvm_unreachable("unhandled case in switch");
@@ -8925,22 +8921,22 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
   ASTContext::ComparisonCategoryInfoList NewData;
   // Otherwise, look up each of the category types and build their required
   // data.
-  for (auto CCK = CCKT::CCK_First; CCK <= CCKT::CCK_Last;
-       CCK = static_cast<CCKT>(CCK + 1)) {
-
+  for (unsigned I = static_cast<unsigned>(CCKT::First),
+                unsigned End = static_cast<unsigned>(CCKT::Last);
+       I <= End; ++I) {
+    CCKT CCK = static_cast<CCKT>(I);
     auto NameClassify = [&]() -> std::pair<const char *, CCCT> {
-      auto Cast = [](int Val) { return static_cast<CCCT>(Val); };
       switch (CCK) {
-      case CCKT::CCK_WeakEquality:
-        return {"weak_equality", CCCT::CCC_None};
-      case CCKT::CCK_StrongEquality:
-        return {"strong_equality", CCCT::CCC_Strong};
-      case CCKT::CCK_PartialOrdering:
-        return {"partial_ordering", Cast(CCCT::CCC_Ordered | CCCT::CCC_Partial)};
-      case CCKT::CCK_WeakOrdering:
-        return {"weak_ordering", CCCT::CCC_Ordered};
-      case CCKT::CCK_StrongOrdering:
-        return {"strong_ordering", Cast(CCCT::CCC_Ordered | CCCT::CCC_Strong)};
+      case CCKT::WeakEquality:
+        return {"weak_equality", CCCT::None};
+      case CCKT::StrongEquality:
+        return {"strong_equality", CCCT::Strong};
+      case CCKT::PartialOrdering:
+        return {"partial_ordering", CCCT::Ordered | CCCT::Partial};
+      case CCKT::WeakOrdering:
+        return {"weak_ordering", CCCT::Ordered};
+      case CCKT::StrongOrdering:
+        return {"strong_ordering", CCCT::Ordered | CCCT::Strong};
       }
     }();
 
@@ -8965,19 +8961,19 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
 
     // Calculate the list of values belonging to this comparison category type.
     SmallVector<CCVT, 4> Values;
-    Values.push_back(CCVT::CCV_Equivalent);
-    if (Info.Classification & CCCT::CCC_Strong)
-      Values.push_back(CCVT::CCV_Equal);
-    if (Info.Classification & CCCT::CCC_Ordered) {
-      Values.push_back(CCVT::CCV_Less);
-      Values.push_back(CCVT::CCV_Greater);
+    Values.push_back(CCVT::Equivalent);
+    if (bool(Info.Classification & CCCT::Strong))
+      Values.push_back(CCVT::Equal);
+    if (bool(Info.Classification & CCCT::Ordered)) {
+      Values.push_back(CCVT::Less);
+      Values.push_back(CCVT::Greater);
     } else {
-      Values.push_back(CCVT::CCV_Nonequivalent);
-      if (Info.Classification & CCCT::CCC_Strong)
-        Values.push_back(CCVT::CCV_Nonequal);
+      Values.push_back(CCVT::Nonequivalent);
+      if (bool(Info.Classification & CCCT::Strong))
+        Values.push_back(CCVT::Nonequal);
     }
-    if (Info.Classification & CCCT::CCC_Partial)
-      Values.push_back(CCVT::CCV_Unordered);
+    if (bool(Info.Classification & CCCT::Partial))
+      Values.push_back(CCVT::Unordered);
 
     // Build each of the require values and store them in Info.
     for (CCVT CCV : Values) {
@@ -9008,7 +9004,7 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
     }
 
     // Success. Set the value in ASTContext.
-    NewData[CCK] = std::move(Info);
+    NewData[I] = std::move(Info);
   }
 
   // All of the objects and values have been built successfully.

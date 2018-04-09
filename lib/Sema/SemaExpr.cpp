@@ -9707,12 +9707,12 @@ static void diagnoseTautologicalComparison(Sema &S, SourceLocation Loc,
 
 static QualType computeSpaceshipReturnType(Sema &S, QualType ArgTy,
                                            SourceLocation Loc) {
-  using CCK = ASTContext::ComparisonCategoryKind;
+  using CCK = ComparisonCategoryKind;
   CCK TypeKind;
   if (ArgTy->isIntegralOrEnumerationType()) {
-    TypeKind = CCK::CCK_StrongOrdering;
+    TypeKind = CCK::StrongOrdering;
   } else if (ArgTy->hasFloatingRepresentation()) {
-    TypeKind = CCK::CCK_PartialOrdering;
+    TypeKind = CCK::PartialOrdering;
   } else {
     llvm_unreachable("other types are unimplemented");
   }
@@ -9957,7 +9957,8 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     if (CompositeTy->isFunctionPointerType() ||
         CompositeTy->isMemberPointerType() || CompositeTy->isNullPtrType())
       CompDecl =
-          Context.getComparisonCategoryInfo(ASTContext::CCK_StrongEquality)
+          Context
+              .getComparisonCategoryInfo(ComparisonCategoryKind::StrongEquality)
               .CCDecl;
     else if (CompositeTy->isPointerType()) {
       auto PointeeTy = CompositeTy->getPointeeType();
@@ -9968,7 +9969,8 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
         return QualType();
       }
       CompDecl =
-          Context.getComparisonCategoryInfo(ASTContext::CCK_StrongOrdering)
+          Context
+              .getComparisonCategoryInfo(ComparisonCategoryKind::StrongOrdering)
               .CCDecl;
     } else
       llvm_unreachable("unhandled three-way comparison composite type");
