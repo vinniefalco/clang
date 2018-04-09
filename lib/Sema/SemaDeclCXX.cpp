@@ -8960,7 +8960,8 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
         return true;
       }
 
-      ExprResult Res = BuildDeclRefExpr(VD, VD->getType(), VK_RValue, Loc);
+      ExprResult Res =
+          BuildDeclRefExpr(VD, VD->getType(), VK_LValue, SourceLocation());
       if (Res.isInvalid())
         return true;
       std::pair<char, DeclRefExpr *> KV{(char)CCV,

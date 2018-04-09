@@ -39,6 +39,11 @@ public:
   friend constexpr weak_equality operator<=>(weak_equality __v, _CmpUnspecifiedParam) noexcept;
   friend constexpr weak_equality operator<=>(_CmpUnspecifiedParam, weak_equality __v) noexcept;
 
+  // test helper
+  constexpr bool test_eq(weak_equality const &other) const noexcept {
+    return __value_ == other.__value_;
+  }
+
 private:
   _EqResult __value_;
 };
@@ -88,6 +93,11 @@ public:
 
   friend constexpr strong_equality operator<=>(strong_equality __v, _CmpUnspecifiedParam) noexcept;
   friend constexpr strong_equality operator<=>(_CmpUnspecifiedParam, strong_equality __v) noexcept;
+
+  // test helper
+  constexpr bool test_eq(strong_equality const &other) const noexcept {
+    return __value_ == other.__value_;
+  }
 
 private:
   _EqResult __value_;
@@ -158,6 +168,11 @@ public:
 
   friend constexpr partial_ordering operator<=>(partial_ordering __v, _CmpUnspecifiedParam) noexcept;
   friend constexpr partial_ordering operator<=>(_CmpUnspecifiedParam, partial_ordering __v) noexcept;
+
+  // test helper
+  constexpr bool test_eq(partial_ordering const &other) const noexcept {
+    return __value_ == other.__value_;
+  }
 
 private:
   _ValueT __value_;
@@ -248,6 +263,11 @@ public:
   friend constexpr weak_ordering operator<=>(weak_ordering __v, _CmpUnspecifiedParam) noexcept;
   friend constexpr weak_ordering operator<=>(_CmpUnspecifiedParam, weak_ordering __v) noexcept;
 
+  // test helper
+  constexpr bool test_eq(weak_ordering const &other) const noexcept {
+    return __value_ == other.__value_;
+  }
+
 private:
   _ValueT __value_;
 };
@@ -301,8 +321,8 @@ constexpr weak_ordering operator<=>(_CmpUnspecifiedParam, weak_ordering __v) noe
 
 class strong_ordering {
   using _ValueT = signed char;
-  explicit constexpr strong_ordering(_EqResult __v) noexcept : __value_(_ValueT(__v)) {}
-  explicit constexpr strong_ordering(_OrdResult __v) noexcept : __value_(_ValueT(__v)) {}
+  explicit constexpr strong_ordering(_EqResult __v) noexcept : __value_(static_cast<signed char>(__v)) {}
+  explicit constexpr strong_ordering(_OrdResult __v) noexcept : __value_(static_cast<signed char>(__v)) {}
 
 public:
   static const strong_ordering less;
@@ -344,6 +364,11 @@ public:
 
   friend constexpr strong_ordering operator<=>(strong_ordering __v, _CmpUnspecifiedParam) noexcept;
   friend constexpr strong_ordering operator<=>(_CmpUnspecifiedParam, strong_ordering __v) noexcept;
+
+  // test helper
+  constexpr bool test_eq(strong_ordering const &other) const noexcept {
+    return __value_ == other.__value_;
+  }
 
 private:
   _ValueT __value_;

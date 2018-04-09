@@ -9389,5 +9389,6 @@ def err_std_compare_type_missing_member : Error<
   "%0 missing a member named '%1'">;
 def err_std_compare_type_invalid_member : Error<
   "member '%1' of %0 is ill-formed">;
-
+def note_spaceship_operand_not_cce : Note<
+  "argument is not a constant expression">;
 } // end of sema component.

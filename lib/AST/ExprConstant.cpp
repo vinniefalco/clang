@@ -2151,6 +2151,7 @@ static bool CheckedIntArithmetic(EvalInfo &Info, const Expr *E,
 static bool handleIntIntBinOp(EvalInfo &Info, const Expr *E, const APSInt &LHS,
                               BinaryOperatorKind Opcode, APSInt RHS,
                               APSInt &Result) {
+
   switch (Opcode) {
   default:
     Info.FFDiag(E);
@@ -2242,6 +2243,8 @@ static bool handleIntIntBinOp(EvalInfo &Info, const Expr *E, const APSInt &LHS,
   case BO_GE: Result = LHS >= RHS; return true;
   case BO_EQ: Result = LHS == RHS; return true;
   case BO_NE: Result = LHS != RHS; return true;
+  case BO_Cmp:
+    llvm_unreachable("BO_Cmp should be handled elsewhere");
   }
 }
 
@@ -4569,6 +4572,10 @@ static bool HandleConstructorCall(const Expr *E, const LValue &This,
                                Info, Result);
 }
 
+static bool HandleSpaceshipBinaryOperator(EvalInfo &Info,
+                                          const BinaryOperator *E,
+                                          ComparisonCategoryResult &CmpResult);
+
 //===----------------------------------------------------------------------===//
 // Generic Evaluation
 //===----------------------------------------------------------------------===//
@@ -4707,7 +4714,30 @@ public:
     switch (E->getOpcode()) {
     default:
       return Error(E);
-
+    case BO_Cmp: {
+      auto OptKind = Info.Ctx.CompCategories.getCategoryForType(E->getType());
+      assert(OptKind.hasValue() && "Fixme unhandled error");
+      auto Kind = OptKind.getValue();
+      auto &CmpInfo = Info.Ctx.CompCategories.getInfo(Kind);
+      bool IsStrong = bool(CmpInfo.Classification &
+                           ComparisonCategoryClassification::Strong);
+      ComparisonCategoryResult CmpResult;
+      if (!HandleSpaceshipBinaryOperator(Info, E, CmpResult))
+        return Error(E);
+      if (!IsStrong) {
+        if (CmpResult == ComparisonCategoryResult::Equal)
+          CmpResult = ComparisonCategoryResult::Equivalent;
+        else if (CmpResult == ComparisonCategoryResult::Nonequal)
+          CmpResult = ComparisonCategoryResult::Nonequivalent;
+      }
+      const DeclRefExpr *Value =
+          Info.Ctx.CompCategories.getResultValue(Kind, CmpResult);
+      assert(Value);
+      APValue Res;
+      if (!EvaluateAsRValue(Info, Value, Res))
+        return Error(E);
+      return DerivedSuccess(Res, E);
+    }
     case BO_Comma:
       VisitIgnoredValue(E->getLHS());
       return StmtVisitorTy::Visit(E->getRHS());
@@ -7078,6 +7108,12 @@ public:
   IntExprEvaluator(EvalInfo &info, APValue &result)
     : ExprEvaluatorBaseTy(info), Result(result) {}
 
+  bool Success(const BinaryOperator *E) {
+    assert(E->getOpcode() == BO_Cmp &&
+           "this success function should only be used by operator<=>");
+    ((void)E);
+    return true;
+  }
   bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
     assert(E->getType()->isIntegralOrEnumerationType() &&
            "Invalid evaluation result.");
@@ -7107,7 +7143,7 @@ public:
   }
 
   bool Success(uint64_t Value, const Expr *E, APValue &Result) {
-    assert(E->getType()->isIntegralOrEnumerationType() && 
+    assert(E->getType()->isIntegralOrEnumerationType() &&
            "Invalid evaluation result.");
     Result = APValue(Info.Ctx.MakeIntValue(Value, E->getType()));
     return true;
@@ -7159,7 +7195,11 @@ public:
 
   bool VisitCallExpr(const CallExpr *E);
   bool VisitBuiltinCallExpr(const CallExpr *E, unsigned BuiltinOp);
-  bool VisitBinaryOperator(const BinaryOperator *E);
+  bool VisitBinaryOperator(const BinaryOperator *E) {
+    return VisitBinaryOperator(E, nullptr);
+  }
+  bool VisitBinaryOperator(const BinaryOperator *E,
+                           ComparisonCategoryResult *Res);
   bool VisitOffsetOfExpr(const OffsetOfExpr *E);
   bool VisitUnaryOperator(const UnaryOperator *E);
 
@@ -8476,6 +8516,13 @@ void DataRecursiveIntBinOpEvaluator::process(EvalResult &Result) {
   llvm_unreachable("Invalid Job::Kind!");
 }
 
+static bool HandleSpaceshipBinaryOperator(EvalInfo &Info,
+                                          const BinaryOperator *E,
+                                          ComparisonCategoryResult &CmpResult) {
+  APValue Result;
+  return IntExprEvaluator(Info, Result).VisitBinaryOperator(E, &CmpResult);
+}
+
 namespace {
 /// Used when we determine that we should fail, but can keep evaluating prior to
 /// noting that we had a failure.
@@ -8497,7 +8544,10 @@ public:
 };
 }
 
-bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
+bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E,
+                                           ComparisonCategoryResult *CmpRes) {
+  assert((E->getOpcode() != BO_Cmp) == (CmpRes == nullptr));
+  bool IsSpaceship = E->getOpcode() == BO_Cmp;
   // We don't call noteFailure immediately because the assignment happens after
   // we evaluate LHS and RHS.
   if (!Info.keepEvaluatingAfterFailure() && E->isAssignmentOp())
@@ -8600,6 +8650,23 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       return Success(CR == APFloat::cmpGreaterThan
                      || CR == APFloat::cmpLessThan
                      || CR == APFloat::cmpUnordered, E);
+    case BO_Cmp: {
+      switch (CR) {
+      case APFloat::cmpEqual:
+        *CmpRes = ComparisonCategoryResult::Equal;
+        break;
+      case APFloat::cmpUnordered:
+        *CmpRes = ComparisonCategoryResult::Unordered;
+        break;
+      case APFloat::cmpLessThan:
+        *CmpRes = ComparisonCategoryResult::Less;
+        break;
+      case APFloat::cmpGreaterThan:
+        *CmpRes = ComparisonCategoryResult::Greater;
+        break;
+      }
+      return Success(E);
+    }
     }
   }
 
@@ -8637,7 +8704,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
         }
         // Inequalities and subtractions between unrelated pointers have
         // unspecified or undefined behavior.
-        if (!E->isEqualityOp())
+        if (!E->isEqualityOp() || E->getOpcode() == BO_Cmp)
           return Error(E);
         // A constant address may compare equal to the address of a symbol.
         // The one exception is that address of an object cannot compare equal
@@ -8668,6 +8735,10 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
         if ((RHSValue.Base && isZeroSized(LHSValue)) ||
             (LHSValue.Base && isZeroSized(RHSValue)))
           return Error(E);
+        if (E->getOpcode() == BO_Cmp) {
+          *CmpRes = ComparisonCategoryResult::Nonequal;
+          return Success(E);
+        }
         // Pointers with different bases cannot represent the same object.
         return Success(E->getOpcode() == BO_NE, E);
       }
@@ -8724,6 +8795,10 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
         if (Result.extend(65) != TrueResult &&
             !HandleOverflow(Info, E, TrueResult, E->getType()))
           return false;
+        if (E->getOpcode() == BO_Cmp) {
+          *CmpRes = ComparisonCategoryResult::Equal;
+          return Success(E);
+        }
         return Success(Result, E);
       }
 
@@ -8811,12 +8886,24 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       case BO_GE: return Success(CompareLHS >= CompareRHS, E);
       case BO_EQ: return Success(CompareLHS == CompareRHS, E);
       case BO_NE: return Success(CompareLHS != CompareRHS, E);
+      case BO_Cmp: {
+        if (CompareLHS < CompareRHS)
+          *CmpRes = ComparisonCategoryResult::Less;
+        else if (CompareLHS > CompareRHS)
+          *CmpRes = ComparisonCategoryResult::Greater;
+        else if (CompareLHS == CompareRHS)
+          *CmpRes = ComparisonCategoryResult::Equal;
+        else
+          *CmpRes = ComparisonCategoryResult::Nonequal;
+        return Success(E);
+      }
       }
     }
   }
 
   if (LHSTy->isMemberPointerType()) {
-    assert(E->isEqualityOp() && "unexpected member pointer operation");
+    assert((E->isEqualityOp() || E->getOpcode() == BO_Cmp) &&
+           "unexpected member pointer operation");
     assert(RHSTy->isMemberPointerType() && "invalid comparison");
 
     MemberPtr LHSValue, RHSValue;
@@ -8833,6 +8920,11 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     //   null, they compare unequal.
     if (!LHSValue.getDecl() || !RHSValue.getDecl()) {
       bool Equal = !LHSValue.getDecl() && !RHSValue.getDecl();
+      if (E->getOpcode() == BO_Cmp) {
+        *CmpRes = (Equal ? ComparisonCategoryResult::Equal
+                         : ComparisonCategoryResult::Nonequal);
+        return Success(E);
+      }
       return Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
     }
 
@@ -8850,6 +8942,11 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     //   they were dereferenced with a hypothetical object of the associated
     //   class type.
     bool Equal = LHSValue == RHSValue;
+    if (E->getOpcode() == BO_Cmp) {
+      *CmpRes = (Equal ? ComparisonCategoryResult::Equal
+                       : ComparisonCategoryResult::Nonequal);
+      return Success(E);
+    }
     return Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
   }
 
@@ -8860,12 +8957,38 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     // are compared, the result is true of the operator is <=, >= or ==, and
     // false otherwise.
     BinaryOperator::Opcode Opcode = E->getOpcode();
+    if (Opcode == BO_Cmp) {
+      *CmpRes = ComparisonCategoryResult::Equal;
+      return Success(E);
+    }
     return Success(Opcode == BO_EQ || Opcode == BO_LE || Opcode == BO_GE, E);
+  }
+
+  if (IsSpaceship && LHSTy->isIntegralOrEnumerationType() &&
+      RHSTy->isIntegralOrEnumerationType()) {
+    APSInt LHS, RHS;
+    bool LHSOK = EvaluateInteger(E->getLHS(), LHS, Info);
+    if (!LHSOK && !Info.noteFailure())
+      return false;
+
+    if (!EvaluateInteger(E->getRHS(), RHS, Info) || !LHSOK)
+      return false;
+
+    if (LHS < RHS)
+      *CmpRes = ComparisonCategoryResult::Less;
+    else if (LHS > RHS)
+      *CmpRes = ComparisonCategoryResult::Greater;
+    else if (LHS == RHS)
+      *CmpRes = ComparisonCategoryResult::Equal;
+    else
+      *CmpRes = ComparisonCategoryResult::Nonequal;
+    return Success(E);
   }
 
   assert((!LHSTy->isIntegralOrEnumerationType() ||
           !RHSTy->isIntegralOrEnumerationType()) &&
          "DataRecursiveIntBinOpEvaluator should have handled integral types");
+  assert(!IsSpaceship && "case not handled for operator<=>");
   // We can't continue from here for non-integral types.
   return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
 }
@@ -10609,7 +10732,6 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
     case BO_AndAssign:
     case BO_XorAssign:
     case BO_OrAssign:
-    case BO_Cmp: // FIXME: Re-enable once we can evaluate this.
       // C99 6.6/3 allows assignments within unevaluated subexpressions of
       // constant expressions, but they can never be ICEs because an ICE cannot
       // contain an lvalue operand.
@@ -10631,7 +10753,8 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
     case BO_And:
     case BO_Xor:
     case BO_Or:
-    case BO_Comma: {
+    case BO_Comma:
+    case BO_Cmp: {
       ICEDiag LHSResult = CheckICE(Exp->getLHS(), Ctx);
       ICEDiag RHSResult = CheckICE(Exp->getRHS(), Ctx);
       if (Exp->getOpcode() == BO_Div ||

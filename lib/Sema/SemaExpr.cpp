@@ -9753,6 +9753,7 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
     auto CastK = ICE->getCastKind();
     SCS.Second = castKindToImplicitConversionKind(CastK);
   }
+  bool Diagnosed = false;
   APValue PreNarrowingValue;
   QualType PreNarrowingType;
   switch (SCS.getNarrowingKind(S.Context, E, PreNarrowingValue,
@@ -9764,20 +9765,16 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
   case NK_Not_Narrowing:
     return false;
 
-  case NK_Variable_Narrowing:
-    // Implicit conversion to a narrower type, and the value is not a constant
-    // expression. We'll diagnose this in a moment.
-    break;
-
   case NK_Constant_Narrowing:
     S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 1
         << PreNarrowingValue.getAsString(S.Context, PreNarrowingType) << ToType;
-    break;
+    return true;
 
+  case NK_Variable_Narrowing:
+    // Implicit conversion to a narrower type, and the value is not a constant
+    // expression. We'll diagnose this in a moment.
   case NK_Type_Narrowing:
-    S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
-        << /*Constant*/ 0 << FromType << ToType;
     break;
   }
 
@@ -9802,19 +9799,21 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
       return false;
     }
   }
-
+  S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
+        << /*Constant*/ 0 << FromType << ToType;
   // It's not a constant expression. Produce an appropriate diagnostic.
   if (Notes.size() == 1 &&
       Notes[0].second.getDiagID() == diag::note_invalid_subexpr_in_const_expr)
-    S.Diag(Notes[0].first, diag::err_expr_not_cce) << Sema::CCEK_CaseValue; // FIXME
+    S.Diag(Notes[0].first, diag::note_spaceship_operand_not_cce);
   else {
-    S.Diag(E->getLocStart(), diag::err_expr_not_cce)
-      << Sema::CCEK_CaseValue << E->getSourceRange();
+    S.Diag(E->getLocStart(), diag::note_spaceship_operand_not_cce)
+        << /*Constant*/ 0 << FromType << ToType;
     for (unsigned I = 0; I < Notes.size(); ++I)
       S.Diag(Notes[I].first, Notes[I].second);
   }
   return true;
 }
+
 static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
                                                          ExprResult &LHS,
                                                          ExprResult &RHS,

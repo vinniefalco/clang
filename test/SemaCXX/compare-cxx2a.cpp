@@ -190,6 +190,45 @@ void test9(long double ld, double d, float f, int i, long long ll) {
   (void)(i <=> f);
 }
 
-void test_constexpr() {
-  (void)(42 <=> 42);
+void non_constexpr_expr();
+#define CHECK(...) do { if (!(__VA_ARGS__)) return false; } while (false)
+#define CHECK_TYPE(...) static_assert(__is_same(__VA_ARGS__));
+
+enum class StrongEnum {
+  ONE = 1,
+  ZERO = 0,
+  TWO = 2
+};
+
+constexpr bool test_constexpr() {
+
+  {
+    auto &EQ = std::strong_ordering::equal;
+    auto &LESS = std::strong_ordering::less;
+    auto &GREATER = std::strong_ordering::greater;
+    using SO = std::strong_ordering;
+    auto eq = (42 <=> 42);
+    CHECK_TYPE(decltype(eq), SO);
+    CHECK(eq.test_eq(EQ));
+
+    auto less = (-1 <=> 0);
+    CHECK_TYPE(decltype(less), SO);
+    CHECK(less.test_eq(LESS));
+
+    auto greater = (42l <=> 1u);
+    CHECK_TYPE(decltype(greater), SO);
+    CHECK(greater.test_eq(GREATER));
+  }
+  {
+    using PO = std::partial_ordering;
+    auto EQUIV = PO::equivalent;
+    auto LESS = PO::less;
+    auto GREATER = PO::greater;
+    auto eq = (42.0 <=> 101.0);
+    CHECK_TYPE(decltype(eq), PO);
+    CHECK(eq.test_eq(GREATER));
+  }
+
+  return true;
 }
+static_assert(test_constexpr());
