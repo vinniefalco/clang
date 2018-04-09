@@ -71,7 +71,6 @@ struct ComparisonCategoryInfo {
 
 namespace llvm {
 
-namespace llvm {
 template <> struct DenseMapInfo<clang::ComparisonCategoryValue> {
 private:
   using ValueType = clang::ComparisonCategoryValue;
