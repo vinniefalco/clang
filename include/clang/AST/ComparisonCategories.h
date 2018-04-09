@@ -43,7 +43,7 @@ enum class ComparisonCategoryKind : unsigned char {
   First = WeakEquality
 };
 
-enum class ComparisonCategoryValue : unsigned char {
+enum class ComparisonCategoryResult : unsigned char {
   Equal,
   Equivalent,
   Nonequivalent,
@@ -67,9 +67,9 @@ LLVM_ENABLE_BITMASK_ENUMS_IN_NAMESPACE();
 
 namespace llvm {
 
-template <> struct DenseMapInfo<clang::ComparisonCategoryValue> {
+template <> struct DenseMapInfo<clang::ComparisonCategoryResult> {
 private:
-  using ValueType = clang::ComparisonCategoryValue;
+  using ValueType = clang::ComparisonCategoryResult;
   using UnderlyingT = std::underlying_type<ValueType>::type;
   static ValueType Cast(UnderlyingT Val) { return static_cast<ValueType>(Val); }
 
@@ -107,7 +107,7 @@ struct ComparisonCategoryInfo {
   ComparisonCategoryClassification Classification;
 
 public:
-  const DeclRefExpr *getValue(ComparisonCategoryValue ValueKind) const {
+  const DeclRefExpr *getResultValue(ComparisonCategoryResult ValueKind) const {
     char Key = static_cast<char>(ValueKind);
     return Objects.lookup(Key);
   }
@@ -122,7 +122,7 @@ struct ComparisonCategories {
   classifyCategory(ComparisonCategoryKind Kind);
 
   static StringRef getCategoryString(ComparisonCategoryKind Kind);
-  static StringRef getValueString(ComparisonCategoryValue Kind);
+  static StringRef getResultString(ComparisonCategoryResult Kind);
 
   bool hasData() const { return HasData; }
 
@@ -137,8 +137,8 @@ struct ComparisonCategories {
 
   Optional<ComparisonCategoryKind> getCategoryForType(QualType Ty) const;
 
-  const DeclRefExpr *getValue(ComparisonCategoryKind Kind,
-                              ComparisonCategoryValue ValKind) const;
+  const DeclRefExpr *getResultValue(ComparisonCategoryKind Kind,
+                                    ComparisonCategoryResult ValKind) const;
 
   void setData(InfoList &&NewData) {
     assert(!HasData && "comparison categories already built");

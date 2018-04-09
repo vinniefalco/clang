@@ -34,8 +34,8 @@ ComparisonCategories::getCategoryForType(QualType Ty) const {
 }
 
 const DeclRefExpr *
-ComparisonCategories::getValue(ComparisonCategoryKind Kind,
-                               ComparisonCategoryValue ValueKind) const {
+ComparisonCategories::getResultValue(ComparisonCategoryKind Kind,
+                                     ComparisonCategoryResult ValueKind) const {
   assert(hasData() && "comparison category data not built");
   auto &Info = getInfo(Kind);
   if (auto *DRE = Info.Objects.lookup(static_cast<char>(ValueKind)))
@@ -73,8 +73,8 @@ StringRef ComparisonCategories::getCategoryString(ComparisonCategoryKind Kind) {
   return getNameAndClassify(Kind).first;
 }
 
-StringRef ComparisonCategories::getValueString(ComparisonCategoryValue Kind) {
-  using CCVT = ComparisonCategoryValue;
+StringRef ComparisonCategories::getResultString(ComparisonCategoryResult Kind) {
+  using CCVT = ComparisonCategoryResult;
   switch (Kind) {
   case CCVT::Equal:
     return "equal";

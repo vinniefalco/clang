@@ -8887,7 +8887,7 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
 
 bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
   using CCKT = ComparisonCategoryKind;
-  using CCVT = ComparisonCategoryValue;
+  using CCVT = ComparisonCategoryResult;
   using CCCT = ComparisonCategoryClassification;
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
@@ -8942,7 +8942,7 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
 
     // Build each of the require values and store them in Info.
     for (CCVT CCV : Values) {
-      StringRef ValueName = ComparisonCategories::getValueString(CCV);
+      StringRef ValueName = ComparisonCategories::getResultString(CCV);
       QualType Ty(Info.CCDecl->getTypeForDecl(), 0);
       DeclContext *LookupCtx = computeDeclContext(Ty);
       LookupResult Found(*this, &PP.getIdentifierTable().get(ValueName), Loc,
