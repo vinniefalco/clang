@@ -8942,7 +8942,7 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
 
     // Build each of the require values and store them in Info.
     for (CCVT CCV : Values) {
-      StringRef ValueName = getComparisonCategoryValueName(CCV);
+      StringRef ValueName = ComparisonCategories::getValueString(CCV);
       QualType Ty(Info.CCDecl->getTypeForDecl(), 0);
       DeclContext *LookupCtx = computeDeclContext(Ty);
       LookupResult Found(*this, &PP.getIdentifierTable().get(ValueName), Loc,
