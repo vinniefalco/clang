@@ -36,8 +36,7 @@ enum class ComparisonCategoryKind : unsigned char {
   WeakOrdering,
   StrongOrdering,
   Last = StrongOrdering,
-  First = WeakEquality,
-  Size = Last + 1
+  First = WeakEquality
 };
 
 enum class ComparisonCategoryValue : unsigned char {
@@ -113,7 +112,7 @@ public:
 struct ComparisonCategories {
   using InfoList =
       std::array<ComparisonCategoryInfo,
-                 static_cast<unsigned>(ComparisonCategoryKind::Size)>;
+                 static_cast<unsigned>(ComparisonCategoryKind::Last) + 1>;
 
   static ComparisonCategoryClassification
   ClassifyKind(ComparisonCategoryKind Kind);
