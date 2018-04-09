@@ -388,30 +388,7 @@ class ASTContext : public RefCountedBase<ASTContext> {
   llvm::DenseMap<Module*, PerModuleInitializers*> ModuleInitializers;
 
 public:
-  using ComparisonCategoryInfoList =
-      std::array<ComparisonCategoryInfo,
-                 static_cast<unsigned>(ComparisonCategoryKind::Size)>;
-
-private:
-  bool ComparisonCategoriesBuilt = false;
-  ComparisonCategoryInfoList ComparisonCategoryData;
-
-public:
-  bool hasComparisonCategoriesData() const { return ComparisonCategoriesBuilt; }
-
-  const ComparisonCategoryInfo &
-  getComparisonCategoryInfo(ComparisonCategoryKind Kind) const {
-    assert(ComparisonCategoriesBuilt &&
-           "comparison category information not yet built");
-    return ComparisonCategoryData[static_cast<unsigned>(Kind)];
-  }
-
-  void setComparisonCategoryData(ComparisonCategoryInfoList &&NewData) {
-    assert(!ComparisonCategoriesBuilt &&
-           "comparison category information already built");
-    ComparisonCategoryData = std::move(NewData);
-    ComparisonCategoriesBuilt = true;
-  }
+  ComparisonCategories CompCategories;
 
 private:
   ASTContext &this_() { return *this; }

@@ -1,25 +1,32 @@
+//===- ComparisonCategories.h - Three Way Comparison Data -------*- C++ -*-===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+//  This file defines the Comparison Category enum and data types, which
+//  store the types and expressions needed to support operator<=>
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 #define LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 
 #include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/Optional.h"
 #include <array>
+#include <cassert>
 #include <type_traits>
 
 namespace clang {
 
 class DeclRefExpr;
 class RecordDecl;
-
-enum class ComparisonCategoryValue : unsigned char;
-
-} // namespace clang
-
-namespace llvm {
-template <> struct DenseMapInfo<clang::ComparisonCategoryValue>;
-} // namespace llvm
-
-namespace clang {
+class QualType;
 
 enum class ComparisonCategoryKind : unsigned char {
   WeakEquality,
@@ -52,21 +59,6 @@ enum class ComparisonCategoryClassification : unsigned char {
 
 LLVM_ENABLE_BITMASK_ENUMS_IN_NAMESPACE();
 
-struct ComparisonCategoryInfo {
-  const char *Name = nullptr;
-
-  /// \brief The declaration for the comparison category type from the
-  /// standard library.
-  RecordDecl *CCDecl = nullptr;
-
-  ComparisonCategoryKind Kind;
-  ComparisonCategoryClassification Classification;
-
-  /// \brief A map containing the comparison category values built from the
-  /// standard library. The key is a value of ComparisonCategoryValue.
-  llvm::DenseMap<char, DeclRefExpr *> Objects;
-};
-
 } // namespace clang
 
 namespace llvm {
@@ -91,5 +83,67 @@ public:
 };
 
 } // namespace llvm
+
+namespace clang {
+
+struct ComparisonCategoryInfo {
+  /// \brief The declaration for the comparison category type from the
+  /// standard library.
+  RecordDecl *CCDecl = nullptr;
+
+  /// \brief A map containing the comparison category values built from the
+  /// standard library. The key is a value of ComparisonCategoryValue.
+  llvm::DenseMap<char, DeclRefExpr *> Objects;
+
+  /// \brief The Kind of the comparison category type
+  ComparisonCategoryKind Kind;
+
+  /// \brief The classification of the comparison category type, representing
+  /// the values it contains.
+  ComparisonCategoryClassification Classification;
+
+public:
+  const DeclRefExpr *getValue(ComparisonCategoryValue ValueKind) const {
+    char Key = static_cast<char>(ValueKind);
+    return Objects.lookup(Key);
+  }
+};
+
+struct ComparisonCategories {
+  using InfoList =
+      std::array<ComparisonCategoryInfo,
+                 static_cast<unsigned>(ComparisonCategoryKind::Size)>;
+
+  static ComparisonCategoryClassification
+  ClassifyKind(ComparisonCategoryKind Kind);
+
+  bool hasData() const { return HasData; }
+
+  const ComparisonCategoryInfo &getInfo(ComparisonCategoryKind Kind) const {
+    assert(HasData && "comparison category information not yet built");
+    return Data[static_cast<unsigned>(Kind)];
+  }
+
+  const RecordDecl *getDecl(ComparisonCategoryKind Kind) const {
+    return getInfo(Kind).CCDecl;
+  }
+
+  Optional<ComparisonCategoryKind> getCategoryForType(QualType Ty) const;
+
+  const DeclRefExpr *getValue(ComparisonCategoryKind Kind,
+                              ComparisonCategoryValue ValKind) const;
+
+  void setData(InfoList &&NewData) {
+    assert(!HasData && "comparison categories already built");
+    Data = std::move(NewData);
+    HasData = true;
+  }
+
+private:
+  bool HasData = false;
+  InfoList Data;
+};
+
+} // namespace clang
 
 #endif

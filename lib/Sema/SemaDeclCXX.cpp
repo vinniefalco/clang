@@ -8915,14 +8915,14 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
          "Looking for comparison category type outside of C++.");
 
   // Check if we've already successfully built the comparison category data.
-  if (Context.hasComparisonCategoriesData())
+  if (Context.CompCategories.hasData())
     return false;
 
-  ASTContext::ComparisonCategoryInfoList NewData;
+  ComparisonCategories::InfoList NewData;
   // Otherwise, look up each of the category types and build their required
   // data.
   for (unsigned I = static_cast<unsigned>(CCKT::First),
-                unsigned End = static_cast<unsigned>(CCKT::Last);
+                End = static_cast<unsigned>(CCKT::Last);
        I <= End; ++I) {
     CCKT CCK = static_cast<CCKT>(I);
     auto NameClassify = [&]() -> std::pair<const char *, CCCT> {
@@ -8939,23 +8939,23 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
         return {"strong_ordering", CCCT::Ordered | CCCT::Strong};
       }
     }();
+    StringRef Name = NameClassify.first;
 
     // Build the initial category information
     ComparisonCategoryInfo Info;
-    Info.Name = NameClassify.first;
+    Info.Kind = CCK;
     Info.Classification = NameClassify.second;
 
     // Lookup the record for the category type
     if (auto Std = getStdNamespace()) {
-      LookupResult Result(*this, &PP.getIdentifierTable().get(Info.Name),
+      LookupResult Result(*this, &PP.getIdentifierTable().get(Name),
                           SourceLocation(), Sema::LookupTagName);
       if (LookupQualifiedName(Result, Std))
         Info.CCDecl = Result.getAsSingle<RecordDecl>();
       Result.suppressDiagnostics();
     }
     if (!Info.CCDecl) {
-      Diag(Loc, diag::err_implied_comparison_category_type_not_found)
-          << Info.Name;
+      Diag(Loc, diag::err_implied_comparison_category_type_not_found) <<.Name;
       return true;
     }
 
@@ -9008,7 +9008,7 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
   }
 
   // All of the objects and values have been built successfully.
-  Context.setComparisonCategoryData(std::move(NewData));
+  Context.CompCategories.setData(std::move(NewData));
   return false;
 }
 

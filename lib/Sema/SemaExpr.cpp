@@ -9719,7 +9719,7 @@ static QualType computeSpaceshipReturnType(Sema &S, QualType ArgTy,
   if (S.BuildComparisonCategoryData(Loc))
     return QualType();
 
-  RecordDecl *CCK_RD = S.Context.getComparisonCategoryInfo(TypeKind).CCDecl;
+  const RecordDecl *CCK_RD = S.Context.CompCategories.getDecl(TypeKind);
   return QualType(CCK_RD->getTypeForDecl(), 0);
 }
 
@@ -9945,7 +9945,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
       return QualType();
 
     QualType CompositeTy = LHS.get()->getType();
-    RecordDecl *CompDecl = nullptr;
+    const RecordDecl *CompDecl = nullptr;
     if (CompositeTy->isVoidPointerType()) {
       if (!isSFINAEContext()) {
         Diag(Loc, diag::err_spaceship_comparison_of_void_ptr)
@@ -9956,10 +9956,8 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     }
     if (CompositeTy->isFunctionPointerType() ||
         CompositeTy->isMemberPointerType() || CompositeTy->isNullPtrType())
-      CompDecl =
-          Context
-              .getComparisonCategoryInfo(ComparisonCategoryKind::StrongEquality)
-              .CCDecl;
+      CompDecl = Context.CompCategories.getDecl(
+          ComparisonCategoryKind::StrongEquality);
     else if (CompositeTy->isPointerType()) {
       auto PointeeTy = CompositeTy->getPointeeType();
       if (!PointeeTy->isObjectType()) {
@@ -9968,10 +9966,8 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
             << CompositeTy << LHSType << RHSType;
         return QualType();
       }
-      CompDecl =
-          Context
-              .getComparisonCategoryInfo(ComparisonCategoryKind::StrongOrdering)
-              .CCDecl;
+      CompDecl = Context.CompCategories..getDecl(
+          ComparisonCategoryKind::StrongOrdering);
     } else
       llvm_unreachable("unhandled three-way comparison composite type");
     if (!CompDecl)
