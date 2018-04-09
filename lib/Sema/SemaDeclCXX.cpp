@@ -8937,6 +8937,10 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
         return {"weak_ordering", CCCT::Ordered};
       case CCKT::StrongOrdering:
         return {"strong_ordering", CCCT::Ordered | CCCT::Strong};
+      case CCKT::First:
+      case CCKT::Last:
+      case CCKT::Size:
+        llvm_unreachable("unhandled cases in switch");
       }
     }();
     StringRef Name = NameClassify.first;
