@@ -9385,4 +9385,9 @@ def err_spaceship_comparison_of_void_ptr : Error<
   "(%1 and %2)">;
 def err_spaceship_comparison_of_invalid_comp_type : Error<
   "three-way comparison of operands has composite type %0 (%1 and %2)">;
+def err_std_compare_type_missing_member : Error<
+  "%0 missing a member named '%1'">;
+def err_std_compare_type_invalid_member : Error<
+  "member '%1' of %0 is ill-formed">;
+
 } // end of sema component.

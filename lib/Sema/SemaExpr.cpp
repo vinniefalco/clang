@@ -9707,7 +9707,7 @@ static void diagnoseTautologicalComparison(Sema &S, SourceLocation Loc,
 
 static QualType computeSpaceshipReturnType(Sema &S, QualType ArgTy,
                                            SourceLocation Loc) {
-  using CCK = Sema::ComparisonCategoryKind;
+  using CCK = ASTContext::ComparisonCategoryKind;
   CCK TypeKind;
   if (ArgTy->isIntegralOrEnumerationType()) {
     TypeKind = CCK::CCK_StrongOrdering;
@@ -9716,9 +9716,11 @@ static QualType computeSpaceshipReturnType(Sema &S, QualType ArgTy,
   } else {
     llvm_unreachable("other types are unimplemented");
   }
-  if (RecordDecl *CCK_RD = S.getComparisonCategoryType(TypeKind, Loc))
-    return QualType(CCK_RD->getTypeForDecl(), 0);
-  return QualType();
+  if (S.BuildComparisonCategoryData(Loc))
+    return QualType();
+
+  RecordDecl *CCK_RD = S.Context.getComparisonCategoryInfo(TypeKind).CCDecl;
+  return QualType(CCK_RD->getTypeForDecl(), 0);
 }
 
 static ImplicitConversionKind castKindToImplicitConversionKind(CastKind CK) {
@@ -9938,6 +9940,10 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
       return Context.getLogicalOperationType();
     assert(getLangOpts().CPlusPlus);
     assert(LHS.get()->getType() == RHS.get()->getType());
+
+    if (BuildComparisonCategoryData(Loc))
+      return QualType();
+
     QualType CompositeTy = LHS.get()->getType();
     RecordDecl *CompDecl = nullptr;
     if (CompositeTy->isVoidPointerType()) {
@@ -9950,7 +9956,9 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     }
     if (CompositeTy->isFunctionPointerType() ||
         CompositeTy->isMemberPointerType() || CompositeTy->isNullPtrType())
-      CompDecl = getComparisonCategoryType(CCK_StrongEquality, Loc);
+      CompDecl =
+          Context.getComparisonCategoryInfo(ASTContext::CCK_StrongEquality)
+              .CCDecl;
     else if (CompositeTy->isPointerType()) {
       auto PointeeTy = CompositeTy->getPointeeType();
       if (!PointeeTy->isObjectType()) {
@@ -9959,7 +9967,9 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
             << CompositeTy << LHSType << RHSType;
         return QualType();
       }
-      CompDecl = getComparisonCategoryType(CCK_StrongOrdering, Loc);
+      CompDecl =
+          Context.getComparisonCategoryInfo(ASTContext::CCK_StrongOrdering)
+              .CCDecl;
     } else
       llvm_unreachable("unhandled three-way comparison composite type");
     if (!CompDecl)

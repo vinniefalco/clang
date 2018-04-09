@@ -8884,103 +8884,136 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
   return StdExperimentalNamespaceCache;
 }
 
-static const char *getComparisonCategoryName(Sema::ComparisonCategoryKind CCK) {
-  switch (CCK) {
-  case Sema::CCK_WeakEquality:
-    return "weak_equality";
-  case Sema::CCK_StrongEquality:
-    return "strong_equality";
-  case Sema::CCK_PartialOrdering:
-    return "partial_ordering";
-  case Sema::CCK_WeakOrdering:
-    return "weak_ordering";
-  case Sema::CCK_StrongOrdering:
-    return "strong_ordering";
+using ComparisonCategoryKind = ASTContext::ComparisonCategoryKind;
+using ComparisonCategoryValue = ASTContext::ComparisonCategoryValue;
+using ComparisonCategoryClassification =
+    ASTContext::ComparisonCategoryClassification;
+using ComparisonCategoryInfo = ASTContext::ComparisonCategoryInfo;
+
+static const char *getComparisonCategoryValueName(ComparisonCategoryValue CCV) {
+  using CCVT = ComparisonCategoryValue;
+  switch (CCV) {
+  case CCVT::CCV_Equal:
+    return "equal";
+  case CCVT::CCV_Nonequal:
+    return "nonequal";
+  case CCVT::CCV_Equivalent:
+    return "equivalent";
+  case CCVT::CCV_Nonequivalent:
+    return "nonequivalent";
+  case CCVT::CCV_Less:
+    return "less";
+  case CCVT::CCV_Greater:
+    return "greater";
+  case CCVT::CCV_Unordered:
+    return "unordered";
   }
-  llvm_unreachable("unhandled comparison category kind");
+  llvm_unreachable("unhandled case in switch");
 }
 
-RecordDecl *Sema::getComparisonCategoryType(ComparisonCategoryKind CCK,
-                                            SourceLocation Loc) {
-  if (RecordDecl *CD = lookupComparisonCategoryType(CCK))
-    return CD;
-  Diag(Loc, diag::err_implied_comparison_category_type_not_found)
-      << getComparisonCategoryName(CCK);
-  return nullptr;
-}
-
-RecordDecl *Sema::lookupComparisonCategoryType(ComparisonCategoryKind CCK) {
+bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
+  using CCKT = ComparisonCategoryKind;
+  using CCVT = ComparisonCategoryValue;
+  using CCCT = ComparisonCategoryClassification;
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
-  assert(CCK <= CCK_Last);
-  RecordDecl *&CD = ComparisonCategoryTypes[CCK];
-  if (!CD) {
+
+  // Check if we've already successfully built the comparison category data.
+  if (Context.hasComparisonCategoriesData())
+    return false;
+
+  ASTContext::ComparisonCategoryInfoList NewData;
+  // Otherwise, look up each of the category types and build their required
+  // data.
+  for (auto CCK = CCKT::CCK_First; CCK <= CCKT::CCK_Last;
+       CCK = static_cast<CCKT>(CCK + 1)) {
+
+    auto NameClassify = [&]() -> std::pair<const char *, CCCT> {
+      auto Cast = [](int Val) { return static_cast<CCCT>(Val); };
+      switch (CCK) {
+      case CCKT::CCK_WeakEquality:
+        return {"weak_equality", CCCT::CCC_None};
+      case CCKT::CCK_StrongEquality:
+        return {"strong_equality", CCCT::CCC_Strong};
+      case CCKT::CCK_PartialOrdering:
+        return {"partial_ordering", Cast(CCCT::CCC_Ordered | CCCT::CCC_Partial)};
+      case CCKT::CCK_WeakOrdering:
+        return {"weak_ordering", CCCT::CCC_Ordered};
+      case CCKT::CCK_StrongOrdering:
+        return {"strong_ordering", Cast(CCCT::CCC_Ordered | CCCT::CCC_Strong)};
+      }
+    }();
+
+    // Build the initial category information
+    ComparisonCategoryInfo Info;
+    Info.Name = NameClassify.first;
+    Info.Classification = NameClassify.second;
+
+    // Lookup the record for the category type
     if (auto Std = getStdNamespace()) {
-      const char *Name = getComparisonCategoryName(CCK);
-      LookupResult Result(*this, &PP.getIdentifierTable().get(Name),
-                          SourceLocation(), LookupTagName);
-      if (!LookupQualifiedName(Result, Std) ||
-          !(CD = Result.getAsSingle<RecordDecl>()))
-        Result.suppressDiagnostics();
+      LookupResult Result(*this, &PP.getIdentifierTable().get(Info.Name),
+                          SourceLocation(), Sema::LookupTagName);
+      if (LookupQualifiedName(Result, Std))
+        Info.CCDecl = Result.getAsSingle<RecordDecl>();
+      Result.suppressDiagnostics();
     }
+    if (!Info.CCDecl) {
+      Diag(Loc, diag::err_implied_comparison_category_type_not_found)
+          << Info.Name;
+      return true;
+    }
+
+    // Calculate the list of values belonging to this comparison category type.
+    SmallVector<CCVT, 4> Values;
+    Values.push_back(CCVT::CCV_Equivalent);
+    if (Info.Classification & CCCT::CCC_Strong)
+      Values.push_back(CCVT::CCV_Equal);
+    if (Info.Classification & CCCT::CCC_Ordered) {
+      Values.push_back(CCVT::CCV_Less);
+      Values.push_back(CCVT::CCV_Greater);
+    } else {
+      Values.push_back(CCVT::CCV_Nonequivalent);
+      if (Info.Classification & CCCT::CCC_Strong)
+        Values.push_back(CCVT::CCV_Nonequal);
+    }
+    if (Info.Classification & CCCT::CCC_Partial)
+      Values.push_back(CCVT::CCV_Unordered);
+
+    // Build each of the require values and store them in Info.
+    for (CCVT CCV : Values) {
+      StringRef ValueName = getComparisonCategoryValueName(CCV);
+      QualType Ty(Info.CCDecl->getTypeForDecl(), 0);
+      DeclContext *LookupCtx = computeDeclContext(Ty);
+      LookupResult Found(*this, &PP.getIdentifierTable().get(ValueName), Loc,
+                         Sema::LookupOrdinaryName);
+      if (!LookupQualifiedName(Found, LookupCtx)) {
+        Diag(Loc, diag::err_std_compare_type_missing_member)
+            << Info.CCDecl << ValueName;
+        return true;
+      }
+      auto *VD = Found.getAsSingle<VarDecl>();
+      if (!VD || !VD->isStaticDataMember()) {
+        // FIXME: Handle more ways the lookup can result in a invalid value.
+        Diag(Loc, diag::err_std_compare_type_invalid_member)
+            << Info.CCDecl << ValueName;
+        return true;
+      }
+
+      ExprResult Res = BuildDeclRefExpr(VD, VD->getType(), VK_RValue, Loc);
+      if (Res.isInvalid())
+        return true;
+      std::pair<char, DeclRefExpr *> KV{(char)CCV,
+                                        cast<DeclRefExpr>(Res.get())};
+      Info.Objects.insert(KV);
+    }
+
+    // Success. Set the value in ASTContext.
+    NewData[CCK] = std::move(Info);
   }
-  return CD;
-}
 
-#ifndef NDEBUG
-static void checkComparisonCategoryMember(Sema::ComparisonCategoryKind CCKind,
-                                          StringRef Name) {
-  using CCK = Sema::ComparisonCategoryKind;
-  struct {
-    const char *Name;
-    std::set<CCK> Allowed;
-  } CompareInfo[] = {
-      {"equivalent",
-       {CCK::CCK_WeakEquality, CCK::CCK_StrongEquality,
-        CCK::CCK_PartialOrdering, CCK::CCK_WeakOrdering,
-        CCK::CCK_StrongOrdering}},
-      {"nonequivalent", {CCK::CCK_WeakEquality, CCK::CCK_StrongEquality}},
-      {"equal", {CCK::CCK_StrongEquality, CCK::CCK_StrongOrdering}},
-      {"nonequal", {CCK::CCK_StrongEquality}},
-      {"less",
-       {CCK::CCK_PartialOrdering, CCK::CCK_WeakOrdering,
-        CCK::CCK_StrongOrdering}},
-      {"greater",
-       {CCK::CCK_PartialOrdering, CCK::CCK_WeakOrdering,
-        CCK::CCK_StrongOrdering}},
-      {"unordered", {CCK::CCK_PartialOrdering}}};
-  for (auto &Info : CompareInfo) {
-    if (Info.Name != Name)
-      continue;
-    assert(Info.Allowed.count(CCKind) &&
-           "comparison category type doesn't have the specified member");
-    return;
-  }
-  assert(false && "invalid member name for all comparison categories");
-}
-#endif
-
-ExprResult Sema::getComparisonCategoryMember(ComparisonCategoryKind CCK,
-                                             StringRef Name,
-                                             SourceLocation Loc) {
-#ifndef NDEBUG
-  checkComparisonCategoryMember(CCK, Name);
-#endif
-  RecordDecl *RD = getComparisonCategoryType(CCK, Loc);
-  if (!RD)
-    return ExprError();
-
-  DeclarationName DN = PP.getIdentifierInfo(Name);
-  LookupResult LR(*this, DN, Loc, Sema::LookupMemberName);
-  if (!LookupQualifiedName(LR, RD))
-    return ExprError();
-
-  ValueDecl *Member = LR.getAsSingle<ValueDecl>();
-  if (!Member) {
-    llvm_unreachable(
-        "handling of ill-formed comparison categories is not implemented");
-  }
-  return BuildDeclRefExpr(Member, Member->getType(), VK_RValue, Loc);
+  // All of the objects and values have been built successfully.
+  Context.setComparisonCategoryData(std::move(NewData));
+  return false;
 }
 
 /// \brief Retrieve the special "std" namespace, which may require us to
