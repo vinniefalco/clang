@@ -189,3 +189,7 @@ void test9(long double ld, double d, float f, int i, long long ll) {
   (void)(d <=> ld);
   (void)(i <=> f);
 }
+
+void test_constexpr() {
+  (void)(42 <=> 42);
+}
