@@ -963,7 +963,7 @@ void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
       RHS = CGF.EmitAnyExpr(E->getRHS()).getAggregatePointer();
       break;
     case TEK_Complex:
-      llvm_unreachable("support for complex types is unimplemented"); // FIXME
+      llvm_unreachable("support for complex types is unimplemented");
     }
     assert(LHS && RHS);
 
