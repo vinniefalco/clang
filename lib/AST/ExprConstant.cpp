@@ -10767,6 +10767,15 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
           return ICEDiag(IK_NotICE, E->getLocStart());
         }
       }
+      if (Exp->getOpcode() == BO_Cmp) {
+        // Check that all of the references to the result objects are ICE.
+        auto &CmpInfo = Ctx.CompCategories.getInfoForType(Exp->getType());
+        ICEDiag RetDiag(IK_ICE, E->getLocStart());
+        for (auto &KV : CmpInfo.Objects)
+          RetDiag = Worst(RetDiag, CheckICE(KV.second, Ctx));
+
+        return Worst(Worst(LHSResult, RHSResult), RetDiag);
+      }
       return Worst(LHSResult, RHSResult);
     }
     case BO_LAnd:
