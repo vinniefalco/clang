@@ -11,19 +11,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CodeGenFunction.h"
+#include "CGCXXABI.h"
 #include "CGObjCRuntime.h"
+#include "CodeGenFunction.h"
 #include "CodeGenModule.h"
 #include "ConstantEmitter.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/StmtVisitor.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
-#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Intrinsics.h"
 using namespace clang;
 using namespace CodeGen;
 
@@ -196,6 +198,9 @@ public:
     RValue Res = CGF.EmitAtomicExpr(E);
     EmitFinalDestCopy(E->getType(), Res);
   }
+
+  llvm::Value *EmitCompare(const BinaryOperator *E, llvm::Value *LHS,
+                           llvm::Value *RHS, unsigned Opcode);
 };
 }  // end anonymous namespace.
 
@@ -879,11 +884,135 @@ void AggExprEmitter::VisitStmtExpr(const StmtExpr *E) {
   CGF.EmitCompoundStmt(*E->getSubStmt(), true, Dest);
 }
 
+llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
+                                         llvm::Value *LHS, llvm::Value *RHS,
+                                         unsigned OpCode) {
+  using llvm::Value;
+  assert(OpCode == BO_NE || OpCode == BO_LT || OpCode == BO_GT);
+  Value *Result = nullptr;
+  QualType LHSTy = E->getLHS()->getType();
+  assert(LHSTy == E->getRHS()->getType());
+  if (auto *MPT = LHSTy->getAs<MemberPointerType>()) {
+    assert(OpCode == BO_NE);
+    return CGF.CGM.getCXXABI().EmitMemberPointerComparison(CGF, LHS, RHS, MPT,
+                                                           /*IsNotEqual*/ true);
+  }
+  llvm::CmpInst::Predicate CmpInst;
+  if (!LHSTy->isAnyComplexType()) {
+    llvm_unreachable("unimplemented");
+  } else if (LHSTy->hasFloatingRepresentation()) {
+    llvm::CmpInst::Predicate Inst =
+        OpCode == BO_LT ? llvm::FCmpInst::FCMP_OLT : llvm::FCmpInst::FCMP_OGT;
+    Result = Builder.CreateFCmp(Inst, LHS, RHS, "cmp");
+  } else {
+    assert(LHSTy->isIntegralOrEnumerationType());
+    assert(OpCode == BO_LT || OpCode == BO_GT);
+    llvm::CmpInst::Predicate Inst;
+    if (LHSTy->hasSignedIntegerRepresentation()) {
+      Inst =
+          OpCode == BO_LT ? llvm::ICmpInst::ICMP_SLT : llvm::ICmpInst::ICMP_SGT;
+    } else {
+      assert(LHSTy->hasUnsignedIntegerRepresentation());
+      Inst =
+          OpCode == BO_LT ? llvm::ICmpInst::ICMP_ULT : llvm::ICmpInst::ICMP_UGT;
+    }
+    Result = Builder.CreateICmp(Inst, LHS, RHS, "cmp");
+  }
+  // CGF.EmitScalarConversion(Result, CGF.getContext().BoolTy, E->getType(),
+  //                           E->getExprLoc());
+  assert(Result != nullptr);
+  return Result;
+}
+
 void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
-  if (E->getOpcode() == BO_PtrMemD || E->getOpcode() == BO_PtrMemI)
+  using llvm::BasicBlock;
+  using llvm::PHINode;
+  using llvm::Value;
+  if (E->getOpcode() == BO_PtrMemD || E->getOpcode() == BO_PtrMemI) {
     VisitPointerToDataMemberBinaryOperator(E);
-  else
-    CGF.ErrorUnsupported(E, "aggregate binary expression");
+    return;
+  }
+  if (E->getOpcode() == BO_Cmp) {
+    auto &CmpInfo =
+        CGF.getContext().CompCategories.getInfoForType(E->getType());
+    QualType LHSTy = E->getLHS()->getType();
+    Value *LHS = nullptr, *RHS = nullptr;
+    switch (CGF.getEvaluationKind(LHSTy)) {
+    case TEK_Scalar:
+      LHS = CGF.EmitScalarExpr(E->getLHS());
+      RHS = CGF.EmitScalarExpr(E->getRHS());
+      break;
+    case TEK_Complex:
+      // FIXME
+      llvm_unreachable("unimplemented");
+    case TEK_Aggregate:
+      assert(false);
+      RValue LHSVal = CGF.EmitAnyExpr(E->getLHS());
+      assert(LHSVal.isAggregate());
+      LHS = LHSVal.getAggregatePointer();
+      RValue RHSVal = CGF.EmitAnyExpr(E->getRHS());
+      assert(RHSVal.isAggregate());
+      RHS = RHSVal.getAggregatePointer();
+    }
+    // FIXME: To reuse the EmitCompare code in CGExprScalar, we build a dummy
+    // binary operator and emit that. But this creates more than one load of the
+    // values.
+    BinaryOperator NewBinOp(E->getLHS(), E->getRHS(), BO_Cmp,
+                            CGF.getContext().getLogicalOperationType(),
+                            VK_RValue, OK_Ordinary, E->getOperatorLoc(),
+                            E->getFPFeatures());
+
+    BasicBlock *ContBlock = CGF.createBasicBlock("cmp.cont");
+    BasicBlock *EqBlock = CGF.createBasicBlock("cmp.equal");
+
+    BasicBlock *EntryBlock = Builder.GetInsertBlock();
+    using ValueEdgePair = std::pair<LValue, BasicBlock *>;
+    llvm::SmallVector<ValueEdgePair, 4> Edges;
+
+    Edges.push_back(
+        std::make_pair(CGF.EmitLValue(CmpInfo.getEqualOrEquiv()), EqBlock));
+
+    CodeGenFunction::ConditionalEvaluation eval(CGF);
+    if (CmpInfo.isOrdered()) {
+      Edges.push_back(
+          std::make_pair(CGF.EmitLValue(CmpInfo.getLess()), EntryBlock));
+
+      BasicBlock *GreaterBlock = CGF.createBasicBlock("cmp.greater");
+      NewBinOp.setOpcode(BO_LT);
+      CGF.EmitBranchOnBoolExpr(&NewBinOp, ContBlock, GreaterBlock,
+                               CGF.getProfileCount(E));
+
+      CGF.EmitBlock(GreaterBlock);
+      Edges.push_back(
+          std::make_pair(CGF.EmitLValue(CmpInfo.getGreater()), GreaterBlock));
+
+      NewBinOp.setOpcode(BO_GT);
+      CGF.EmitBranchOnBoolExpr(&NewBinOp, ContBlock, EqBlock,
+                               CGF.getProfileCount(E));
+
+    } else {
+      LValue neq = CGF.EmitLValue(CmpInfo.getNonequalOrNonequiv());
+      Edges.push_back(std::make_pair(neq, EntryBlock));
+
+      NewBinOp.setOpcode(BO_NE);
+      CGF.EmitBranchOnBoolExpr(&NewBinOp, ContBlock, EqBlock,
+                               CGF.getProfileCount(E));
+    }
+    CGF.EmitBlock(EqBlock);
+
+    LValue eq = Edges[0].first;
+    PHINode *PN = llvm::PHINode::Create(
+        eq.getPointer()->getType(), CmpInfo.isOrdered() ? 3 : 2, "", ContBlock);
+    CGF.EmitBlock(ContBlock);
+    for (auto &Edge : Edges)
+      PN->addIncoming(Edge.first.getPointer(), Edge.second);
+
+    Address result(PN, eq.getAlignment());
+    EmitFinalDestCopy(E->getType(), CGF.MakeAddrLValue(result, E->getType()));
+    return;
+  }
+
+  CGF.ErrorUnsupported(E, "aggregate binary expression");
 }
 
 void AggExprEmitter::VisitPointerToDataMemberBinaryOperator(

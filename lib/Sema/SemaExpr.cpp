@@ -11976,10 +11976,8 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
     ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc, true);
     assert(ResultTy.isNull() || ResultTy->getAsCXXRecordDecl());
     if (!ResultTy.isNull()) {
-      auto &CC = Context.CompCategories;
-      auto Classify =
-          CC.classifyCategory(CC.getCategoryForType(ResultTy).getValue());
-      IsCmpOrdered = bool(Classify & ComparisonCategoryClassification::Ordered);
+      IsCmpOrdered =
+          Context.CompCategories.getInfoForType(ResultTy).isOrdered();
     }
     break;
   case BO_And:

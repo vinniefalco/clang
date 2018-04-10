@@ -4715,29 +4715,23 @@ public:
     default:
       return Error(E);
     case BO_Cmp: {
-      auto OptKind = Info.Ctx.CompCategories.getCategoryForType(E->getType());
-      assert(OptKind.hasValue() && "Fixme unhandled error");
-      auto Kind = OptKind.getValue();
-      auto &CmpInfo = Info.Ctx.CompCategories.getInfo(Kind);
-      bool IsStrong = bool(CmpInfo.Classification &
-                           ComparisonCategoryClassification::Strong);
-      ComparisonCategoryResult CmpResult = ComparisonCategoryResult::Invalid;
+      using CCR = ComparisonCategoryResult;
+      auto &CmpInfo = Info.Ctx.CompCategories.getInfoForType(E->getType());
+      CCR CmpResult = CCR::Invalid;
       if (!HandleSpaceshipBinaryOperator(Info, E, CmpResult))
-        return Error(E);
-      assert(CmpResult != ComparisonCategoryResult::Invalid);
-      if (!IsStrong) {
-        if (CmpResult == ComparisonCategoryResult::Equal)
-          CmpResult = ComparisonCategoryResult::Equivalent;
-        else if (CmpResult == ComparisonCategoryResult::Nonequal)
-          CmpResult = ComparisonCategoryResult::Nonequivalent;
-      }
-      const DeclRefExpr *Value =
-          Info.Ctx.CompCategories.getResultValue(Kind, CmpResult);
+        return false;
+      assert(CmpResult != CCR::Invalid);
+      assert((CmpResult != CCR::Nonequal || CmpInfo.isEquality()) &&
+             "returned unequal for ordered comparison");
 
+      CmpResult = CmpInfo.makeWeakResult(CmpResult);
+      const DeclRefExpr *Value =
+          Info.Ctx.CompCategories.getResultValue(CmpInfo.Kind, CmpResult);
       assert(Value && "comparison categories not built or ValueKind");
+
       APValue Res;
       if (!EvaluateAsRValue(Info, Value, Res))
-        return Error(E);
+        return false;
       return DerivedSuccess(Res, E);
     }
     case BO_Comma:
@@ -8673,6 +8667,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E,
   }
 
   if (LHSTy->isPointerType() && RHSTy->isPointerType()) {
+    assert(!LHSTy->isMemberPointerType());
     if (E->getOpcode() == BO_Sub || E->isComparisonOp()) {
       LValue LHSValue, RHSValue;
 
@@ -8707,17 +8702,6 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E,
         // Inequalities and subtractions between unrelated pointers have
         // unspecified or undefined behavior.
         if (!E->isEqualityOp()) {
-          if (IsSpaceship) {
-            // Compute the type of the comparison based on the result type,
-            // and return an error only if we have a non-equality comparison.
-            auto OptCat =
-                Info.Ctx.CompCategories.getCategoryForType(E->getType());
-            assert(OptCat);
-            auto Classify =
-                Info.Ctx.CompCategories.classifyCategory(OptCat.getValue());
-            if (bool(Classify & ComparisonCategoryClassification::Ordered))
-              return Error(E);
-          } else
             return Error(E);
         }
         // A constant address may compare equal to the address of a symbol.
@@ -8809,10 +8793,6 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E,
         if (Result.extend(65) != TrueResult &&
             !HandleOverflow(Info, E, TrueResult, E->getType()))
           return false;
-        if (E->getOpcode() == BO_Cmp) {
-          *CmpRes = ComparisonCategoryResult::Equal;
-          return Success(E);
-        }
         return Success(Result, E);
       }
 
@@ -8907,8 +8887,6 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E,
           *CmpRes = ComparisonCategoryResult::Greater;
         else if (CompareLHS == CompareRHS)
           *CmpRes = ComparisonCategoryResult::Equal;
-        else
-          *CmpRes = ComparisonCategoryResult::Nonequal;
         return Success(E);
       }
       }
@@ -8916,8 +8894,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E,
   }
 
   if (LHSTy->isMemberPointerType()) {
-    assert((E->isEqualityOp() || E->getOpcode() == BO_Cmp) &&
-           "unexpected member pointer operation");
+    assert((E->isEqualityOp()) && "unexpected member pointer operation");
     assert(RHSTy->isMemberPointerType() && "invalid comparison");
 
     MemberPtr LHSValue, RHSValue;
@@ -8992,10 +8969,8 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E,
       *CmpRes = ComparisonCategoryResult::Less;
     else if (LHS > RHS)
       *CmpRes = ComparisonCategoryResult::Greater;
-    else if (LHS == RHS)
-      *CmpRes = ComparisonCategoryResult::Equal;
     else
-      *CmpRes = ComparisonCategoryResult::Nonequal;
+      *CmpRes = ComparisonCategoryResult::Equal;
     return Success(E);
   }
 

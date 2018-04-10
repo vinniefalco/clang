@@ -15,7 +15,6 @@
 #ifndef LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 #define LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 
-#include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
 #include "clang/Basic/LLVM.h"
@@ -53,16 +52,6 @@ enum class ComparisonCategoryResult : unsigned char {
   Greater,
   Unordered,
 };
-
-enum class ComparisonCategoryClassification : unsigned char {
-  None = 0,
-  Strong = 1 << 0,
-  Ordered = 1 << 1,
-  Partial = 1 << 2,
-  LLVM_MARK_AS_BITMASK_ENUM(Partial)
-};
-
-LLVM_ENABLE_BITMASK_ENUMS_IN_NAMESPACE();
 
 } // namespace clang
 
@@ -103,14 +92,54 @@ struct ComparisonCategoryInfo {
   /// \brief The Kind of the comparison category type
   ComparisonCategoryKind Kind;
 
-  /// \brief The classification of the comparison category type, representing
-  /// the values it contains.
-  ComparisonCategoryClassification Classification;
-
 public:
   const DeclRefExpr *getResultValue(ComparisonCategoryResult ValueKind) const {
     char Key = static_cast<char>(ValueKind);
     return Objects.lookup(Key);
+  }
+  bool isEquality() const { return !isOrdered(); }
+  bool isOrdered() const {
+    using CCK = ComparisonCategoryKind;
+    return Kind == CCK::PartialOrdering || Kind == CCK::WeakOrdering ||
+           Kind == CCK::StrongOrdering;
+  }
+  bool isStrong() const {
+    using CCK = ComparisonCategoryKind;
+    return Kind == CCK::StrongEquality || Kind == CCK::StrongOrdering;
+  }
+  bool isPartial() const {
+    using CCK = ComparisonCategoryKind;
+    return Kind == CCK::PartialOrdering;
+  }
+
+  ComparisonCategoryResult makeWeakResult(ComparisonCategoryResult Res) const {
+    using CCR = ComparisonCategoryResult;
+    if (!isStrong()) {
+      if (Res == CCR::Equal)
+        return CCR::Equivalent;
+      if (Res == CCR::Nonequal)
+        return CCR::Nonequivalent;
+    }
+    return Res;
+  }
+
+  const DeclRefExpr *getEqualOrEquiv() const {
+    return getResultValue(makeWeakResult(ComparisonCategoryResult::Equal));
+  }
+  const DeclRefExpr *getNonequalOrNonequiv() const {
+    return getResultValue(makeWeakResult(ComparisonCategoryResult::Nonequal));
+  }
+  const DeclRefExpr *getLess() const {
+    assert(isOrdered());
+    return getResultValue(ComparisonCategoryResult::Less);
+  }
+  const DeclRefExpr *getGreater() const {
+    assert(isOrdered());
+    return getResultValue(ComparisonCategoryResult::Greater);
+  }
+  const DeclRefExpr *getUnordered() const {
+    assert(isPartial());
+    return getResultValue(ComparisonCategoryResult::Unordered);
   }
 };
 
@@ -118,9 +147,6 @@ struct ComparisonCategories {
   using InfoList =
       std::array<ComparisonCategoryInfo,
                  static_cast<unsigned>(ComparisonCategoryKind::Last) + 1>;
-
-  static ComparisonCategoryClassification
-  classifyCategory(ComparisonCategoryKind Kind);
 
   static StringRef getCategoryString(ComparisonCategoryKind Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
@@ -131,6 +157,7 @@ struct ComparisonCategories {
     assert(HasData && "comparison category information not yet built");
     return Data[static_cast<unsigned>(Kind)];
   }
+  const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
 
   const RecordDecl *getDecl(ComparisonCategoryKind Kind) const {
     return getInfo(Kind).CCDecl;

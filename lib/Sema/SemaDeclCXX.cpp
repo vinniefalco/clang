@@ -8888,7 +8888,6 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
 bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
   using CCKT = ComparisonCategoryKind;
   using CCVT = ComparisonCategoryResult;
-  using CCCT = ComparisonCategoryClassification;
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
 
@@ -8909,7 +8908,6 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
     // Build the initial category information
     ComparisonCategoryInfo Info;
     Info.Kind = CCK;
-    Info.Classification = ComparisonCategories::classifyCategory(CCK);
 
     // Lookup the record for the category type
     if (auto Std = getStdNamespace()) {
@@ -8925,19 +8923,19 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
     }
 
     // Calculate the list of values belonging to this comparison category type.
-    SmallVector<CCVT, 4> Values;
+    SmallVector<CCVT, 6> Values;
     Values.push_back(CCVT::Equivalent);
-    if (bool(Info.Classification & CCCT::Strong))
+    if (Info.isStrong())
       Values.push_back(CCVT::Equal);
-    if (bool(Info.Classification & CCCT::Ordered)) {
+    if (Info.isOrdered()) {
       Values.push_back(CCVT::Less);
       Values.push_back(CCVT::Greater);
     } else {
       Values.push_back(CCVT::Nonequivalent);
-      if (bool(Info.Classification & CCCT::Strong))
+      if (Info.isStrong())
         Values.push_back(CCVT::Nonequal);
     }
-    if (bool(Info.Classification & CCCT::Partial))
+    if (Info.isPartial())
       Values.push_back(CCVT::Unordered);
 
     // Build each of the require values and store them in Info.
