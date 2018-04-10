@@ -8738,9 +8738,8 @@ bool BinOpEvaluatorBase<Derived>::VisitBinaryOperator(const BinaryOperator *E) {
         }
         // Inequalities and subtractions between unrelated pointers have
         // unspecified or undefined behavior.
-        if (!E->isEqualityOp()) {
+        if (!E->isEqualityOp())
             return Error(E);
-        }
         // A constant address may compare equal to the address of a symbol.
         // The one exception is that address of an object cannot compare equal
         // to a null pointer constant.
@@ -8977,9 +8976,8 @@ bool BinOpEvaluatorBase<Derived>::VisitBinaryOperator(const BinaryOperator *E) {
     // are compared, the result is true of the operator is <=, >= or ==, and
     // false otherwise.
     BinaryOperator::Opcode Opcode = E->getOpcode();
-    if (Opcode == BO_Cmp) {
+    if (Opcode == BO_Cmp)
       return Success(CCR::Equal, E);
-    }
     return Success(Opcode == BO_EQ || Opcode == BO_LE || Opcode == BO_GE, E);
   }
 

@@ -9338,9 +9338,8 @@ static void checkEnumComparison(Sema &S, SourceLocation Loc, Expr *LHS,
       !RHSEnumType->getDecl()->getTypedefNameForAnonDecl())
     return;
 
-  if (S.Context.hasSameUnqualifiedType(LHSStrippedType, RHSStrippedType)) {
+  if (S.Context.hasSameUnqualifiedType(LHSStrippedType, RHSStrippedType))
     return;
-  }
 
   S.Diag(Loc, diag::warn_comparison_of_mixed_enum_types)
       << LHSStrippedType << RHSStrippedType

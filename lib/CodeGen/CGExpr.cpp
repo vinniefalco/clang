@@ -4345,9 +4345,6 @@ CGCallee CodeGenFunction::EmitCallee(const Expr *E) {
 }
 
 LValue CodeGenFunction::EmitBinaryOperatorLValue(const BinaryOperator *E) {
-  using llvm::BasicBlock;
-  using llvm::PHINode;
-  using llvm::Value;
   // Comma expressions just emit their LHS then their RHS as an l-value.
   if (E->getOpcode() == BO_Comma) {
     EmitIgnoredExpr(E->getLHS());
