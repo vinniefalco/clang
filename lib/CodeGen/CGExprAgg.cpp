@@ -886,9 +886,7 @@ void AggExprEmitter::VisitStmtExpr(const StmtExpr *E) {
 enum CompareKind {
   CK_Less,
   CK_Greater,
-  CK_LessEqual,
-  CK_GreaterEqual,
-  CK_NonEqual
+  CK_Equal,
 };
 
 static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
@@ -896,14 +894,11 @@ static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
                                 llvm::Value *RHS, CompareKind Kind) {
   QualType ArgTy = E->getLHS()->getType();
   if (auto *MPT = ArgTy->getAs<MemberPointerType>()) {
-    assert(Kind == CK_NonEqual &&
+    assert(Kind == CK_Equal &&
            "member pointers may only be compared for equality");
     return CGF.CGM.getCXXABI().EmitMemberPointerComparison(
-        CGF, LHS, RHS, MPT, /*IsInequality*/ true);
+        CGF, LHS, RHS, MPT, /*IsInequality*/ false);
   }
-
-  assert(Kind != CK_NonEqual &&
-         "only member pointers should be compared for inequality");
 
   // Compute the comparison instructions for the specified comparison kind.
   struct CmpInstInfo {
@@ -915,18 +910,13 @@ static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
   CmpInstInfo InstInfo = [&]() -> CmpInstInfo {
     using FI = llvm::FCmpInst;
     using II = llvm::ICmpInst;
-    llvm::CmpInst::Predicate Invalid = II::BAD_ICMP_PREDICATE;
     switch (Kind) {
     case CK_Less:
       return {"cmp.lt", FI::FCMP_OLT, II::ICMP_SLT, II::ICMP_ULT};
-    case CK_LessEqual:
-      return {"cmp.le", FI::FCMP_OLE, Invalid, Invalid};
     case CK_Greater:
       return {"cmp.gt", FI::FCMP_OGT, II::ICMP_SGT, II::ICMP_UGT};
-    case CK_GreaterEqual:
-      return {"cmp.ge", FI::FCMP_OGE, Invalid, Invalid};
-    case CK_NonEqual:
-      llvm_unreachable("unhandled case");
+    case CK_Equal:
+      return {"cmp.eq", FI::FCMP_OEQ, II::ICMP_EQ, II::ICMP_EQ};
     }
   }();
 
@@ -979,27 +969,25 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   Value *Select = nullptr;
   if (CmpInfo.isEquality()) {
     Select = Builder.CreateSelect(
-        EmitCmp(CK_NonEqual), EmitCmpRes(CmpInfo.getNonequalOrNonequiv()),
-        EmitCmpRes(CmpInfo.getEqualOrEquiv()), "sel.eq");
+        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
+        EmitCmpRes(CmpInfo.getNonequalOrNonequiv()), "sel.eq");
   } else if (!CmpInfo.isPartial()) {
     Value *SelectOne =
         Builder.CreateSelect(EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()),
-                             EmitCmpRes(CmpInfo.getEqualOrEquiv()), "sel.lt");
-    Select = Builder.CreateSelect(EmitCmp(CK_Greater),
-                                  EmitCmpRes(CmpInfo.getGreater()), SelectOne,
-                                  "sel.gt");
-  } else {
-    Value *LE = EmitCmp(CK_LessEqual);
-    Value *GE = EmitCmp(CK_GreaterEqual);
-    Value *SelectLTGT =
-        Builder.CreateSelect(LE, EmitCmpRes(CmpInfo.getLess()),
                              EmitCmpRes(CmpInfo.getGreater()), "sel.lt");
-    Value *SelectEq =
-        Builder.CreateSelect(Builder.CreateAnd(LE, GE, "cmp.eq"),
-                             EmitCmpRes(CmpInfo.getEqualOrEquiv()),
-                             EmitCmpRes(CmpInfo.getUnordered()), "sel.eq");
-    Select = Builder.CreateSelect(Builder.CreateXor(LE, GE, "cmp.ord"),
-                                  SelectLTGT, SelectEq, "sel.ord");
+    Select = Builder.CreateSelect(EmitCmp(CK_Equal),
+                                  EmitCmpRes(CmpInfo.getEqualOrEquiv()),
+                                  SelectOne, "sel.eq");
+  } else {
+    Value *SelectEq = Builder.CreateSelect(
+        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
+        EmitCmpRes(CmpInfo.getUnordered()), "sel.eq");
+
+    Value *SelectGT = Builder.CreateSelect(EmitCmp(CK_Greater),
+                                           EmitCmpRes(CmpInfo.getGreater()),
+                                           SelectEq, "sel.gt");
+    Select = Builder.CreateSelect(
+        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()), SelectGT, "sel.lt");
   }
   assert(Select != nullptr);
   return EmitFinalDestCopy(

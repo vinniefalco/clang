@@ -6247,7 +6247,6 @@ namespace {
       APSInt Result;
       if (!EvaluateInteger(&NewOp, Result, Info))
         return false;
-      Result.dump();
       CCR CmpRes = static_cast<CCR>(Result.getExtValue());
 
       const DeclRefExpr *Value =

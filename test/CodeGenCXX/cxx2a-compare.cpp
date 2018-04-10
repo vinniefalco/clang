@@ -21,11 +21,11 @@ typedef int INT;
 auto test_signed(int x, int y) {
   // CHECK: %retval = alloca %[[SO]]
   // CHECK: %cmp.lt = icmp slt i32 %0, %1
-  // CHECK: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
-  // CHECK: %cmp.gt = icmp sgt i32 %0, %1
-  // CHECK: %sel.gt = select i1 %cmp.gt, %[[SO]]* @[[SO_GT]], %[[SO]]* %sel.lt
+  // CHECK: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_GT]]
+  // CHECK: %cmp.eq = icmp eq i32 %0, %1
+  // CHECK: %sel.eq = select i1 %cmp.eq, %[[SO]]* @[[SO_EQ]], %[[SO]]* %sel.lt
   // CHECK: %[[TMPRET:.*]] = bitcast %[[SO]]* %retval
-  // CHECK: %[[TMPSRC:.*]] = bitcast %[[SO]]* %sel.gt
+  // CHECK: %[[TMPSRC:.*]] = bitcast %[[SO]]* %sel.eq
   // CHECK: call void @llvm.memcpy{{.*}}(i8* align 1 %[[TMPRET]], i8* align 1 %[[TMPSRC]]
   // CHECK: ret
   return x <=> y;
@@ -34,11 +34,11 @@ auto test_signed(int x, int y) {
 // CHECK-LABEL: @_Z13test_unsignedjj
 auto test_unsigned(unsigned x, unsigned y) {
   // CHECK: %cmp.lt = icmp ult i32 %0, %1
-  // CHECK: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
-  // CHECK: %cmp.gt = icmp ugt i32 %0, %1
-  // CHECK: %sel.gt = select i1 %cmp.gt, %[[SO]]* @[[SO_GT]], %[[SO]]* %sel.lt
+  // CHECK: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_GT]]
+  // CHECK: %cmp.eq = icmp eq i32 %0, %1
+  // CHECK: %sel.eq = select i1 %cmp.eq, %[[SO]]* @[[SO_EQ]], %[[SO]]* %sel.lt
   // CHECK: %retval
-  // CHECK: %sel.gt
+  // CHECK: %sel.eq
   // CHECK: ret
   return x <=> y;
 }
@@ -46,15 +46,14 @@ auto test_unsigned(unsigned x, unsigned y) {
 // CHECK-LABEL: @_Z10float_testdd
 auto float_test(double x, double y) {
   // CHECK: %retval = alloca %[[PO]]
-  // CHECK: %cmp.le = fcmp ole double %0, %1
-  // CHECK: %cmp.ge = fcmp oge double %0, %1
-  // CHECK: %sel.lt = select i1 %cmp.le, %[[PO]]* @[[PO_LT]], %[[PO]]* @[[PO_GT]]
-  // CHECK: %cmp.eq = and i1 %cmp.le, %cmp.ge
+  // CHECK: %cmp.eq = fcmp oeq double %0, %1
   // CHECK: %sel.eq = select i1 %cmp.eq, %[[PO]]* @[[PO_EQ]], %[[PO]]* @[[PO_UNORD]]
-  // CHECK: %cmp.ord = xor i1 %cmp.le, %cmp.ge
-  // CHECK: %sel.ord = select i1 %cmp.ord, %[[PO]]* %sel.lt, %[[PO]]* %sel.eq
+  // CHECK: %cmp.gt = fcmp ogt double %0, %1
+  // CHECK: %sel.gt = select i1 %cmp.gt, %[[PO]]* @[[PO_GT]], %[[PO]]* %sel.eq
+  // CHECK: %cmp.lt = fcmp olt double %0, %1
+  // CHECK: %sel.lt = select i1 %cmp.lt, %[[PO]]* @[[PO_LT]], %[[PO]]* %sel.gt
   // CHECK: %retval
-  // CHECK: %sel.ord
+  // CHECK: %sel.lt
   // CHECK: ret
   return x <=> y;
 }
@@ -62,11 +61,11 @@ auto float_test(double x, double y) {
 // CHECK-LABEL: @_Z8ptr_testPiS_
 auto ptr_test(int *x, int *y) {
   // CHECK: %cmp.lt = icmp ult i32* %0, %1
-  // CHECK-NEXT: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
-  // CHECK: %cmp.gt = icmp ugt i32* %0, %1
-  // CHECK-NEXT: %sel.gt = select i1 %cmp.gt, %[[SO]]* @[[SO_GT]], %[[SO]]* %sel.lt
+  // CHECK: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_GT]]
+  // CHECK: %cmp.eq = icmp eq i32* %0, %1
+  // CHECK: %sel.eq = select i1 %cmp.eq, %[[SO]]* @[[SO_EQ]], %[[SO]]* %sel.lt
   // CHECK: %retval
-  // CHECK: %sel.gt
+  // CHECK: %sel.eq
   // CHECK: ret
   return x <=> y;
 }
@@ -78,12 +77,12 @@ using MemDataT = int(MemPtr::*);
 // CHECK-LABEL: @_Z12mem_ptr_testM6MemPtrFvvES1_
 auto mem_ptr_test(MemPtrT x, MemPtrT y) {
   // CHECK: %retval = alloca %[[SE]]
-  // CHECK: %cmp.ptr = icmp ne i64 %lhs.memptr.ptr, %rhs.memptr.ptr
-  // CHECK: %cmp.ptr.null = icmp ne i64 %lhs.memptr.ptr, 0
-  // CHECK: %cmp.adj = icmp ne i64 %lhs.memptr.adj, %rhs.memptr.adj
-  // CHECK: %6 = and i1 %cmp.ptr.null, %cmp.adj
-  // CHECK: %memptr.ne = or i1 %cmp.ptr, %6
-  // CHECK: %sel.eq = select i1 %memptr.ne, %[[SE]]* @[[SE_NE]], %[[SE]]* @[[SE_EQ]]
+  // CHECK: %cmp.ptr = icmp eq i64 %lhs.memptr.ptr, %rhs.memptr.ptr
+  // CHECK: %cmp.ptr.null = icmp eq i64 %lhs.memptr.ptr, 0
+  // CHECK: %cmp.adj = icmp eq i64 %lhs.memptr.adj, %rhs.memptr.adj
+  // CHECK: %6 = or i1 %cmp.ptr.null, %cmp.adj
+  // CHECK: %memptr.eq = and i1 %cmp.ptr, %6
+  // CHECK: %sel.eq = select i1 %memptr.eq, %[[SE]]* @[[SE_EQ]], %[[SE]]* @[[SE_NE]]
   // CHECK: %retval
   // CHECK: %sel.eq
   // CHECK: ret
@@ -93,8 +92,8 @@ auto mem_ptr_test(MemPtrT x, MemPtrT y) {
 // CHECK-LABEL: @_Z13mem_data_testM6MemPtriS0_
 auto mem_data_test(MemDataT x, MemDataT y) {
   // CHECK: %retval = alloca %[[SE]]
-  // CHECK: %[[CMP:.*]] = icmp ne i64 %0, %1
-  // CHECK: %sel.eq = select i1 %[[CMP]], %[[SE]]* @[[SE_NE]], %[[SE]]* @[[SE_EQ]]
+  // CHECK: %[[CMP:.*]] = icmp eq i64 %0, %1
+  // CHECK: %sel.eq = select i1 %[[CMP]], %[[SE]]* @[[SE_EQ]], %[[SE]]* @[[SE_NE]]
   // CHECK: %retval
   // CHECK: %sel.eq
   return x <=> y;
