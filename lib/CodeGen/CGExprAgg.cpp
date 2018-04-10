@@ -956,41 +956,24 @@ void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
       RHS = RHSVal.getAggregatePointer();
     }
     assert(LHS && RHS);
-    LValue EqLV = CGF.EmitLValue(CmpInfo.getEqualOrEquiv());
 
-    BasicBlock *ContBlock = CGF.createBasicBlock("cmp.cont");
-    PHINode *PN = PHINode::Create(EqLV.getPointer()->getType(),
-                                  CmpInfo.isOrdered() ? 3 : 2, "", ContBlock);
-
-    BasicBlock *EqBlock = CGF.createBasicBlock("cmp.equal");
-
-    PN->addIncoming(EqLV.getPointer(), EqBlock);
-
-    CodeGenFunction::ConditionalEvaluation eval(CGF);
-    if (CmpInfo.isOrdered()) {
-      PN->addIncoming(CGF.EmitLValue(CmpInfo.getLess()).getPointer(),
-                      Builder.GetInsertBlock());
-
-      BasicBlock *GreaterBlock = CGF.createBasicBlock("cmp.greater");
-      Builder.CreateCondBr(EmitCompare(E, LHS, RHS, BO_LT), ContBlock,
-                           GreaterBlock);
-
-      CGF.EmitBlock(GreaterBlock);
-      PN->addIncoming(CGF.EmitLValue(CmpInfo.getGreater()).getPointer(),
-                      GreaterBlock);
-
-      Builder.CreateCondBr(EmitCompare(E, LHS, RHS, BO_GT), ContBlock, EqBlock);
-
-    } else {
-      PN->addIncoming(
+    Value *Select = nullptr;
+    if (CmpInfo.isEquality()) {
+      Select = Builder.CreateSelect(
+          EmitCompare(E, LHS, RHS, BO_NE),
           CGF.EmitLValue(CmpInfo.getNonequalOrNonequiv()).getPointer(),
-          Builder.GetInsertBlock());
-      Builder.CreateCondBr(EmitCompare(E, LHS, RHS, BO_NE), ContBlock, EqBlock);
+          CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer());
+    } else {
+      Value *SelectOne = Builder.CreateSelect(
+          EmitCompare(E, LHS, RHS, BO_LT),
+          CGF.EmitLValue(CmpInfo.getLess()).getPointer(),
+          CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer());
+      Select = Builder.CreateSelect(
+          EmitCompare(E, LHS, RHS, BO_GT),
+          CGF.EmitLValue(CmpInfo.getGreater()).getPointer(), SelectOne);
     }
-    CGF.EmitBlock(EqBlock);
-    CGF.EmitBlock(ContBlock);
-
-    LValue ResLV = CGF.MakeNaturalAlignAddrLValue(PN, E->getType());
+    assert(Select != nullptr);
+    LValue ResLV = CGF.MakeNaturalAlignAddrLValue(Select, E->getType());
     EmitFinalDestCopy(E->getType(), ResLV);
     return;
   }
