@@ -920,18 +920,18 @@ llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
     }
   }();
 
-  if (ArgTy->isAnyComplexType()) {
-    llvm_unreachable("support for complex types is unimplemented");
-  } else if (ArgTy->hasFloatingRepresentation()) {
-    assert(!ArgTy->isVectorType() && // FIXME: Handle vector types here.
-           "support for vector types is unimplemented");
-
+  if (ArgTy->isRealFloatingType()) {
     return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS, "cmp");
-  } else {
-    assert(ArgTy->isIntegralOrEnumerationType() || ArgTy->isPointerType());
+  } else if (ArgTy->isIntegralOrEnumerationType() || ArgTy->isPointerType()) {
     auto Inst =
         ArgTy->hasSignedIntegerRepresentation() ? InstInfo.SCmp : InstInfo.UCmp;
     return Builder.CreateICmp(Inst, LHS, RHS, "cmp");
+  } else if (ArgTy->isAnyComplexType()) {
+    llvm_unreachable("support for complex types is unimplemented");
+  } else if (ArgTy->isVectorType()) {
+    llvm_unreachable("support for vector types is unimplemented");
+  } else {
+    llvm_unreachable("unexpected argument type when building operator<=>")
   }
 }
 
