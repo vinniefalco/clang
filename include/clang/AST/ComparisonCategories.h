@@ -75,6 +75,16 @@ public:
   /// \brief Return an expression referencing the member of the specified
   ///   comparison category. For example 'std::strong_equality::equal'
   const DeclRefExpr *getResultValue(ComparisonCategoryResult ValueKind) const {
+    const auto *DR = getResultValueUnsafe(ValueKind);
+    assert(DR &&
+           "comparison category does not contain the specified result kind");
+    return DR;
+  }
+
+  const DeclRefExpr *
+  getResultValueUnsafe(ComparisonCategoryResult ValueKind) const {
+    assert(ValueKind != ComparisonCategoryResult::Invalid &&
+           "invalid value specified");
     char Key = static_cast<char>(ValueKind);
     return Objects.lookup(Key);
   }

@@ -4720,13 +4720,9 @@ public:
       CCR CmpResult = CCR::Invalid;
       if (!HandleSpaceshipBinaryOperator(Info, E, CmpResult))
         return false;
-      assert(CmpResult != CCR::Invalid);
-      assert((CmpResult != CCR::Nonequal || CmpInfo.isEquality()) &&
-             "returned unequal for ordered comparison");
 
       const DeclRefExpr *Value =
           CmpInfo.getResultValue(CmpInfo.makeWeakResult(CmpResult));
-      assert(Value && "comparison categories not built or ValueKind");
 
       APValue Res;
       if (!EvaluateAsRValue(Info, Value, Res))
