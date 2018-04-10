@@ -897,22 +897,23 @@ llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
     return CGF.CGM.getCXXABI().EmitMemberPointerComparison(CGF, LHS, RHS, MPT,
                                                            /*IsNotEqual*/ true);
   }
-  llvm::CmpInst::Predicate CmpInst;
-  if (!LHSTy->isAnyComplexType()) {
+
+  if (LHSTy->isAnyComplexType()) {
     llvm_unreachable("unimplemented");
   } else if (LHSTy->hasFloatingRepresentation()) {
     llvm::CmpInst::Predicate Inst =
         OpCode == BO_LT ? llvm::FCmpInst::FCMP_OLT : llvm::FCmpInst::FCMP_OGT;
     Result = Builder.CreateFCmp(Inst, LHS, RHS, "cmp");
   } else {
-    assert(LHSTy->isIntegralOrEnumerationType());
+    assert(LHSTy->isIntegralOrEnumerationType() || LHSTy->isPointerType());
     assert(OpCode == BO_LT || OpCode == BO_GT);
     llvm::CmpInst::Predicate Inst;
     if (LHSTy->hasSignedIntegerRepresentation()) {
       Inst =
           OpCode == BO_LT ? llvm::ICmpInst::ICMP_SLT : llvm::ICmpInst::ICMP_SGT;
     } else {
-      assert(LHSTy->hasUnsignedIntegerRepresentation());
+      assert(LHSTy->hasUnsignedIntegerRepresentation() ||
+             LHSTy->isPointerType());
       Inst =
           OpCode == BO_LT ? llvm::ICmpInst::ICMP_ULT : llvm::ICmpInst::ICMP_UGT;
     }
@@ -954,61 +955,43 @@ void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
       assert(RHSVal.isAggregate());
       RHS = RHSVal.getAggregatePointer();
     }
-    // FIXME: To reuse the EmitCompare code in CGExprScalar, we build a dummy
-    // binary operator and emit that. But this creates more than one load of the
-    // values.
-    BinaryOperator NewBinOp(E->getLHS(), E->getRHS(), BO_Cmp,
-                            CGF.getContext().getLogicalOperationType(),
-                            VK_RValue, OK_Ordinary, E->getOperatorLoc(),
-                            E->getFPFeatures());
+    assert(LHS && RHS);
+    LValue EqLV = CGF.EmitLValue(CmpInfo.getEqualOrEquiv());
 
     BasicBlock *ContBlock = CGF.createBasicBlock("cmp.cont");
+    PHINode *PN = PHINode::Create(EqLV.getPointer()->getType(),
+                                  CmpInfo.isOrdered() ? 3 : 2, "", ContBlock);
+
     BasicBlock *EqBlock = CGF.createBasicBlock("cmp.equal");
 
-    BasicBlock *EntryBlock = Builder.GetInsertBlock();
-    using ValueEdgePair = std::pair<LValue, BasicBlock *>;
-    llvm::SmallVector<ValueEdgePair, 4> Edges;
-
-    Edges.push_back(
-        std::make_pair(CGF.EmitLValue(CmpInfo.getEqualOrEquiv()), EqBlock));
+    PN->addIncoming(EqLV.getPointer(), EqBlock);
 
     CodeGenFunction::ConditionalEvaluation eval(CGF);
     if (CmpInfo.isOrdered()) {
-      Edges.push_back(
-          std::make_pair(CGF.EmitLValue(CmpInfo.getLess()), EntryBlock));
+      PN->addIncoming(CGF.EmitLValue(CmpInfo.getLess()).getPointer(),
+                      Builder.GetInsertBlock());
 
       BasicBlock *GreaterBlock = CGF.createBasicBlock("cmp.greater");
-      NewBinOp.setOpcode(BO_LT);
-      CGF.EmitBranchOnBoolExpr(&NewBinOp, ContBlock, GreaterBlock,
-                               CGF.getProfileCount(E));
+      Builder.CreateCondBr(EmitCompare(E, LHS, RHS, BO_LT), ContBlock,
+                           GreaterBlock);
 
       CGF.EmitBlock(GreaterBlock);
-      Edges.push_back(
-          std::make_pair(CGF.EmitLValue(CmpInfo.getGreater()), GreaterBlock));
+      PN->addIncoming(CGF.EmitLValue(CmpInfo.getGreater()).getPointer(),
+                      GreaterBlock);
 
-      NewBinOp.setOpcode(BO_GT);
-      CGF.EmitBranchOnBoolExpr(&NewBinOp, ContBlock, EqBlock,
-                               CGF.getProfileCount(E));
+      Builder.CreateCondBr(EmitCompare(E, LHS, RHS, BO_GT), ContBlock, EqBlock);
 
     } else {
-      LValue neq = CGF.EmitLValue(CmpInfo.getNonequalOrNonequiv());
-      Edges.push_back(std::make_pair(neq, EntryBlock));
-
-      NewBinOp.setOpcode(BO_NE);
-      CGF.EmitBranchOnBoolExpr(&NewBinOp, ContBlock, EqBlock,
-                               CGF.getProfileCount(E));
+      PN->addIncoming(
+          CGF.EmitLValue(CmpInfo.getNonequalOrNonequiv()).getPointer(),
+          Builder.GetInsertBlock());
+      Builder.CreateCondBr(EmitCompare(E, LHS, RHS, BO_NE), ContBlock, EqBlock);
     }
     CGF.EmitBlock(EqBlock);
-
-    LValue eq = Edges[0].first;
-    PHINode *PN = llvm::PHINode::Create(
-        eq.getPointer()->getType(), CmpInfo.isOrdered() ? 3 : 2, "", ContBlock);
     CGF.EmitBlock(ContBlock);
-    for (auto &Edge : Edges)
-      PN->addIncoming(Edge.first.getPointer(), Edge.second);
 
-    Address result(PN, eq.getAlignment());
-    EmitFinalDestCopy(E->getType(), CGF.MakeAddrLValue(result, E->getType()));
+    LValue ResLV = CGF.MakeNaturalAlignAddrLValue(PN, E->getType());
+    EmitFinalDestCopy(E->getType(), ResLV);
     return;
   }
 

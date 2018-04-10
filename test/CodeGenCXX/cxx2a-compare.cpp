@@ -19,6 +19,9 @@ using MemPtrT = void (MemPtr::*)();
 auto mem_ptr_test(MemPtrT x, MemPtrT y) {
   return x <=> y;
 }
+bool mem_ptr_test2(MemPtrT x, MemPtrT y) {
+  return x != y;
+}
 
 auto float_test(double x, float y) {
   return x <=> y;
