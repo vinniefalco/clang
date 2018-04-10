@@ -150,11 +150,17 @@ struct ComparisonCategories {
   static StringRef getCategoryString(ComparisonCategoryKind Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
 
-  /// \brief Return the comparison category information fo the category
+  /// \brief Return the comparison category information for the category
   ///   specified by 'Kind'.
   const ComparisonCategoryInfo &getInfo(ComparisonCategoryKind Kind) const {
     assert(HasData && "comparison category information not yet built");
     return Data[static_cast<unsigned>(Kind)];
+  }
+
+  /// \brief Return the comparison category decl for the category
+  ///   specified by 'Kind'.
+  const RecordDecl *getDecl(ComparisonCategoryKind Kind) const {
+    return getInfo(Kind).CCDecl;
   }
 
   /// \brief Return the comparison category information as specified by

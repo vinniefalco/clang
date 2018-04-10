@@ -9705,24 +9705,6 @@ static void diagnoseTautologicalComparison(Sema &S, SourceLocation Loc,
   }
 }
 
-static QualType computeSpaceshipReturnType(Sema &S, QualType ArgTy,
-                                           SourceLocation Loc) {
-  using CCK = ComparisonCategoryKind;
-  CCK TypeKind;
-  if (ArgTy->isIntegralOrEnumerationType()) {
-    TypeKind = CCK::StrongOrdering;
-  } else if (ArgTy->hasFloatingRepresentation()) {
-    TypeKind = CCK::PartialOrdering;
-  } else {
-    llvm_unreachable("other types are unimplemented");
-  }
-  if (S.BuildComparisonCategoryData(Loc))
-    return QualType();
-
-  const RecordDecl *CCK_RD = S.Context.CompCategories.getDecl(TypeKind);
-  return QualType(CCK_RD->getTypeForDecl(), 0);
-}
-
 static ImplicitConversionKind castKindToImplicitConversionKind(CastKind CK) {
   switch (CK) {
   default:
@@ -9817,6 +9799,9 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
                                                          ExprResult &LHS,
                                                          ExprResult &RHS,
                                                          SourceLocation Loc) {
+  if (S.BuildComparisonCategoryData(Loc))
+    return QualType();
+
   QualType LHSType = LHS.get()->getType();
   QualType RHSType = RHS.get()->getType();
 
@@ -9858,9 +9843,19 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
     if (HasNarrowing)
       return QualType();
   }
-
   assert(!Type.isNull() && "composite type for <=> has not been set");
-  return computeSpaceshipReturnType(S, Type, Loc);
+
+  auto TypeKind = [&]() {
+    using CCK = ComparisonCategoryKind;
+    if (Type->isIntegralOrEnumerationType())
+      return CCK::StrongOrdering;
+    if (Type->hasFloatingRepresentation())
+      return CCK::PartialOrdering;
+    llvm_unreachable("other types are unimplemented");
+  }();
+
+  return QualType(S.Context.CompCategories.getDecl(TypeKind)->getTypeForDecl(),
+                  0);
 }
 
 static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
