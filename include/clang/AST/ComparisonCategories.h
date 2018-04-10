@@ -32,6 +32,9 @@ class DeclRefExpr;
 class RecordDecl;
 class QualType;
 
+/// \brief An enumeration representing the different comparison categories.
+///   The values map to the category types defined in the standard library.
+///   i.e. 'std::weak_equality'.
 enum class ComparisonCategoryKind : unsigned char {
   WeakEquality,
   StrongEquality,
@@ -42,6 +45,9 @@ enum class ComparisonCategoryKind : unsigned char {
   First = WeakEquality
 };
 
+/// \brief An enumeration representing the possible results of a three-way
+///   comparison. These values map onto instances of comparison category types
+///   defined in the standard library. i.e. 'std::strong_ordering::less'.
 enum class ComparisonCategoryResult : unsigned char {
   Invalid, // Internal implementation detail
   Equal,
@@ -52,33 +58,6 @@ enum class ComparisonCategoryResult : unsigned char {
   Greater,
   Unordered,
 };
-
-} // namespace clang
-
-namespace llvm {
-
-template <> struct DenseMapInfo<clang::ComparisonCategoryResult> {
-private:
-  using ValueType = clang::ComparisonCategoryResult;
-  using UnderlyingT = std::underlying_type<ValueType>::type;
-  static ValueType Cast(UnderlyingT Val) { return static_cast<ValueType>(Val); }
-
-public:
-  static inline ValueType getEmptyKey() { return Cast(0xFF); }
-  static inline ValueType getTombstoneKey() { return Cast(0xFF - 1); }
-
-  static unsigned getHashValue(const ValueType &Val) {
-    return static_cast<UnderlyingT>(Val) * 37U;
-  }
-
-  static bool isEqual(const ValueType &LHS, const ValueType &RHS) {
-    return LHS == RHS;
-  }
-};
-
-} // namespace llvm
-
-namespace clang {
 
 struct ComparisonCategoryInfo {
   /// \brief The declaration for the comparison category type from the
@@ -93,25 +72,39 @@ struct ComparisonCategoryInfo {
   ComparisonCategoryKind Kind;
 
 public:
+  /// \brief Return an expression referencing the member of the specified
+  ///   comparison category. For example 'std::strong_equality::equal'
   const DeclRefExpr *getResultValue(ComparisonCategoryResult ValueKind) const {
     char Key = static_cast<char>(ValueKind);
     return Objects.lookup(Key);
   }
+
+  /// \brief True iff the comparison category is an equality comparison.
   bool isEquality() const { return !isOrdered(); }
+
+  /// \brief True iff the comparison category is a relational comparison.
   bool isOrdered() const {
     using CCK = ComparisonCategoryKind;
     return Kind == CCK::PartialOrdering || Kind == CCK::WeakOrdering ||
            Kind == CCK::StrongOrdering;
   }
+
+  /// \brief True iff the comparison is "strong". i.e. it checks equality and
+  ///    not equivalence.
   bool isStrong() const {
     using CCK = ComparisonCategoryKind;
     return Kind == CCK::StrongEquality || Kind == CCK::StrongOrdering;
   }
+
+  /// \brief True iff the comparison is not totally ordered.
   bool isPartial() const {
     using CCK = ComparisonCategoryKind;
     return Kind == CCK::PartialOrdering;
   }
 
+  /// \brief Converts the specified result kind into the the correct result kind
+  ///    for this category. Specifically it lowers strong equality results to
+  ///    weak equivalence if needed.
   ComparisonCategoryResult makeWeakResult(ComparisonCategoryResult Res) const {
     using CCR = ComparisonCategoryResult;
     if (!isStrong()) {
@@ -144,29 +137,34 @@ public:
 };
 
 struct ComparisonCategories {
-  using InfoList =
-      std::array<ComparisonCategoryInfo,
-                 static_cast<unsigned>(ComparisonCategoryKind::Last) + 1>;
-
   static StringRef getCategoryString(ComparisonCategoryKind Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
 
-  bool hasData() const { return HasData; }
-
+  /// \brief Return the comparison category information fo the category
+  ///   specified by 'Kind'.
   const ComparisonCategoryInfo &getInfo(ComparisonCategoryKind Kind) const {
     assert(HasData && "comparison category information not yet built");
     return Data[static_cast<unsigned>(Kind)];
   }
+
+  /// \brief Return the comparison category information as specified by
+  ///   `getCategoryForType(Ty)`.
   const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
 
-  const RecordDecl *getDecl(ComparisonCategoryKind Kind) const {
-    return getInfo(Kind).CCDecl;
-  }
-
+  /// \brief Return the comparison category kind coorisponding to the specified
+  ///   type. 'Ty' is expected to refer to the type of one of the comparison
+  ///   category decls; if it doesn't no value is returned.
   Optional<ComparisonCategoryKind> getCategoryForType(QualType Ty) const;
 
-  const DeclRefExpr *getResultValue(ComparisonCategoryKind Kind,
-                                    ComparisonCategoryResult ValKind) const;
+  /// \brief returns true if the comparison category data has already been
+  /// built,
+  ///    and false otherwise.
+  bool hasData() const { return HasData; }
+
+public: // private
+  using InfoList =
+      std::array<ComparisonCategoryInfo,
+                 static_cast<unsigned>(ComparisonCategoryKind::Last) + 1>;
 
   void setData(InfoList &&NewData) {
     assert(!HasData && "comparison categories already built");

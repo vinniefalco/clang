@@ -4724,9 +4724,8 @@ public:
       assert((CmpResult != CCR::Nonequal || CmpInfo.isEquality()) &&
              "returned unequal for ordered comparison");
 
-      CmpResult = CmpInfo.makeWeakResult(CmpResult);
       const DeclRefExpr *Value =
-          Info.Ctx.CompCategories.getResultValue(CmpInfo.Kind, CmpResult);
+          CmpInfo.getResultValue(CmpInfo.makeWeakResult(CmpResult));
       assert(Value && "comparison categories not built or ValueKind");
 
       APValue Res;

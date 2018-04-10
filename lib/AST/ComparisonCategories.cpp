@@ -41,18 +41,6 @@ ComparisonCategories::getInfoForType(QualType Ty) const {
   return getInfo(OptKind.getValue());
 }
 
-const DeclRefExpr *
-ComparisonCategories::getResultValue(ComparisonCategoryKind Kind,
-                                     ComparisonCategoryResult ValueKind) const {
-  assert(hasData() && "comparison category data not built");
-  assert(ValueKind != ComparisonCategoryResult::Invalid &&
-         "invalid result kind");
-  auto &Info = getInfo(Kind);
-  if (auto *DRE = Info.Objects.lookup(static_cast<char>(ValueKind)))
-    return DRE;
-  return nullptr;
-}
-
 StringRef ComparisonCategories::getCategoryString(ComparisonCategoryKind Kind) {
   using CCKT = ComparisonCategoryKind;
   switch (Kind) {
