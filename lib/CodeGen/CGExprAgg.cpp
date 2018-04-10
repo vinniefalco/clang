@@ -888,52 +888,51 @@ void AggExprEmitter::VisitStmtExpr(const StmtExpr *E) {
 llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
                                          llvm::Value *LHS, llvm::Value *RHS,
                                          CompareKind Kind) {
-  using llvm::Value;
-  Value *Result = nullptr;
-  QualType LHSTy = E->getLHS()->getType();
-  assert(LHSTy == E->getRHS()->getType());
-  if (auto *MPT = LHSTy->getAs<MemberPointerType>()) {
+  assert(E->getLHS()->getType() == E->getRHS()->getType());
+
+  QualType ArgTy = E->getLHS()->getType();
+  if (auto *MPT = ArgTy->getAs<MemberPointerType>()) {
     assert(Kind == CK_NonEqual);
-    return CGF.CGM.getCXXABI().EmitMemberPointerComparison(CGF, LHS, RHS, MPT,
-                                                           /*IsNotEqual*/ true);
+    return CGF.CGM.getCXXABI().EmitMemberPointerComparison(
+        CGF, LHS, RHS, MPT,
+        /*IsInequality*/ true);
   }
 
-  if (LHSTy->isAnyComplexType()) {
-    llvm_unreachable("unimplemented");
-  } else if (LHSTy->hasFloatingRepresentation()) {
-    llvm::CmpInst::Predicate Inst = [&] {
-      using FI = llvm::FCmpInst;
-      switch (Kind) {
-      case CK_Less:
-        return FI::FCMP_OLT;
-      case CK_Greater:
-        return FI::FCMP_OGT;
-      case CK_Ordered:
-        return FI::FCMP_ORD;
-      case CK_NonEqual:
-        llvm_unreachable("unhandled case");
-      }
-    }();
-    Result = Builder.CreateFCmp(Inst, LHS, RHS, "cmp");
-  } else {
-    assert(LHSTy->isIntegralOrEnumerationType() || LHSTy->isPointerType());
-    assert(Kind == CK_Less || Kind == CK_Greater);
-    llvm::CmpInst::Predicate Inst;
-    if (LHSTy->hasSignedIntegerRepresentation()) {
-      Inst =
-          Kind == CK_Less ? llvm::ICmpInst::ICMP_SLT : llvm::ICmpInst::ICMP_SGT;
-    } else {
-      assert(LHSTy->hasUnsignedIntegerRepresentation() ||
-             LHSTy->isPointerType());
-      Inst =
-          Kind == CK_Less ? llvm::ICmpInst::ICMP_ULT : llvm::ICmpInst::ICMP_UGT;
+  assert(Kind != CK_NonEqual &&
+         "only member pointers should be compared for inequality");
+
+  // Compute the comparison instructions for the specified comparison kind.
+  struct CmpInstInfo {
+    llvm::CmpInst::Predicate FCmp;
+    llvm::CmpInst::Predicate SCmp;
+    llvm::CmpInst::Predicate UCmp;
+  };
+  CmpInstInfo InstInfo = [&]() -> CmpInstInfo {
+    using FI = llvm::FCmpInst;
+    using II = llvm::ICmpInst;
+    switch (Kind) {
+    case CK_Less:
+      return {FI::FCMP_OLT, II::ICMP_SLT, II::ICMP_ULT};
+    case CK_Greater:
+      return {FI::FCMP_OGT, II::ICMP_SGT, II::ICMP_UGT};
+    case CK_Ordered:
+      return {FI::FCMP_ORD, II::BAD_ICMP_PREDICATE, II::BAD_ICMP_PREDICATE};
+    case CK_NonEqual:
+      llvm_unreachable("unhandled case");
     }
-    Result = Builder.CreateICmp(Inst, LHS, RHS, "cmp");
+  }();
+  if (ArgTy->isAnyComplexType()) {
+    llvm_unreachable("unimplemented");
+  } else if (ArgTy->hasFloatingRepresentation()) {
+    // FIXME: Handle vector types here.
+    return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS, "cmp");
+  } else {
+    assert(ArgTy->isIntegralOrEnumerationType() || ArgTy->isPointerType());
+    auto Inst =
+        ArgTy->hasSignedIntegerRepresentation() ? InstInfo.SCmp : InstInfo.UCmp;
+    assert(Inst != llvm::ICmpInst::BAD_ICMP_PREDICATE && "invalid predicate");
+    return Builder.CreateICmp(Inst, LHS, RHS, "cmp");
   }
-  // CGF.EmitScalarConversion(Result, CGF.getContext().BoolTy, E->getType(),
-  //                           E->getExprLoc());
-  assert(Result != nullptr);
-  return Result;
 }
 
 void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
@@ -959,12 +958,8 @@ void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
       llvm_unreachable("unimplemented");
     case TEK_Aggregate:
       assert(false);
-      RValue LHSVal = CGF.EmitAnyExpr(E->getLHS());
-      assert(LHSVal.isAggregate());
-      LHS = LHSVal.getAggregatePointer();
-      RValue RHSVal = CGF.EmitAnyExpr(E->getRHS());
-      assert(RHSVal.isAggregate());
-      RHS = RHSVal.getAggregatePointer();
+      LHS = CGF.EmitAnyExpr(E->getLHS()).getAggregatePointer();
+      RHS = CGF.EmitAnyExpr(E->getRHS()).getAggregatePointer();
     }
     assert(LHS && RHS);
 
@@ -989,9 +984,8 @@ void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
           CGF.EmitLValue(CmpInfo.getGreater()).getPointer(), SelectOne);
     }
     assert(Select != nullptr);
-    LValue ResLV = CGF.MakeNaturalAlignAddrLValue(Select, E->getType());
-    EmitFinalDestCopy(E->getType(), ResLV);
-    return;
+    return EmitFinalDestCopy(
+        E->getType(), CGF.MakeNaturalAlignAddrLValue(Select, E->getType()));
   }
 
   CGF.ErrorUnsupported(E, "aggregate binary expression");
