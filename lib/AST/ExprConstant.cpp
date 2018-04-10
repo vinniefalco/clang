@@ -6237,8 +6237,12 @@ namespace {
 
     bool VisitBinCmp(const BinaryOperator *E) {
       using CCR = ComparisonCategoryResult;
-      auto &CmpInfo = Info.Ctx.CompCategories.getInfoForType(E->getType());
+      const ComparisonCategoryInfo &CmpInfo =
+          Info.Ctx.CompCategories.getInfoForType(E->getType());
 
+      // Build a new version of the binary operator which returns an integer
+      // representing the ComparisonCategoryResult. Then defer to
+      // IntExprEvaluator to evaluate it.
       BinaryOperator NewOp(E->getLHS(), E->getRHS(), BO_Cmp, Info.Ctx.IntTy,
                            VK_RValue, OK_Ordinary, E->getOperatorLoc(),
                            E->getFPFeatures());
@@ -8872,7 +8876,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   }
 
   if (LHSTy->isMemberPointerType()) {
-    assert((E->isEqualityOp()) && "unexpected member pointer operation");
+    assert(E->isEqualityOp() && "unexpected member pointer operation");
     assert(RHSTy->isMemberPointerType() && "invalid comparison");
 
     MemberPtr LHSValue, RHSValue;
@@ -10746,9 +10750,10 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
       }
       if (Exp->getOpcode() == BO_Cmp) {
         // Check that all of the references to the result objects are ICE.
-        auto &CmpInfo = Ctx.CompCategories.getInfoForType(Exp->getType());
+        const ComparisonCategoryInfo &CmpInfo =
+            Ctx.CompCategories.getInfoForType(Exp->getType());
         ICEDiag RetDiag(IK_ICE, E->getLocStart());
-        for (auto &KV : CmpInfo.Objects)
+        for (const auto &KV : CmpInfo.Objects)
           RetDiag = Worst(RetDiag, CheckICE(KV.second, Ctx));
 
         return Worst(Worst(LHSResult, RHSResult), RetDiag);

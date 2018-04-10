@@ -4544,7 +4544,7 @@ public:
   /// \brief Lookup the comparison category types in the standard library, and
   /// build DeclRefExprs to values returned by the operator<=> builtins. The
   /// results are cached in ASTContext so they are accessible outside of Sema.
-  /// An error is emitted  if the types are not found or another error occurs.
+  /// An error is emitted if the types are not found or another error occurs.
   ///
   /// \return true if an error occurred. False otherwise.
   bool BuildComparisonCategoryData(SourceLocation Loc);

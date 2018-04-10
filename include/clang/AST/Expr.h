@@ -3025,7 +3025,7 @@ private:
   Stmt* SubExprs[END_EXPR];
 public:
   BinaryOperator(Expr *lhs, Expr *rhs, Opcode opc, QualType ResTy,
-                 ExprValueKind VK, ExprObjectKind OK, SourceLocation opLoc,
+                 ExprValueKind VK, ExprObjectKind OK, SourceLocation OpLoc,
                  FPOptions FPFeatures)
       : Expr(BinaryOperatorClass, ResTy, VK, OK,
              lhs->isTypeDependent() || rhs->isTypeDependent(),
@@ -3035,7 +3035,7 @@ public:
              (lhs->containsUnexpandedParameterPack() ||
               rhs->containsUnexpandedParameterPack())),
         Opc(opc), FPFeatures(FPFeatures.getInt()), IsCmpOrdered(false),
-        OpLoc(opLoc) {
+        OpLoc(OpLoc) {
     SubExprs[LHS] = lhs;
     SubExprs[RHS] = rhs;
     assert(!isCompoundAssignmentOp() &&
@@ -3164,7 +3164,7 @@ public:
     return isShiftAssignOp(getOpcode());
   }
 
-  void setIsCmpOrdered(bool Val = true) { IsCmpOrdered = Val; }
+  void setIsCmpOrdered(bool Val) { IsCmpOrdered = Val; }
   bool getIsCmpOrdered() const { return IsCmpOrdered; }
 
   // Return true if a binary operator using the specified opcode and operands

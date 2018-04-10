@@ -75,7 +75,7 @@ public:
   /// \brief Return an expression referencing the member of the specified
   ///   comparison category. For example 'std::strong_equality::equal'
   const DeclRefExpr *getResultValue(ComparisonCategoryResult ValueKind) const {
-    const auto *DR = getResultValueUnsafe(ValueKind);
+    const DeclRefExpr *DR = getResultValueUnsafe(ValueKind);
     assert(DR &&
            "comparison category does not contain the specified result kind");
     return DR;
@@ -167,17 +167,18 @@ struct ComparisonCategories {
   ///   `getCategoryForType(Ty)`.
   const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
 
-  /// \brief Return the comparison category kind coorisponding to the specified
+  /// \brief Return the comparison category kind corresponding to the specified
   ///   type. 'Ty' is expected to refer to the type of one of the comparison
   ///   category decls; if it doesn't no value is returned.
   Optional<ComparisonCategoryKind> getCategoryForType(QualType Ty) const;
 
   /// \brief returns true if the comparison category data has already been
-  /// built,
-  ///    and false otherwise.
+  /// built, and false otherwise.
   bool hasData() const { return HasData; }
 
-public: // private
+public:
+  // implementation details which should only be used by the function creating
+  // and setting the data.
   using InfoList =
       std::array<ComparisonCategoryInfo,
                  static_cast<unsigned>(ComparisonCategoryKind::Last) + 1>;

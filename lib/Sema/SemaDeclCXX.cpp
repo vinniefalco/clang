@@ -8962,9 +8962,8 @@ bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
           BuildDeclRefExpr(VD, VD->getType(), VK_LValue, SourceLocation());
       if (Res.isInvalid())
         return true;
-      std::pair<char, DeclRefExpr *> KV{(char)CCV,
-                                        cast<DeclRefExpr>(Res.get())};
-      Info.Objects.insert(KV);
+
+      Info.Objects.try_emplace((char)CCV, cast<DeclRefExpr>(Res.get()));
     }
 
     // Success. Set the value in ASTContext.

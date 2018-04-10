@@ -893,7 +893,7 @@ static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
                                 const BinaryOperator *E, llvm::Value *LHS,
                                 llvm::Value *RHS, CompareKind Kind) {
   QualType ArgTy = E->getLHS()->getType();
-  if (auto *MPT = ArgTy->getAs<MemberPointerType>()) {
+  if (const auto *MPT = ArgTy->getAs<MemberPointerType>()) {
     assert(Kind == CK_Equal &&
            "member pointers may only be compared for equality");
     return CGF.CGM.getCXXABI().EmitMemberPointerComparison(
@@ -941,7 +941,8 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   using llvm::Value;
   assert(CGF.getContext().hasSameType(E->getLHS()->getType(),
                                       E->getRHS()->getType()));
-  auto &CmpInfo = CGF.getContext().CompCategories.getInfoForType(E->getType());
+  const ComparisonCategoryInfo &CmpInfo =
+      CGF.getContext().CompCategories.getInfoForType(E->getType());
 
   QualType ArgTy = E->getLHS()->getType();
   Value *LHS = nullptr, *RHS = nullptr;

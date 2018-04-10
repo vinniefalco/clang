@@ -1,4 +1,4 @@
-//===- ComparisonCategories.h - Three Way Comparison Data -------*- C++ -*-===//
+//===- ComparisonCategories.cpp - Three Way Comparison Data -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -35,7 +35,7 @@ ComparisonCategories::getCategoryForType(QualType Ty) const {
 
 const ComparisonCategoryInfo &
 ComparisonCategories::getInfoForType(QualType Ty) const {
-  auto OptKind = getCategoryForType(Ty);
+  Optional<ComparisonCategoryKind> OptKind = getCategoryForType(Ty);
   assert(OptKind &&
          "return type for operator<=> is not a comparison category type");
   return getInfo(OptKind.getValue());

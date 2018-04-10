@@ -9730,7 +9730,7 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
   StandardConversionSequence SCS;
   SCS.setToType(0, FromType);
   SCS.setToType(1, ToType);
-  if (ImplicitCastExpr *ICE = dyn_cast<ImplicitCastExpr>(E)) {
+  if (const auto *ICE = dyn_cast<ImplicitCastExpr>(E)) {
     auto CastK = ICE->getCastKind();
     SCS.Second = castKindToImplicitConversionKind(CastK);
   }
@@ -9758,26 +9758,21 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
     break;
   }
 
-  if (E->isValueDependent()) {
+  if (E->isValueDependent())
     return false;
-  }
 
   // Check the expression is a constant expression.
   SmallVector<PartialDiagnosticAt, 8> Notes;
   Expr::EvalResult Eval;
   Eval.Diag = &Notes;
 
-  if ((ToType->isReferenceType()
-           ? !E->EvaluateAsLValue(Eval, S.Context)
-           : !E->EvaluateAsRValue(Eval, S.Context))
-      /*(RequireInt && !Eval.Val.isInt())*/) {
+  if (ToType->isReferenceType() ? !E->EvaluateAsLValue(Eval, S.Context)
+                                : !E->EvaluateAsRValue(Eval, S.Context)) {
     // The expression can't be folded, so we can't keep it at this position in
     // the AST.
-  } else {
-    if (Notes.empty()) {
-      // It's a constant expression.
-      return false;
-    }
+  } else if (Notes.empty()) {
+    // It's a constant expression.
+    return false;
   }
   S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 0 << FromType << ToType;
@@ -11965,10 +11960,9 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
     ConvertHalfVec = true;
     ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc, true);
     assert(ResultTy.isNull() || ResultTy->getAsCXXRecordDecl());
-    if (!ResultTy.isNull()) {
+    if (!ResultTy.isNull())
       IsCmpOrdered =
           Context.CompCategories.getInfoForType(ResultTy).isOrdered();
-    }
     break;
   case BO_And:
     checkObjCPointerIntrospection(*this, LHS, RHS, OpLoc);
