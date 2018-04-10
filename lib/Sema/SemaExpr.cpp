@@ -9833,11 +9833,7 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
   QualType Type;
   if (LHSType->isEnumeralType() || RHSType->isEnumeralType()) {
     // C++2a [expr.spaceship]p5
-    QualType LHSCanonType =
-        S.Context.getCanonicalType(LHSType).getUnqualifiedType();
-    QualType RHSCanonType =
-        S.Context.getCanonicalType(RHSType).getUnqualifiedType();
-    if (LHSCanonType != RHSCanonType) {
+    if (!S.Context.hasSameUnqualifiedType(LHSType, RHSType)) {
       S.InvalidOperands(Loc, LHS, RHS);
       return QualType();
     }
@@ -9937,7 +9933,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     if (!IsSpaceship)
       return Context.getLogicalOperationType();
     assert(getLangOpts().CPlusPlus);
-    assert(LHS.get()->getType() == RHS.get()->getType());
+    assert(Context.hasSameType(LHS.get()->getType(), RHS.get()->getType()));
 
     if (BuildComparisonCategoryData(Loc))
       return QualType();

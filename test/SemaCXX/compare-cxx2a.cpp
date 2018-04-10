@@ -300,3 +300,8 @@ constexpr bool test_constexpr = [] {
 
   return true;
 }();
+
+typedef int *INTPTR;
+void test_typedef_bug(int *x, INTPTR y) {
+  (void)(x <=> y);
+}

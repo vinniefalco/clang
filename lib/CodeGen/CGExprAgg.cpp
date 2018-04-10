@@ -931,7 +931,7 @@ llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
   } else if (ArgTy->isVectorType()) {
     llvm_unreachable("support for vector types is unimplemented");
   } else {
-    llvm_unreachable("unexpected argument type when building operator<=>")
+    llvm_unreachable("unexpected argument type when building operator<=>");
   }
 }
 
@@ -944,8 +944,8 @@ void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
     return;
   }
   if (E->getOpcode() == BO_Cmp) {
-    assert(CGF.getContext().getCanonicalType(E->getLHS()->getType()) ==
-           CGF.getContext().getCanonicalType(E->getLHS()->getType()));
+    assert(CGF.getContext().hasSameType(E->getLHS()->getType(),
+                                        E->getRHS()->getType()));
 
     auto &CmpInfo =
         CGF.getContext().CompCategories.getInfoForType(E->getType());
