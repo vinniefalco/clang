@@ -972,20 +972,21 @@ void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
       Select = Builder.CreateSelect(
           EmitCompare(E, LHS, RHS, CK_NonEqual),
           CGF.EmitLValue(CmpInfo.getNonequalOrNonequiv()).getPointer(),
-          CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer());
+          CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer(), "sel.eq");
     } else {
       Value *EqVal = CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer();
       if (CmpInfo.isPartial()) {
         EqVal = Builder.CreateSelect(
             EmitCompare(E, LHS, RHS, CK_Ordered), EqVal,
-            CGF.EmitLValue(CmpInfo.getUnordered()).getPointer());
+            CGF.EmitLValue(CmpInfo.getUnordered()).getPointer(), "sel.eq");
       }
       Value *SelectOne = Builder.CreateSelect(
           EmitCompare(E, LHS, RHS, CK_Less),
-          CGF.EmitLValue(CmpInfo.getLess()).getPointer(), EqVal);
+          CGF.EmitLValue(CmpInfo.getLess()).getPointer(), EqVal, "sel.lt");
       Select = Builder.CreateSelect(
           EmitCompare(E, LHS, RHS, CK_Greater),
-          CGF.EmitLValue(CmpInfo.getGreater()).getPointer(), SelectOne);
+          CGF.EmitLValue(CmpInfo.getGreater()).getPointer(), SelectOne,
+          "sel.gt");
     }
     assert(Select != nullptr);
     return EmitFinalDestCopy(

@@ -2,17 +2,16 @@
 // RUN:    FileCheck %s \
 // RUN:          '-DSO="class.std::__1::strong_ordering"' \
 // RUN:           -DSO_EQ=_ZNSt3__115strong_ordering5equalE \
-// RUN:           -DSO_LESS=_ZNSt3__115strong_ordering4lessE \
-// RUN:           -DSO_GREATER=_ZNSt3__115strong_ordering7greaterE \
+// RUN:           -DSO_LT=_ZNSt3__115strong_ordering4lessE \
+// RUN:           -DSO_GT=_ZNSt3__115strong_ordering7greaterE \
 // RUN:          '-DSE="class.std::__1::strong_equality"' \
 // RUN:           -DSE_EQ=_ZNSt3__115strong_equality5equalE \
 // RUN:           -DSE_NE=_ZNSt3__115strong_equality8nonequalE \
 // RUN:          '-DPO="class.std::__1::partial_ordering"' \
 // RUN:           -DPO_EQ=_ZNSt3__116partial_ordering10equivalentE \
-// RUN:           -DPO_LESS=_ZNSt3__116partial_ordering4lessE \
-// RUN:           -DPO_GREATER=_ZNSt3__116partial_ordering7greaterE \
+// RUN:           -DPO_LT=_ZNSt3__116partial_ordering4lessE \
+// RUN:           -DPO_GT=_ZNSt3__116partial_ordering7greaterE \
 // RUN:           -DPO_UNORD=_ZNSt3__116partial_ordering9unorderedE
-
 
 #include "Inputs/std-compare.h"
 
@@ -22,9 +21,9 @@ typedef int INT;
 auto test_signed(int x, int y) {
   // CHECK: %retval = alloca %[[SO]]
   // CHECK: %cmp = icmp slt i32 %0, %1
-  // CHECK: %[[SELECT1:.*]] = select i1 %cmp, %[[SO]]* @[[SO_LESS]], %[[SO]]* @[[SO_EQ]]
+  // CHECK: %[[SELECT1:.*]] = select i1 %cmp, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
   // CHECK: %cmp1 = icmp sgt i32 %0, %1
-  // CHECK: %[[SELECT2:.*]] = select i1 %cmp1, %[[SO]]* @[[SO_GREATER]], %[[SO]]* %[[SELECT1]]
+  // CHECK: %[[SELECT2:.*]] = select i1 %cmp1, %[[SO]]* @[[SO_GT]], %[[SO]]* %[[SELECT1]]
   // CHECK: %[[TMPRET:.*]] = bitcast %[[SO]]* %retval
   // CHECK: %[[TMPSRC:.*]] = bitcast %[[SO]]* %[[SELECT2]]
   // CHECK: call void @llvm.memcpy{{.*}}(i8* align 1 %[[TMPRET]], i8* align 1 %[[TMPSRC]]
@@ -35,9 +34,9 @@ auto test_signed(int x, int y) {
 // CHECK-LABEL: @_Z13test_unsignedjj
 auto test_unsigned(unsigned x, unsigned y) {
   // CHECK: %cmp = icmp ult i32 %0, %1
-  // CHECK: %[[SELECT1:.*]] = select i1 %cmp, %[[SO]]* @[[SO_LESS]], %[[SO]]* @[[SO_EQ]]
+  // CHECK: %[[SELECT1:.*]] = select i1 %cmp, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
   // CHECK: %cmp1 = icmp ugt i32 %0, %1
-  // CHECK: %[[SELECT2:.*]] = select i1 %cmp1, %[[SO]]* @[[SO_GREATER]], %[[SO]]* %[[SELECT1]]
+  // CHECK: %[[SELECT2:.*]] = select i1 %cmp1, %[[SO]]* @[[SO_GT]], %[[SO]]* %[[SELECT1]]
   // CHECK: ret
   return x <=> y;
 }
@@ -48,9 +47,9 @@ auto float_test(double x, double y) {
   // CHECK: %[[CMP1:.*]] = fcmp ord double %0, %1
   // CHECK: %[[SELECT1:.*]] = select i1 %[[CMP1]], %[[PO]]* @[[PO_EQ]], %[[PO]]* @[[PO_UNORD]]
   // CHECK: %[[CMP2:.*]] = fcmp olt double %0, %1
-  // CHECK: %[[SELECT2:.*]] = select i1 %[[CMP2]], %[[PO]]* @[[PO_LESS]], %[[PO]]* %[[SELECT1]]
+  // CHECK: %[[SELECT2:.*]] = select i1 %[[CMP2]], %[[PO]]* @[[PO_LT]], %[[PO]]* %[[SELECT1]]
   // CHECK: %[[CMP3:.*]] = fcmp ogt double %0, %1
-  // CHECK: %[[SELECT3:.*]] = select i1 %[[CMP3]], %[[PO]]* @[[PO_GREATER]], %[[PO]]* %[[SELECT2]]
+  // CHECK: %[[SELECT3:.*]] = select i1 %[[CMP3]], %[[PO]]* @[[PO_GT]], %[[PO]]* %[[SELECT2]]
   // CHECK: ret
   return x <=> y;
 }
@@ -58,9 +57,9 @@ auto float_test(double x, double y) {
 // CHECK-LABEL: @_Z8ptr_testPiS_
 auto ptr_test(int *x, int *y) {
   // CHECK: %cmp = icmp ult i32* %0, %1
-  // CHECK: %[[SELECT1:.*]] = select i1 %cmp, %[[SO]]* @[[SO_LESS]], %[[SO]]* @[[SO_EQ]]
+  // CHECK: %[[SELECT1:.*]] = select i1 %cmp, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
   // CHECK: %cmp1 = icmp ugt i32* %0, %1
-  // CHECK: %[[SELECT2:.*]] = select i1 %cmp1, %[[SO]]* @[[SO_GREATER]], %[[SO]]* %[[SELECT1]]
+  // CHECK: %[[SELECT2:.*]] = select i1 %cmp1, %[[SO]]* @[[SO_GT]], %[[SO]]* %[[SELECT1]]
   // CHECK: ret
   return x <=> y;
 }
