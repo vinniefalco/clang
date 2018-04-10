@@ -5064,9 +5064,11 @@ public:
 
 } // namespace
 
+//===----------------------------------------------------------------------===//
+// Binary Operator Evaluation
+//===----------------------------------------------------------------------===//
 
 namespace {
-
 template <class Derived>
 class BinOpEvaluatorBase : public ExprEvaluatorBase<Derived> {
   template <bool Dummy = false, class DepDerived = Derived>
