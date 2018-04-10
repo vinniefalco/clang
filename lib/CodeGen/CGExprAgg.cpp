@@ -200,15 +200,6 @@ public:
     EmitFinalDestCopy(E->getType(), Res);
   }
 
-  enum CompareKind {
-    CK_Less,
-    CK_Greater,
-    CK_LessEqual,
-    CK_GreaterEqual,
-    CK_NonEqual
-  };
-  llvm::Value *EmitCompare(const BinaryOperator *E, llvm::Value *LHS,
-                           llvm::Value *RHS, CompareKind Kind);
 };
 }  // end anonymous namespace.
 
@@ -892,9 +883,17 @@ void AggExprEmitter::VisitStmtExpr(const StmtExpr *E) {
   CGF.EmitCompoundStmt(*E->getSubStmt(), true, Dest);
 }
 
-llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
-                                         llvm::Value *LHS, llvm::Value *RHS,
-                                         CompareKind Kind) {
+enum CompareKind {
+  CK_Less,
+  CK_Greater,
+  CK_LessEqual,
+  CK_GreaterEqual,
+  CK_NonEqual
+};
+
+static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
+                                const BinaryOperator *E, llvm::Value *LHS,
+                                llvm::Value *RHS, CompareKind Kind) {
   QualType ArgTy = E->getLHS()->getType();
   if (auto *MPT = ArgTy->getAs<MemberPointerType>()) {
     assert(Kind == CK_NonEqual &&
@@ -974,23 +973,24 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   auto EmitCmpRes = [&](const DeclRefExpr *DRE) {
     return CGF.EmitLValue(DRE).getPointer();
   };
-
+  auto EmitCmp = [&](CompareKind K) {
+    return EmitCompare(Builder, CGF, E, LHS, RHS, K);
+  };
   Value *Select = nullptr;
   if (CmpInfo.isEquality()) {
-    Select =
-        Builder.CreateSelect(EmitCompare(E, LHS, RHS, CK_NonEqual),
-                             EmitCmpRes(CmpInfo.getNonequalOrNonequiv()),
-                             EmitCmpRes(CmpInfo.getEqualOrEquiv()), "sel.eq");
+    Select = Builder.CreateSelect(
+        EmitCmp(CK_NonEqual), EmitCmpRes(CmpInfo.getNonequalOrNonequiv()),
+        EmitCmpRes(CmpInfo.getEqualOrEquiv()), "sel.eq");
   } else if (!CmpInfo.isPartial()) {
-    Value *SelectOne = Builder.CreateSelect(
-        EmitCompare(E, LHS, RHS, CK_Less), EmitCmpRes(CmpInfo.getLess()),
-        EmitCmpRes(CmpInfo.getEqualOrEquiv()), "sel.lt");
-    Select = Builder.CreateSelect(EmitCompare(E, LHS, RHS, CK_Greater),
+    Value *SelectOne =
+        Builder.CreateSelect(EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()),
+                             EmitCmpRes(CmpInfo.getEqualOrEquiv()), "sel.lt");
+    Select = Builder.CreateSelect(EmitCmp(CK_Greater),
                                   EmitCmpRes(CmpInfo.getGreater()), SelectOne,
                                   "sel.gt");
   } else {
-    Value *LE = EmitCompare(E, LHS, RHS, CK_LessEqual);
-    Value *GE = EmitCompare(E, LHS, RHS, CK_GreaterEqual);
+    Value *LE = EmitCmp(CK_LessEqual);
+    Value *GE = EmitCmp(CK_GreaterEqual);
     Value *SelectLTGT =
         Builder.CreateSelect(LE, EmitCmpRes(CmpInfo.getLess()),
                              EmitCmpRes(CmpInfo.getGreater()), "sel.lt");

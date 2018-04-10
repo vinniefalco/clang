@@ -37,6 +37,8 @@ auto test_unsigned(unsigned x, unsigned y) {
   // CHECK: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
   // CHECK: %cmp.gt = icmp ugt i32 %0, %1
   // CHECK: %sel.gt = select i1 %cmp.gt, %[[SO]]* @[[SO_GT]], %[[SO]]* %sel.lt
+  // CHECK: %retval
+  // CHECK: %sel.gt
   // CHECK: ret
   return x <=> y;
 }
@@ -51,6 +53,8 @@ auto float_test(double x, double y) {
   // CHECK: %sel.eq = select i1 %cmp.eq, %[[PO]]* @[[PO_EQ]], %[[PO]]* @[[PO_UNORD]]
   // CHECK: %cmp.ord = xor i1 %cmp.le, %cmp.ge
   // CHECK: %sel.ord = select i1 %cmp.ord, %[[PO]]* %sel.lt, %[[PO]]* %sel.eq
+  // CHECK: %retval
+  // CHECK: %sel.ord
   // CHECK: ret
   return x <=> y;
 }
@@ -61,6 +65,8 @@ auto ptr_test(int *x, int *y) {
   // CHECK-NEXT: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
   // CHECK: %cmp.gt = icmp ugt i32* %0, %1
   // CHECK-NEXT: %sel.gt = select i1 %cmp.gt, %[[SO]]* @[[SO_GT]], %[[SO]]* %sel.lt
+  // CHECK: %retval
+  // CHECK: %sel.gt
   // CHECK: ret
   return x <=> y;
 }
@@ -77,7 +83,9 @@ auto mem_ptr_test(MemPtrT x, MemPtrT y) {
   // CHECK: %cmp.adj = icmp ne i64 %lhs.memptr.adj, %rhs.memptr.adj
   // CHECK: %6 = and i1 %cmp.ptr.null, %cmp.adj
   // CHECK: %memptr.ne = or i1 %cmp.ptr, %6
-  // CHECK: select i1 %memptr.ne, %[[SE]]* @[[SE_NE]], %[[SE]]* @[[SE_EQ]]
+  // CHECK: %sel.eq = select i1 %memptr.ne, %[[SE]]* @[[SE_NE]], %[[SE]]* @[[SE_EQ]]
+  // CHECK: %retval
+  // CHECK: %sel.eq
   // CHECK: ret
   return x <=> y;
 }
@@ -86,7 +94,9 @@ auto mem_ptr_test(MemPtrT x, MemPtrT y) {
 auto mem_data_test(MemDataT x, MemDataT y) {
   // CHECK: %retval = alloca %[[SE]]
   // CHECK: %[[CMP:.*]] = icmp ne i64 %0, %1
-  // CHECK: select i1 %[[CMP]], %[[SE]]* @[[SE_NE]], %[[SE]]* @[[SE_EQ]]
+  // CHECK: %sel.eq = select i1 %[[CMP]], %[[SE]]* @[[SE_NE]], %[[SE]]* @[[SE_EQ]]
+  // CHECK: %retval
+  // CHECK: %sel.eq
   return x <=> y;
 }
 
