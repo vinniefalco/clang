@@ -888,14 +888,12 @@ void AggExprEmitter::VisitStmtExpr(const StmtExpr *E) {
 llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
                                          llvm::Value *LHS, llvm::Value *RHS,
                                          CompareKind Kind) {
-  assert(E->getLHS()->getType() == E->getRHS()->getType());
-
   QualType ArgTy = E->getLHS()->getType();
   if (auto *MPT = ArgTy->getAs<MemberPointerType>()) {
-    assert(Kind == CK_NonEqual);
+    assert(Kind == CK_NonEqual &&
+           "member pointers may only be compared for equality");
     return CGF.CGM.getCXXABI().EmitMemberPointerComparison(
-        CGF, LHS, RHS, MPT,
-        /*IsInequality*/ true);
+        CGF, LHS, RHS, MPT, /*IsInequality*/ true);
   }
 
   assert(Kind != CK_NonEqual &&
@@ -921,16 +919,18 @@ llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
       llvm_unreachable("unhandled case");
     }
   }();
+
   if (ArgTy->isAnyComplexType()) {
-    llvm_unreachable("unimplemented");
+    llvm_unreachable("support for complex types is unimplemented");
   } else if (ArgTy->hasFloatingRepresentation()) {
-    // FIXME: Handle vector types here.
+    assert(!ArgTy->isVectorType() && // FIXME: Handle vector types here.
+           "support for vector types is unimplemented");
+
     return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS, "cmp");
   } else {
     assert(ArgTy->isIntegralOrEnumerationType() || ArgTy->isPointerType());
     auto Inst =
         ArgTy->hasSignedIntegerRepresentation() ? InstInfo.SCmp : InstInfo.UCmp;
-    assert(Inst != llvm::ICmpInst::BAD_ICMP_PREDICATE && "invalid predicate");
     return Builder.CreateICmp(Inst, LHS, RHS, "cmp");
   }
 }
@@ -944,22 +944,26 @@ void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
     return;
   }
   if (E->getOpcode() == BO_Cmp) {
+    assert(CGF.getContext().getCanonicalType(E->getLHS()->getType()) ==
+           CGF.getContext().getCanonicalType(E->getLHS()->getType()));
+
     auto &CmpInfo =
         CGF.getContext().CompCategories.getInfoForType(E->getType());
-    QualType LHSTy = E->getLHS()->getType();
+
+    QualType ArgTy = E->getLHS()->getType();
     Value *LHS = nullptr, *RHS = nullptr;
-    switch (CGF.getEvaluationKind(LHSTy)) {
+    switch (CGF.getEvaluationKind(ArgTy)) {
     case TEK_Scalar:
       LHS = CGF.EmitScalarExpr(E->getLHS());
       RHS = CGF.EmitScalarExpr(E->getRHS());
       break;
-    case TEK_Complex:
-      // FIXME
-      llvm_unreachable("unimplemented");
     case TEK_Aggregate:
-      assert(false);
+      // FIXME: Is this ever used?
       LHS = CGF.EmitAnyExpr(E->getLHS()).getAggregatePointer();
       RHS = CGF.EmitAnyExpr(E->getRHS()).getAggregatePointer();
+      break;
+    case TEK_Complex:
+      llvm_unreachable("support for complex types is unimplemented"); // FIXME
     }
     assert(LHS && RHS);
 

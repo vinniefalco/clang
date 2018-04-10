@@ -16,6 +16,8 @@
 
 #include "Inputs/std-compare.h"
 
+typedef int INT;
+
 // CHECK-LABEL: @_Z11test_signedii
 auto test_signed(int x, int y) {
   // CHECK: %retval = alloca %[[SO]]
