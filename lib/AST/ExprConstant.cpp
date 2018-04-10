@@ -5090,7 +5090,7 @@ public:
   bool Success(ComparisonCategoryResult Res, const BinaryOperator *E) {
     assert(E->getOpcode() == BO_Cmp &&
            "this success function should only be used by operator<=>");
-    assert(CmpResult && "have operator<=> result but no where to put it?");
+    assert(CmpResult && "have operator<=> result but nowhere to put it?");
     *CmpResult = Res;
     return true;
   }
@@ -5108,13 +5108,19 @@ public:
 class SpaceshipOpEvaluator : public BinOpEvaluatorBase<SpaceshipOpEvaluator> {
 public:
   SpaceshipOpEvaluator(EvalInfo &info, ComparisonCategoryResult &CmpRes)
-    : BinOpEvaluatorBase<SpaceshipOpEvaluator>(info, &CmpRes) {
-  }
+      : BinOpEvaluatorBaseTy(info, &CmpRes) {}
 
   template <class ...Args>
   bool Success(Args&& ...args) {
     llvm_unreachable("have operator<=> result destination, but no result?");
     return false;
+  }
+
+  bool VisitBinCmp(const BinaryOperator *E) {
+    return BinOpEvaluatorBaseTy::VisitBinaryOperator(E);
+  }
+  bool VisitBinaryOperator(const BinaryOperator *E) {
+    llvm_unreachable("this class should only be used to visit operator<=>");
   }
 };
 
@@ -6293,15 +6299,12 @@ namespace {
     bool VisitCXXConstructExpr(const CXXConstructExpr *E, QualType T);
     bool VisitCXXStdInitializerListExpr(const CXXStdInitializerListExpr *E);
 
-    bool VisitBinaryOperator(const BinaryOperator *E) {
-      if (E->getOpcode() != BO_Cmp)
-        return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
-
+    bool VisitBinCmp(const BinaryOperator *E) {
       using CCR = ComparisonCategoryResult;
       auto &CmpInfo = Info.Ctx.CompCategories.getInfoForType(E->getType());
 
       CCR CmpRes = CCR::Invalid;
-      if (!SpaceshipOpEvaluator(Info, CmpRes).VisitBinaryOperator(E))
+      if (!SpaceshipOpEvaluator(Info, CmpRes).VisitBinCmp(E))
         return false;
       assert(CmpRes != CCR::Invalid);
 
@@ -9016,7 +9019,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   if (DataRecursiveIntBinOpEvaluator::shouldEnqueue(E))
     return DataRecursiveIntBinOpEvaluator(*this, Result).Traverse(E);
 
-  return DirectBase::VisitBinaryOperator(E);
+  return BinOpEvaluatorBaseTy::Visit(E);
 }
 
 /// VisitUnaryExprOrTypeTraitExpr - Evaluate a sizeof, alignof or vec_step with

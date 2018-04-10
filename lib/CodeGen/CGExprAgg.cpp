@@ -147,6 +147,7 @@ public:
   void VisitPointerToDataMemberBinaryOperator(const BinaryOperator *BO);
   void VisitBinAssign(const BinaryOperator *E);
   void VisitBinComma(const BinaryOperator *E);
+  void VisitBinCmp(const BinaryOperator *E);
 
   void VisitObjCMessageExpr(ObjCMessageExpr *E);
   void VisitObjCIvarRefExpr(ObjCIvarRefExpr *E) {
@@ -199,7 +200,13 @@ public:
     EmitFinalDestCopy(E->getType(), Res);
   }
 
-  enum CompareKind { CK_Less, CK_Greater, CK_NonEqual, CK_Ordered };
+  enum CompareKind {
+    CK_Less,
+    CK_Greater,
+    CK_LessEqual,
+    CK_GreaterEqual,
+    CK_NonEqual
+  };
   llvm::Value *EmitCompare(const BinaryOperator *E, llvm::Value *LHS,
                            llvm::Value *RHS, CompareKind Kind);
 };
@@ -901,6 +908,7 @@ llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
 
   // Compute the comparison instructions for the specified comparison kind.
   struct CmpInstInfo {
+    const char *Name;
     llvm::CmpInst::Predicate FCmp;
     llvm::CmpInst::Predicate SCmp;
     llvm::CmpInst::Predicate UCmp;
@@ -908,24 +916,27 @@ llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
   CmpInstInfo InstInfo = [&]() -> CmpInstInfo {
     using FI = llvm::FCmpInst;
     using II = llvm::ICmpInst;
+    llvm::CmpInst::Predicate Invalid = II::BAD_ICMP_PREDICATE;
     switch (Kind) {
     case CK_Less:
-      return {FI::FCMP_OLT, II::ICMP_SLT, II::ICMP_ULT};
+      return {"cmp.lt", FI::FCMP_OLT, II::ICMP_SLT, II::ICMP_ULT};
+    case CK_LessEqual:
+      return {"cmp.le", FI::FCMP_OLE, Invalid, Invalid};
     case CK_Greater:
-      return {FI::FCMP_OGT, II::ICMP_SGT, II::ICMP_UGT};
-    case CK_Ordered:
-      return {FI::FCMP_ORD, II::BAD_ICMP_PREDICATE, II::BAD_ICMP_PREDICATE};
+      return {"cmp.gt", FI::FCMP_OGT, II::ICMP_SGT, II::ICMP_UGT};
+    case CK_GreaterEqual:
+      return {"cmp.ge", FI::FCMP_OGE, Invalid, Invalid};
     case CK_NonEqual:
       llvm_unreachable("unhandled case");
     }
   }();
 
   if (ArgTy->isRealFloatingType()) {
-    return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS, "cmp");
+    return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS, InstInfo.Name);
   } else if (ArgTy->isIntegralOrEnumerationType() || ArgTy->isPointerType()) {
     auto Inst =
         ArgTy->hasSignedIntegerRepresentation() ? InstInfo.SCmp : InstInfo.UCmp;
-    return Builder.CreateICmp(Inst, LHS, RHS, "cmp");
+    return Builder.CreateICmp(Inst, LHS, RHS, InstInfo.Name);
   } else if (ArgTy->isAnyComplexType()) {
     llvm_unreachable("support for complex types is unimplemented");
   } else if (ArgTy->isVectorType()) {
@@ -935,62 +946,71 @@ llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
   }
 }
 
-void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
+void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   using llvm::BasicBlock;
   using llvm::PHINode;
   using llvm::Value;
+  assert(CGF.getContext().hasSameType(E->getLHS()->getType(),
+                                      E->getRHS()->getType()));
+  auto &CmpInfo = CGF.getContext().CompCategories.getInfoForType(E->getType());
+
+  QualType ArgTy = E->getLHS()->getType();
+  Value *LHS = nullptr, *RHS = nullptr;
+  switch (CGF.getEvaluationKind(ArgTy)) {
+  case TEK_Scalar:
+    LHS = CGF.EmitScalarExpr(E->getLHS());
+    RHS = CGF.EmitScalarExpr(E->getRHS());
+    break;
+  case TEK_Aggregate:
+    // FIXME: Is this ever used?
+    LHS = CGF.EmitAnyExpr(E->getLHS()).getAggregatePointer();
+    RHS = CGF.EmitAnyExpr(E->getRHS()).getAggregatePointer();
+    break;
+  case TEK_Complex:
+    llvm_unreachable("support for complex types is unimplemented");
+  }
+  assert(LHS && RHS);
+
+  auto EmitCmpRes = [&](const DeclRefExpr *DRE) {
+    return CGF.EmitLValue(DRE).getPointer();
+  };
+
+  Value *Select = nullptr;
+  if (CmpInfo.isEquality()) {
+    Select =
+        Builder.CreateSelect(EmitCompare(E, LHS, RHS, CK_NonEqual),
+                             EmitCmpRes(CmpInfo.getNonequalOrNonequiv()),
+                             EmitCmpRes(CmpInfo.getEqualOrEquiv()), "sel.eq");
+  } else if (!CmpInfo.isPartial()) {
+    Value *SelectOne = Builder.CreateSelect(
+        EmitCompare(E, LHS, RHS, CK_Less), EmitCmpRes(CmpInfo.getLess()),
+        EmitCmpRes(CmpInfo.getEqualOrEquiv()), "sel.lt");
+    Select = Builder.CreateSelect(EmitCompare(E, LHS, RHS, CK_Greater),
+                                  EmitCmpRes(CmpInfo.getGreater()), SelectOne,
+                                  "sel.gt");
+  } else {
+    Value *LE = EmitCompare(E, LHS, RHS, CK_LessEqual);
+    Value *GE = EmitCompare(E, LHS, RHS, CK_GreaterEqual);
+    Value *SelectLTGT =
+        Builder.CreateSelect(LE, EmitCmpRes(CmpInfo.getLess()),
+                             EmitCmpRes(CmpInfo.getGreater()), "sel.lt");
+    Value *SelectEq =
+        Builder.CreateSelect(Builder.CreateAnd(LE, GE, "cmp.eq"),
+                             EmitCmpRes(CmpInfo.getEqualOrEquiv()),
+                             EmitCmpRes(CmpInfo.getUnordered()), "sel.eq");
+    Select = Builder.CreateSelect(Builder.CreateXor(LE, GE, "cmp.ord"),
+                                  SelectLTGT, SelectEq, "sel.ord");
+  }
+  assert(Select != nullptr);
+  return EmitFinalDestCopy(
+      E->getType(), CGF.MakeNaturalAlignAddrLValue(Select, E->getType()));
+}
+
+void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
+
   if (E->getOpcode() == BO_PtrMemD || E->getOpcode() == BO_PtrMemI) {
     VisitPointerToDataMemberBinaryOperator(E);
     return;
-  }
-  if (E->getOpcode() == BO_Cmp) {
-    assert(CGF.getContext().hasSameType(E->getLHS()->getType(),
-                                        E->getRHS()->getType()));
-
-    auto &CmpInfo =
-        CGF.getContext().CompCategories.getInfoForType(E->getType());
-
-    QualType ArgTy = E->getLHS()->getType();
-    Value *LHS = nullptr, *RHS = nullptr;
-    switch (CGF.getEvaluationKind(ArgTy)) {
-    case TEK_Scalar:
-      LHS = CGF.EmitScalarExpr(E->getLHS());
-      RHS = CGF.EmitScalarExpr(E->getRHS());
-      break;
-    case TEK_Aggregate:
-      // FIXME: Is this ever used?
-      LHS = CGF.EmitAnyExpr(E->getLHS()).getAggregatePointer();
-      RHS = CGF.EmitAnyExpr(E->getRHS()).getAggregatePointer();
-      break;
-    case TEK_Complex:
-      llvm_unreachable("support for complex types is unimplemented");
-    }
-    assert(LHS && RHS);
-
-    Value *Select = nullptr;
-    if (CmpInfo.isEquality()) {
-      Select = Builder.CreateSelect(
-          EmitCompare(E, LHS, RHS, CK_NonEqual),
-          CGF.EmitLValue(CmpInfo.getNonequalOrNonequiv()).getPointer(),
-          CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer(), "sel.eq");
-    } else {
-      Value *EqVal = CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer();
-      if (CmpInfo.isPartial()) {
-        EqVal = Builder.CreateSelect(
-            EmitCompare(E, LHS, RHS, CK_Ordered), EqVal,
-            CGF.EmitLValue(CmpInfo.getUnordered()).getPointer(), "sel.eq");
-      }
-      Value *SelectOne = Builder.CreateSelect(
-          EmitCompare(E, LHS, RHS, CK_Less),
-          CGF.EmitLValue(CmpInfo.getLess()).getPointer(), EqVal, "sel.lt");
-      Select = Builder.CreateSelect(
-          EmitCompare(E, LHS, RHS, CK_Greater),
-          CGF.EmitLValue(CmpInfo.getGreater()).getPointer(), SelectOne,
-          "sel.gt");
-    }
-    assert(Select != nullptr);
-    return EmitFinalDestCopy(
-        E->getType(), CGF.MakeNaturalAlignAddrLValue(Select, E->getType()));
   }
 
   CGF.ErrorUnsupported(E, "aggregate binary expression");

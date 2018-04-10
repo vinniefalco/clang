@@ -22,7 +22,6 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclarationName.h"
-#include "clang/AST/Expr.h"
 #include "clang/AST/ExternalASTSource.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/PrettyPrinter.h"

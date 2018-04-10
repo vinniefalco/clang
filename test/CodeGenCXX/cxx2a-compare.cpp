@@ -20,12 +20,12 @@ typedef int INT;
 // CHECK-LABEL: @_Z11test_signedii
 auto test_signed(int x, int y) {
   // CHECK: %retval = alloca %[[SO]]
-  // CHECK: %cmp = icmp slt i32 %0, %1
-  // CHECK: %[[SELECT1:.*]] = select i1 %cmp, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
-  // CHECK: %cmp1 = icmp sgt i32 %0, %1
-  // CHECK: %[[SELECT2:.*]] = select i1 %cmp1, %[[SO]]* @[[SO_GT]], %[[SO]]* %[[SELECT1]]
+  // CHECK: %cmp.lt = icmp slt i32 %0, %1
+  // CHECK: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
+  // CHECK: %cmp.gt = icmp sgt i32 %0, %1
+  // CHECK: %sel.gt = select i1 %cmp.gt, %[[SO]]* @[[SO_GT]], %[[SO]]* %sel.lt
   // CHECK: %[[TMPRET:.*]] = bitcast %[[SO]]* %retval
-  // CHECK: %[[TMPSRC:.*]] = bitcast %[[SO]]* %[[SELECT2]]
+  // CHECK: %[[TMPSRC:.*]] = bitcast %[[SO]]* %sel.gt
   // CHECK: call void @llvm.memcpy{{.*}}(i8* align 1 %[[TMPRET]], i8* align 1 %[[TMPSRC]]
   // CHECK: ret
   return x <=> y;
@@ -33,10 +33,10 @@ auto test_signed(int x, int y) {
 
 // CHECK-LABEL: @_Z13test_unsignedjj
 auto test_unsigned(unsigned x, unsigned y) {
-  // CHECK: %cmp = icmp ult i32 %0, %1
-  // CHECK: %[[SELECT1:.*]] = select i1 %cmp, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
-  // CHECK: %cmp1 = icmp ugt i32 %0, %1
-  // CHECK: %[[SELECT2:.*]] = select i1 %cmp1, %[[SO]]* @[[SO_GT]], %[[SO]]* %[[SELECT1]]
+  // CHECK: %cmp.lt = icmp ult i32 %0, %1
+  // CHECK: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
+  // CHECK: %cmp.gt = icmp ugt i32 %0, %1
+  // CHECK: %sel.gt = select i1 %cmp.gt, %[[SO]]* @[[SO_GT]], %[[SO]]* %sel.lt
   // CHECK: ret
   return x <=> y;
 }
@@ -44,22 +44,23 @@ auto test_unsigned(unsigned x, unsigned y) {
 // CHECK-LABEL: @_Z10float_testdd
 auto float_test(double x, double y) {
   // CHECK: %retval = alloca %[[PO]]
-  // CHECK: %[[CMP1:.*]] = fcmp ord double %0, %1
-  // CHECK: %[[SELECT1:.*]] = select i1 %[[CMP1]], %[[PO]]* @[[PO_EQ]], %[[PO]]* @[[PO_UNORD]]
-  // CHECK: %[[CMP2:.*]] = fcmp olt double %0, %1
-  // CHECK: %[[SELECT2:.*]] = select i1 %[[CMP2]], %[[PO]]* @[[PO_LT]], %[[PO]]* %[[SELECT1]]
-  // CHECK: %[[CMP3:.*]] = fcmp ogt double %0, %1
-  // CHECK: %[[SELECT3:.*]] = select i1 %[[CMP3]], %[[PO]]* @[[PO_GT]], %[[PO]]* %[[SELECT2]]
+  // CHECK: %cmp.le = fcmp ole double %0, %1
+  // CHECK: %cmp.ge = fcmp oge double %0, %1
+  // CHECK: %sel.lt = select i1 %cmp.le, %[[PO]]* @[[PO_LT]], %[[PO]]* @[[PO_GT]]
+  // CHECK: %cmp.eq = and i1 %cmp.le, %cmp.ge
+  // CHECK: %sel.eq = select i1 %cmp.eq, %[[PO]]* @[[PO_EQ]], %[[PO]]* @[[PO_UNORD]]
+  // CHECK: %cmp.ord = xor i1 %cmp.le, %cmp.ge
+  // CHECK: %sel.ord = select i1 %cmp.ord, %[[PO]]* %sel.lt, %[[PO]]* %sel.eq
   // CHECK: ret
   return x <=> y;
 }
 
 // CHECK-LABEL: @_Z8ptr_testPiS_
 auto ptr_test(int *x, int *y) {
-  // CHECK: %cmp = icmp ult i32* %0, %1
-  // CHECK: %[[SELECT1:.*]] = select i1 %cmp, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
-  // CHECK: %cmp1 = icmp ugt i32* %0, %1
-  // CHECK: %[[SELECT2:.*]] = select i1 %cmp1, %[[SO]]* @[[SO_GT]], %[[SO]]* %[[SELECT1]]
+  // CHECK: %cmp.lt = icmp ult i32* %0, %1
+  // CHECK-NEXT: %sel.lt = select i1 %cmp.lt, %[[SO]]* @[[SO_LT]], %[[SO]]* @[[SO_EQ]]
+  // CHECK: %cmp.gt = icmp ugt i32* %0, %1
+  // CHECK-NEXT: %sel.gt = select i1 %cmp.gt, %[[SO]]* @[[SO_GT]], %[[SO]]* %sel.lt
   // CHECK: ret
   return x <=> y;
 }
@@ -86,5 +87,18 @@ auto mem_data_test(MemDataT x, MemDataT y) {
   // CHECK: %retval = alloca %[[SE]]
   // CHECK: %[[CMP:.*]] = icmp ne i64 %0, %1
   // CHECK: select i1 %[[CMP]], %[[SE]]* @[[SE_NE]], %[[SE]]* @[[SE_EQ]]
+  return x <=> y;
+}
+
+// CHECK-LABEL: @_Z13test_constantv
+auto test_constant() {
+  // CHECK: entry:
+  // CHECK-NOT: icmp
+  // CHECK-NOT: [[SO_GT]]
+  // CHECK-NOT: [[SO_EQ]]
+  // CHECK: memcpy{{.*}}[[SO_LT]]
+  // CHECK: ret
+  const int x = 42;
+  const int y = 101;
   return x <=> y;
 }

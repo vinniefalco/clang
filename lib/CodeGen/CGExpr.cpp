@@ -26,7 +26,6 @@
 #include "clang/AST/Attr.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/NSAPI.h"
-#include "clang/AST/Stmt.h"
 #include "clang/Frontend/CodeGenOptions.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/StringExtras.h"
