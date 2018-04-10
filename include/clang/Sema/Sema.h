@@ -869,8 +869,6 @@ public:
   /// \brief The declaration of the dictionaryWithObjects:forKeys:count: method.
   ObjCMethodDecl *DictionaryWithObjectsMethod;
 
-
-
   /// \brief id<NSCopying> type.
   QualType QIDNSCopying;
 
