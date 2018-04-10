@@ -199,8 +199,9 @@ public:
     EmitFinalDestCopy(E->getType(), Res);
   }
 
+  enum CompareKind { CK_Less, CK_Greater, CK_NonEqual, CK_Ordered };
   llvm::Value *EmitCompare(const BinaryOperator *E, llvm::Value *LHS,
-                           llvm::Value *RHS, unsigned Opcode);
+                           llvm::Value *RHS, CompareKind Kind);
 };
 }  // end anonymous namespace.
 
@@ -886,14 +887,13 @@ void AggExprEmitter::VisitStmtExpr(const StmtExpr *E) {
 
 llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
                                          llvm::Value *LHS, llvm::Value *RHS,
-                                         unsigned OpCode) {
+                                         CompareKind Kind) {
   using llvm::Value;
-  assert(OpCode == BO_NE || OpCode == BO_LT || OpCode == BO_GT);
   Value *Result = nullptr;
   QualType LHSTy = E->getLHS()->getType();
   assert(LHSTy == E->getRHS()->getType());
   if (auto *MPT = LHSTy->getAs<MemberPointerType>()) {
-    assert(OpCode == BO_NE);
+    assert(Kind == CK_NonEqual);
     return CGF.CGM.getCXXABI().EmitMemberPointerComparison(CGF, LHS, RHS, MPT,
                                                            /*IsNotEqual*/ true);
   }
@@ -901,21 +901,32 @@ llvm::Value *AggExprEmitter::EmitCompare(const BinaryOperator *E,
   if (LHSTy->isAnyComplexType()) {
     llvm_unreachable("unimplemented");
   } else if (LHSTy->hasFloatingRepresentation()) {
-    llvm::CmpInst::Predicate Inst =
-        OpCode == BO_LT ? llvm::FCmpInst::FCMP_OLT : llvm::FCmpInst::FCMP_OGT;
+    llvm::CmpInst::Predicate Inst = [&] {
+      using FI = llvm::FCmpInst;
+      switch (Kind) {
+      case CK_Less:
+        return FI::FCMP_OLT;
+      case CK_Greater:
+        return FI::FCMP_OGT;
+      case CK_Ordered:
+        return FI::FCMP_ORD;
+      case CK_NonEqual:
+        llvm_unreachable("unhandled case");
+      }
+    }();
     Result = Builder.CreateFCmp(Inst, LHS, RHS, "cmp");
   } else {
     assert(LHSTy->isIntegralOrEnumerationType() || LHSTy->isPointerType());
-    assert(OpCode == BO_LT || OpCode == BO_GT);
+    assert(Kind == CK_Less || Kind == CK_Greater);
     llvm::CmpInst::Predicate Inst;
     if (LHSTy->hasSignedIntegerRepresentation()) {
       Inst =
-          OpCode == BO_LT ? llvm::ICmpInst::ICMP_SLT : llvm::ICmpInst::ICMP_SGT;
+          Kind == CK_Less ? llvm::ICmpInst::ICMP_SLT : llvm::ICmpInst::ICMP_SGT;
     } else {
       assert(LHSTy->hasUnsignedIntegerRepresentation() ||
              LHSTy->isPointerType());
       Inst =
-          OpCode == BO_LT ? llvm::ICmpInst::ICMP_ULT : llvm::ICmpInst::ICMP_UGT;
+          Kind == CK_Less ? llvm::ICmpInst::ICMP_ULT : llvm::ICmpInst::ICMP_UGT;
     }
     Result = Builder.CreateICmp(Inst, LHS, RHS, "cmp");
   }
@@ -960,16 +971,21 @@ void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
     Value *Select = nullptr;
     if (CmpInfo.isEquality()) {
       Select = Builder.CreateSelect(
-          EmitCompare(E, LHS, RHS, BO_NE),
+          EmitCompare(E, LHS, RHS, CK_NonEqual),
           CGF.EmitLValue(CmpInfo.getNonequalOrNonequiv()).getPointer(),
           CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer());
     } else {
+      Value *EqVal = CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer();
+      if (CmpInfo.isPartial()) {
+        EqVal = Builder.CreateSelect(
+            EmitCompare(E, LHS, RHS, CK_Ordered), EqVal,
+            CGF.EmitLValue(CmpInfo.getUnordered()).getPointer());
+      }
       Value *SelectOne = Builder.CreateSelect(
-          EmitCompare(E, LHS, RHS, BO_LT),
-          CGF.EmitLValue(CmpInfo.getLess()).getPointer(),
-          CGF.EmitLValue(CmpInfo.getEqualOrEquiv()).getPointer());
+          EmitCompare(E, LHS, RHS, CK_Less),
+          CGF.EmitLValue(CmpInfo.getLess()).getPointer(), EqVal);
       Select = Builder.CreateSelect(
-          EmitCompare(E, LHS, RHS, BO_GT),
+          EmitCompare(E, LHS, RHS, CK_Greater),
           CGF.EmitLValue(CmpInfo.getGreater()).getPointer(), SelectOne);
     }
     assert(Select != nullptr);

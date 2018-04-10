@@ -2,7 +2,15 @@
 
 #include "Inputs/std-compare.h"
 
-auto foo(int x, int y) {
+auto test_signed(int x, int y) {
+  return x <=> y;
+}
+
+auto test_unsigned(unsigned x, unsigned y) {
+  return x <=> y;
+}
+
+auto float_test(double x, float y) {
   return x <=> y;
 }
 
@@ -10,19 +18,14 @@ auto ptr_test(int *x, int *y) {
   return x <=> y;
 }
 
-struct MemPtr {
-  void foo() {}
-  void bar() {}
-};
+struct MemPtr {};
 using MemPtrT = void (MemPtr::*)();
+using MemDataT = int(MemPtr::*);
 
 auto mem_ptr_test(MemPtrT x, MemPtrT y) {
   return x <=> y;
 }
-bool mem_ptr_test2(MemPtrT x, MemPtrT y) {
-  return x != y;
-}
 
-auto float_test(double x, float y) {
+auto mem_data_test(MemDataT x, MemDataT y) {
   return x <=> y;
 }
