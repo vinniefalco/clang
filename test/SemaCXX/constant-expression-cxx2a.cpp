@@ -28,6 +28,17 @@ namespace ThreeWayComparison {
   struct MemPtr {
     void foo() {}
     void bar() {}
+    int data;
+    int data2;
+    long data3;
+  };
+
+  struct MemPtr2 {
+    void foo() {}
+    void bar() {}
+    int data;
+    int data2;
+    long data3;
   };
   using MemPtrT = void (MemPtr::*)();
 
@@ -39,7 +50,7 @@ namespace ThreeWayComparison {
 #define CHECK(...) ((__VA_ARGS__) ? void() : throw "error")
 #define CHECK_TYPE(...) static_assert(__is_same(__VA_ARGS__));
 
-constexpr bool test_constexpr = [] {
+constexpr bool test_constexpr_success = [] {
   {
     auto &EQ = std::strong_ordering::equal;
     auto &LESS = std::strong_ordering::less;
@@ -132,9 +143,49 @@ constexpr bool test_constexpr = [] {
     CHECK_TYPE(decltype(eq), SO);
     CHECK(eq.test_eq(EQ));
   }
+  { // mixed nullptr tests
+    using SO = std::strong_ordering;
+    using SE = std::strong_equality;
+
+    int x = 42;
+    int *xp = &x;
+
+
+
+    MemPtrT mf = nullptr;
+    MemPtrT mf2 = &MemPtr::foo;
+    auto r3 = (mf <=> nullptr);
+    CHECK_TYPE(decltype(r3), std::strong_equality);
+    CHECK(r3.test_eq(SE::equal));
+  }
 
   return true;
 }();
+
+template <auto LHS, auto RHS>
+constexpr bool test_constexpr() {
+  (void)(LHS <=> RHS); // expected-note 1+ {{subexpression not valid in a constant expression}}
+  return true;
+}
+int dummy = 42;
+int dummy2 = 101;
+
+// expected-error@+1 {{must be initialized by a constant expression}}
+constexpr bool tc1 = test_constexpr<nullptr, &dummy>(); // expected-note {{in call}}
+// expected-error@+1 {{must be initialized by a constant expression}}
+constexpr bool tc2 = test_constexpr<&dummy, nullptr>(); // expected-note {{in call}}
+
+// OK, equality comparison only
+constexpr bool tc3 = test_constexpr<&MemPtr::foo, nullptr>();
+constexpr bool tc4 = test_constexpr<nullptr, &MemPtr::foo>();
+constexpr bool tc5 = test_constexpr<&MemPtr::foo, &MemPtr::bar>();
+
+constexpr bool tc6 = test_constexpr<&MemPtr::data, nullptr>();
+constexpr bool tc7 = test_constexpr<nullptr, &MemPtr::data>();
+constexpr bool tc8 = test_constexpr<&MemPtr::data, &MemPtr::data2>();
+
+// expected-error@+1 {{must be initialized by a constant expression}}
+constexpr bool tc9 = test_constexpr<&dummy, &dummy2>(); // expected-note {{in call}}
 
 // TODO: defaulted operator <=>
 } // namespace ThreeWayComparison
