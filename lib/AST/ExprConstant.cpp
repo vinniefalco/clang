@@ -7145,6 +7145,9 @@ public:
   }
 
   bool Success(ComparisonCategoryResult Res, const Expr *E) {
+    assert(isa<BinaryOperator>(E) &&
+           cast<BinaryOperator>(E)->getOpcode() == BO_Cmp &&
+           "operator<=> result reported for non-operator<=>?");
     return Success(static_cast<uint64_t>(Res), E);
   }
 
