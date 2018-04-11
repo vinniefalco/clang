@@ -10011,10 +10011,9 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     //   If both operands are pointers, [...] bring them to their composite
     //   pointer type.
     if ((int)LHSType->isPointerType() + (int)RHSType->isPointerType() >=
-            (IsRelational ? 2 : 1) &&
-        (!LangOpts.ObjCAutoRefCount ||
-         !(LHSType->isObjCObjectPointerType() ||
-           RHSType->isObjCObjectPointerType()))) {
+            ((IsRelational && !IsSpaceship) ? 2 : 1) &&
+        (!LangOpts.ObjCAutoRefCount || !(LHSType->isObjCObjectPointerType() ||
+                                         RHSType->isObjCObjectPointerType()))) {
       if (convertPointersToCompositeType(*this, Loc, LHS, RHS))
         return QualType();
       return computeResultTy();
@@ -10075,7 +10074,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // C++ [expr.eq]p4:
     //   Two operands of type std::nullptr_t or one operand of type
     //   std::nullptr_t and the other a null pointer constant compare equal.
-    if (!IsRelational && LHSIsNull && RHSIsNull) {
+    if ((!IsRelational || IsSpaceship) && LHSIsNull && RHSIsNull) {
       if (LHSType->isNullPtrType()) {
         RHS = ImpCastExprToType(RHS.get(), LHSType, CK_NullToPointer);
         return computeResultTy();

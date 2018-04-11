@@ -19,24 +19,22 @@ namespace ThreeWayComparison {
   constexpr int k = (1 <=> 1, 0);
   // expected-warning@-1 {{three-way comparison result unused}}
 
+  static_assert(std::strong_ordering::equal == 0);
+
   constexpr void f() {
     void(1 <=> 1);
   }
 
-  // TODO: defaulted operator <=>
-}
+  struct MemPtr {
+    void foo() {}
+    void bar() {}
+  };
+  using MemPtrT = void (MemPtr::*)();
 
+  using FnPtrT = void (*)();
 
-struct MemPtr {
-  void foo() {}
-  void bar() {}
-};
-using MemPtrT = void (MemPtr::*)();
-
-using FnPtrT = void (*)();
-
-void FnPtr1() {}
-void FnPtr2() {}
+  void FnPtr1() {}
+  void FnPtr2() {}
 
 #define CHECK(...) ((__VA_ARGS__) ? void() : throw "error")
 #define CHECK_TYPE(...) static_assert(__is_same(__VA_ARGS__));
@@ -138,3 +136,5 @@ constexpr bool test_constexpr = [] {
   return true;
 }();
 
+// TODO: defaulted operator <=>
+} // namespace ThreeWayComparison

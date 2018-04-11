@@ -5,6 +5,9 @@
 
 #include "Inputs/std-compare.h"
 
+#define ASSERT_TYPE(...) static_assert(__is_same(__VA_ARGS__))
+#define ASSERT_EXPR_TYPE(Expr, Expect) static_assert(__is_same(decltype(Expr), Expect));
+
 void self_compare() {
   int a;
   int b[3], c[3];
@@ -193,4 +196,52 @@ void test9(long double ld, double d, float f, int i, long long ll) {
 typedef int *INTPTR;
 void test_typedef_bug(int *x, INTPTR y) {
   (void)(x <=> y);
+}
+
+using nullptr_t = decltype(nullptr);
+
+struct Class {};
+struct ClassB : Class {};
+struct Class2 {};
+using FnTy = void(int);
+using FnTy2 = long(int);
+using MemFnTy = void (Class::*)() const;
+using MemFnTyB = void (ClassB::*)() const;
+using MemFnTy2 = void (Class::*)();
+using MemFnTy3 = void (Class2::*)() const;
+using MemDataTy = long(Class::*);
+
+void test_nullptr(int *x, FnTy *fp, MemFnTy memp, MemDataTy memdp) {
+  auto r1 = (nullptr <=> nullptr);
+  ASSERT_EXPR_TYPE(r1, std::strong_equality);
+
+  auto r2 = (nullptr <=> x);
+  ASSERT_EXPR_TYPE(r2, std::strong_ordering);
+
+  auto r3 = (fp <=> nullptr);
+  ASSERT_EXPR_TYPE(r3, std::strong_equality);
+
+  auto r4 = (0 <=> fp);
+  ASSERT_EXPR_TYPE(r4, std::strong_equality);
+
+  auto r5 = (nullptr <=> memp);
+  ASSERT_EXPR_TYPE(r5, std::strong_equality);
+
+  auto r6 = (0 <=> memdp);
+  ASSERT_EXPR_TYPE(r6, std::strong_equality);
+
+  auto r7 = (0 <=> nullptr);
+  ASSERT_EXPR_TYPE(r7, std::strong_equality);
+}
+
+void test_compatible_pointer(FnTy *f1, FnTy2 *f2, MemFnTy mf1, MemFnTyB mfb,
+                             MemFnTy2 mf2, MemFnTy3 mf3) {
+  (void)(f1 <=> f2); // expected-error {{distinct pointer types}}
+
+  auto r1 = (mf1 <=> mfb); // OK
+  ASSERT_EXPR_TYPE(r1, std::strong_equality);
+  ASSERT_EXPR_TYPE((mf1 <=> mfb), std::strong_equality);
+
+  (void)(mf1 <=> mf2); // expected-error {{distinct pointer types}}
+  (void)(mf3 <=> mf1); // expected-error {{distinct pointer types}}
 }
