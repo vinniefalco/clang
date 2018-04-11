@@ -183,6 +183,22 @@ protected:
     unsigned IsType : 1; // true if operand is a type, false if an expression.
   };
 
+  class BinaryOperatorBitfields {
+    friend class BinaryOperator;
+
+    unsigned : NumExprBits;
+
+    unsigned Opc : 6;
+
+    // This is only meaningful for operations on floating point types and 0
+    // otherwise.
+    unsigned FPFeatures : 2;
+
+    // When Opc is BO_Cmp, this is set only when the comparison category is an
+    // ordered comparison. Otherwise the comparison is an equality comparison.
+    unsigned IsCmpOrdered : 1;
+  };
+
   class DeclRefExprBitfields {
     friend class ASTStmtReader; // deserialization
     friend class DeclRefExpr;
@@ -299,6 +315,7 @@ protected:
     CharacterLiteralBitfields CharacterLiteralBits;
     FloatingLiteralBitfields FloatingLiteralBits;
     UnaryExprOrTypeTraitExprBitfields UnaryExprOrTypeTraitExprBits;
+    BinaryOperatorBitfields BinaryOperatorBits;
     DeclRefExprBitfields DeclRefExprBits;
     CastExprBitfields CastExprBits;
     CallExprBitfields CallExprBits;
