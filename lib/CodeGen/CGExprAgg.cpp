@@ -11,9 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "CodeGenFunction.h"
 #include "CGCXXABI.h"
 #include "CGObjCRuntime.h"
-#include "CodeGenFunction.h"
 #include "CodeGenModule.h"
 #include "ConstantEmitter.h"
 #include "clang/AST/ASTContext.h"
@@ -927,11 +927,11 @@ static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
         ArgTy->hasSignedIntegerRepresentation() ? InstInfo.SCmp : InstInfo.UCmp;
     return Builder.CreateICmp(Inst, LHS, RHS, InstInfo.Name);
   } else if (ArgTy->isAnyComplexType()) {
-    llvm_unreachable("support for complex types is unimplemented");
+    CGF.ErrorUnsupported(E, "aggregate binary expression with complex arguments");
   } else if (ArgTy->isVectorType()) {
-    llvm_unreachable("support for vector types is unimplemented");
+    CGF.ErrorUnsupported(E, "aggregate binary expression with vector arguments");
   } else {
-    llvm_unreachable("unexpected argument type when building operator<=>");
+    CGF.ErrorUnsupported(E, "aggregate binary expression");
   }
 }
 
@@ -952,12 +952,11 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
     RHS = CGF.EmitScalarExpr(E->getRHS());
     break;
   case TEK_Aggregate:
-    // FIXME: Is this ever used?
     LHS = CGF.EmitAnyExpr(E->getLHS()).getAggregatePointer();
     RHS = CGF.EmitAnyExpr(E->getRHS()).getAggregatePointer();
     break;
   case TEK_Complex:
-    llvm_unreachable("support for complex types is unimplemented");
+    CGF.ErrorUnsupported(E, "aggregate binary expression with complex arguments");
   }
   assert(LHS && RHS);
 
