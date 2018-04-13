@@ -5,12 +5,14 @@
 #define HEADER
 
 #include "Inputs/std-compare.h"
+constexpr auto foo() {
+  return (42 <=> 101);
+}
 
 #else
 
 // expected-no-diagnostics
-void foo() {
-  (void)(42 <=> 101);
-}
+
+static_assert(foo() < 0);
 
 #endif
