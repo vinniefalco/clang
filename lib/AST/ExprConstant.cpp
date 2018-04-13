@@ -8551,12 +8551,12 @@ public:
 
 } // namespace
 
+template <class AfterCB>
 static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
-                                                  CmpEvalSuccess &Success,
+                                                  APValue &Result,
                                                   const BinaryOperator *E,
-                                                  bool &DidEvaluate) {
-  DidEvaluate = true;
-
+                                                  AfterCB &&DoAfter) {
+  CmpEvalSuccess Success(Info, Result);
   auto Error = [&](const Expr *E) {
     Info.FFDiag(E, diag::note_invalid_subexpr_in_const_expr);
     return false;
@@ -8986,18 +8986,14 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
     Success(CCR::Equal, E);
   }
 
-  assert(!IsThreeWayCmp && "case not handled for operator<=>");
-
-  return (DidEvaluate = false);
+  return DoAfter();
 }
 
 bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
-  CmpEvalSuccess CmpSuccess(Info, Result);
-  bool DidEvaluate = false;
-  bool Res =
-      EvaluateIntOrCmpBuiltinBinaryOperator(Info, CmpSuccess, E, DidEvaluate);
-  assert(DidEvaluate && "operator<=> should have been evaluated to a result");
-  return Res;
+  return EvaluateIntOrCmpBuiltinBinaryOperator(Info, Result, E, []() {
+    assert(false && "operator<=> should have been evaluated to a result");
+    return false;
+  });
 }
 
 bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
@@ -9010,17 +9006,13 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   if (DataRecursiveIntBinOpEvaluator::shouldEnqueue(E))
     return DataRecursiveIntBinOpEvaluator(*this, Result).Traverse(E);
 
-  CmpEvalSuccess CmpSuccess(Info, Result);
-  bool DidEvaluate = false;
-  bool Res =
-      EvaluateIntOrCmpBuiltinBinaryOperator(Info, CmpSuccess, E, DidEvaluate);
-  if (DidEvaluate)
-    return Res;
-
-  assert((!E->getLHS()->getType()->isIntegralOrEnumerationType() ||
-          !E->getRHS()->getType()->isIntegralOrEnumerationType()) &&
-         "DataRecursiveIntBinOpEvaluator should have handled integral types");
-  return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
+  auto DoAfter = [&]() {
+    assert((!E->getLHS()->getType()->isIntegralOrEnumerationType() ||
+            !E->getRHS()->getType()->isIntegralOrEnumerationType()) &&
+           "DataRecursiveIntBinOpEvaluator should have handled integral types");
+    return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
+  };
+  return EvaluateIntOrCmpBuiltinBinaryOperator(Info, Result, E, DoAfter);
 }
 
 /// VisitUnaryExprOrTypeTraitExpr - Evaluate a sizeof, alignof or vec_step with
