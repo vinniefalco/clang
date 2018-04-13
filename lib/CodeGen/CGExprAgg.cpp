@@ -970,8 +970,9 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
 
   auto &Ctx = CGF.getContext();
   auto EmitCmpRes = [&](const VarDecl *VD) {
-    DeclRefExpr DE(VD, /*RefersToEnclosingVariableOrCapture*/ false,
-                   E->getType(), VK_LValue, E->getExprLoc());
+    DeclRefExpr DE(const_cast<VarDecl *>(VD),
+                   /*RefersToEnclosingVariableOrCapture*/ false, E->getType(),
+                   VK_LValue, E->getExprLoc());
     return CGF.EmitDeclRefLValue(&DE).getPointer();
   };
   auto EmitCmp = [&](CompareKind K) {
@@ -980,25 +981,24 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   Value *Select;
   if (CmpInfo.isEquality()) {
     Select = Builder.CreateSelect(
-        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv(Ctx)),
-        EmitCmpRes(CmpInfo.getNonequalOrNonequiv(Ctx)), "sel.eq");
+        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
+        EmitCmpRes(CmpInfo.getNonequalOrNonequiv()), "sel.eq");
   } else if (!CmpInfo.isPartial()) {
-    Value *SelectOne = Builder.CreateSelect(
-        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess(Ctx)),
-        EmitCmpRes(CmpInfo.getGreater(Ctx)), "sel.lt");
-    Select = Builder.CreateSelect(
-        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv(Ctx)),
-        SelectOne, "sel.eq");
+    Value *SelectOne =
+        Builder.CreateSelect(EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()),
+                             EmitCmpRes(CmpInfo.getGreater()), "sel.lt");
+    Select = Builder.CreateSelect(EmitCmp(CK_Equal),
+                                  EmitCmpRes(CmpInfo.getEqualOrEquiv()),
+                                  SelectOne, "sel.eq");
   } else {
     Value *SelectEq = Builder.CreateSelect(
-        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv(Ctx)),
-        EmitCmpRes(CmpInfo.getUnordered(Ctx)), "sel.eq");
-    Value *SelectGT = Builder.CreateSelect(
-        EmitCmp(CK_Greater), EmitCmpRes(CmpInfo.getGreater(Ctx)),
-        SelectEq, "sel.gt");
+        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
+        EmitCmpRes(CmpInfo.getUnordered()), "sel.eq");
+    Value *SelectGT = Builder.CreateSelect(EmitCmp(CK_Greater),
+                                           EmitCmpRes(CmpInfo.getGreater()),
+                                           SelectEq, "sel.gt");
     Select = Builder.CreateSelect(
-        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess(Ctx)),
-        SelectGT, "sel.lt");
+        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()), SelectGT, "sel.lt");
   }
 
   return EmitFinalDestCopy(

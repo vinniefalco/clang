@@ -15,11 +15,12 @@
 #ifndef LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 #define LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 
-#include "llvm/ADT/DenseMap.h"
 #include "clang/Basic/LLVM.h"
+#include "llvm/ADT/DenseMap.h"
 #include <array>
 #include <cassert>
 #include <type_traits>
+#include <utility>
 
 namespace llvm {
   class StringRef;
@@ -31,6 +32,7 @@ class ASTContext;
 class VarDecl;
 class RecordDecl;
 class QualType;
+class NamespaceDecl;
 
 /// \brief An enumeration representing the different comparison categories
 /// types.
@@ -43,7 +45,9 @@ enum class ComparisonCategoryType : unsigned char {
   StrongEquality,
   PartialOrdering,
   WeakOrdering,
-  StrongOrdering
+  StrongOrdering,
+  First = WeakEquality,
+  Last = StrongOrdering
 };
 
 /// \brief An enumeration representing the possible results of a three-way
@@ -59,9 +63,16 @@ enum class ComparisonCategoryResult : unsigned char {
   Unordered,
 };
 
-struct ComparisonCategoryInfo {
+class ComparisonCategoryInfo {
+  friend class ComparisonCategories;
+  const ASTContext &Ctx;
+
+  ComparisonCategoryInfo(const ASTContext &Ctx) : Ctx(Ctx) {}
+
+public:
   /// \brief The declaration for the comparison category type from the
   /// standard library.
+  // FIXME: Make this const
   RecordDecl *CCDecl = nullptr;
 
   /// \brief A map containing the comparison category values built from the
@@ -74,16 +85,14 @@ struct ComparisonCategoryInfo {
 public:
   /// \brief Return an expression referencing the member of the specified
   ///   comparison category. For example 'std::strong_equality::equal'
-  const VarDecl *getResultValue(const ASTContext &Ctx,
-                                ComparisonCategoryResult ValueKind) const {
-    const VarDecl *VD = lookupResultValue(Ctx, ValueKind);
+  const VarDecl *getResultValue(ComparisonCategoryResult ValueKind) const {
+    const VarDecl *VD = lookupResultValue(ValueKind);
     assert(VD &&
            "comparison category does not contain the specified result kind");
     return VD;
   }
 
-  const VarDecl *lookupResultValue(const ASTContext &Ctx,
-                                   ComparisonCategoryResult ValueKind) const;
+  const VarDecl *lookupResultValue(ComparisonCategoryResult ValueKind) const;
 
   /// \brief True iff the comparison category is an equality comparison.
   bool isEquality() const { return !isOrdered(); }
@@ -122,35 +131,41 @@ public:
     return Res;
   }
 
-  const VarDecl *getEqualOrEquiv(const ASTContext &Ctx) const {
-    return getResultValue(Ctx, makeWeakResult(ComparisonCategoryResult::Equal));
+  const VarDecl *getEqualOrEquiv() const {
+    return getResultValue(makeWeakResult(ComparisonCategoryResult::Equal));
   }
-  const VarDecl *getNonequalOrNonequiv(const ASTContext &Ctx) const {
-    return getResultValue(Ctx,
-        makeWeakResult(ComparisonCategoryResult::Nonequal));
+  const VarDecl *getNonequalOrNonequiv() const {
+    return getResultValue(makeWeakResult(ComparisonCategoryResult::Nonequal));
   }
-  const VarDecl *getLess(const ASTContext &Ctx) const {
+  const VarDecl *getLess() const {
     assert(isOrdered());
-    return getResultValue(Ctx, ComparisonCategoryResult::Less);
+    return getResultValue(ComparisonCategoryResult::Less);
   }
-  const VarDecl *getGreater(const ASTContext &Ctx) const {
+  const VarDecl *getGreater() const {
     assert(isOrdered());
-    return getResultValue(Ctx, ComparisonCategoryResult::Greater);
+    return getResultValue(ComparisonCategoryResult::Greater);
   }
-  const VarDecl *getUnordered(const ASTContext &Ctx) const {
+  const VarDecl *getUnordered() const {
     assert(isPartial());
-    return getResultValue(Ctx, ComparisonCategoryResult::Unordered);
+    return getResultValue(ComparisonCategoryResult::Unordered);
   }
 };
 
-struct ComparisonCategories {
+class ComparisonCategories {
+  friend class ASTContext;
+
+  const ASTContext &Ctx;
+
+  explicit ComparisonCategories(const ASTContext &Ctx) : Ctx(Ctx) {}
+
+public:
   static StringRef getCategoryString(ComparisonCategoryType Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
 
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind'.
   const ComparisonCategoryInfo &getInfo(ComparisonCategoryType Kind) const {
-    const ComparisonCategoryInfo *Result = getInfoUnchecked(Kind);
+    const ComparisonCategoryInfo *Result = lookupInfo(Kind);
     assert(Result != nullptr &&
            "information for specified comparison category has not been built");
     return *Result;
@@ -169,20 +184,29 @@ struct ComparisonCategories {
   ///   `getCategoryForType(Ty)`.
   ///
   /// Note: The comparison category type must have already been built by Sema.
-  const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
-
-  /// \brief Return the comparison category kind corresponding to the specified
-  ///   type. 'Ty' is expected to refer to the type of one of the comparison
-  ///   category decls; if it doesn't nullptr is returned.
-  const ComparisonCategoryType *getCategoryForType(QualType Ty) const;
+  const ComparisonCategoryInfo &getInfoForType(QualType Ty) const {
+    const ComparisonCategoryInfo *Info = lookupInfoForTypeUnchecked(Ty);
+    assert(Info && "info for comparison category not found");
+    return *Info;
+  }
 
 public:
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind', or nullptr if it isn't available.
-  const ComparisonCategoryInfo *
-  getInfoUnchecked(ComparisonCategoryType Kind) const;
+  const ComparisonCategoryInfo *lookupInfo(ComparisonCategoryType Kind) const {
+    const ComparisonCategoryInfo *Info = lookupInfoUnchecked(Kind);
+    assert(Info && "info for comparison category type not found");
+    return Info;
+  }
 
-  llvm::DenseMap<char, ComparisonCategoryInfo> Data;
+  const ComparisonCategoryInfo *
+  lookupInfoUnchecked(ComparisonCategoryType Kind) const;
+
+  const ComparisonCategoryInfo *lookupInfoForTypeUnchecked(QualType Ty) const;
+
+  NamespaceDecl *StdNs = nullptr;
+
+  mutable llvm::DenseMap<char, ComparisonCategoryInfo> Data;
 };
 
 } // namespace clang

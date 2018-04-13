@@ -19,35 +19,101 @@
 
 using namespace clang;
 
-const ComparisonCategoryInfo *
-ComparisonCategories::getInfoUnchecked(ComparisonCategoryType Kind) const {
-  auto It = Data.find(static_cast<char>(Kind));
-  if (It == Data.end())
-    return nullptr;
-  return &It->second;
-}
+const VarDecl *ComparisonCategoryInfo::lookupResultValue(
+    ComparisonCategoryResult ValueKind) const {
+  char Key = static_cast<char>(ValueKind);
+  const VarDecl *VD = Objects.lookup(Key);
+  if (VD)
+    return VD;
 
-const ComparisonCategoryType *
-ComparisonCategories::getCategoryForType(QualType Ty) const {
-  assert(!Ty.isNull() && "type must be non-null");
-  if (const auto *RD = Ty->getAsCXXRecordDecl()) {
-    const auto *CanonRD = RD->getCanonicalDecl();
-    for (auto &KV : Data) {
-      const ComparisonCategoryInfo &Info = KV.second;
-      if (CanonRD == Info.CCDecl->getCanonicalDecl())
-        return &Info.Kind;
-    }
+  StringRef StrName = ComparisonCategories::getResultString(ValueKind);
+  const RecordDecl *RD = cast<RecordDecl>(CCDecl->getCanonicalDecl());
+
+  const IdentifierInfo &II = Ctx.Idents.get(StrName);
+  DeclarationName Name(&II);
+  DeclContextLookupResult Lookup =
+      RD->getDeclContext()->getRedeclContext()->lookup(Name);
+  if (Lookup.size() != 1)
+    return nullptr;
+  const NamedDecl *ND = Lookup.front();
+  if (const auto *VD = dyn_cast<VarDecl>(ND)) {
+    auto ItPair =
+        Objects.try_emplace((char)ValueKind, const_cast<VarDecl *>(VD));
+    return ItPair.first->second;
   }
   return nullptr;
 }
 
-const ComparisonCategoryInfo &
-ComparisonCategories::getInfoForType(QualType Ty) const {
-  const ComparisonCategoryType *Kind = getCategoryForType(Ty);
-  assert(Kind &&
-         "return type for operator<=> is not a comparison category type or the "
-         "specified comparison category kind has not been built yet");
-  return getInfo(*Kind);
+static const RecordDecl *lookupRecordDecl(const ASTContext &Ctx,
+                                          ComparisonCategoryType Kind) {
+  NamespaceDecl *NS = NamespaceDecl::Create(
+      const_cast<ASTContext &>(Ctx), Ctx.getTranslationUnitDecl(),
+      /*Inline*/ false, SourceLocation(), SourceLocation(),
+      &Ctx.Idents.get("std"),
+      /*PrevDecl*/ nullptr);
+  StringRef StrName = ComparisonCategories::getCategoryString(Kind);
+  const IdentifierInfo &II = Ctx.Idents.get(StrName);
+  DeclarationName Name(&II);
+  DeclContextLookupResult Lookup = NS->lookup(Name);
+  if (Lookup.size() == 1) {
+    if (const RecordDecl *RD = dyn_cast<RecordDecl>(Lookup.front()))
+      return RD;
+  }
+  return nullptr;
+}
+
+const ComparisonCategoryInfo *
+ComparisonCategories::lookupInfoUnchecked(ComparisonCategoryType Kind) const {
+  auto It = Data.find(static_cast<char>(Kind));
+  if (It != Data.end())
+    return &It->second;
+  const RecordDecl *RD = lookupRecordDecl(Ctx, Kind);
+  if (!RD)
+    return nullptr;
+  ComparisonCategoryInfo Info(Ctx);
+  Info.CCDecl = const_cast<RecordDecl *>(RD);
+  Info.Kind = Kind;
+  return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
+}
+
+const ComparisonCategoryInfo *
+ComparisonCategories::lookupInfoForTypeUnchecked(QualType Ty) const {
+  assert(!Ty.isNull() && "type must be non-null");
+  const auto *RD = Ty->getAsCXXRecordDecl();
+  if (!RD)
+    return nullptr;
+
+  // Check to see if we have information for the specified type cached.
+  const auto *CanonRD = RD->getCanonicalDecl();
+  for (auto &KV : Data) {
+    const ComparisonCategoryInfo &Info = KV.second;
+    if (CanonRD == Info.CCDecl->getCanonicalDecl())
+      return &Info;
+  }
+
+  // If not, check to see if the decl names a type in namespace std with a name
+  // matching one of the comparison category types.
+  if (RD->getEnclosingNamespaceContext()->isStdNamespace()) {
+    using CCT = ComparisonCategoryType;
+    for (unsigned I = static_cast<unsigned>(CCT::First),
+                  End = static_cast<unsigned>(CCT::Last);
+         I <= End; ++I) {
+      CCT Kind = static_cast<CCT>(I);
+
+      // We've found the comparison category type. Build a new cache entry for
+      // it.
+      if (getCategoryString(Kind) == RD->getName()) {
+        ComparisonCategoryInfo Info(Ctx);
+        Info.CCDecl =
+            const_cast<RecordDecl *>(static_cast<const RecordDecl *>(RD));
+        Info.Kind = Kind;
+        return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
+      }
+    }
+  }
+
+  // We've found nothing. This isn't a comparison category type.
+  return nullptr;
 }
 
 StringRef ComparisonCategories::getCategoryString(ComparisonCategoryType Kind) {
@@ -88,24 +154,3 @@ StringRef ComparisonCategories::getResultString(ComparisonCategoryResult Kind) {
   llvm_unreachable("unhandled case in switch");
 }
 
-const VarDecl *ComparisonCategoryInfo::lookupResultValue(
-    const ASTContext &Ctx, ComparisonCategoryResult ValueKind) const {
-  char Key = static_cast<char>(ValueKind);
-  const VarDecl *VD = Objects.lookup(Key);
-  if (VD)
-    return VD;
-
-  StringRef StrName = ComparisonCategories::getResultString(ValueKind);
-  const RecordDecl *RD = cast<RecordDecl>(CCDecl->getCanonicalDecl());
-
-  const IdentifierInfo &II = Ctx.Idents.get(StrName);
-
-  DeclarationName Name(&II);
-  DeclContextLookupResult Lookup =
-      RD->getDeclContext()->getRedeclContext()->lookup(Name);
-  assert(Lookup.size() == 1);
-  const NamedDecl *ND = Lookup.front();
-  assert(isa<VarDecl>(ND));
-  auto ItPair = Objects.try_emplace((char)ValueKind, cast<VarDecl>(ND));
-  return ItPair.first->second;
-}

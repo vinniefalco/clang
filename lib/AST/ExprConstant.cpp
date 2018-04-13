@@ -8806,7 +8806,7 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
     const ComparisonCategoryInfo &CmpInfo =
         Info.Ctx.CompCategories.getInfoForType(E->getType());
     const VarDecl *Value =
-        CmpInfo.getResultValue(Info.Ctx, CmpInfo.makeWeakResult(ResKind));
+        CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
     DeclRefExpr DE(const_cast<VarDecl *>(Value),
                    /*RefersToEnclosingVariableOrCapture*/ false, E->getType(),
                    VK_LValue, E->getExprLoc());

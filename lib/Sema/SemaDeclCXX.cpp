@@ -8888,29 +8888,25 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
 const ComparisonCategoryInfo *
 Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
                                          SourceLocation Loc) {
+  using CCT = ComparisonCategoryType;
   using CCVT = ComparisonCategoryResult;
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
 
   // Check if we've already successfully built the comparison category data.
-  if (const ComparisonCategoryInfo *Info =
-          Context.CompCategories.getInfoUnchecked(Kind))
-    return Info;
 
   StringRef Name = ComparisonCategories::getCategoryString(Kind);
   // Build the initial category information
-  ComparisonCategoryInfo Info;
-  Info.Kind = Kind;
-
+  RecordDecl *CCDecl = nullptr;
   // Lookup the record for the category type
   if (auto Std = getStdNamespace()) {
     LookupResult Result(*this, &PP.getIdentifierTable().get(Name),
                         SourceLocation(), Sema::LookupTagName);
     if (LookupQualifiedName(Result, Std))
-      Info.CCDecl = Result.getAsSingle<RecordDecl>();
+      CCDecl = Result.getAsSingle<RecordDecl>();
     Result.suppressDiagnostics();
   }
-  if (!Info.CCDecl) {
+  if (!CCDecl) {
     Diag(Loc, diag::err_implied_comparison_category_type_not_found) << Name;
     return nullptr;
   }
@@ -8918,29 +8914,31 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
   // Calculate the list of values belonging to this comparison category type.
   SmallVector<CCVT, 6> Values;
   Values.push_back(CCVT::Equivalent);
-  if (Info.isStrong())
+  bool IsStrong = (Kind == CCT::StrongEquality || Kind == CCT::StrongOrdering);
+  if (IsStrong)
     Values.push_back(CCVT::Equal);
-  if (Info.isOrdered()) {
+  if (Kind == CCT::StrongOrdering || Kind == CCT::WeakOrdering ||
+      Kind == CCT::PartialOrdering) {
     Values.push_back(CCVT::Less);
     Values.push_back(CCVT::Greater);
   } else {
     Values.push_back(CCVT::Nonequivalent);
-    if (Info.isStrong())
+    if (IsStrong)
       Values.push_back(CCVT::Nonequal);
   }
-  if (Info.isPartial())
+  if (Kind == CCT::PartialOrdering)
     Values.push_back(CCVT::Unordered);
 
   // Build each of the require values and store them in Info.
   for (CCVT CCV : Values) {
     StringRef ValueName = ComparisonCategories::getResultString(CCV);
-    QualType Ty(Info.CCDecl->getTypeForDecl(), 0);
+    QualType Ty(CCDecl->getTypeForDecl(), 0);
     DeclContext *LookupCtx = computeDeclContext(Ty);
     LookupResult Found(*this, &PP.getIdentifierTable().get(ValueName), Loc,
                        Sema::LookupOrdinaryName);
     if (!LookupQualifiedName(Found, LookupCtx)) {
       Diag(Loc, diag::err_std_compare_type_missing_member)
-          << Info.CCDecl << ValueName;
+          << CCDecl << ValueName;
       return nullptr;
     }
     auto *VD = Found.getAsSingle<VarDecl>();
@@ -8950,17 +8948,19 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
     // TODO Handle more ways the lookup or result can be invalid.
     if (!VD || !VD->isStaticDataMember() || !VD->isConstexpr()) {
       Diag(Loc, diag::err_std_compare_type_not_supported)
-          << Info.CCDecl << ValueName;
+          << CCDecl << ValueName;
       return nullptr;
     }
     MarkVariableReferenced(Loc, VD);
-    Info.Objects.try_emplace((char)CCV, VD);
   }
 
   // We've successfully built the required types and expressions. Update
   // the cache and return the newly cached value.
-  return &Context.CompCategories.Data.try_emplace((char)Kind, std::move(Info))
-              .first->second;
+  const ComparisonCategoryInfo *CachedInfo =
+      Context.CompCategories.lookupInfo(Kind);
+  assert(CachedInfo->CCDecl == CCDecl);
+  assert(CachedInfo->Kind == Kind);
+  return CachedInfo;
 }
 
 /// \brief Retrieve the special "std" namespace, which may require us to
