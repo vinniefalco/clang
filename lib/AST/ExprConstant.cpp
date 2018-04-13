@@ -8514,13 +8514,15 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
   };
 
   using CCR = ComparisonCategoryResult;
-  bool IsThreeWayCmp = false, IsOrderedCmp = false, IsEqualityCmp = false;
+  bool IsThreeWayCmp = false;
+  bool IsRelational = E->isRelationalOp();
+  bool IsEquality = E->isEqualityOp();
   if (E->getOpcode() == BO_Cmp) {
     const ComparisonCategoryInfo &CmpInfo =
         Info.Ctx.CompCategories.getInfoForType(E->getType());
     IsThreeWayCmp = true;
-    IsOrderedCmp = CmpInfo.isOrdered();
-    IsEqualityCmp = CmpInfo.isEquality();
+    IsRelational = CmpInfo.isOrdered();
+    IsEquality = CmpInfo.isEquality();
   }
 
   QualType LHSTy = E->getLHS()->getType();
@@ -8563,7 +8565,7 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
       bool IsEqual = CR_r == APFloat::cmpEqual && CR_i == APFloat::cmpEqual;
       return Success(IsEqual ? CCR::Equal : CCR::Nonequal, E);
     } else {
-      assert(E->isEqualityOp() && "invalid complex comparison");
+      assert(IsEquality && "invalid complex comparison");
       bool IsEqual = LHS.getComplexIntReal() == RHS.getComplexIntReal() &&
                      LHS.getComplexIntImag() == RHS.getComplexIntImag();
       return Success(IsEqual ? CCR::Equal : CCR::Nonequal, E);
@@ -8581,22 +8583,20 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     if (!EvaluateFloat(E->getLHS(), LHS, Info) || !LHSOK)
       return false;
 
-    APFloat::cmpResult CR = LHS.compare(RHS);
-
     assert(E->isComparisonOp() && "Invalid binary operator!");
-    auto GetCmpRes = [&]() {
+    auto GetCmpRes = [](APFloat::cmpResult CR) {
       switch (CR) {
       case APFloat::cmpEqual:
         return CCR::Equal;
-      case APFloat::cmpUnordered:
-        return CCR::Unordered;
       case APFloat::cmpLessThan:
         return CCR::Less;
       case APFloat::cmpGreaterThan:
         return CCR::Greater;
+      case APFloat::cmpUnordered:
+        return CCR::Unordered;
       }
     };
-    return Success(GetCmpRes(), E);
+    return Success(GetCmpRes(LHS.compare(RHS)), E);
   }
 
   if (LHSTy->isPointerType() && RHSTy->isPointerType()) {
@@ -8614,7 +8614,7 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     if (!HasSameBase(LHSValue, RHSValue)) {
       // Inequalities and subtractions between unrelated pointers have
       // unspecified or undefined behavior.
-      if (!E->isEqualityOp() && !IsEqualityCmp)
+      if (!IsEquality)
         return Error(E);
       // A constant address may compare equal to the address of a symbol.
       // The one exception is that address of an object cannot compare equal
@@ -8661,8 +8661,7 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     //   operator is <= or >= and false otherwise; otherwise the result is
     //   unspecified.
     // We interpret this as applying to pointers to *cv* void.
-    if (LHSTy->isVoidPointerType() && LHSOffset != RHSOffset &&
-        E->isRelationalOp())
+    if (LHSTy->isVoidPointerType() && LHSOffset != RHSOffset && IsRelational)
       Info.CCEDiag(E, diag::note_constexpr_void_comparison);
 
     // C++11 [expr.rel]p2:
@@ -8673,8 +8672,7 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     //   not a union.
     //   [...]
     // - Otherwise pointer comparisons are unspecified.
-    if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
-        (E->isRelationalOp() || IsOrderedCmp)) {
+    if (!LHSDesignator.Invalid && !RHSDesignator.Invalid && IsRelational) {
       bool WasArrayIndex;
       unsigned Mismatch = FindDesignatorMismatch(
           getType(LHSValue.Base), LHSDesignator, RHSDesignator, WasArrayIndex);
@@ -8720,7 +8718,7 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     // If there is a base and this is a relational operator, we can only
     // compare pointers within the object in question; otherwise, the result
     // depends on where the object is located in memory.
-    if (!LHSValue.Base.isNull() && (E->isRelationalOp() || IsOrderedCmp)) {
+    if (!LHSValue.Base.isNull() && IsRelational) {
       QualType BaseTy = getType(LHSValue.Base);
       if (BaseTy->isIncompleteType())
         return Error(E);
@@ -8738,8 +8736,7 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
   }
 
   if (LHSTy->isMemberPointerType()) {
-    assert((E->isEqualityOp() || IsEqualityCmp) &&
-           "unexpected member pointer operation");
+    assert(IsEquality && "unexpected member pointer operation");
     assert(RHSTy->isMemberPointerType() && "invalid comparison");
 
     MemberPtr LHSValue, RHSValue;
@@ -8832,12 +8829,10 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   if (DataRecursiveIntBinOpEvaluator::shouldEnqueue(E))
     return DataRecursiveIntBinOpEvaluator(*this, Result).Traverse(E);
 
-  auto DoAfter = [&]() {
-    assert((!E->getLHS()->getType()->isIntegralOrEnumerationType() ||
-            !E->getRHS()->getType()->isIntegralOrEnumerationType()) &&
-           "DataRecursiveIntBinOpEvaluator should have handled integral types");
-    return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
-  };
+  assert((!E->getLHS()->getType()->isIntegralOrEnumerationType() ||
+          !E->getRHS()->getType()->isIntegralOrEnumerationType()) &&
+         "DataRecursiveIntBinOpEvaluator should have handled integral types");
+
   if (E->isComparisonOp()) {
     auto OnSuccess = [&](ComparisonCategoryResult ResKind,
                          const BinaryOperator *E) {
@@ -8858,7 +8853,9 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       case BO_GE: return Success(IsGreater || IsEqual, E);
       }
     };
-    return EvaluateIntOrCmpBinaryOperator(Info, E, OnSuccess, DoAfter);
+    return EvaluateIntOrCmpBinaryOperator(Info, E, OnSuccess, [&]() {
+      return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
+    });
   }
 
   QualType LHSTy = E->getLHS()->getType();
@@ -8947,7 +8944,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     return Success(Result, E);
   }
 
-  return DoAfter();
+  return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
 }
 
 /// VisitUnaryExprOrTypeTraitExpr - Evaluate a sizeof, alignof or vec_step with
