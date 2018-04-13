@@ -969,10 +969,9 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   }
 
   auto EmitCmpRes = [&](const VarDecl *VD) {
-    return CGF
-        .EmitNamedDeclLValue(E, VD, /*RefersToEnclosingVarOrCapture*/ false,
-                             E->getExprLoc())
-        .getPointer();
+    DeclRefExpr DE(VD, /*RefersToEnclosingVariableOrCapture*/ false,
+                   E->getType(), VK_LValue, E->getExprLoc());
+    return CGF.EmitDeclRefLValue(&DE).getPointer();
   };
   auto EmitCmp = [&](CompareKind K) {
     return EmitCompare(Builder, CGF, E, LHS, RHS, K);
