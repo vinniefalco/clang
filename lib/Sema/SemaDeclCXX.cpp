@@ -8913,7 +8913,7 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
   }
   if (!Info.CCDecl) {
     Diag(Loc, diag::err_implied_comparison_category_type_not_found) << Name;
-    return true;
+    return nullptr;
   }
 
   // Calculate the list of values belonging to this comparison category type.
