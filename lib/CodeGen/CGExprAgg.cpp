@@ -968,11 +968,8 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
         "unsupported complex expressions should have already been handled");
   }
 
-  auto EmitCmpRes = [&](const VarDecl *VD) {
-    return CGF
-        .EmitNamedDeclLValue(E, VD, /*RefersToEnclosingVarOrCapture*/ false,
-                             E->getExprLoc())
-        .getPointer();
+  auto EmitCmpRes = [&](const DeclRefExpr *DRE) {
+    return CGF.EmitLValue(DRE).getPointer();
   };
   auto EmitCmp = [&](CompareKind K) {
     return EmitCompare(Builder, CGF, E, LHS, RHS, K);

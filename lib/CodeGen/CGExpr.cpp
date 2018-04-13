@@ -2372,9 +2372,8 @@ static LValue EmitGlobalNamedRegister(const VarDecl *VD, CodeGenModule &CGM) {
   return LValue::MakeGlobalReg(Address(Ptr, Alignment), VD->getType());
 }
 
-LValue CodeGenFunction::EmitNamedDeclLValue(const Expr *E, const NamedDecl *ND,
-                                            bool RefersToEnclosingVarOrCapture,
-                                            SourceLocation Loc) {
+LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
+  const NamedDecl *ND = E->getDecl();
   QualType T = E->getType();
 
   if (const auto *VD = dyn_cast<VarDecl>(ND)) {
@@ -2390,14 +2389,16 @@ LValue CodeGenFunction::EmitNamedDeclLValue(const Expr *E, const NamedDecl *ND,
         VD->isUsableInConstantExpressions(getContext()) &&
         VD->checkInitIsICE() &&
         // Do not emit if it is private OpenMP variable.
-        !(RefersToEnclosingVarOrCapture &&
+        !(E->refersToEnclosingVariableOrCapture() &&
           ((CapturedStmtInfo &&
             (LocalDeclMap.count(VD->getCanonicalDecl()) ||
              CapturedStmtInfo->lookup(VD->getCanonicalDecl()))) ||
            LambdaCaptureFields.lookup(VD->getCanonicalDecl()) ||
            isa<BlockDecl>(CurCodeDecl)))) {
-      llvm::Constant *Val = ConstantEmitter(*this).emitAbstract(
-          Loc, *VD->evaluateValue(), VD->getType());
+      llvm::Constant *Val =
+        ConstantEmitter(*this).emitAbstract(E->getLocation(),
+                                            *VD->evaluateValue(),
+                                            VD->getType());
       assert(Val && "failed to emit reference constant expression");
       // FIXME: Eventually we will want to emit vector element references.
 
@@ -2410,7 +2411,7 @@ LValue CodeGenFunction::EmitNamedDeclLValue(const Expr *E, const NamedDecl *ND,
     }
 
     // Check for captured variables.
-    if (RefersToEnclosingVarOrCapture) {
+    if (E->refersToEnclosingVariableOrCapture()) {
       VD = VD->getCanonicalDecl();
       if (auto *FD = LambdaCaptureFields.lookup(VD))
         return EmitCapturedFieldLValue(*this, FD, CXXABIThisValue);
@@ -2440,7 +2441,8 @@ LValue CodeGenFunction::EmitNamedDeclLValue(const Expr *E, const NamedDecl *ND,
   // FIXME: We should be able to assert this for FunctionDecls as well!
   // FIXME: We should be able to assert this for all DeclRefExprs, not just
   // those with a valid source location.
-  assert((ND->isUsed(false) || !isa<VarDecl>(ND) || !Loc.isValid()) &&
+  assert((ND->isUsed(false) || !isa<VarDecl>(ND) ||
+          !E->getLocation().isValid()) &&
          "Should not use decl without marking it used!");
 
   if (ND->hasAttr<WeakRefAttr>()) {

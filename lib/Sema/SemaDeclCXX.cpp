@@ -8954,7 +8954,12 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
       return nullptr;
     }
 
-    Info.Objects.try_emplace((char)CCV, VD);
+    ExprResult Res =
+        BuildDeclRefExpr(VD, VD->getType(), VK_LValue, SourceLocation());
+    if (Res.isInvalid())
+      return nullptr;
+
+    Info.Objects.try_emplace((char)CCV, cast<DeclRefExpr>(Res.get()));
   }
 
   // We've successfully built the required types and expressions. Update

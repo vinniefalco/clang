@@ -3274,14 +3274,7 @@ public:
   LValue EmitCallExprLValue(const CallExpr *E);
   // Note: only available for agg return types
   LValue EmitVAArgExprLValue(const VAArgExpr *E);
-  LValue EmitDeclRefLValue(const DeclRefExpr *E) {
-    const NamedDecl *ND = E->getDecl();
-    return EmitNamedDeclLValue(E, ND, E->refersToEnclosingVariableOrCapture(),
-                               E->getLocation());
-  }
-  LValue EmitNamedDeclLValue(const Expr *E, const NamedDecl *ND,
-                             bool RefersToEnclosingVarOrCapture,
-                             SourceLocation Loc);
+  LValue EmitDeclRefLValue(const DeclRefExpr *E);
   LValue EmitStringLiteralLValue(const StringLiteral *E);
   LValue EmitObjCEncodeExprLValue(const ObjCEncodeExpr *E);
   LValue EmitPredefinedLValue(const PredefinedExpr *E);
