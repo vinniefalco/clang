@@ -8829,9 +8829,9 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     auto OnSuccess = [&](ComparisonCategoryResult ResKind,
                          const BinaryOperator *E) {
       using CCR = ComparisonCategoryResult;
-      bool IsEqual = ResKind == CCR::Equal;
-      bool IsLess = ResKind == CCR::Less;
-      bool IsGreater = ResKind == CCR::Greater;
+      bool IsEqual   = ResKind == CCR::Equal,
+           IsLess    = ResKind == CCR::Less,
+           IsGreater = ResKind == CCR::Greater;
       auto Op = E->getOpcode();
       switch (Op) {
       default:
