@@ -154,8 +154,9 @@ struct ComparisonCategories {
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind'.
   const ComparisonCategoryInfo &getInfo(ComparisonCategoryKind Kind) const {
-    const ComparisonCategoryInfo *Result = getInfoUnsafe(Kind);
-    assert(Result != nullptr);
+    const ComparisonCategoryInfo *Result = getInfoUnchecked(Kind);
+    assert(Result != nullptr &&
+           "information for specified comparison category has not been built");
     return *Result;
   }
 
@@ -183,7 +184,7 @@ public:
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind', or nullptr if it isn't available.
   const ComparisonCategoryInfo *
-  getInfoUnsafe(ComparisonCategoryKind Kind) const;
+  getInfoUnchecked(ComparisonCategoryKind Kind) const;
 
   llvm::DenseMap<char, ComparisonCategoryInfo> Data;
 };

@@ -20,7 +20,7 @@
 using namespace clang;
 
 const ComparisonCategoryInfo *
-ComparisonCategories::getInfoUnsafe(ComparisonCategoryKind Kind) const {
+ComparisonCategories::getInfoUnchecked(ComparisonCategoryKind Kind) const {
   auto It = Data.find(static_cast<char>(Kind));
   if (It == Data.end())
     return nullptr;
