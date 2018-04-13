@@ -9942,10 +9942,10 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
       return buildResultTy(ComparisonCategoryKind::StrongOrdering);
 
     // C++2a [expr.spaceship]p9: Otherwise, the program is ill-formed.
-    if (!CompositeTy->isPointerType()) {
+    if (CompositeTy->isPointerType()) {
       auto PointeeTy = CompositeTy->getPointeeType();
-      assert(PointeeTy->isObjectType() &&
-             "pointers to non-object types should have already been handled");
+      assert(!PointeeTy->isObjectType() &&
+             "pointers to object types should have already been handled");
       if (PointeeTy->isVoidType()) {
         if (!isSFINAEContext()) {
           Diag(Loc, diag::err_spaceship_comparison_of_void_ptr)

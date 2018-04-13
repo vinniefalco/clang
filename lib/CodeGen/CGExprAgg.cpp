@@ -952,7 +952,8 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   if (ArgTy->isVectorType())
     return CGF.ErrorUnsupported(
         E, "aggregate binary expression with vector arguments");
-  if (!ArgTy->isIntegralOrEnumerationType() && !ArgTy->isPointerType())
+  if (!ArgTy->isIntegralOrEnumerationType() && !ArgTy->isRealFloatingType() &&
+      !ArgTy->isPointerType() && !ArgTy->isMemberPointerType())
     return CGF.ErrorUnsupported(E, "aggregate binary expression");
 
   Value *LHS = nullptr, *RHS = nullptr;

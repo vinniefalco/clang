@@ -8951,15 +8951,12 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     return Success(CCR::Equal, E);
   }
 
+  assert(!IsThreeWayCmp && "case not handled for operator<=>");
   assert((!LHSTy->isIntegralOrEnumerationType() ||
           !RHSTy->isIntegralOrEnumerationType()) &&
          "DataRecursiveIntBinOpEvaluator should have handled integral types");
-  assert(!IsThreeWayCmp && "case not handled for operator<=>");
   // We can't continue from here for non-integral types.
   return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
-
-
-
 }
 
 /// VisitUnaryExprOrTypeTraitExpr - Evaluate a sizeof, alignof or vec_step with

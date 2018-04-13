@@ -24,16 +24,16 @@ void test0(long a, unsigned long b) {
 
   // FIXME: <=> should never produce -Wsign-compare warnings. All the possible error
   // cases involve narrowing conversions and so are ill-formed.
-  (void)(a <=> (unsigned long)b); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)(a <=> (unsigned long)b); // expected-error {{argument to 'operator<=>' cannot be narrowed}}
   (void)(a <=> (unsigned int) b);
   (void)(a <=> (unsigned short) b);
   (void)(a <=> (unsigned char) b);
-  (void)((long)a <=> b);                // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
-  (void)((int)a <=> b);                 // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
-  (void)((short)a <=> b);               // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
-  (void)((signed char)a <=> b);         // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
-  (void)((long)a <=> (unsigned long)b); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
-  (void)((int)a <=> (unsigned int)b);   // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((long)a <=> b);                // expected-error {{argument to 'operator<=>' cannot be narrowed}}
+  (void)((int)a <=> b);                 // expected-error {{argument to 'operator<=>' cannot be narrowed}}
+  (void)((short)a <=> b);               // expected-error {{argument to 'operator<=>' cannot be narrowed}}
+  (void)((signed char)a <=> b);         // expected-error {{argument to 'operator<=>' cannot be narrowed}}
+  (void)((long)a <=> (unsigned long)b); // expected-error {{argument to 'operator<=>' cannot be narrowed}}
+  (void)((int)a <=> (unsigned int)b);   // expected-error {{argument to 'operator<=>' cannot be narrowed}}
   (void)((short) a <=> (unsigned short) b);
   (void)((signed char) a <=> (unsigned char) b);
 
@@ -110,7 +110,7 @@ void test0(long a, unsigned long b) {
   (void)((signed char) 0x80000 <=> (unsigned char) b);
 
   // (a,0x80000)
-  (void)(a <=> (unsigned long)0x80000); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)(a <=> (unsigned long)0x80000); // expected-error {{argument to 'operator<=>' cannot be narrowed}}
   (void)(a <=> (unsigned int) 0x80000);
   (void)(a <=> (unsigned short) 0x80000);
   (void)(a <=> (unsigned char) 0x80000);
@@ -118,8 +118,8 @@ void test0(long a, unsigned long b) {
   (void)((int) a <=> 0x80000);
   (void)((short) a <=> 0x80000); // expected-warning {{comparison of constant 524288 with expression of type 'short' is always 'std::strong_ordering::less'}}
   (void)((signed char) a <=> 0x80000); // expected-warning {{comparison of constant 524288 with expression of type 'signed char' is always 'std::strong_ordering::less'}}
-  (void)((long)a <=> (unsigned long)0x80000); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
-  (void)((int)a <=> (unsigned int)0x80000);   // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((long)a <=> (unsigned long)0x80000); // expected-error {{argument to 'operator<=>' cannot be narrowed}}
+  (void)((int)a <=> (unsigned int)0x80000);   // expected-error {{argument to 'operator<=>' cannot be narrowed}}
   (void)((short) a <=> (unsigned short) 0x80000);
   (void)((signed char) a <=> (unsigned char) 0x80000);
 }
@@ -149,10 +149,10 @@ void test7(unsigned long other) {
   (void)((unsigned long)other <=> (unsigned)(0xffff'ffff));
 
   // Common unsigned, other signed, constant unsigned
-  (void)((int)other <=> (unsigned long)(0xffff'ffff'ffff'ffff)); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
-  (void)((int)other <=> (unsigned long)(0x0000'0000'ffff'ffff)); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
-  (void)((int)other <=> (unsigned long)(0x0000'0000'0fff'ffff)); // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
-  (void)((int)other <=> (unsigned)(0x8000'0000));                // expected-error {{argument to 'operator<=>' cannot be narrowed}} expected-note {{argument is not a constant expression}}
+  (void)((int)other <=> (unsigned long)(0xffff'ffff'ffff'ffff)); // expected-error {{argument to 'operator<=>' cannot be narrowed}}
+  (void)((int)other <=> (unsigned long)(0x0000'0000'ffff'ffff)); // expected-error {{argument to 'operator<=>' cannot be narrowed}}
+  (void)((int)other <=> (unsigned long)(0x0000'0000'0fff'ffff)); // expected-error {{argument to 'operator<=>' cannot be narrowed}}
+  (void)((int)other <=> (unsigned)(0x8000'0000));                // expected-error {{argument to 'operator<=>' cannot be narrowed}}
 
   // Common unsigned, other unsigned, constant signed
   (void)((unsigned long)other <=> (int)(0xffff'ffff)); // expected-error {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned long'}}
