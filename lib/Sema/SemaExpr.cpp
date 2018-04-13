@@ -9793,9 +9793,6 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
                                                          ExprResult &LHS,
                                                          ExprResult &RHS,
                                                          SourceLocation Loc) {
-  if (S.BuildComparisonCategoryData(Loc))
-    return QualType();
-
   QualType LHSType = LHS.get()->getType();
   QualType RHSType = RHS.get()->getType();
 
@@ -9848,8 +9845,10 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
     llvm_unreachable("other types are unimplemented");
   }();
 
-  return QualType(S.Context.CompCategories.getDecl(TypeKind)->getTypeForDecl(),
-                  0);
+  if (const ComparisonCategoryInfo *Info =
+          S.BuildComparisonCategoryInfoForType(TypeKind, Loc))
+    return QualType(Info->CCDecl->getTypeForDecl(), 0);
+  return QualType();
 }
 
 static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
@@ -9924,9 +9923,6 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     assert(getLangOpts().CPlusPlus);
     assert(Context.hasSameType(LHS.get()->getType(), RHS.get()->getType()));
 
-    if (BuildComparisonCategoryData(Loc))
-      return QualType();
-
     QualType CompositeTy = LHS.get()->getType();
     assert(!CompositeTy->isReferenceType());
     const RecordDecl *CompDecl = nullptr;
@@ -9938,10 +9934,10 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
       }
       return QualType();
     }
+    ComparisonCategoryKind Kind;
     if (CompositeTy->isFunctionPointerType() ||
         CompositeTy->isMemberPointerType() || CompositeTy->isNullPtrType())
-      CompDecl = Context.CompCategories.getDecl(
-          ComparisonCategoryKind::StrongEquality);
+      Kind = ComparisonCategoryKind::StrongEquality;
     else if (CompositeTy->isPointerType()) {
       auto PointeeTy = CompositeTy->getPointeeType();
       if (!PointeeTy->isObjectType()) {
@@ -9950,13 +9946,13 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
             << CompositeTy << LHSType << RHSType;
         return QualType();
       }
-      CompDecl = Context.CompCategories.getDecl(
-          ComparisonCategoryKind::StrongOrdering);
+      Kind = ComparisonCategoryKind::StrongOrdering;
     } else
       llvm_unreachable("unhandled three-way comparison composite type");
-    if (!CompDecl)
-      return QualType();
-    return QualType(CompDecl->getTypeForDecl(), 0);
+    if (const ComparisonCategoryInfo *Info =
+            BuildComparisonCategoryInfoForType(Kind, Loc))
+      return QualType(Info->CCDecl->getTypeForDecl(), 0);
+    return QualType();
   };
 
   const Expr::NullPointerConstantKind LHSNullKind =

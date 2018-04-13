@@ -32,17 +32,18 @@ class DeclRefExpr;
 class RecordDecl;
 class QualType;
 
-/// \brief An enumeration representing the different comparison categories.
-///   The values map to the category types defined in the standard library.
-///   i.e. 'std::weak_equality'.
+/// \brief An enumeration representing the different comparison categories
+/// types.
+///
+/// C++2a [cmp.categories.pre] The types weak_equality, strong_equality,
+/// partial_ordering, weak_ordering, and strong_ordering are collectively
+/// termed the comparison category types.
 enum class ComparisonCategoryKind : unsigned char {
   WeakEquality,
   StrongEquality,
   PartialOrdering,
   WeakOrdering,
   StrongOrdering,
-  Last = StrongOrdering,
-  First = WeakEquality
 };
 
 /// \brief An enumeration representing the possible results of a three-way
@@ -65,7 +66,7 @@ struct ComparisonCategoryInfo {
   RecordDecl *CCDecl = nullptr;
 
   /// \brief A map containing the comparison category values built from the
-  /// standard library. The key is a value of ComparisonCategoryValue.
+  /// standard library. The key is a value of ComparisonCategoryResult.
   llvm::DenseMap<char, DeclRefExpr *> Objects;
 
   /// \brief The Kind of the comparison category type
@@ -153,8 +154,9 @@ struct ComparisonCategories {
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind'.
   const ComparisonCategoryInfo &getInfo(ComparisonCategoryKind Kind) const {
-    assert(HasData && "comparison category information not yet built");
-    return Data[static_cast<unsigned>(Kind)];
+    const ComparisonCategoryInfo *Result = getInfoUnsafe(Kind);
+    assert(Result != nullptr);
+    return *Result;
   }
 
   /// \brief Return the comparison category decl for the category
@@ -165,33 +167,26 @@ struct ComparisonCategories {
 
   /// \brief Return the comparison category information as specified by
   ///   `getCategoryForType(Ty)`.
+  ///
+  /// Note: The comparison category type must have already been built by Sema.
   const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
 
   /// \brief Return the comparison category kind corresponding to the specified
   ///   type. 'Ty' is expected to refer to the type of one of the comparison
   ///   category decls; if it doesn't no value is returned.
+  ///
+  /// Note: The comparison category type must have already been built by Sema.
   Optional<ComparisonCategoryKind> getCategoryForType(QualType Ty) const;
 
-  /// \brief returns true if the comparison category data has already been
-  /// built, and false otherwise.
-  bool hasData() const { return HasData; }
-
 public:
-  // implementation details which should only be used by the function creating
-  // and setting the data.
-  using InfoList =
-      std::array<ComparisonCategoryInfo,
-                 static_cast<unsigned>(ComparisonCategoryKind::Last) + 1>;
-
-  void setData(InfoList &&NewData) {
-    assert(!HasData && "comparison categories already built");
-    Data = std::move(NewData);
-    HasData = true;
+  /// \brief Return the comparison category information for the category
+  ///   specified by 'Kind', or nullptr if it isn't available.
+  const ComparisonCategoryInfo *
+  getInfoUnsafe(ComparisonCategoryKind Kind) const {
+    return Data.lookup(static_cast<char>(Kind));
   }
 
-private:
-  bool HasData = false;
-  InfoList Data;
+  llvm::DenseMap<char, ComparisonCategoryInfo *> Data;
 };
 
 } // namespace clang

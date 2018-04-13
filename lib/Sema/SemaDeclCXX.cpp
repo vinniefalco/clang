@@ -8885,93 +8885,83 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
   return StdExperimentalNamespaceCache;
 }
 
-bool Sema::BuildComparisonCategoryData(SourceLocation Loc) {
+bool Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
+                                              SourceLocation Loc) {
   using CCKT = ComparisonCategoryKind;
   using CCVT = ComparisonCategoryResult;
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
 
   // Check if we've already successfully built the comparison category data.
-  if (Context.CompCategories.hasData())
+  if (Context.CompCategories.getInfoUnsafe(Kind))
     return false;
 
-  ComparisonCategories::InfoList NewData;
-  // Otherwise, look up each of the category types and build their required
-  // data.
-  for (unsigned I = static_cast<unsigned>(CCKT::First),
-                End = static_cast<unsigned>(CCKT::Last);
-       I <= End; ++I) {
-    CCKT CCK = static_cast<CCKT>(I);
+  StringRef Name = ComparisonCategories::getCategoryString(Kind);
+  // Build the initial category information
+  ComparisonCategoryInfo Info;
+  Info.Kind = Kind;
 
-    StringRef Name = ComparisonCategories::getCategoryString(CCK);
+  // Lookup the record for the category type
+  if (auto Std = getStdNamespace()) {
+    LookupResult Result(*this, &PP.getIdentifierTable().get(Name),
+                        SourceLocation(), Sema::LookupTagName);
+    if (LookupQualifiedName(Result, Std))
+      Info.CCDecl = Result.getAsSingle<RecordDecl>();
+    Result.suppressDiagnostics();
+  }
+  if (!Info.CCDecl) {
+    Diag(Loc, diag::err_implied_comparison_category_type_not_found) << Name;
+    return true;
+  }
 
-    // Build the initial category information
-    ComparisonCategoryInfo Info;
-    Info.Kind = CCK;
+  // Calculate the list of values belonging to this comparison category type.
+  SmallVector<CCVT, 6> Values;
+  Values.push_back(CCVT::Equivalent);
+  if (Info.isStrong())
+    Values.push_back(CCVT::Equal);
+  if (Info.isOrdered()) {
+    Values.push_back(CCVT::Less);
+    Values.push_back(CCVT::Greater);
+  } else {
+    Values.push_back(CCVT::Nonequivalent);
+    if (Info.isStrong())
+      Values.push_back(CCVT::Nonequal);
+  }
+  if (Info.isPartial())
+    Values.push_back(CCVT::Unordered);
 
-    // Lookup the record for the category type
-    if (auto Std = getStdNamespace()) {
-      LookupResult Result(*this, &PP.getIdentifierTable().get(Name),
-                          SourceLocation(), Sema::LookupTagName);
-      if (LookupQualifiedName(Result, Std))
-        Info.CCDecl = Result.getAsSingle<RecordDecl>();
-      Result.suppressDiagnostics();
+  // Build each of the require values and store them in Info.
+  for (CCVT CCV : Values) {
+    StringRef ValueName = ComparisonCategories::getResultString(CCV);
+    QualType Ty(Info.CCDecl->getTypeForDecl(), 0);
+    DeclContext *LookupCtx = computeDeclContext(Ty);
+    LookupResult Found(*this, &PP.getIdentifierTable().get(ValueName), Loc,
+                       Sema::LookupOrdinaryName);
+    if (!LookupQualifiedName(Found, LookupCtx)) {
+      Diag(Loc, diag::err_std_compare_type_missing_member)
+          << Info.CCDecl << ValueName;
+      return true;
     }
-    if (!Info.CCDecl) {
-      Diag(Loc, diag::err_implied_comparison_category_type_not_found) << Name;
+    auto *VD = Found.getAsSingle<VarDecl>();
+
+    // Attempt to diagnose reasons why the STL definition of this type
+    // might be foobar, including it failing to be a constant expression.
+    // TODO Handle more ways the lookup or result can be invalid.
+    if (!VD || !VD->isStaticDataMember() || !VD->isConstexpr()) {
+      Diag(Loc, diag::err_std_compare_type_not_supported)
+          << Info.CCDecl << ValueName;
       return true;
     }
 
-    // Calculate the list of values belonging to this comparison category type.
-    SmallVector<CCVT, 6> Values;
-    Values.push_back(CCVT::Equivalent);
-    if (Info.isStrong())
-      Values.push_back(CCVT::Equal);
-    if (Info.isOrdered()) {
-      Values.push_back(CCVT::Less);
-      Values.push_back(CCVT::Greater);
-    } else {
-      Values.push_back(CCVT::Nonequivalent);
-      if (Info.isStrong())
-        Values.push_back(CCVT::Nonequal);
-    }
-    if (Info.isPartial())
-      Values.push_back(CCVT::Unordered);
+    ExprResult Res =
+        BuildDeclRefExpr(VD, VD->getType(), VK_LValue, SourceLocation());
+    if (Res.isInvalid())
+      return true;
 
-    // Build each of the require values and store them in Info.
-    for (CCVT CCV : Values) {
-      StringRef ValueName = ComparisonCategories::getResultString(CCV);
-      QualType Ty(Info.CCDecl->getTypeForDecl(), 0);
-      DeclContext *LookupCtx = computeDeclContext(Ty);
-      LookupResult Found(*this, &PP.getIdentifierTable().get(ValueName), Loc,
-                         Sema::LookupOrdinaryName);
-      if (!LookupQualifiedName(Found, LookupCtx)) {
-        Diag(Loc, diag::err_std_compare_type_missing_member)
-            << Info.CCDecl << ValueName;
-        return true;
-      }
-      auto *VD = Found.getAsSingle<VarDecl>();
-      if (!VD || !VD->isStaticDataMember()) {
-        // FIXME: Handle more ways the lookup can result in a invalid value.
-        Diag(Loc, diag::err_std_compare_type_invalid_member)
-            << Info.CCDecl << ValueName;
-        return true;
-      }
-
-      ExprResult Res =
-          BuildDeclRefExpr(VD, VD->getType(), VK_LValue, SourceLocation());
-      if (Res.isInvalid())
-        return true;
-
-      Info.Objects.try_emplace((char)CCV, cast<DeclRefExpr>(Res.get()));
-    }
-
-    // Success. Set the value in ASTContext.
-    NewData[I] = std::move(Info);
+    Info.Objects.try_emplace((char)CCV, cast<DeclRefExpr>(Res.get()));
   }
+  Context.CompCategories.Data.try_emplace((char)Kind, std::move(Info));
 
-  // All of the objects and values have been built successfully.
-  Context.CompCategories.setData(std::move(NewData));
   return false;
 }
 

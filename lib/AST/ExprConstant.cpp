@@ -7104,7 +7104,7 @@ class IntExprEvaluator : public ExprEvaluatorBase<IntExprEvaluator> {
   APValue &Result;
 public:
   IntExprEvaluator(EvalInfo &info, APValue &result)
-      : ExprEvaluatorBase(info), Result(result) {}
+      : ExprEvaluatorBaseTy(info), Result(result) {}
 
   bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
     assert(E->getType()->isIntegralOrEnumerationType() &&
@@ -8656,7 +8656,6 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   }
 
   if (LHSTy->isPointerType() && RHSTy->isPointerType()) {
-    assert(!LHSTy->isMemberPointerType());
     if (E->getOpcode() == BO_Sub || E->isComparisonOp()) {
       LValue LHSValue, RHSValue;
 
@@ -10750,16 +10749,6 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
           // In both C89 and C++, commas in ICEs are illegal.
           return ICEDiag(IK_NotICE, E->getLocStart());
         }
-      }
-      if (Exp->getOpcode() == BO_Cmp) {
-        // Check that all of the references to the result objects are ICE.
-        const ComparisonCategoryInfo &CmpInfo =
-            Ctx.CompCategories.getInfoForType(Exp->getType());
-        ICEDiag RetDiag(IK_ICE, E->getLocStart());
-        for (const auto &KV : CmpInfo.Objects)
-          RetDiag = Worst(RetDiag, CheckICE(KV.second, Ctx));
-
-        return Worst(Worst(LHSResult, RHSResult), RetDiag);
       }
       return Worst(LHSResult, RHSResult);
     }

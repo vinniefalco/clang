@@ -9374,8 +9374,8 @@ def err_multiversion_not_supported : Error<
 
 // spaceship operator diagnostics
 def err_implied_comparison_category_type_not_found : Error<
-  "%0 type was not found; include <compare> before defining "
-  "or using 'operator<=>'">;
+  "cannot deduce return type of operator<=> because type %0 was not found; "
+  "include <compare>">;
 def err_spaceship_argument_narrowing : Error<
   "argument to 'operator<=>' "
   "%select{cannot be narrowed from type %1 to %2|"
@@ -9386,9 +9386,10 @@ def err_spaceship_comparison_of_void_ptr : Error<
 def err_spaceship_comparison_of_invalid_comp_type : Error<
   "three-way comparison of operands has composite type %0 (%1 and %2)">;
 def err_std_compare_type_missing_member : Error<
-  "%0 missing a member named '%1'">;
-def err_std_compare_type_invalid_member : Error<
-  "member '%1' of %0 is ill-formed">;
+  "%0 is missing member named '%1'">;
+def err_std_compare_type_not_supported : Error<
+  "standard library implementation of comparison category '%1' is not supported; "
+   "failed to build reference to member %0">;
 def note_spaceship_operand_not_cce : Note<
   "argument is not a constant expression">;
 } // end of sema component.

@@ -17,8 +17,9 @@
 
 #include "clang/AST/Attr.h"
 #include "clang/AST/Availability.h"
-#include "clang/AST/DeclarationName.h"
+#include "clang/AST/ComparisonCategories.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/AST/DeclarationName.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExternalASTSource.h"
@@ -4541,13 +4542,17 @@ public:
   CXXRecordDecl *getStdBadAlloc() const;
   EnumDecl *getStdAlignValT() const;
 
-  /// \brief Lookup the comparison category types in the standard library, and
-  /// build DeclRefExprs to values returned by the operator<=> builtins. The
-  /// results are cached in ASTContext so they are accessible outside of Sema.
-  /// An error is emitted if the types are not found or another error occurs.
+  /// \brief Lookup the specified comparison category types in the standard
+  ///   library, an build DeclRefExprs to values returned by the operator<=>
+  ///   builtins for that type. The results are cached in ASTContext so they are
+  ///   accessible outside of Sema. An error is emitted if the type is not found
+  ///   or another error occurs.
   ///
-  /// \return true if an error occurred. False otherwise.
-  bool BuildComparisonCategoryData(SourceLocation Loc);
+  /// \return the info for the specified kind if no error occurs, otherwise
+  ///   nullptr.
+  const ComparisonCategoryInfo *
+  BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
+                                     SourceLocation Loc);
 
   /// \brief Tests whether Ty is an instance of std::initializer_list and, if
   /// it is and Element is not NULL, assigns the element type to Element.

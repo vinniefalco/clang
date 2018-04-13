@@ -21,11 +21,13 @@ using namespace clang;
 
 Optional<ComparisonCategoryKind>
 ComparisonCategories::getCategoryForType(QualType Ty) const {
-  assert(hasData() && "comparison category data not built");
   assert(!Ty.isNull() && "type must be non-null");
   if (const auto *RD = Ty->getAsCXXRecordDecl()) {
     const auto *CanonRD = RD->getCanonicalDecl();
-    for (auto &Info : Data) {
+    for (auto &KV : Data) {
+      if (!KV.second.hasValue())
+        continue;
+      const ComparisonCategoryInfo &Info = KV.second.getValue();
       if (CanonRD == Info.CCDecl->getCanonicalDecl())
         return Info.Kind;
     }
