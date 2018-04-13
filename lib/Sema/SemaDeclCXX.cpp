@@ -8894,7 +8894,7 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
 
   // Check if we've already successfully built the comparison category data.
   if (const ComparisonCategoryInfo *Info =
-          Context.CompCategories.getInfoUnsafe(Kind))
+          Context.CompCategories.getInfoUnchecked(Kind))
     return Info;
 
   StringRef Name = ComparisonCategories::getCategoryString(Kind);
