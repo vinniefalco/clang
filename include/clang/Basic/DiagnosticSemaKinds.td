@@ -9380,13 +9380,10 @@ def err_spaceship_argument_narrowing : Error<
   "argument to 'operator<=>' "
   "%select{cannot be narrowed from type %1 to %2|"
   "evaluates to %1, which cannot be narrowed to type %2}0">;
-def err_spaceship_comparison_of_void_ptr : Error<
-  "three-way comparison with void pointer %select{operand type|operand types}0 "
-  "(%1 and %2)">;
 def err_spaceship_comparison_of_invalid_comp_type : Error<
   "three-way comparison of operands has composite type %0 (%1 and %2)">;
 def err_std_compare_type_missing_member : Error<
-  "%0 is missing member named '%1'">;
+  "%0 is missing a member named '%1'">;
 def err_std_compare_type_not_supported : Error<
   "standard library implementation of comparison category %0 is not supported; "
    "failed to build reference to member '%1'">;

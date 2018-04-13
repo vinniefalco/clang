@@ -9938,25 +9938,11 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // C++2a [expr.spaceship]p8: If the composite pointer type is an object
     // pointer type, p <=> q is of type std::strong_ordering.
     if (CompositeTy->isPointerType() &&
-        CompositeTy->getPointeeType()->isObjectType())
+            CompositeTy->getPointeeType()->isObjectType() ||
+        CompositeTy->getPointeeType()->isVoidType())
       return buildResultTy(ComparisonCategoryType::StrongOrdering);
 
     // C++2a [expr.spaceship]p9: Otherwise, the program is ill-formed.
-    if (CompositeTy->isPointerType()) {
-      auto PointeeTy = CompositeTy->getPointeeType();
-      assert(!PointeeTy->isObjectType() &&
-             "pointers to object types should have already been handled");
-      if (PointeeTy->isVoidType()) {
-        if (!isSFINAEContext()) {
-          Diag(Loc, diag::err_spaceship_comparison_of_void_ptr)
-              << (LHSType->isVoidPointerType() + RHSType->isVoidPointerType() -
-                  1)
-              << LHSType << RHSType;
-        }
-        return QualType();
-      }
-      // fallthrough
-    }
     // TODO: Can this case actually occur? ie we have a
     // non-object/function/mem-function pointer, non-enum, and non-integral type
     Diag(Loc, diag::err_spaceship_comparison_of_invalid_comp_type)
