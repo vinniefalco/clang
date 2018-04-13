@@ -27,7 +27,7 @@ namespace llvm {
 
 namespace clang {
 
-class DeclRefExpr;
+class VarDecl;
 class RecordDecl;
 class QualType;
 
@@ -65,7 +65,7 @@ struct ComparisonCategoryInfo {
 
   /// \brief A map containing the comparison category values built from the
   /// standard library. The key is a value of ComparisonCategoryResult.
-  llvm::DenseMap<char, DeclRefExpr *> Objects;
+  llvm::DenseMap<char, VarDecl *> Objects;
 
   /// \brief The Kind of the comparison category type
   ComparisonCategoryType Kind;
@@ -73,14 +73,14 @@ struct ComparisonCategoryInfo {
 public:
   /// \brief Return an expression referencing the member of the specified
   ///   comparison category. For example 'std::strong_equality::equal'
-  const DeclRefExpr *getResultValue(ComparisonCategoryResult ValueKind) const {
-    const DeclRefExpr *DR = getResultValueUnsafe(ValueKind);
-    assert(DR &&
+  const VarDecl *getResultValue(ComparisonCategoryResult ValueKind) const {
+    const VarDecl *VD = getResultValueUnsafe(ValueKind);
+    assert(VD &&
            "comparison category does not contain the specified result kind");
-    return DR;
+    return VD;
   }
 
-  const DeclRefExpr *
+  const VarDecl *
   getResultValueUnsafe(ComparisonCategoryResult ValueKind) const {
     char Key = static_cast<char>(ValueKind);
     return Objects.lookup(Key);
@@ -123,21 +123,21 @@ public:
     return Res;
   }
 
-  const DeclRefExpr *getEqualOrEquiv() const {
+  const VarDecl *getEqualOrEquiv() const {
     return getResultValue(makeWeakResult(ComparisonCategoryResult::Equal));
   }
-  const DeclRefExpr *getNonequalOrNonequiv() const {
+  const VarDecl *getNonequalOrNonequiv() const {
     return getResultValue(makeWeakResult(ComparisonCategoryResult::Nonequal));
   }
-  const DeclRefExpr *getLess() const {
+  const VarDecl *getLess() const {
     assert(isOrdered());
     return getResultValue(ComparisonCategoryResult::Less);
   }
-  const DeclRefExpr *getGreater() const {
+  const VarDecl *getGreater() const {
     assert(isOrdered());
     return getResultValue(ComparisonCategoryResult::Greater);
   }
-  const DeclRefExpr *getUnordered() const {
+  const VarDecl *getUnordered() const {
     assert(isPartial());
     return getResultValue(ComparisonCategoryResult::Unordered);
   }
