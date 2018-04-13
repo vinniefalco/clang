@@ -87,3 +87,25 @@ StringRef ComparisonCategories::getResultString(ComparisonCategoryResult Kind) {
   }
   llvm_unreachable("unhandled case in switch");
 }
+
+const VarDecl *ComparisonCategoryInfo::lookupResultValue(
+    const ASTContext &Ctx, ComparisonCategoryResult ValueKind) const {
+  char Key = static_cast<char>(ValueKind);
+  const VarDecl *VD = Objects.lookup(Key);
+  if (VD)
+    return VD;
+
+  StringRef StrName = ComparisonCategories::getResultString(ValueKind);
+  const RecordDecl *RD = cast<RecordDecl>(CCDecl->getCanonicalDecl());
+
+  const IdentifierInfo &II = Ctx.Idents.get(StrName);
+
+  DeclarationName Name(&II);
+  DeclContextLookupResult Lookup =
+      RD->getDeclContext()->getRedeclContext()->lookup(Name);
+  assert(Lookup.size() == 1);
+  const NamedDecl *ND = Lookup.front();
+  assert(isa<VarDecl>(ND));
+  auto ItPair = Objects.try_emplace((char)ValueKind, cast<VarDecl>(ND));
+  return ItPair.first->second;
+}

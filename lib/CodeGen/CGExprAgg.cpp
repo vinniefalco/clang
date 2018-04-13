@@ -968,6 +968,7 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
         "unsupported complex expressions should have already been handled");
   }
 
+  auto &Ctx = CGF.getContext();
   auto EmitCmpRes = [&](const VarDecl *VD) {
     DeclRefExpr DE(VD, /*RefersToEnclosingVariableOrCapture*/ false,
                    E->getType(), VK_LValue, E->getExprLoc());
@@ -979,24 +980,24 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   Value *Select;
   if (CmpInfo.isEquality()) {
     Select = Builder.CreateSelect(
-        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
-        EmitCmpRes(CmpInfo.getNonequalOrNonequiv()), "sel.eq");
+        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv(Ctx)),
+        EmitCmpRes(CmpInfo.getNonequalOrNonequiv(Ctx)), "sel.eq");
   } else if (!CmpInfo.isPartial()) {
     Value *SelectOne = Builder.CreateSelect(
-        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()),
-        EmitCmpRes(CmpInfo.getGreater()), "sel.lt");
+        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess(Ctx)),
+        EmitCmpRes(CmpInfo.getGreater(Ctx)), "sel.lt");
     Select = Builder.CreateSelect(
-        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
+        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv(Ctx)),
         SelectOne, "sel.eq");
   } else {
     Value *SelectEq = Builder.CreateSelect(
-        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
-        EmitCmpRes(CmpInfo.getUnordered()), "sel.eq");
+        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv(Ctx)),
+        EmitCmpRes(CmpInfo.getUnordered(Ctx)), "sel.eq");
     Value *SelectGT = Builder.CreateSelect(
-        EmitCmp(CK_Greater), EmitCmpRes(CmpInfo.getGreater()),
+        EmitCmp(CK_Greater), EmitCmpRes(CmpInfo.getGreater(Ctx)),
         SelectEq, "sel.gt");
     Select = Builder.CreateSelect(
-        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()),
+        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess(Ctx)),
         SelectGT, "sel.lt");
   }
 

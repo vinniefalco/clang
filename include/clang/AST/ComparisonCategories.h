@@ -27,6 +27,7 @@ namespace llvm {
 
 namespace clang {
 
+class ASTContext;
 class VarDecl;
 class RecordDecl;
 class QualType;
@@ -65,7 +66,7 @@ struct ComparisonCategoryInfo {
 
   /// \brief A map containing the comparison category values built from the
   /// standard library. The key is a value of ComparisonCategoryResult.
-  llvm::DenseMap<char, VarDecl *> Objects;
+  mutable llvm::DenseMap<char, VarDecl *> Objects;
 
   /// \brief The Kind of the comparison category type
   ComparisonCategoryType Kind;
@@ -73,18 +74,16 @@ struct ComparisonCategoryInfo {
 public:
   /// \brief Return an expression referencing the member of the specified
   ///   comparison category. For example 'std::strong_equality::equal'
-  const VarDecl *getResultValue(ComparisonCategoryResult ValueKind) const {
-    const VarDecl *VD = getResultValueUnsafe(ValueKind);
+  const VarDecl *getResultValue(const ASTContext &Ctx,
+                                ComparisonCategoryResult ValueKind) const {
+    const VarDecl *VD = lookupResultValue(Ctx, ValueKind);
     assert(VD &&
            "comparison category does not contain the specified result kind");
     return VD;
   }
 
-  const VarDecl *
-  getResultValueUnsafe(ComparisonCategoryResult ValueKind) const {
-    char Key = static_cast<char>(ValueKind);
-    return Objects.lookup(Key);
-  }
+  const VarDecl *lookupResultValue(const ASTContext &Ctx,
+                                   ComparisonCategoryResult ValueKind) const;
 
   /// \brief True iff the comparison category is an equality comparison.
   bool isEquality() const { return !isOrdered(); }
@@ -123,23 +122,24 @@ public:
     return Res;
   }
 
-  const VarDecl *getEqualOrEquiv() const {
-    return getResultValue(makeWeakResult(ComparisonCategoryResult::Equal));
+  const VarDecl *getEqualOrEquiv(const ASTContext &Ctx) const {
+    return getResultValue(makeWeakResult(Ctx, ComparisonCategoryResult::Equal));
   }
-  const VarDecl *getNonequalOrNonequiv() const {
-    return getResultValue(makeWeakResult(ComparisonCategoryResult::Nonequal));
+  const VarDecl *getNonequalOrNonequiv(const ASTContext &Ctx) const {
+    return getResultValue(
+        makeWeakResult(Ctx, ComparisonCategoryResult::Nonequal));
   }
-  const VarDecl *getLess() const {
+  const VarDecl *getLess(const ASTContext &Ctx) const {
     assert(isOrdered());
-    return getResultValue(ComparisonCategoryResult::Less);
+    return getResultValue(Ctx, ComparisonCategoryResult::Less);
   }
-  const VarDecl *getGreater() const {
+  const VarDecl *getGreater(const ASTContext &Ctx) const {
     assert(isOrdered());
-    return getResultValue(ComparisonCategoryResult::Greater);
+    return getResultValue(Ctx, ComparisonCategoryResult::Greater);
   }
-  const VarDecl *getUnordered() const {
+  const VarDecl *getUnordered(const ASTContext &Ctx) const {
     assert(isPartial());
-    return getResultValue(ComparisonCategoryResult::Unordered);
+    return getResultValue(Ctx, ComparisonCategoryResult::Unordered);
   }
 };
 

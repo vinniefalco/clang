@@ -8953,7 +8953,7 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
           << Info.CCDecl << ValueName;
       return nullptr;
     }
-
+    MarkVariableReferenced(Loc, VD);
     Info.Objects.try_emplace((char)CCV, VD);
   }
 
