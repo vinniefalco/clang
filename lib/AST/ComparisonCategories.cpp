@@ -84,8 +84,6 @@ StringRef ComparisonCategories::getResultString(ComparisonCategoryResult Kind) {
     return "greater";
   case CCVT::Unordered:
     return "unordered";
-  case CCVT::Invalid:
-    return "invalid";
   }
   llvm_unreachable("unhandled case in switch");
 }
