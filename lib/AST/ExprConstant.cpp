@@ -8548,6 +8548,11 @@ public:
   }
 
   bool operator()(const APValue &V, const Expr *E) {
+    assert(!isBinCmp(E) && "unexpected three-way comparison expression");
+    if (V.isLValue() || V.isAddrLabelDiff()) {
+      Result = V;
+      return true;
+    }
     return (*this)(V.getInt(), E);
   }
 };
