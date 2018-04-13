@@ -9945,9 +9945,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // C++2a [expr.spaceship]p9: Otherwise, the program is ill-formed.
     // TODO: Can this case actually occur? ie we have a
     // non-object/function/mem-function pointer, non-enum, and non-integral type
-    Diag(Loc, diag::err_spaceship_comparison_of_invalid_comp_type)
-        << CompositeTy << LHSType << RHSType;
-    return QualType();
+    return InvalidOperands(Loc, LHS, RHS);
   };
 
   const Expr::NullPointerConstantKind LHSNullKind =
