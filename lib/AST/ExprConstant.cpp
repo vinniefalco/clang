@@ -8615,8 +8615,8 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
         LHS.getComplexFloatImag().compare(RHS.getComplexFloatImag());
 
       if (E->getOpcode() == BO_EQ)
-        return Success((CR_r == APFloat::cmpEqual && CR_i == APFloat::cmpEqual),
-                       E);
+        return Success((CR_r == APFloat::cmpEqual &&
+                        CR_i == APFloat::cmpEqual), E);
       else {
         assert(E->getOpcode() == BO_NE &&
                "Invalid complex comparison.");
@@ -8624,20 +8624,17 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
             ((CR_r == APFloat::cmpGreaterThan || CR_r == APFloat::cmpLessThan ||
               CR_r == APFloat::cmpUnordered) ||
              (CR_i == APFloat::cmpGreaterThan || CR_i == APFloat::cmpLessThan ||
-              CR_i == APFloat::cmpUnordered)),
-            E);
+              CR_i == APFloat::cmpUnordered)), E);
       }
     } else {
       if (E->getOpcode() == BO_EQ)
         return Success((LHS.getComplexIntReal() == RHS.getComplexIntReal() &&
-                        LHS.getComplexIntImag() == RHS.getComplexIntImag()),
-                       E);
+                        LHS.getComplexIntImag() == RHS.getComplexIntImag()), E);
       else {
         assert(E->getOpcode() == BO_NE &&
                "Invalid compex comparison.");
         return Success((LHS.getComplexIntReal() != RHS.getComplexIntReal() ||
-                        LHS.getComplexIntImag() != RHS.getComplexIntImag()),
-                       E);
+                        LHS.getComplexIntImag() != RHS.getComplexIntImag()), E);
       }
     }
   }
