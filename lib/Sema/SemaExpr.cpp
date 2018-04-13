@@ -9832,7 +9832,7 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
   assert(!Type.isNull() && "composite type for <=> has not been set");
 
   auto TypeKind = [&]() {
-    using CCK = ComparisonCategoryKind;
+    using CCK = ComparisonCategoryType;
     if (Type->isIntegralOrEnumerationType())
       return CCK::StrongOrdering;
     if (Type->hasFloatingRepresentation())
@@ -9921,7 +9921,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     QualType CompositeTy = LHS.get()->getType();
     assert(!CompositeTy->isReferenceType());
 
-    auto buildResultTy = [&](ComparisonCategoryKind Kind) {
+    auto buildResultTy = [&](ComparisonCategoryType Kind) {
       if (const ComparisonCategoryInfo *Info =
               BuildComparisonCategoryInfoForType(Kind, Loc))
         return QualType(Info->CCDecl->getTypeForDecl(), 0);
@@ -9933,13 +9933,13 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // result is of type std::strong_equality
     if (CompositeTy->isFunctionPointerType() ||
         CompositeTy->isMemberPointerType() || CompositeTy->isNullPtrType())
-      return buildResultTy(ComparisonCategoryKind::StrongEquality);
+      return buildResultTy(ComparisonCategoryType::StrongEquality);
 
     // C++2a [expr.spaceship]p8: If the composite pointer type is an object
     // pointer type, p <=> q is of type std::strong_ordering.
     if (CompositeTy->isPointerType() &&
         CompositeTy->getPointeeType()->isObjectType())
-      return buildResultTy(ComparisonCategoryKind::StrongOrdering);
+      return buildResultTy(ComparisonCategoryType::StrongOrdering);
 
     // C++2a [expr.spaceship]p9: Otherwise, the program is ill-formed.
     if (CompositeTy->isPointerType()) {

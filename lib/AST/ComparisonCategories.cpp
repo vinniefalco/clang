@@ -20,14 +20,14 @@
 using namespace clang;
 
 const ComparisonCategoryInfo *
-ComparisonCategories::getInfoUnchecked(ComparisonCategoryKind Kind) const {
+ComparisonCategories::getInfoUnchecked(ComparisonCategoryType Kind) const {
   auto It = Data.find(static_cast<char>(Kind));
   if (It == Data.end())
     return nullptr;
   return &It->second;
 }
 
-const ComparisonCategoryKind *
+const ComparisonCategoryType *
 ComparisonCategories::getCategoryForType(QualType Ty) const {
   assert(!Ty.isNull() && "type must be non-null");
   if (const auto *RD = Ty->getAsCXXRecordDecl()) {
@@ -43,15 +43,15 @@ ComparisonCategories::getCategoryForType(QualType Ty) const {
 
 const ComparisonCategoryInfo &
 ComparisonCategories::getInfoForType(QualType Ty) const {
-  const ComparisonCategoryKind *Kind = getCategoryForType(Ty);
+  const ComparisonCategoryType *Kind = getCategoryForType(Ty);
   assert(Kind &&
          "return type for operator<=> is not a comparison category type or the "
          "specified comparison category kind has not been built yet");
   return getInfo(*Kind);
 }
 
-StringRef ComparisonCategories::getCategoryString(ComparisonCategoryKind Kind) {
-  using CCKT = ComparisonCategoryKind;
+StringRef ComparisonCategories::getCategoryString(ComparisonCategoryType Kind) {
+  using CCKT = ComparisonCategoryType;
   switch (Kind) {
   case CCKT::WeakEquality:
     return "weak_equality";

@@ -37,7 +37,7 @@ class QualType;
 /// C++2a [cmp.categories.pre] The types weak_equality, strong_equality,
 /// partial_ordering, weak_ordering, and strong_ordering are collectively
 /// termed the comparison category types.
-enum class ComparisonCategoryKind : unsigned char {
+enum class ComparisonCategoryType : unsigned char {
   WeakEquality,
   StrongEquality,
   PartialOrdering,
@@ -49,7 +49,6 @@ enum class ComparisonCategoryKind : unsigned char {
 ///   comparison. These values map onto instances of comparison category types
 ///   defined in the standard library. i.e. 'std::strong_ordering::less'.
 enum class ComparisonCategoryResult : unsigned char {
-  Invalid, // Internal implementation detail
   Equal,
   Equivalent,
   Nonequivalent,
@@ -69,7 +68,7 @@ struct ComparisonCategoryInfo {
   llvm::DenseMap<char, DeclRefExpr *> Objects;
 
   /// \brief The Kind of the comparison category type
-  ComparisonCategoryKind Kind;
+  ComparisonCategoryType Kind;
 
 public:
   /// \brief Return an expression referencing the member of the specified
@@ -83,8 +82,6 @@ public:
 
   const DeclRefExpr *
   getResultValueUnsafe(ComparisonCategoryResult ValueKind) const {
-    assert(ValueKind != ComparisonCategoryResult::Invalid &&
-           "invalid value specified");
     char Key = static_cast<char>(ValueKind);
     return Objects.lookup(Key);
   }
@@ -94,7 +91,7 @@ public:
 
   /// \brief True iff the comparison category is a relational comparison.
   bool isOrdered() const {
-    using CCK = ComparisonCategoryKind;
+    using CCK = ComparisonCategoryType;
     return Kind == CCK::PartialOrdering || Kind == CCK::WeakOrdering ||
            Kind == CCK::StrongOrdering;
   }
@@ -102,13 +99,13 @@ public:
   /// \brief True iff the comparison is "strong". i.e. it checks equality and
   ///    not equivalence.
   bool isStrong() const {
-    using CCK = ComparisonCategoryKind;
+    using CCK = ComparisonCategoryType;
     return Kind == CCK::StrongEquality || Kind == CCK::StrongOrdering;
   }
 
   /// \brief True iff the comparison is not totally ordered.
   bool isPartial() const {
-    using CCK = ComparisonCategoryKind;
+    using CCK = ComparisonCategoryType;
     return Kind == CCK::PartialOrdering;
   }
 
@@ -147,12 +144,12 @@ public:
 };
 
 struct ComparisonCategories {
-  static StringRef getCategoryString(ComparisonCategoryKind Kind);
+  static StringRef getCategoryString(ComparisonCategoryType Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
 
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind'.
-  const ComparisonCategoryInfo &getInfo(ComparisonCategoryKind Kind) const {
+  const ComparisonCategoryInfo &getInfo(ComparisonCategoryType Kind) const {
     const ComparisonCategoryInfo *Result = getInfoUnchecked(Kind);
     assert(Result != nullptr &&
            "information for specified comparison category has not been built");
@@ -164,7 +161,7 @@ struct ComparisonCategories {
   ///
   /// Note: The specified comparison category kind must have already been built
   ///   by Sema.
-  const RecordDecl *getDecl(ComparisonCategoryKind Kind) const {
+  const RecordDecl *getDecl(ComparisonCategoryType Kind) const {
     return getInfo(Kind).CCDecl;
   }
 
@@ -177,13 +174,13 @@ struct ComparisonCategories {
   /// \brief Return the comparison category kind corresponding to the specified
   ///   type. 'Ty' is expected to refer to the type of one of the comparison
   ///   category decls; if it doesn't nullptr is returned.
-  const ComparisonCategoryKind *getCategoryForType(QualType Ty) const;
+  const ComparisonCategoryType *getCategoryForType(QualType Ty) const;
 
 public:
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind', or nullptr if it isn't available.
   const ComparisonCategoryInfo *
-  getInfoUnchecked(ComparisonCategoryKind Kind) const;
+  getInfoUnchecked(ComparisonCategoryType Kind) const;
 
   llvm::DenseMap<char, ComparisonCategoryInfo> Data;
 };

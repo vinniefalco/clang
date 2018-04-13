@@ -4551,7 +4551,7 @@ public:
   /// \return the info for the specified kind if no error occurs, otherwise
   ///   nullptr.
   const ComparisonCategoryInfo *
-  BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
+  BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
                                      SourceLocation Loc);
 
   /// \brief Tests whether Ty is an instance of std::initializer_list and, if
