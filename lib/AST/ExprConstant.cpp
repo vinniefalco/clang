@@ -8584,8 +8584,8 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
       return false;
 
     assert(E->isComparisonOp() && "Invalid binary operator!");
-    auto GetCmpRes = [](APFloat::cmpResult CR) {
-      switch (CR) {
+    auto GetCmpRes = [&]() {
+      switch (LHS.compare(RHS)) {
       case APFloat::cmpEqual:
         return CCR::Equal;
       case APFloat::cmpLessThan:
@@ -8596,7 +8596,7 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
         return CCR::Unordered;
       }
     };
-    return Success(GetCmpRes(LHS.compare(RHS)), E);
+    return Success(GetCmpRes(), E);
   }
 
   if (LHSTy->isPointerType() && RHSTy->isPointerType()) {
@@ -8788,10 +8788,8 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     bool LHSOK = EvaluateInteger(E->getLHS(), LHS, Info);
     if (!LHSOK && !Info.noteFailure())
       return false;
-
     if (!EvaluateInteger(E->getRHS(), RHS, Info) || !LHSOK)
       return false;
-
     if (LHS < RHS)
       return Success(CCR::Less, E);
     if (LHS > RHS)
