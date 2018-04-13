@@ -920,21 +920,17 @@ static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
     }
   }();
 
-  if (ArgTy->isRealFloatingType()) {
+  if (ArgTy->isRealFloatingType())
     return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS, InstInfo.Name);
-  } else if (ArgTy->isIntegralOrEnumerationType() || ArgTy->isPointerType()) {
+
+  if (ArgTy->isIntegralOrEnumerationType() || ArgTy->isPointerType()) {
     auto Inst =
         ArgTy->hasSignedIntegerRepresentation() ? InstInfo.SCmp : InstInfo.UCmp;
     return Builder.CreateICmp(Inst, LHS, RHS, InstInfo.Name);
-  } else if (ArgTy->isAnyComplexType()) {
-    CGF.ErrorUnsupported(E, "aggregate binary expression with complex arguments");
-  } else if (ArgTy->isVectorType()) {
-    CGF.ErrorUnsupported(E, "aggregate binary expression with vector arguments");
-  } else {
-    CGF.ErrorUnsupported(E, "aggregate binary expression");
   }
-  // FIXME: Do something better than this if we've hit an unsupported expression.
-  return nullptr;
+
+  llvm_unreachable("unsupported aggregate binary expression should have "
+                   "already been handled");
 }
 
 void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
@@ -947,6 +943,18 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
       CGF.getContext().CompCategories.getInfoForType(E->getType());
 
   QualType ArgTy = E->getLHS()->getType();
+
+  // TODO: Handle comparing these types. For now just report and error and
+  // return.
+  if (ArgTy->isAnyComplexType())
+    return CGF.ErrorUnsupported(
+        E, "aggregate binary expression with complex arguments");
+  if (ArgTy->isVectorType())
+    return CGF.ErrorUnsupported(
+        E, "aggregate binary expression with vector arguments");
+  if (!ArgTy->isIntegralOrEnumerationType() && !ArgTy->isPointerType())
+    return CGF.ErrorUnsupported(E, "aggregate binary expression");
+
   Value *LHS = nullptr, *RHS = nullptr;
   switch (CGF.getEvaluationKind(ArgTy)) {
   case TEK_Scalar:
