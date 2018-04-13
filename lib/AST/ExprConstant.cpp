@@ -8689,8 +8689,8 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
         }
         // Inequalities and subtractions between unrelated pointers have
         // unspecified or undefined behavior.
-        if (!E->isEqualityOp())
-            return Error(E);
+        if (!E->isEqualityOp() && !E->isEqualityCmpOp())
+          return Error(E);
         // A constant address may compare equal to the address of a symbol.
         // The one exception is that address of an object cannot compare equal
         // to a null pointer constant.
@@ -8801,7 +8801,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       //   [...]
       // - Otherwise pointer comparisons are unspecified.
       if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
-          E->isRelationalOp()) {
+          (E->isRelationalOp() || E->isOrderedCmpOp())) {
         bool WasArrayIndex;
         unsigned Mismatch =
           FindDesignatorMismatch(getType(LHSValue.Base), LHSDesignator,
@@ -8847,7 +8847,8 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       // If there is a base and this is a relational operator, we can only
       // compare pointers within the object in question; otherwise, the result
       // depends on where the object is located in memory.
-      if (!LHSValue.Base.isNull() && E->isRelationalOp()) {
+      if (!LHSValue.Base.isNull() &&
+          (E->isRelationalOp() || E->isOrderedCmpOp())) {
         QualType BaseTy = getType(LHSValue.Base);
         if (BaseTy->isIncompleteType())
           return Error(E);
@@ -8878,7 +8879,8 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   }
 
   if (LHSTy->isMemberPointerType()) {
-    assert(E->isEqualityOp() && "unexpected member pointer operation");
+    assert((E->isEqualityOp() || E->isEqualityCmpOp()) &&
+           "unexpected member pointer operation");
     assert(RHSTy->isMemberPointerType() && "invalid comparison");
 
     MemberPtr LHSValue, RHSValue;
