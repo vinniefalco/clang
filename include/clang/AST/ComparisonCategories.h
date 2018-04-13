@@ -123,11 +123,11 @@ public:
   }
 
   const VarDecl *getEqualOrEquiv(const ASTContext &Ctx) const {
-    return getResultValue(makeWeakResult(Ctx, ComparisonCategoryResult::Equal));
+    return getResultValue(Ctx, makeWeakResult(ComparisonCategoryResult::Equal));
   }
   const VarDecl *getNonequalOrNonequiv(const ASTContext &Ctx) const {
-    return getResultValue(
-        makeWeakResult(Ctx, ComparisonCategoryResult::Nonequal));
+    return getResultValue(Ctx,
+        makeWeakResult(ComparisonCategoryResult::Nonequal));
   }
   const VarDecl *getLess(const ASTContext &Ctx) const {
     assert(isOrdered());
