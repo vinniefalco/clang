@@ -8803,7 +8803,6 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
 }
 
 bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
-
   auto OnSuccess = [&](ComparisonCategoryResult ResKind,
                        const BinaryOperator *E) {
     const ComparisonCategoryInfo &CmpInfo =
