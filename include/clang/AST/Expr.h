@@ -3167,8 +3167,6 @@ public:
   }
 
   void setCmpCategoryKind(ComparisonCategoryKind CCK) {
-    assert(getOpcode() == BO_Cmp &&
-           "non three-way comparison cannot have a comparison category kind");
     BinaryOperatorBits.CmpKind = static_cast<char>(CCK);
   }
   ComparisonCategoryKind getCmpCategoryKind() const {
