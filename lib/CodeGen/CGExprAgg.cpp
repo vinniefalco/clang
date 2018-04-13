@@ -982,22 +982,22 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
         EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
         EmitCmpRes(CmpInfo.getNonequalOrNonequiv()), "sel.eq");
   } else if (!CmpInfo.isPartial()) {
-    Value *SelectOne =
-        Builder.CreateSelect(EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()),
-                             EmitCmpRes(CmpInfo.getGreater()), "sel.lt");
-    Select = Builder.CreateSelect(EmitCmp(CK_Equal),
-                                  EmitCmpRes(CmpInfo.getEqualOrEquiv()),
-                                  SelectOne, "sel.eq");
+    Value *SelectOne = Builder.CreateSelect(
+        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()),
+        EmitCmpRes(CmpInfo.getGreater()), "sel.lt");
+    Select = Builder.CreateSelect(
+        EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
+        SelectOne, "sel.eq");
   } else {
     Value *SelectEq = Builder.CreateSelect(
         EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
         EmitCmpRes(CmpInfo.getUnordered()), "sel.eq");
-
-    Value *SelectGT = Builder.CreateSelect(EmitCmp(CK_Greater),
-                                           EmitCmpRes(CmpInfo.getGreater()),
-                                           SelectEq, "sel.gt");
+    Value *SelectGT = Builder.CreateSelect(
+        EmitCmp(CK_Greater), EmitCmpRes(CmpInfo.getGreater()),
+        SelectEq, "sel.gt");
     Select = Builder.CreateSelect(
-        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()), SelectGT, "sel.lt");
+        EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()),
+        SelectGT, "sel.lt");
   }
 
   return EmitFinalDestCopy(
