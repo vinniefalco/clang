@@ -671,8 +671,6 @@ void ASTStmtWriter::VisitBinaryOperator(BinaryOperator *E) {
   Record.push_back(E->getOpcode()); // FIXME: stable encoding
   Record.AddSourceLocation(E->getOperatorLoc());
   Record.push_back(E->getFPFeatures().getInt());
-  if (E->getOpcode() == BO_Cmp)
-    Record.push_back(static_cast<unsigned>(E->getCmpCategoryKind()));
   Code = serialization::EXPR_BINARY_OPERATOR;
 }
 

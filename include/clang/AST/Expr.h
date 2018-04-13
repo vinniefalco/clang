@@ -3009,25 +3009,28 @@ public:
   typedef BinaryOperatorKind Opcode;
 
 private:
+  unsigned Opc : 6;
+
+  // This is only meaningful for operations on floating point types and 0
+  // otherwise.
+  unsigned FPFeatures : 2;
   SourceLocation OpLoc;
 
   enum { LHS, RHS, END_EXPR };
   Stmt* SubExprs[END_EXPR];
 public:
+
   BinaryOperator(Expr *lhs, Expr *rhs, Opcode opc, QualType ResTy,
-                 ExprValueKind VK, ExprObjectKind OK, SourceLocation OpLoc,
-                 FPOptions FPFeatures)
-      : Expr(BinaryOperatorClass, ResTy, VK, OK,
-             lhs->isTypeDependent() || rhs->isTypeDependent(),
-             lhs->isValueDependent() || rhs->isValueDependent(),
-             (lhs->isInstantiationDependent() ||
-              rhs->isInstantiationDependent()),
-             (lhs->containsUnexpandedParameterPack() ||
-              rhs->containsUnexpandedParameterPack())),
-        OpLoc(OpLoc) {
-    BinaryOperatorBits.Opc = opc;
-    BinaryOperatorBits.FPFeatures = FPFeatures.getInt();
-    BinaryOperatorBits.CmpKind = 0;
+                 ExprValueKind VK, ExprObjectKind OK,
+                 SourceLocation opLoc, FPOptions FPFeatures)
+    : Expr(BinaryOperatorClass, ResTy, VK, OK,
+           lhs->isTypeDependent() || rhs->isTypeDependent(),
+           lhs->isValueDependent() || rhs->isValueDependent(),
+           (lhs->isInstantiationDependent() ||
+            rhs->isInstantiationDependent()),
+           (lhs->containsUnexpandedParameterPack() ||
+            rhs->containsUnexpandedParameterPack())),
+      Opc(opc), FPFeatures(FPFeatures.getInt()), OpLoc(opLoc) {
     SubExprs[LHS] = lhs;
     SubExprs[RHS] = rhs;
     assert(!isCompoundAssignmentOp() &&
@@ -3035,18 +3038,15 @@ public:
   }
 
   /// \brief Construct an empty binary operator.
-  explicit BinaryOperator(EmptyShell Empty) : Expr(BinaryOperatorClass, Empty) {
-    BinaryOperatorBits.Opc = BO_Comma;
-  }
+  explicit BinaryOperator(EmptyShell Empty)
+    : Expr(BinaryOperatorClass, Empty), Opc(BO_Comma) { }
 
   SourceLocation getExprLoc() const LLVM_READONLY { return OpLoc; }
   SourceLocation getOperatorLoc() const { return OpLoc; }
   void setOperatorLoc(SourceLocation L) { OpLoc = L; }
 
-  Opcode getOpcode() const {
-    return static_cast<Opcode>(BinaryOperatorBits.Opc);
-  }
-  void setOpcode(Opcode O) { BinaryOperatorBits.Opc = O; }
+  Opcode getOpcode() const { return static_cast<Opcode>(Opc); }
+  void setOpcode(Opcode O) { Opc = O; }
 
   Expr *getLHS() const { return cast<Expr>(SubExprs[LHS]); }
   void setLHS(Expr *E) { SubExprs[LHS] = E; }
@@ -3075,9 +3075,7 @@ public:
   static OverloadedOperatorKind getOverloadedOperator(Opcode Opc);
 
   /// predicates to categorize the respective opcodes.
-  bool isPtrMemOp() const {
-    return getOpcode() == BO_PtrMemD || getOpcode() == BO_PtrMemI;
-  }
+  bool isPtrMemOp() const { return Opc == BO_PtrMemD || Opc == BO_PtrMemI; }
   static bool isMultiplicativeOp(Opcode Opc) {
     return Opc >= BO_Mul && Opc <= BO_Rem;
   }
@@ -3098,17 +3096,6 @@ public:
 
   static bool isComparisonOp(Opcode Opc) { return Opc >= BO_Cmp && Opc<=BO_NE; }
   bool isComparisonOp() const { return isComparisonOp(getOpcode()); }
-
-  bool isEqualityCmpOp() const {
-    using CCK = ComparisonCategoryKind;
-    return getOpcode() == BO_Cmp &&
-           (getCmpCategoryKind() == CCK::WeakEquality ||
-            getCmpCategoryKind() == CCK::StrongEquality);
-  }
-
-  bool isOrderedCmpOp() const {
-    return getOpcode() == BO_Cmp && !isEqualityCmpOp();
-  }
 
   static Opcode negateComparisonOp(Opcode Opc) {
     switch (Opc) {
@@ -3166,13 +3153,6 @@ public:
     return isShiftAssignOp(getOpcode());
   }
 
-  void setCmpCategoryKind(ComparisonCategoryKind CCK) {
-    BinaryOperatorBits.CmpKind = static_cast<char>(CCK);
-  }
-  ComparisonCategoryKind getCmpCategoryKind() const {
-    return static_cast<ComparisonCategoryKind>(BinaryOperatorBits.CmpKind);
-  }
-
   // Return true if a binary operator using the specified opcode and operands
   // would match the 'p = (i8*)nullptr + n' idiom for casting a pointer-sized
   // integer to a pointer.
@@ -3194,43 +3174,34 @@ public:
 
   // Set the FP contractability status of this operator. Only meaningful for
   // operations on floating point types.
-  void setFPFeatures(FPOptions F) {
-    BinaryOperatorBits.FPFeatures = F.getInt();
-  }
+  void setFPFeatures(FPOptions F) { FPFeatures = F.getInt(); }
 
-  FPOptions getFPFeatures() const {
-    return FPOptions(BinaryOperatorBits.FPFeatures);
-  }
+  FPOptions getFPFeatures() const { return FPOptions(FPFeatures); }
 
   // Get the FP contractability status of this operator. Only meaningful for
   // operations on floating point types.
   bool isFPContractableWithinStatement() const {
-    return FPOptions(BinaryOperatorBits.FPFeatures)
-        .allowFPContractWithinStatement();
+    return FPOptions(FPFeatures).allowFPContractWithinStatement();
   }
 
 protected:
   BinaryOperator(Expr *lhs, Expr *rhs, Opcode opc, QualType ResTy,
-                 ExprValueKind VK, ExprObjectKind OK, SourceLocation opLoc,
-                 FPOptions FPFeatures, bool dead2)
-      : Expr(CompoundAssignOperatorClass, ResTy, VK, OK,
-             lhs->isTypeDependent() || rhs->isTypeDependent(),
-             lhs->isValueDependent() || rhs->isValueDependent(),
-             (lhs->isInstantiationDependent() ||
-              rhs->isInstantiationDependent()),
-             (lhs->containsUnexpandedParameterPack() ||
-              rhs->containsUnexpandedParameterPack())),
-        OpLoc(opLoc) {
-    BinaryOperatorBits.Opc = opc;
-    BinaryOperatorBits.FPFeatures = FPFeatures.getInt();
-    BinaryOperatorBits.CmpKind = 0;
+                 ExprValueKind VK, ExprObjectKind OK,
+                 SourceLocation opLoc, FPOptions FPFeatures, bool dead2)
+    : Expr(CompoundAssignOperatorClass, ResTy, VK, OK,
+           lhs->isTypeDependent() || rhs->isTypeDependent(),
+           lhs->isValueDependent() || rhs->isValueDependent(),
+           (lhs->isInstantiationDependent() ||
+            rhs->isInstantiationDependent()),
+           (lhs->containsUnexpandedParameterPack() ||
+            rhs->containsUnexpandedParameterPack())),
+      Opc(opc), FPFeatures(FPFeatures.getInt()), OpLoc(opLoc) {
     SubExprs[LHS] = lhs;
     SubExprs[RHS] = rhs;
   }
 
-  BinaryOperator(StmtClass SC, EmptyShell Empty) : Expr(SC, Empty) {
-    BinaryOperatorBits.Opc = BO_MulAssign;
-  }
+  BinaryOperator(StmtClass SC, EmptyShell Empty)
+    : Expr(SC, Empty), Opc(BO_MulAssign) { }
 };
 
 /// CompoundAssignOperator - For compound assignments (e.g. +=), we keep

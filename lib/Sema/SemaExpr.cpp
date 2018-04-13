@@ -12068,14 +12068,8 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
     if (ConvertHalfVec)
       return convertHalfVecBinOp(*this, LHS, RHS, Opc, ResultTy, VK, OK, false,
                                  OpLoc, FPFeatures);
-    BinaryOperator *Op = new (Context) BinaryOperator(
-        LHS.get(), RHS.get(), Opc, ResultTy, VK, OK, OpLoc, FPFeatures);
-    if (Opc == BO_Cmp && !ResultTy.isNull()) {
-      ComparisonCategoryKind Kind =
-          Context.CompCategories.getInfoForType(ResultTy).Kind;
-      Op->setCmpCategoryKind(Kind);
-    }
-    return Op;
+    return new (Context) BinaryOperator(LHS.get(), RHS.get(), Opc, ResultTy, VK,
+                                        OK, OpLoc, FPFeatures);
   }
 
   // Handle compound assignments.

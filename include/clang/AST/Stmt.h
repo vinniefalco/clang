@@ -14,7 +14,6 @@
 #ifndef LLVM_CLANG_AST_STMT_H
 #define LLVM_CLANG_AST_STMT_H
 
-#include "clang/AST/ComparisonCategories.h"
 #include "clang/AST/DeclGroup.h"
 #include "clang/AST/StmtIterator.h"
 #include "clang/Basic/CapturedStmt.h"
@@ -184,25 +183,6 @@ protected:
     unsigned IsType : 1; // true if operand is a type, false if an expression.
   };
 
-  class BinaryOperatorBitfields {
-    friend class BinaryOperator;
-
-    unsigned : NumExprBits;
-
-    unsigned Opc : 6;
-
-    // This is only meaningful for operations on floating point types and 0
-    // otherwise.
-    unsigned FPFeatures : 2;
-
-    // When Opc is BO_Cmp, this is set to the `ComparisonCategoryKind` it
-    // represents.
-    unsigned CmpKind : 3;
-    static_assert(static_cast<unsigned>(ComparisonCategoryKind::Last) == 4,
-                  "number of bits required to represent the comparison "
-                  "category kind is incorrect");
-  };
-
   class DeclRefExprBitfields {
     friend class ASTStmtReader; // deserialization
     friend class DeclRefExpr;
@@ -319,7 +299,6 @@ protected:
     CharacterLiteralBitfields CharacterLiteralBits;
     FloatingLiteralBitfields FloatingLiteralBits;
     UnaryExprOrTypeTraitExprBitfields UnaryExprOrTypeTraitExprBits;
-    BinaryOperatorBitfields BinaryOperatorBits;
     DeclRefExprBitfields DeclRefExprBits;
     CastExprBitfields CastExprBits;
     CallExprBitfields CallExprBits;

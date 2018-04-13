@@ -6235,32 +6235,7 @@ namespace {
     bool VisitCXXConstructExpr(const CXXConstructExpr *E, QualType T);
     bool VisitCXXStdInitializerListExpr(const CXXStdInitializerListExpr *E);
 
-    bool VisitBinCmp(const BinaryOperator *E) {
-      using CCR = ComparisonCategoryResult;
-      const ComparisonCategoryInfo &CmpInfo =
-          Info.Ctx.CompCategories.getInfo(E->getCmpCategoryKind());
-
-      // Build a new version of the binary operator which returns an integer
-      // representing the ComparisonCategoryResult. Then defer to
-      // IntExprEvaluator to evaluate it.
-      BinaryOperator NewOp(E->getLHS(), E->getRHS(), BO_Cmp, Info.Ctx.IntTy,
-                           VK_RValue, OK_Ordinary, E->getOperatorLoc(),
-                           E->getFPFeatures());
-      NewOp.setCmpCategoryKind(E->getCmpCategoryKind());
-
-      APSInt Result;
-      if (!EvaluateInteger(&NewOp, Result, Info))
-        return false;
-      CCR CmpRes = static_cast<CCR>(Result.getExtValue());
-
-      const DeclRefExpr *Value =
-          CmpInfo.getResultValue(CmpInfo.makeWeakResult(CmpRes));
-
-      APValue Res;
-      if (!EvaluateAsRValue(Info, Value, Res))
-        return false;
-      return Success(Res, E);
-    }
+    bool VisitBinCmp(const BinaryOperator *E);
   };
 }
 
@@ -7142,13 +7117,6 @@ public:
   }
   bool Success(uint64_t Value, const Expr *E) {
     return Success(Value, E, Result);
-  }
-
-  bool Success(ComparisonCategoryResult Res, const Expr *E) {
-    assert(isa<BinaryOperator>(E) &&
-           cast<BinaryOperator>(E)->getOpcode() == BO_Cmp &&
-           "operator<=> result reported for non-operator<=>?");
-    return Success(static_cast<uint64_t>(Res), E);
   }
 
   bool Success(CharUnits Size, const Expr *E) {
@@ -8531,18 +8499,78 @@ public:
 };
 }
 
-bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
-  using CCR = ComparisonCategoryResult;
-  bool IsThreeWayCmp = E->getOpcode() == BO_Cmp;
-  auto &Info = this->Info;
-  // We don't call noteFailure immediately because the assignment happens after
-  // we evaluate LHS and RHS.
-  if (!Info.keepEvaluatingAfterFailure() && E->isAssignmentOp())
-    return Error(E);
+namespace {
+class CmpEvalSuccess {
+  EvalInfo &Info;
+  APValue &Result;
 
-  DelayedNoteFailureRAII MaybeNoteFailureLater(Info, E->isAssignmentOp());
-  if (DataRecursiveIntBinOpEvaluator::shouldEnqueue(E))
-    return DataRecursiveIntBinOpEvaluator(*this, Result).Traverse(E);
+  static bool isBinCmp(const Expr *E) {
+    if (const auto *BE = dyn_cast<BinaryOperator>(E))
+      return BE->getOpcode() == BO_Cmp;
+    return false;
+  }
+
+public:
+  CmpEvalSuccess(EvalInfo &Info, APValue &Result)
+      : Info(Info), Result(Result) {}
+
+  bool operator()(ComparisonCategoryResult ResKind, const Expr *E) {
+    assert(isBinCmp(E) && "expected three-way comparison  expression");
+    using CCR = ComparisonCategoryResult;
+    const ComparisonCategoryInfo &CmpInfo =
+        Info.Ctx.CompCategories.getInfoForType(E->getType());
+
+    const DeclRefExpr *Value =
+        CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
+
+    if (!EvaluateAsRValue(Info, Value, Result))
+      return false;
+    return true;
+  }
+
+  bool operator()(uint64_t Value, const Expr *E) {
+    assert(!isBinCmp(E) && "unexpected three-way comparison expression");
+    assert(E->getType()->isIntegralOrEnumerationType() &&
+           "Invalid evaluation result.");
+    Result = APValue(Info.Ctx.MakeIntValue(Value, E->getType()));
+    return true;
+  }
+
+  bool operator()(const llvm::APInt &I, const Expr *E) {
+    assert(!isBinCmp(E) && "unexpected three-way comparison expression");
+    assert(E->getType()->isIntegralOrEnumerationType() &&
+           "Invalid evaluation result.");
+    assert(I.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
+           "Invalid evaluation result.");
+    Result = APValue(APSInt(I));
+    Result.getInt().setIsUnsigned(
+        E->getType()->isUnsignedIntegerOrEnumerationType());
+    return true;
+  }
+};
+
+} // namespace
+
+static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
+                                                  CmpEvalSuccess &Success,
+                                                  const BinaryOperator *E,
+                                                  bool &DidEvaluate) {
+  DidEvaluate = true;
+
+  auto Error = [&](const Expr *E) {
+    Info.FFDiag(E, diag::note_invalid_subexpr_in_const_expr);
+    return false;
+  };
+
+  using CCR = ComparisonCategoryResult;
+  bool IsThreeWayCmp = false, IsOrderedCmp = false, IsEqualityCmp = false;
+  if (E->getOpcode() == BO_Cmp) {
+    const ComparisonCategoryInfo &CmpInfo =
+        Info.Ctx.CompCategories.getInfoForType(E->getType());
+    IsThreeWayCmp = true;
+    IsOrderedCmp = CmpInfo.isOrdered();
+    IsEqualityCmp = CmpInfo.isEquality();
+  }
 
   QualType LHSTy = E->getLHS()->getType();
   QualType RHSTy = E->getRHS()->getType();
@@ -8581,27 +8609,28 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
         LHS.getComplexFloatImag().compare(RHS.getComplexFloatImag());
 
       if (E->getOpcode() == BO_EQ)
-        return Success((CR_r == APFloat::cmpEqual &&
-                        CR_i == APFloat::cmpEqual), E);
+        Success((CR_r == APFloat::cmpEqual && CR_i == APFloat::cmpEqual), E);
       else {
         assert(E->getOpcode() == BO_NE &&
                "Invalid complex comparison.");
-        return Success(((CR_r == APFloat::cmpGreaterThan ||
-                         CR_r == APFloat::cmpLessThan ||
-                         CR_r == APFloat::cmpUnordered) ||
-                        (CR_i == APFloat::cmpGreaterThan ||
-                         CR_i == APFloat::cmpLessThan ||
-                         CR_i == APFloat::cmpUnordered)), E);
+        Success(
+            ((CR_r == APFloat::cmpGreaterThan || CR_r == APFloat::cmpLessThan ||
+              CR_r == APFloat::cmpUnordered) ||
+             (CR_i == APFloat::cmpGreaterThan || CR_i == APFloat::cmpLessThan ||
+              CR_i == APFloat::cmpUnordered)),
+            E);
       }
     } else {
       if (E->getOpcode() == BO_EQ)
-        return Success((LHS.getComplexIntReal() == RHS.getComplexIntReal() &&
-                        LHS.getComplexIntImag() == RHS.getComplexIntImag()), E);
+        Success((LHS.getComplexIntReal() == RHS.getComplexIntReal() &&
+                 LHS.getComplexIntImag() == RHS.getComplexIntImag()),
+                E);
       else {
         assert(E->getOpcode() == BO_NE &&
                "Invalid compex comparison.");
-        return Success((LHS.getComplexIntReal() != RHS.getComplexIntReal() ||
-                        LHS.getComplexIntImag() != RHS.getComplexIntImag()), E);
+        Success((LHS.getComplexIntReal() != RHS.getComplexIntReal() ||
+                 LHS.getComplexIntImag() != RHS.getComplexIntImag()),
+                E);
       }
     }
   }
@@ -8623,20 +8652,19 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     default:
       llvm_unreachable("Invalid binary operator!");
     case BO_LT:
-      return Success(CR == APFloat::cmpLessThan, E);
+      Success(CR == APFloat::cmpLessThan, E);
     case BO_GT:
-      return Success(CR == APFloat::cmpGreaterThan, E);
+      Success(CR == APFloat::cmpGreaterThan, E);
     case BO_LE:
-      return Success(CR == APFloat::cmpLessThan || CR == APFloat::cmpEqual, E);
+      Success(CR == APFloat::cmpLessThan || CR == APFloat::cmpEqual, E);
     case BO_GE:
-      return Success(CR == APFloat::cmpGreaterThan || CR == APFloat::cmpEqual,
-                     E);
+      Success(CR == APFloat::cmpGreaterThan || CR == APFloat::cmpEqual, E);
     case BO_EQ:
-      return Success(CR == APFloat::cmpEqual, E);
+      Success(CR == APFloat::cmpEqual, E);
     case BO_NE:
-      return Success(CR == APFloat::cmpGreaterThan
-                     || CR == APFloat::cmpLessThan
-                     || CR == APFloat::cmpUnordered, E);
+      Success(CR == APFloat::cmpGreaterThan || CR == APFloat::cmpLessThan ||
+                  CR == APFloat::cmpUnordered,
+              E);
     case BO_Cmp: {
       auto GetCmpRes = [&]() {
         switch (CR) {
@@ -8650,7 +8678,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
           return CCR::Greater;
         }
       };
-      return Success(GetCmpRes(), E);
+      Success(GetCmpRes(), E);
     }
     }
   }
@@ -8685,11 +8713,11 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
           if (LHSAddrExpr->getLabel()->getDeclContext() !=
               RHSAddrExpr->getLabel()->getDeclContext())
             return Error(E);
-          return Success(APValue(LHSAddrExpr, RHSAddrExpr), E);
+          Success(APValue(LHSAddrExpr, RHSAddrExpr), E);
         }
         // Inequalities and subtractions between unrelated pointers have
         // unspecified or undefined behavior.
-        if (!E->isEqualityOp() && !E->isEqualityCmpOp())
+        if (!E->isEqualityOp() && !IsEqualityCmp)
           return Error(E);
         // A constant address may compare equal to the address of a symbol.
         // The one exception is that address of an object cannot compare equal
@@ -8721,9 +8749,9 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
             (LHSValue.Base && isZeroSized(RHSValue)))
           return Error(E);
         if (E->getOpcode() == BO_Cmp)
-          return Success(CCR::Nonequal, E);
+          Success(CCR::Nonequal, E);
         // Pointers with different bases cannot represent the same object.
-        return Success(E->getOpcode() == BO_NE, E);
+        Success(E->getOpcode() == BO_NE, E);
       }
 
       const CharUnits &LHSOffset = LHSValue.getLValueOffset();
@@ -8740,7 +8768,8 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
         if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
             !AreElementsOfSameArray(getType(LHSValue.Base),
                                     LHSDesignator, RHSDesignator))
-          CCEDiag(E, diag::note_constexpr_pointer_subtraction_not_same_array);
+          Info.CCEDiag(E,
+                       diag::note_constexpr_pointer_subtraction_not_same_array);
 
         QualType Type = E->getLHS()->getType();
         QualType ElementType = Type->getAs<PointerType>()->getPointeeType();
@@ -8778,7 +8807,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
         if (Result.extend(65) != TrueResult &&
             !HandleOverflow(Info, E, TrueResult, E->getType()))
           return false;
-        return Success(Result, E);
+        Success(Result, E);
       }
 
       // C++11 [expr.rel]p3:
@@ -8790,7 +8819,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       // We interpret this as applying to pointers to *cv* void.
       if (LHSTy->isVoidPointerType() && LHSOffset != RHSOffset &&
           E->isRelationalOp())
-        CCEDiag(E, diag::note_constexpr_void_comparison);
+        Info.CCEDiag(E, diag::note_constexpr_void_comparison);
 
       // C++11 [expr.rel]p2:
       // - If two pointers point to non-static data members of the same object,
@@ -8801,7 +8830,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       //   [...]
       // - Otherwise pointer comparisons are unspecified.
       if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
-          (E->isRelationalOp() || E->isOrderedCmpOp())) {
+          (E->isRelationalOp() || IsOrderedCmp)) {
         bool WasArrayIndex;
         unsigned Mismatch =
           FindDesignatorMismatch(getType(LHSValue.Base), LHSDesignator,
@@ -8817,20 +8846,22 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
           const FieldDecl *LF = getAsField(LHSDesignator.Entries[Mismatch]);
           const FieldDecl *RF = getAsField(RHSDesignator.Entries[Mismatch]);
           if (!LF && !RF)
-            CCEDiag(E, diag::note_constexpr_pointer_comparison_base_classes);
+            Info.CCEDiag(E,
+                         diag::note_constexpr_pointer_comparison_base_classes);
           else if (!LF)
-            CCEDiag(E, diag::note_constexpr_pointer_comparison_base_field)
-              << getAsBaseClass(LHSDesignator.Entries[Mismatch])
-              << RF->getParent() << RF;
+            Info.CCEDiag(E, diag::note_constexpr_pointer_comparison_base_field)
+                << getAsBaseClass(LHSDesignator.Entries[Mismatch])
+                << RF->getParent() << RF;
           else if (!RF)
-            CCEDiag(E, diag::note_constexpr_pointer_comparison_base_field)
-              << getAsBaseClass(RHSDesignator.Entries[Mismatch])
-              << LF->getParent() << LF;
+            Info.CCEDiag(E, diag::note_constexpr_pointer_comparison_base_field)
+                << getAsBaseClass(RHSDesignator.Entries[Mismatch])
+                << LF->getParent() << LF;
           else if (!LF->getParent()->isUnion() &&
                    LF->getAccess() != RF->getAccess())
-            CCEDiag(E, diag::note_constexpr_pointer_comparison_differing_access)
-              << LF << LF->getAccess() << RF << RF->getAccess()
-              << LF->getParent();
+            Info.CCEDiag(
+                E, diag::note_constexpr_pointer_comparison_differing_access)
+                << LF << LF->getAccess() << RF << RF->getAccess()
+                << LF->getParent();
         }
       }
 
@@ -8847,8 +8878,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       // If there is a base and this is a relational operator, we can only
       // compare pointers within the object in question; otherwise, the result
       // depends on where the object is located in memory.
-      if (!LHSValue.Base.isNull() &&
-          (E->isRelationalOp() || E->isOrderedCmpOp())) {
+      if (!LHSValue.Base.isNull() && (E->isRelationalOp() || IsOrderedCmp)) {
         QualType BaseTy = getType(LHSValue.Base);
         if (BaseTy->isIncompleteType())
           return Error(E);
@@ -8860,26 +8890,31 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
 
       switch (E->getOpcode()) {
       default: llvm_unreachable("missing comparison operator");
-      case BO_LT: return Success(CompareLHS < CompareRHS, E);
-      case BO_GT: return Success(CompareLHS > CompareRHS, E);
-      case BO_LE: return Success(CompareLHS <= CompareRHS, E);
-      case BO_GE: return Success(CompareLHS >= CompareRHS, E);
-      case BO_EQ: return Success(CompareLHS == CompareRHS, E);
-      case BO_NE: return Success(CompareLHS != CompareRHS, E);
+      case BO_LT:
+        Success(CompareLHS < CompareRHS, E);
+      case BO_GT:
+        Success(CompareLHS > CompareRHS, E);
+      case BO_LE:
+        Success(CompareLHS <= CompareRHS, E);
+      case BO_GE:
+        Success(CompareLHS >= CompareRHS, E);
+      case BO_EQ:
+        Success(CompareLHS == CompareRHS, E);
+      case BO_NE:
+        Success(CompareLHS != CompareRHS, E);
       case BO_Cmp: {
         if (CompareLHS < CompareRHS)
-          return Success(CCR::Less, E);
+          Success(CCR::Less, E);
         if (CompareLHS > CompareRHS)
-          return Success(CCR::Greater, E);
-        return Success(CCR::Equal, E);
-
+          Success(CCR::Greater, E);
+        Success(CCR::Equal, E);
       }
       }
     }
   }
 
   if (LHSTy->isMemberPointerType()) {
-    assert((E->isEqualityOp() || E->isEqualityCmpOp()) &&
+    assert((E->isEqualityOp() || IsEqualityCmp) &&
            "unexpected member pointer operation");
     assert(RHSTy->isMemberPointerType() && "invalid comparison");
 
@@ -8898,18 +8933,18 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     if (!LHSValue.getDecl() || !RHSValue.getDecl()) {
       bool Equal = !LHSValue.getDecl() && !RHSValue.getDecl();
       if (E->getOpcode() == BO_Cmp)
-        return Success(Equal ? CCR::Equal : CCR::Nonequal, E);
-      return Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
+        Success(Equal ? CCR::Equal : CCR::Nonequal, E);
+      Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
     }
 
     //   Otherwise if either is a pointer to a virtual member function, the
     //   result is unspecified.
     if (const CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(LHSValue.getDecl()))
       if (MD->isVirtual())
-        CCEDiag(E, diag::note_constexpr_compare_virtual_mem_ptr) << MD;
+        Info.CCEDiag(E, diag::note_constexpr_compare_virtual_mem_ptr) << MD;
     if (const CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(RHSValue.getDecl()))
       if (MD->isVirtual())
-        CCEDiag(E, diag::note_constexpr_compare_virtual_mem_ptr) << MD;
+        Info.CCEDiag(E, diag::note_constexpr_compare_virtual_mem_ptr) << MD;
 
     //   Otherwise they compare equal if and only if they would refer to the
     //   same member of the same most derived object or the same subobject if
@@ -8917,9 +8952,9 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     //   class type.
     bool Equal = LHSValue == RHSValue;
     if (E->getOpcode() == BO_Cmp)
-      return Success(Equal ? CCR::Equal : CCR::Nonequal, E);
+      Success(Equal ? CCR::Equal : CCR::Nonequal, E);
 
-    return Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
+    Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
   }
 
   if (LHSTy->isNullPtrType()) {
@@ -8930,8 +8965,8 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     // false otherwise.
     BinaryOperator::Opcode Opcode = E->getOpcode();
     if (Opcode == BO_Cmp)
-      return Success(CCR::Equal, E);
-    return Success(Opcode == BO_EQ || Opcode == BO_LE || Opcode == BO_GE, E);
+      Success(CCR::Equal, E);
+    Success(Opcode == BO_EQ || Opcode == BO_LE || Opcode == BO_GE, E);
   }
 
   if (IsThreeWayCmp && LHSTy->isIntegralOrEnumerationType() &&
@@ -8945,17 +8980,46 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       return false;
 
     if (LHS < RHS)
-      return Success(CCR::Less, E);
+      Success(CCR::Less, E);
     if (LHS > RHS)
-      return Success(CCR::Greater, E);
-    return Success(CCR::Equal, E);
+      Success(CCR::Greater, E);
+    Success(CCR::Equal, E);
   }
 
   assert(!IsThreeWayCmp && "case not handled for operator<=>");
-  assert((!LHSTy->isIntegralOrEnumerationType() ||
-          !RHSTy->isIntegralOrEnumerationType()) &&
+
+  return (DidEvaluate = false);
+}
+
+bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
+  CmpEvalSuccess CmpSuccess(Info, Result);
+  bool DidEvaluate = false;
+  bool Res =
+      EvaluateIntOrCmpBuiltinBinaryOperator(Info, CmpSuccess, E, DidEvaluate);
+  assert(DidEvaluate && "operator<=> should have been evaluated to a result");
+  return Res;
+}
+
+bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
+  // We don't call noteFailure immediately because the assignment happens after
+  // we evaluate LHS and RHS.
+  if (!Info.keepEvaluatingAfterFailure() && E->isAssignmentOp())
+    return Error(E);
+
+  DelayedNoteFailureRAII MaybeNoteFailureLater(Info, E->isAssignmentOp());
+  if (DataRecursiveIntBinOpEvaluator::shouldEnqueue(E))
+    return DataRecursiveIntBinOpEvaluator(*this, Result).Traverse(E);
+
+  CmpEvalSuccess CmpSuccess(Info, Result);
+  bool DidEvaluate = false;
+  bool Res =
+      EvaluateIntOrCmpBuiltinBinaryOperator(Info, CmpSuccess, E, DidEvaluate);
+  if (DidEvaluate)
+    return Res;
+
+  assert((!E->getLHS()->getType()->isIntegralOrEnumerationType() ||
+          !E->getRHS()->getType()->isIntegralOrEnumerationType()) &&
          "DataRecursiveIntBinOpEvaluator should have handled integral types");
-  // We can't continue from here for non-integral types.
   return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
 }
 
