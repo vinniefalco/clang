@@ -8841,8 +8841,8 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
         return Success(IsEqual == (Op == BO_EQ), E);
       case BO_LT: return Success(IsLess, E);
       case BO_GT: return Success(IsGreater, E);
-      case BO_LE: return Success(IsLess || IsEqual, E);
-      case BO_GE: return Success(IsGreater || IsEqual, E);
+      case BO_LE: return Success(IsEqual || IsLess, E);
+      case BO_GE: return Success(IsEqual || IsGreater, E);
       }
     };
     return EvaluateComparisonBinaryOperator(Info, E, OnSuccess, [&]() {
