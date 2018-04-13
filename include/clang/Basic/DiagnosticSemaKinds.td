@@ -9390,6 +9390,4 @@ def err_std_compare_type_missing_member : Error<
 def err_std_compare_type_not_supported : Error<
   "standard library implementation of comparison category '%1' is not supported; "
    "failed to build reference to member %0">;
-def note_spaceship_operand_not_cce : Note<
-  "argument is not a constant expression">;
 } // end of sema component.

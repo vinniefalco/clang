@@ -9776,16 +9776,11 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
   }
   S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 0 << FromType << ToType;
-  // It's not a constant expression. Produce an appropriate diagnostic.
-  if (Notes.size() >= 1 &&
-      Notes[0].second.getDiagID() == diag::note_invalid_subexpr_in_const_expr)
-    S.Diag(Notes[0].first, diag::note_spaceship_operand_not_cce);
-  else {
-    S.Diag(E->getLocStart(), diag::note_spaceship_operand_not_cce);
-    // FIXME: Re-enable these notes?
-    // for (unsigned I = 0; I < Notes.size(); ++I)
-    //  S.Diag(Notes[I].first, Notes[I].second);
-  }
+
+  // TODO: It's not a constant expression. If the user intended it to be a
+  // constant expression, can we produce notes to help them figure out why it
+  // isn't?
+
   return true;
 }
 
