@@ -3780,10 +3780,14 @@ enum EvalStmtResult {
 };
 }
 
-static bool EvaluateVarDecl(EvalInfo &Info, const VarDecl *VD) {
+static bool EvaluateVarDecl(EvalInfo &Info, const VarDecl *VD,
+                            APValue *Dest = nullptr) {
   // We don't need to evaluate the initializer for a static local.
   if (!VD->hasLocalStorage())
     return true;
+
+  if (Dest)
+    *Dest = APValue();
 
   LValue Result;
   APValue &Val = createTemporary(VD, true, Result, *Info.CurrentCall);
@@ -3805,7 +3809,8 @@ static bool EvaluateVarDecl(EvalInfo &Info, const VarDecl *VD) {
     Val = APValue();
     return false;
   }
-
+  if (Dest)
+    *Dest = Val;
   return true;
 }
 
@@ -8800,9 +8805,9 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
                        const BinaryOperator *E) {
     const ComparisonCategoryInfo &CmpInfo =
         Info.Ctx.CompCategories.getInfoForType(E->getType());
-    const DeclRefExpr *Value =
+    const VarDecl *Value =
         CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
-    return EvaluateAsRValue(Info, Value, Result);
+    return EvaluateVarDecl(Info, Value, &Result);
   };
   return EvaluateComparisonBinaryOperator(Info, E, OnSuccess, []() -> bool {
     llvm_unreachable("operator<=> should have been evaluated to a result");
