@@ -9938,8 +9938,8 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // C++2a [expr.spaceship]p8: If the composite pointer type is an object
     // pointer type, p <=> q is of type std::strong_ordering.
     if (CompositeTy->isPointerType() &&
-            CompositeTy->getPointeeType()->isObjectType() ||
-        CompositeTy->getPointeeType()->isVoidType())
+        (CompositeTy->getPointeeType()->isObjectType() ||
+         CompositeTy->getPointeeType()->isVoidType()))
       return buildResultTy(ComparisonCategoryType::StrongOrdering);
 
     // C++2a [expr.spaceship]p9: Otherwise, the program is ill-formed.

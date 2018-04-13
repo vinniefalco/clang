@@ -180,11 +180,10 @@ void test7(unsigned long other) {
   (void)((unsigned short)other <=> (unsigned char)(0xff));
 }
 
-// test void pointer diagnostics
 void test8(void *vp, const void *cvp, int *ip) {
-  (void)(vp <=> cvp); // expected-error {{three-way comparison with void pointer operand types ('void *' and 'const void *')}}
-  (void)(vp <=> ip);  // expected-error {{three-way comparison with void pointer operand type ('void *' and 'int *')}}
-  (void)(ip <=> cvp); // expected-error {{three-way comparison with void pointer operand type ('int *' and 'const void *')}}
+  (void)(vp <=> cvp); // OK, void* comparisons are allowed.
+  (void)(vp <=> ip);
+  (void)(ip <=> cvp);
 }
 
 void test9(long double ld, double d, float f, int i, long long ll) {
