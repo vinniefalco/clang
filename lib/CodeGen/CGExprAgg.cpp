@@ -933,6 +933,8 @@ static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
   } else {
     CGF.ErrorUnsupported(E, "aggregate binary expression");
   }
+  // FIXME: Do something better than this if we've hit an unsupported expression.
+  return nullptr;
 }
 
 void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
