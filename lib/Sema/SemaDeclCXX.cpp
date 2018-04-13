@@ -8964,8 +8964,8 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
 
   // We've successfully built the required types and expressions. Update
   // the cache and return the newly cached value.
-  Context.CompCategories.Data.try_emplace((char)Kind, std::move(Info));
-  return &Context.CompCategories.getInfo(Kind);
+  return &Context.CompCategories.Data.try_emplace((char)Kind, std::move(Info))
+              .first->second;
 }
 
 /// \brief Retrieve the special "std" namespace, which may require us to

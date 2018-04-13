@@ -9388,6 +9388,6 @@ def err_spaceship_comparison_of_invalid_comp_type : Error<
 def err_std_compare_type_missing_member : Error<
   "%0 is missing member named '%1'">;
 def err_std_compare_type_not_supported : Error<
-  "standard library implementation of comparison category '%1' is not supported; "
-   "failed to build reference to member %0">;
+  "standard library implementation of comparison category %0 is not supported; "
+   "failed to build reference to member '%1'">;
 } // end of sema component.
