@@ -8503,11 +8503,10 @@ template <class SuccessCB, class AfterCB>
 static bool
 EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
                                  SuccessCB &&Success, AfterCB &&DoAfter) {
-
+  assert(E->isComparisonOp() && "expected comparison operator");
   assert((E->getOpcode() == BO_Cmp ||
           E->getType()->isIntegralOrEnumerationType()) &&
          "unsupported binary expression evaluation");
-  assert(E->isComparisonOp() && "expected comparison operator");
   auto Error = [&](const Expr *E) {
     Info.FFDiag(E, diag::note_invalid_subexpr_in_const_expr);
     return false;
@@ -8573,7 +8572,6 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
         LHS.getComplexFloatReal().compare(RHS.getComplexFloatReal());
       APFloat::cmpResult CR_i =
         LHS.getComplexFloatImag().compare(RHS.getComplexFloatImag());
-
       bool IsEqual = CR_r == APFloat::cmpEqual && CR_i == APFloat::cmpEqual;
       return Success(IsEqual ? CCR::Equal : CCR::Nonequal, E);
     } else {
