@@ -19,27 +19,35 @@
 
 using namespace clang;
 
-Optional<ComparisonCategoryKind>
+const ComparisonCategoryInfo *
+ComparisonCategories::getInfoUnsafe(ComparisonCategoryKind Kind) const {
+  auto It = Data.find(static_cast<char>(Kind));
+  if (It == Data.end())
+    return nullptr;
+  return It->second;
+}
+
+const ComparisonCategoryKind *
 ComparisonCategories::getCategoryForType(QualType Ty) const {
   assert(!Ty.isNull() && "type must be non-null");
   if (const auto *RD = Ty->getAsCXXRecordDecl()) {
     const auto *CanonRD = RD->getCanonicalDecl();
     for (auto &KV : Data) {
-      assert(KV.second != nullptr && "have category entry but no data?");
-      const ComparisonCategoryInfo &Info = *KV.second;
+      const ComparisonCategoryInfo &Info = KV.second;
       if (CanonRD == Info.CCDecl->getCanonicalDecl())
-        return Info.Kind;
+        return &Info.Kind;
     }
   }
-  return None;
+  return nullptr;
 }
 
 const ComparisonCategoryInfo &
 ComparisonCategories::getInfoForType(QualType Ty) const {
-  Optional<ComparisonCategoryKind> OptKind = getCategoryForType(Ty);
-  assert(OptKind &&
-         "return type for operator<=> is not a comparison category type");
-  return getInfo(OptKind.getValue());
+  const ComparisonCategoryKind *Kind = getCategoryForType(Ty);
+  assert(Kind &&
+         "return type for operator<=> is not a comparison category type or the "
+         "specified comparison category kind has not been built yet");
+  return getInfo(*Kind);
 }
 
 StringRef ComparisonCategories::getCategoryString(ComparisonCategoryKind Kind) {

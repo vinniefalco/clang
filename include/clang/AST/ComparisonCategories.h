@@ -16,7 +16,6 @@
 #define LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Optional.h"
 #include "clang/Basic/LLVM.h"
 #include <array>
 #include <cassert>
@@ -161,6 +160,9 @@ struct ComparisonCategories {
 
   /// \brief Return the comparison category decl for the category
   ///   specified by 'Kind'.
+  ///
+  /// Note: The specified comparison category kind must have already been built
+  ///   by Sema.
   const RecordDecl *getDecl(ComparisonCategoryKind Kind) const {
     return getInfo(Kind).CCDecl;
   }
@@ -173,20 +175,16 @@ struct ComparisonCategories {
 
   /// \brief Return the comparison category kind corresponding to the specified
   ///   type. 'Ty' is expected to refer to the type of one of the comparison
-  ///   category decls; if it doesn't no value is returned.
-  ///
-  /// Note: The comparison category type must have already been built by Sema.
-  Optional<ComparisonCategoryKind> getCategoryForType(QualType Ty) const;
+  ///   category decls; if it doesn't nullptr is returned.
+  const ComparisonCategoryKind *getCategoryForType(QualType Ty) const;
 
 public:
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind', or nullptr if it isn't available.
   const ComparisonCategoryInfo *
-  getInfoUnsafe(ComparisonCategoryKind Kind) const {
-    return Data.lookup(static_cast<char>(Kind));
-  }
+  getInfoUnsafe(ComparisonCategoryKind Kind) const;
 
-  llvm::DenseMap<char, ComparisonCategoryInfo *> Data;
+  llvm::DenseMap<char, ComparisonCategoryInfo> Data;
 };
 
 } // namespace clang
