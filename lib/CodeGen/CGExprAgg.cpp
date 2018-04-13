@@ -955,7 +955,7 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
       !ArgTy->isPointerType() && !ArgTy->isMemberPointerType())
     return CGF.ErrorUnsupported(E, "aggregate binary expression");
 
-  Value *LHS = nullptr, *RHS = nullptr;
+  Value *LHS, *RHS;
   switch (CGF.getEvaluationKind(ArgTy)) {
   case TEK_Scalar:
     LHS = CGF.EmitScalarExpr(E->getLHS());
@@ -966,9 +966,9 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
     RHS = CGF.EmitAnyExpr(E->getRHS()).getAggregatePointer();
     break;
   case TEK_Complex:
-    CGF.ErrorUnsupported(E, "aggregate binary expression with complex arguments");
+    llvm_unreachable(
+        "unsupported complex expressions should have already been handled");
   }
-  assert(LHS && RHS);
 
   auto EmitCmpRes = [&](const DeclRefExpr *DRE) {
     return CGF.EmitLValue(DRE).getPointer();

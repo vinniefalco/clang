@@ -8499,76 +8499,15 @@ public:
 };
 }
 
-namespace {
-class CmpEvalSuccess {
-  EvalInfo &Info;
-  APValue &Result;
-
-  static bool isBinCmp(const Expr *E) {
-    if (const auto *BE = dyn_cast<BinaryOperator>(E))
-      return BE->getOpcode() == BO_Cmp;
-    return false;
-  }
-
-public:
-  CmpEvalSuccess(EvalInfo &Info, APValue &Result)
-      : Info(Info), Result(Result) {}
-
-  bool operator()(ComparisonCategoryResult ResKind, const Expr *E) {
-    assert(isBinCmp(E) && "expected three-way comparison  expression");
-    const ComparisonCategoryInfo &CmpInfo =
-        Info.Ctx.CompCategories.getInfoForType(E->getType());
-
-    const DeclRefExpr *Value =
-        CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
-
-    if (!EvaluateAsRValue(Info, Value, Result))
-      return false;
-    return true;
-  }
-
-  bool operator()(uint64_t Value, const Expr *E) {
-    assert(!isBinCmp(E) && "unexpected three-way comparison expression");
-    assert(E->getType()->isIntegralOrEnumerationType() &&
-           "Invalid evaluation result.");
-    Result = APValue(Info.Ctx.MakeIntValue(Value, E->getType()));
-    return true;
-  }
-
-  bool operator()(const llvm::APInt &I, const Expr *E) {
-    assert(!isBinCmp(E) && "unexpected three-way comparison expression");
-    assert(E->getType()->isIntegralOrEnumerationType() &&
-           "Invalid evaluation result.");
-    assert(I.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
-           "Invalid evaluation result.");
-    Result = APValue(APSInt(I));
-    Result.getInt().setIsUnsigned(
-        E->getType()->isUnsignedIntegerOrEnumerationType());
-    return true;
-  }
-
-  bool operator()(const APValue &V, const Expr *E) {
-    assert(!isBinCmp(E) && "unexpected three-way comparison expression");
-    if (V.isLValue() || V.isAddrLabelDiff()) {
-      Result = V;
-      return true;
-    }
-    return (*this)(V.getInt(), E);
-  }
-};
-
-} // namespace
-
-template <class AfterCB>
-static bool EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, APValue &Result,
-                                           const BinaryOperator *E,
-                                           AfterCB &&DoAfter) {
+template <class SuccessCB, class AfterCB>
+static bool
+EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
+                               SuccessCB &&Success, AfterCB &&DoAfter) {
 
   assert((E->getOpcode() == BO_Cmp ||
           E->getType()->isIntegralOrEnumerationType()) &&
          "unsupported binary expression evaluation");
-
-  CmpEvalSuccess Success(Info, Result);
+  assert(E->isComparisonOp() && "expected comparison operator");
   auto Error = [&](const Expr *E) {
     Info.FFDiag(E, diag::note_invalid_subexpr_in_const_expr);
     return false;
@@ -8621,28 +8560,13 @@ static bool EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, APValue &Result,
       APFloat::cmpResult CR_i =
         LHS.getComplexFloatImag().compare(RHS.getComplexFloatImag());
 
-      if (E->getOpcode() == BO_EQ)
-        return Success((CR_r == APFloat::cmpEqual &&
-                        CR_i == APFloat::cmpEqual), E);
-      else {
-        assert(E->getOpcode() == BO_NE &&
-               "Invalid complex comparison.");
-        return Success(
-            ((CR_r == APFloat::cmpGreaterThan || CR_r == APFloat::cmpLessThan ||
-              CR_r == APFloat::cmpUnordered) ||
-             (CR_i == APFloat::cmpGreaterThan || CR_i == APFloat::cmpLessThan ||
-              CR_i == APFloat::cmpUnordered)), E);
-      }
+      bool IsEqual = CR_r == APFloat::cmpEqual && CR_i == APFloat::cmpEqual;
+      return Success(IsEqual ? CCR::Equal : CCR::Nonequal, E);
     } else {
-      if (E->getOpcode() == BO_EQ)
-        return Success((LHS.getComplexIntReal() == RHS.getComplexIntReal() &&
-                        LHS.getComplexIntImag() == RHS.getComplexIntImag()), E);
-      else {
-        assert(E->getOpcode() == BO_NE &&
-               "Invalid compex comparison.");
-        return Success((LHS.getComplexIntReal() != RHS.getComplexIntReal() ||
-                        LHS.getComplexIntImag() != RHS.getComplexIntImag()), E);
-      }
+      assert(E->isEqualityOp() && "invalid complex comparison");
+      bool IsEqual = LHS.getComplexIntReal() == RHS.getComplexIntReal() &&
+                     LHS.getComplexIntImag() == RHS.getComplexIntImag();
+      return Success(IsEqual ? CCR::Equal : CCR::Nonequal, E);
     }
   }
 
@@ -8659,271 +8583,158 @@ static bool EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, APValue &Result,
 
     APFloat::cmpResult CR = LHS.compare(RHS);
 
-    switch (E->getOpcode()) {
-    default:
-      llvm_unreachable("Invalid binary operator!");
-    case BO_LT:
-      return Success(CR == APFloat::cmpLessThan, E);
-    case BO_GT:
-      return Success(CR == APFloat::cmpGreaterThan, E);
-    case BO_LE:
-      return Success(CR == APFloat::cmpLessThan || CR == APFloat::cmpEqual, E);
-    case BO_GE:
-      return Success(CR == APFloat::cmpGreaterThan || CR == APFloat::cmpEqual,
-                     E);
-    case BO_EQ:
-      return Success(CR == APFloat::cmpEqual, E);
-    case BO_NE:
-      return Success(CR == APFloat::cmpGreaterThan ||
-                         CR == APFloat::cmpLessThan ||
-                         CR == APFloat::cmpUnordered,
-                     E);
-    case BO_Cmp: {
-      auto GetCmpRes = [&]() {
-        switch (CR) {
-        case APFloat::cmpEqual:
-          return CCR::Equal;
-        case APFloat::cmpUnordered:
-          return CCR::Unordered;
-        case APFloat::cmpLessThan:
-          return CCR::Less;
-        case APFloat::cmpGreaterThan:
-          return CCR::Greater;
-        }
-      };
-      return Success(GetCmpRes(), E);
-    }
-    }
+    assert(E->isRelationalOp() && "Invalid binary operator!");
+    auto GetCmpRes = [&]() {
+      switch (CR) {
+      case APFloat::cmpEqual:
+        return CCR::Equal;
+      case APFloat::cmpUnordered:
+        return CCR::Unordered;
+      case APFloat::cmpLessThan:
+        return CCR::Less;
+      case APFloat::cmpGreaterThan:
+        return CCR::Greater;
+      }
+    };
+    return Success(GetCmpRes(), E);
   }
 
   if (LHSTy->isPointerType() && RHSTy->isPointerType()) {
-    if (E->getOpcode() == BO_Sub || E->isComparisonOp()) {
-      LValue LHSValue, RHSValue;
+    LValue LHSValue, RHSValue;
 
-      bool LHSOK = EvaluatePointer(E->getLHS(), LHSValue, Info);
-      if (!LHSOK && !Info.noteFailure())
-        return false;
+    bool LHSOK = EvaluatePointer(E->getLHS(), LHSValue, Info);
+    if (!LHSOK && !Info.noteFailure())
+      return false;
 
-      if (!EvaluatePointer(E->getRHS(), RHSValue, Info) || !LHSOK)
-        return false;
+    if (!EvaluatePointer(E->getRHS(), RHSValue, Info) || !LHSOK)
+      return false;
 
-      // Reject differing bases from the normal codepath; we special-case
-      // comparisons to null.
-      if (!HasSameBase(LHSValue, RHSValue)) {
-        if (E->getOpcode() == BO_Sub) {
-          // Handle &&A - &&B.
-          if (!LHSValue.Offset.isZero() || !RHSValue.Offset.isZero())
-            return Error(E);
-          const Expr *LHSExpr = LHSValue.Base.dyn_cast<const Expr*>();
-          const Expr *RHSExpr = RHSValue.Base.dyn_cast<const Expr*>();
-          if (!LHSExpr || !RHSExpr)
-            return Error(E);
-          const AddrLabelExpr *LHSAddrExpr = dyn_cast<AddrLabelExpr>(LHSExpr);
-          const AddrLabelExpr *RHSAddrExpr = dyn_cast<AddrLabelExpr>(RHSExpr);
-          if (!LHSAddrExpr || !RHSAddrExpr)
-            return Error(E);
-          // Make sure both labels come from the same function.
-          if (LHSAddrExpr->getLabel()->getDeclContext() !=
-              RHSAddrExpr->getLabel()->getDeclContext())
-            return Error(E);
-          return Success(APValue(LHSAddrExpr, RHSAddrExpr), E);
-        }
-        // Inequalities and subtractions between unrelated pointers have
-        // unspecified or undefined behavior.
-        if (!E->isEqualityOp() && !IsEqualityCmp)
-          return Error(E);
-        // A constant address may compare equal to the address of a symbol.
-        // The one exception is that address of an object cannot compare equal
-        // to a null pointer constant.
-        if ((!LHSValue.Base && !LHSValue.Offset.isZero()) ||
-            (!RHSValue.Base && !RHSValue.Offset.isZero()))
-          return Error(E);
-        // It's implementation-defined whether distinct literals will have
-        // distinct addresses. In clang, the result of such a comparison is
-        // unspecified, so it is not a constant expression. However, we do know
-        // that the address of a literal will be non-null.
-        if ((IsLiteralLValue(LHSValue) || IsLiteralLValue(RHSValue)) &&
-            LHSValue.Base && RHSValue.Base)
-          return Error(E);
-        // We can't tell whether weak symbols will end up pointing to the same
-        // object.
-        if (IsWeakLValue(LHSValue) || IsWeakLValue(RHSValue))
-          return Error(E);
-        // We can't compare the address of the start of one object with the
-        // past-the-end address of another object, per C++ DR1652.
-        if ((LHSValue.Base && LHSValue.Offset.isZero() &&
-             isOnePastTheEndOfCompleteObject(Info.Ctx, RHSValue)) ||
-            (RHSValue.Base && RHSValue.Offset.isZero() &&
-             isOnePastTheEndOfCompleteObject(Info.Ctx, LHSValue)))
-          return Error(E);
-        // We can't tell whether an object is at the same address as another
-        // zero sized object.
-        if ((RHSValue.Base && isZeroSized(LHSValue)) ||
-            (LHSValue.Base && isZeroSized(RHSValue)))
-          return Error(E);
-        if (E->getOpcode() == BO_Cmp)
-          return Success(CCR::Nonequal, E);
-        // Pointers with different bases cannot represent the same object.
-        return Success(E->getOpcode() == BO_NE, E);
-      }
+    // Reject differing bases from the normal codepath; we special-case
+    // comparisons to null.
+    if (!HasSameBase(LHSValue, RHSValue)) {
+      // Inequalities and subtractions between unrelated pointers have
+      // unspecified or undefined behavior.
+      if (!E->isEqualityOp() && !IsEqualityCmp)
+        return Error(E);
+      // A constant address may compare equal to the address of a symbol.
+      // The one exception is that address of an object cannot compare equal
+      // to a null pointer constant.
+      if ((!LHSValue.Base && !LHSValue.Offset.isZero()) ||
+          (!RHSValue.Base && !RHSValue.Offset.isZero()))
+        return Error(E);
+      // It's implementation-defined whether distinct literals will have
+      // distinct addresses. In clang, the result of such a comparison is
+      // unspecified, so it is not a constant expression. However, we do know
+      // that the address of a literal will be non-null.
+      if ((IsLiteralLValue(LHSValue) || IsLiteralLValue(RHSValue)) &&
+          LHSValue.Base && RHSValue.Base)
+        return Error(E);
+      // We can't tell whether weak symbols will end up pointing to the same
+      // object.
+      if (IsWeakLValue(LHSValue) || IsWeakLValue(RHSValue))
+        return Error(E);
+      // We can't compare the address of the start of one object with the
+      // past-the-end address of another object, per C++ DR1652.
+      if ((LHSValue.Base && LHSValue.Offset.isZero() &&
+           isOnePastTheEndOfCompleteObject(Info.Ctx, RHSValue)) ||
+          (RHSValue.Base && RHSValue.Offset.isZero() &&
+           isOnePastTheEndOfCompleteObject(Info.Ctx, LHSValue)))
+        return Error(E);
+      // We can't tell whether an object is at the same address as another
+      // zero sized object.
+      if ((RHSValue.Base && isZeroSized(LHSValue)) ||
+          (LHSValue.Base && isZeroSized(RHSValue)))
+        return Error(E);
+      return Success(CCR::Nonequal, E);
+    }
 
-      const CharUnits &LHSOffset = LHSValue.getLValueOffset();
-      const CharUnits &RHSOffset = RHSValue.getLValueOffset();
+    const CharUnits &LHSOffset = LHSValue.getLValueOffset();
+    const CharUnits &RHSOffset = RHSValue.getLValueOffset();
 
-      SubobjectDesignator &LHSDesignator = LHSValue.getLValueDesignator();
-      SubobjectDesignator &RHSDesignator = RHSValue.getLValueDesignator();
+    SubobjectDesignator &LHSDesignator = LHSValue.getLValueDesignator();
+    SubobjectDesignator &RHSDesignator = RHSValue.getLValueDesignator();
 
-      if (E->getOpcode() == BO_Sub) {
-        // C++11 [expr.add]p6:
-        //   Unless both pointers point to elements of the same array object, or
-        //   one past the last element of the array object, the behavior is
-        //   undefined.
-        if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
-            !AreElementsOfSameArray(getType(LHSValue.Base),
-                                    LHSDesignator, RHSDesignator))
+    // C++11 [expr.rel]p3:
+    //   Pointers to void (after pointer conversions) can be compared, with a
+    //   result defined as follows: If both pointers represent the same
+    //   address or are both the null pointer value, the result is true if the
+    //   operator is <= or >= and false otherwise; otherwise the result is
+    //   unspecified.
+    // We interpret this as applying to pointers to *cv* void.
+    if (LHSTy->isVoidPointerType() && LHSOffset != RHSOffset &&
+        E->isRelationalOp())
+      Info.CCEDiag(E, diag::note_constexpr_void_comparison);
+
+    // C++11 [expr.rel]p2:
+    // - If two pointers point to non-static data members of the same object,
+    //   or to subobjects or array elements fo such members, recursively, the
+    //   pointer to the later declared member compares greater provided the
+    //   two members have the same access control and provided their class is
+    //   not a union.
+    //   [...]
+    // - Otherwise pointer comparisons are unspecified.
+    if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
+        (E->isRelationalOp() || IsOrderedCmp)) {
+      bool WasArrayIndex;
+      unsigned Mismatch = FindDesignatorMismatch(
+          getType(LHSValue.Base), LHSDesignator, RHSDesignator, WasArrayIndex);
+      // At the point where the designators diverge, the comparison has a
+      // specified value if:
+      //  - we are comparing array indices
+      //  - we are comparing fields of a union, or fields with the same access
+      // Otherwise, the result is unspecified and thus the comparison is not a
+      // constant expression.
+      if (!WasArrayIndex && Mismatch < LHSDesignator.Entries.size() &&
+          Mismatch < RHSDesignator.Entries.size()) {
+        const FieldDecl *LF = getAsField(LHSDesignator.Entries[Mismatch]);
+        const FieldDecl *RF = getAsField(RHSDesignator.Entries[Mismatch]);
+        if (!LF && !RF)
+          Info.CCEDiag(E, diag::note_constexpr_pointer_comparison_base_classes);
+        else if (!LF)
+          Info.CCEDiag(E, diag::note_constexpr_pointer_comparison_base_field)
+              << getAsBaseClass(LHSDesignator.Entries[Mismatch])
+              << RF->getParent() << RF;
+        else if (!RF)
+          Info.CCEDiag(E, diag::note_constexpr_pointer_comparison_base_field)
+              << getAsBaseClass(RHSDesignator.Entries[Mismatch])
+              << LF->getParent() << LF;
+        else if (!LF->getParent()->isUnion() &&
+                 LF->getAccess() != RF->getAccess())
           Info.CCEDiag(E,
-                       diag::note_constexpr_pointer_subtraction_not_same_array);
-
-        QualType Type = E->getLHS()->getType();
-        QualType ElementType = Type->getAs<PointerType>()->getPointeeType();
-
-        CharUnits ElementSize;
-        if (!HandleSizeof(Info, E->getExprLoc(), ElementType, ElementSize))
-          return false;
-
-        // As an extension, a type may have zero size (empty struct or union in
-        // C, array of zero length). Pointer subtraction in such cases has
-        // undefined behavior, so is not constant.
-        if (ElementSize.isZero()) {
-          Info.FFDiag(E, diag::note_constexpr_pointer_subtraction_zero_size)
-            << ElementType;
-          return false;
-        }
-
-        // FIXME: LLVM and GCC both compute LHSOffset - RHSOffset at runtime,
-        // and produce incorrect results when it overflows. Such behavior
-        // appears to be non-conforming, but is common, so perhaps we should
-        // assume the standard intended for such cases to be undefined behavior
-        // and check for them.
-
-        // Compute (LHSOffset - RHSOffset) / Size carefully, checking for
-        // overflow in the final conversion to ptrdiff_t.
-        APSInt LHS(
-          llvm::APInt(65, (int64_t)LHSOffset.getQuantity(), true), false);
-        APSInt RHS(
-          llvm::APInt(65, (int64_t)RHSOffset.getQuantity(), true), false);
-        APSInt ElemSize(
-          llvm::APInt(65, (int64_t)ElementSize.getQuantity(), true), false);
-        APSInt TrueResult = (LHS - RHS) / ElemSize;
-        APSInt Result = TrueResult.trunc(Info.Ctx.getIntWidth(E->getType()));
-
-        if (Result.extend(65) != TrueResult &&
-            !HandleOverflow(Info, E, TrueResult, E->getType()))
-          return false;
-        return Success(Result, E);
-      }
-
-      // C++11 [expr.rel]p3:
-      //   Pointers to void (after pointer conversions) can be compared, with a
-      //   result defined as follows: If both pointers represent the same
-      //   address or are both the null pointer value, the result is true if the
-      //   operator is <= or >= and false otherwise; otherwise the result is
-      //   unspecified.
-      // We interpret this as applying to pointers to *cv* void.
-      if (LHSTy->isVoidPointerType() && LHSOffset != RHSOffset &&
-          E->isRelationalOp())
-        Info.CCEDiag(E, diag::note_constexpr_void_comparison);
-
-      // C++11 [expr.rel]p2:
-      // - If two pointers point to non-static data members of the same object,
-      //   or to subobjects or array elements fo such members, recursively, the
-      //   pointer to the later declared member compares greater provided the
-      //   two members have the same access control and provided their class is
-      //   not a union.
-      //   [...]
-      // - Otherwise pointer comparisons are unspecified.
-      if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
-          (E->isRelationalOp() || IsOrderedCmp)) {
-        bool WasArrayIndex;
-        unsigned Mismatch =
-          FindDesignatorMismatch(getType(LHSValue.Base), LHSDesignator,
-                                 RHSDesignator, WasArrayIndex);
-        // At the point where the designators diverge, the comparison has a
-        // specified value if:
-        //  - we are comparing array indices
-        //  - we are comparing fields of a union, or fields with the same access
-        // Otherwise, the result is unspecified and thus the comparison is not a
-        // constant expression.
-        if (!WasArrayIndex && Mismatch < LHSDesignator.Entries.size() &&
-            Mismatch < RHSDesignator.Entries.size()) {
-          const FieldDecl *LF = getAsField(LHSDesignator.Entries[Mismatch]);
-          const FieldDecl *RF = getAsField(RHSDesignator.Entries[Mismatch]);
-          if (!LF && !RF)
-            Info.CCEDiag(E,
-                         diag::note_constexpr_pointer_comparison_base_classes);
-          else if (!LF)
-            Info.CCEDiag(E, diag::note_constexpr_pointer_comparison_base_field)
-                << getAsBaseClass(LHSDesignator.Entries[Mismatch])
-                << RF->getParent() << RF;
-          else if (!RF)
-            Info.CCEDiag(E, diag::note_constexpr_pointer_comparison_base_field)
-                << getAsBaseClass(RHSDesignator.Entries[Mismatch])
-                << LF->getParent() << LF;
-          else if (!LF->getParent()->isUnion() &&
-                   LF->getAccess() != RF->getAccess())
-            Info.CCEDiag(
-                E, diag::note_constexpr_pointer_comparison_differing_access)
-                << LF << LF->getAccess() << RF << RF->getAccess()
-                << LF->getParent();
-        }
-      }
-
-      // The comparison here must be unsigned, and performed with the same
-      // width as the pointer.
-      unsigned PtrSize = Info.Ctx.getTypeSize(LHSTy);
-      uint64_t CompareLHS = LHSOffset.getQuantity();
-      uint64_t CompareRHS = RHSOffset.getQuantity();
-      assert(PtrSize <= 64 && "Unexpected pointer width");
-      uint64_t Mask = ~0ULL >> (64 - PtrSize);
-      CompareLHS &= Mask;
-      CompareRHS &= Mask;
-
-      // If there is a base and this is a relational operator, we can only
-      // compare pointers within the object in question; otherwise, the result
-      // depends on where the object is located in memory.
-      if (!LHSValue.Base.isNull() && (E->isRelationalOp() || IsOrderedCmp)) {
-        QualType BaseTy = getType(LHSValue.Base);
-        if (BaseTy->isIncompleteType())
-          return Error(E);
-        CharUnits Size = Info.Ctx.getTypeSizeInChars(BaseTy);
-        uint64_t OffsetLimit = Size.getQuantity();
-        if (CompareLHS > OffsetLimit || CompareRHS > OffsetLimit)
-          return Error(E);
-      }
-
-      switch (E->getOpcode()) {
-      default: llvm_unreachable("missing comparison operator");
-      case BO_LT:
-        return Success(CompareLHS < CompareRHS, E);
-      case BO_GT:
-        return Success(CompareLHS > CompareRHS, E);
-      case BO_LE:
-        return Success(CompareLHS <= CompareRHS, E);
-      case BO_GE:
-        return Success(CompareLHS >= CompareRHS, E);
-      case BO_EQ:
-        return Success(CompareLHS == CompareRHS, E);
-      case BO_NE:
-        return Success(CompareLHS != CompareRHS, E);
-      case BO_Cmp: {
-        if (CompareLHS < CompareRHS)
-          return Success(CCR::Less, E);
-        if (CompareLHS > CompareRHS)
-          return Success(CCR::Greater, E);
-        return Success(CCR::Equal, E);
-      }
+                       diag::note_constexpr_pointer_comparison_differing_access)
+              << LF << LF->getAccess() << RF << RF->getAccess()
+              << LF->getParent();
       }
     }
+
+    // The comparison here must be unsigned, and performed with the same
+    // width as the pointer.
+    unsigned PtrSize = Info.Ctx.getTypeSize(LHSTy);
+    uint64_t CompareLHS = LHSOffset.getQuantity();
+    uint64_t CompareRHS = RHSOffset.getQuantity();
+    assert(PtrSize <= 64 && "Unexpected pointer width");
+    uint64_t Mask = ~0ULL >> (64 - PtrSize);
+    CompareLHS &= Mask;
+    CompareRHS &= Mask;
+
+    // If there is a base and this is a relational operator, we can only
+    // compare pointers within the object in question; otherwise, the result
+    // depends on where the object is located in memory.
+    if (!LHSValue.Base.isNull() && (E->isRelationalOp() || IsOrderedCmp)) {
+      QualType BaseTy = getType(LHSValue.Base);
+      if (BaseTy->isIncompleteType())
+        return Error(E);
+      CharUnits Size = Info.Ctx.getTypeSizeInChars(BaseTy);
+      uint64_t OffsetLimit = Size.getQuantity();
+      if (CompareLHS > OffsetLimit || CompareRHS > OffsetLimit)
+        return Error(E);
+    }
+
+    if (CompareLHS < CompareRHS)
+      return Success(CCR::Less, E);
+    if (CompareLHS > CompareRHS)
+      return Success(CCR::Greater, E);
+    return Success(CCR::Equal, E);
   }
 
   if (LHSTy->isMemberPointerType()) {
@@ -8945,9 +8756,7 @@ static bool EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, APValue &Result,
     //   null, they compare unequal.
     if (!LHSValue.getDecl() || !RHSValue.getDecl()) {
       bool Equal = !LHSValue.getDecl() && !RHSValue.getDecl();
-      if (E->getOpcode() == BO_Cmp)
-        return Success(Equal ? CCR::Equal : CCR::Nonequal, E);
-      return Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
+      return Success(Equal ? CCR::Equal : CCR::Nonequal, E);
     }
 
     //   Otherwise if either is a pointer to a virtual member function, the
@@ -8964,10 +8773,7 @@ static bool EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, APValue &Result,
     //   they were dereferenced with a hypothetical object of the associated
     //   class type.
     bool Equal = LHSValue == RHSValue;
-    if (E->getOpcode() == BO_Cmp)
-      return Success(Equal ? CCR::Equal : CCR::Nonequal, E);
-
-    return Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
+    return Success(Equal ? CCR::Equal : CCR::Nonequal, E);
   }
 
   if (LHSTy->isNullPtrType()) {
@@ -8976,10 +8782,7 @@ static bool EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, APValue &Result,
     // C++11 [expr.rel]p4, [expr.eq]p3: If two operands of type std::nullptr_t
     // are compared, the result is true of the operator is <=, >= or ==, and
     // false otherwise.
-    BinaryOperator::Opcode Opcode = E->getOpcode();
-    if (Opcode == BO_Cmp)
-      return Success(CCR::Equal, E);
-    return Success(Opcode == BO_EQ || Opcode == BO_LE || Opcode == BO_GE, E);
+    return Success(CCR::Equal, E);
   }
 
   if (IsThreeWayCmp && LHSTy->isIntegralOrEnumerationType() &&
@@ -9003,7 +8806,18 @@ static bool EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, APValue &Result,
 }
 
 bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
-  return EvaluateIntOrCmpBinaryOperator(Info, Result, E, []() -> bool {
+
+  auto OnSuccess = [&](ComparisonCategoryResult ResKind,
+                       const BinaryOperator *E) {
+    const ComparisonCategoryInfo &CmpInfo =
+        Info.Ctx.CompCategories.getInfoForType(E->getType());
+    const DeclRefExpr *Value =
+        CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
+    if (!EvaluateAsRValue(Info, Value, Result))
+      return false;
+    return true;
+  };
+  return EvaluateIntOrCmpBinaryOperator(Info, E, OnSuccess, []() -> bool {
     llvm_unreachable("operator<=> should have been evaluated to a result");
   });
 }
@@ -9018,12 +8832,122 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   if (DataRecursiveIntBinOpEvaluator::shouldEnqueue(E))
     return DataRecursiveIntBinOpEvaluator(*this, Result).Traverse(E);
 
-  return EvaluateIntOrCmpBinaryOperator(Info, Result, E, [&]() {
+  auto DoAfter = [&]() {
     assert((!E->getLHS()->getType()->isIntegralOrEnumerationType() ||
             !E->getRHS()->getType()->isIntegralOrEnumerationType()) &&
            "DataRecursiveIntBinOpEvaluator should have handled integral types");
     return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
-  });
+  };
+  if (E->isComparisonOp()) {
+    auto OnSuccess = [&](ComparisonCategoryResult ResKind,
+                         const BinaryOperator *E) {
+      using CCR = ComparisonCategoryResult;
+      bool IsEqual = ResKind == CCR::Equal;
+      bool IsLess = ResKind == CCR::Less;
+      bool IsGreater = ResKind == CCR::Greater;
+      auto Op = E->getOpcode();
+      switch (Op) {
+      default:
+        llvm_unreachable("unsupported binary operator");
+      case BO_EQ:
+      case BO_NE:
+        return Success(IsEqual == (Op == BO_EQ), E);
+      case BO_LT: return Success(IsLess, E);
+      case BO_GT: return Success(IsGreater, E);
+      case BO_LE: return Success(IsLess || IsEqual, E);
+      case BO_GE: return Success(IsGreater || IsEqual, E);
+      }
+    };
+    return EvaluateIntOrCmpBinaryOperator(Info, E, OnSuccess, DoAfter);
+  }
+
+  QualType LHSTy = E->getLHS()->getType();
+  QualType RHSTy = E->getRHS()->getType();
+
+  if (LHSTy->isPointerType() && RHSTy->isPointerType() &&
+      E->getOpcode() == BO_Sub) {
+    LValue LHSValue, RHSValue;
+
+    bool LHSOK = EvaluatePointer(E->getLHS(), LHSValue, Info);
+    if (!LHSOK && !Info.noteFailure())
+      return false;
+
+    if (!EvaluatePointer(E->getRHS(), RHSValue, Info) || !LHSOK)
+      return false;
+
+    // Reject differing bases from the normal codepath; we special-case
+    // comparisons to null.
+    if (!HasSameBase(LHSValue, RHSValue)) {
+      // Handle &&A - &&B.
+      if (!LHSValue.Offset.isZero() || !RHSValue.Offset.isZero())
+        return Error(E);
+      const Expr *LHSExpr = LHSValue.Base.dyn_cast<const Expr *>();
+      const Expr *RHSExpr = RHSValue.Base.dyn_cast<const Expr *>();
+      if (!LHSExpr || !RHSExpr)
+        return Error(E);
+      const AddrLabelExpr *LHSAddrExpr = dyn_cast<AddrLabelExpr>(LHSExpr);
+      const AddrLabelExpr *RHSAddrExpr = dyn_cast<AddrLabelExpr>(RHSExpr);
+      if (!LHSAddrExpr || !RHSAddrExpr)
+        return Error(E);
+      // Make sure both labels come from the same function.
+      if (LHSAddrExpr->getLabel()->getDeclContext() !=
+          RHSAddrExpr->getLabel()->getDeclContext())
+        return Error(E);
+      return Success(APValue(LHSAddrExpr, RHSAddrExpr), E);
+    }
+    const CharUnits &LHSOffset = LHSValue.getLValueOffset();
+    const CharUnits &RHSOffset = RHSValue.getLValueOffset();
+
+    SubobjectDesignator &LHSDesignator = LHSValue.getLValueDesignator();
+    SubobjectDesignator &RHSDesignator = RHSValue.getLValueDesignator();
+
+    // C++11 [expr.add]p6:
+    //   Unless both pointers point to elements of the same array object, or
+    //   one past the last element of the array object, the behavior is
+    //   undefined.
+    if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
+        !AreElementsOfSameArray(getType(LHSValue.Base), LHSDesignator,
+                                RHSDesignator))
+      Info.CCEDiag(E, diag::note_constexpr_pointer_subtraction_not_same_array);
+
+    QualType Type = E->getLHS()->getType();
+    QualType ElementType = Type->getAs<PointerType>()->getPointeeType();
+
+    CharUnits ElementSize;
+    if (!HandleSizeof(Info, E->getExprLoc(), ElementType, ElementSize))
+      return false;
+
+    // As an extension, a type may have zero size (empty struct or union in
+    // C, array of zero length). Pointer subtraction in such cases has
+    // undefined behavior, so is not constant.
+    if (ElementSize.isZero()) {
+      Info.FFDiag(E, diag::note_constexpr_pointer_subtraction_zero_size)
+          << ElementType;
+      return false;
+    }
+
+    // FIXME: LLVM and GCC both compute LHSOffset - RHSOffset at runtime,
+    // and produce incorrect results when it overflows. Such behavior
+    // appears to be non-conforming, but is common, so perhaps we should
+    // assume the standard intended for such cases to be undefined behavior
+    // and check for them.
+
+    // Compute (LHSOffset - RHSOffset) / Size carefully, checking for
+    // overflow in the final conversion to ptrdiff_t.
+    APSInt LHS(llvm::APInt(65, (int64_t)LHSOffset.getQuantity(), true), false);
+    APSInt RHS(llvm::APInt(65, (int64_t)RHSOffset.getQuantity(), true), false);
+    APSInt ElemSize(llvm::APInt(65, (int64_t)ElementSize.getQuantity(), true),
+                    false);
+    APSInt TrueResult = (LHS - RHS) / ElemSize;
+    APSInt Result = TrueResult.trunc(Info.Ctx.getIntWidth(E->getType()));
+
+    if (Result.extend(65) != TrueResult &&
+        !HandleOverflow(Info, E, TrueResult, E->getType()))
+      return false;
+    return Success(Result, E);
+  }
+
+  return DoAfter();
 }
 
 /// VisitUnaryExprOrTypeTraitExpr - Evaluate a sizeof, alignof or vec_step with
