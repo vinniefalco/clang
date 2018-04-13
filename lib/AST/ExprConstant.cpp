@@ -8500,9 +8500,8 @@ public:
 }
 
 template <class SuccessCB, class AfterCB>
-static bool
-EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
-                               SuccessCB &&Success, AfterCB &&DoAfter) {
+static bool EvaluateCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
+                                      SuccessCB &&Success, AfterCB &&DoAfter) {
 
   assert((E->getOpcode() == BO_Cmp ||
           E->getType()->isIntegralOrEnumerationType()) &&
@@ -8811,7 +8810,7 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
       return false;
     return true;
   };
-  return EvaluateIntOrCmpBinaryOperator(Info, E, OnSuccess, []() -> bool {
+  return EvaluateCmpBinaryOperator(Info, E, OnSuccess, []() -> bool {
     llvm_unreachable("operator<=> should have been evaluated to a result");
   });
 }
@@ -8850,7 +8849,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       case BO_GE: return Success(IsGreater || IsEqual, E);
       }
     };
-    return EvaluateIntOrCmpBinaryOperator(Info, E, OnSuccess, [&]() {
+    return EvaluateCmpBinaryOperator(Info, E, OnSuccess, [&]() {
       return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
     });
   }
