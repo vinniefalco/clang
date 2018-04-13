@@ -1007,12 +1007,10 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
 
 void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
 
-  if (E->getOpcode() == BO_PtrMemD || E->getOpcode() == BO_PtrMemI) {
+  if (E->getOpcode() == BO_PtrMemD || E->getOpcode() == BO_PtrMemI)
     VisitPointerToDataMemberBinaryOperator(E);
-    return;
-  }
-
-  CGF.ErrorUnsupported(E, "aggregate binary expression");
+  else
+    CGF.ErrorUnsupported(E, "aggregate binary expression");
 }
 
 void AggExprEmitter::VisitPointerToDataMemberBinaryOperator(

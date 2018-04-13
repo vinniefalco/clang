@@ -7075,7 +7075,8 @@ bool ArrayExprEvaluator::VisitCXXConstructExpr(const CXXConstructExpr *E,
 //===----------------------------------------------------------------------===//
 
 namespace {
-class IntExprEvaluator : public ExprEvaluatorBase<IntExprEvaluator> {
+class IntExprEvaluator
+        : public ExprEvaluatorBase<IntExprEvaluator> {
   APValue &Result;
 public:
   IntExprEvaluator(EvalInfo &info, APValue &result)
@@ -8562,6 +8563,9 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
   assert((E->getOpcode() == BO_Cmp ||
           E->getType()->isIntegralOrEnumerationType()) &&
          "unsupported binary expression evaluation");
+  assert((E->isComparisonOp() || E->getOpcode() == BO_Sub) &&
+         "unsupported binary expression evaluation");
+
   CmpEvalSuccess Success(Info, Result);
   auto Error = [&](const Expr *E) {
     Info.FFDiag(E, diag::note_invalid_subexpr_in_const_expr);
@@ -8581,6 +8585,7 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
   QualType LHSTy = E->getLHS()->getType();
   QualType RHSTy = E->getRHS()->getType();
 
+    // TODO Add support for BO_Cmp for complex types.
   if (LHSTy->isAnyComplexType() || RHSTy->isAnyComplexType()) {
     ComplexValue LHS, RHS;
     bool LHSOK;
