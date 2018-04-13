@@ -8807,7 +8807,9 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
         Info.Ctx.CompCategories.getInfoForType(E->getType());
     const VarDecl *Value =
         CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
-    return EvaluateVarDecl(Info, Value, &Result);
+    DeclRefExpr DE(Value, /*RefersToEnclosingVariableOrCapture*/false, E->getType(),
+    VK_LValue, E->getExprLoc());
+    return EvaluateAsRValue(Info, &DE, Result);
   };
   return EvaluateComparisonBinaryOperator(Info, E, OnSuccess, []() -> bool {
     llvm_unreachable("operator<=> should have been evaluated to a result");
