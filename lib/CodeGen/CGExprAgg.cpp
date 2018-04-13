@@ -942,8 +942,7 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
 
   QualType ArgTy = E->getLHS()->getType();
 
-  // TODO: Handle comparing these types. For now just report and error and
-  // return.
+  // TODO: Handle comparing these types.
   if (ArgTy->isAnyComplexType())
     return CGF.ErrorUnsupported(
         E, "aggregate binary expression with complex arguments");
