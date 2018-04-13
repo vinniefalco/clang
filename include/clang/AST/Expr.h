@@ -3225,7 +3225,7 @@ protected:
         OpLoc(opLoc) {
     BinaryOperatorBits.Opc = opc;
     BinaryOperatorBits.FPFeatures = FPFeatures.getInt();
-    BinaryOperatorBits.IsCmpOrdered = false;
+    BinaryOperatorBits.CmpKind = 0;
     SubExprs[LHS] = lhs;
     SubExprs[RHS] = rhs;
   }
