@@ -8568,8 +8568,6 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
   assert((E->getOpcode() == BO_Cmp ||
           E->getType()->isIntegralOrEnumerationType()) &&
          "unsupported binary expression evaluation");
-  assert((E->isComparisonOp() || E->getOpcode() == BO_Sub) &&
-         "unsupported binary expression evaluation");
 
   CmpEvalSuccess Success(Info, Result);
   auto Error = [&](const Expr *E) {
@@ -9006,9 +9004,8 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
 }
 
 bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
-  return EvaluateIntOrCmpBuiltinBinaryOperator(Info, Result, E, []() {
-    assert(false && "operator<=> should have been evaluated to a result");
-    return false;
+  return EvaluateIntOrCmpBuiltinBinaryOperator(Info, Result, E, []() -> bool {
+    llvm_unreachable("operator<=> should have been evaluated to a result");
   });
 }
 
@@ -9022,13 +9019,12 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   if (DataRecursiveIntBinOpEvaluator::shouldEnqueue(E))
     return DataRecursiveIntBinOpEvaluator(*this, Result).Traverse(E);
 
-  auto DoAfter = [&]() {
+  return EvaluateIntOrCmpBuiltinBinaryOperator(Info, Result, E, [&]() {
     assert((!E->getLHS()->getType()->isIntegralOrEnumerationType() ||
             !E->getRHS()->getType()->isIntegralOrEnumerationType()) &&
            "DataRecursiveIntBinOpEvaluator should have handled integral types");
     return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
-  };
-  return EvaluateIntOrCmpBuiltinBinaryOperator(Info, Result, E, DoAfter);
+  });
 }
 
 /// VisitUnaryExprOrTypeTraitExpr - Evaluate a sizeof, alignof or vec_step with
