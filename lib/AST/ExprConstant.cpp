@@ -8218,11 +8218,10 @@ public:
   /// We handle binary operators that are comma, logical, or that have operands
   /// with integral or enumeration type.
   static bool shouldEnqueue(const BinaryOperator *E) {
-    return E->getOpcode() != BO_Cmp && // TODO Make this work with <=>
-           (E->getOpcode() == BO_Comma || E->isLogicalOp() ||
-            (E->isRValue() && E->getType()->isIntegralOrEnumerationType() &&
-             E->getLHS()->getType()->isIntegralOrEnumerationType() &&
-             E->getRHS()->getType()->isIntegralOrEnumerationType()));
+    return E->getOpcode() == BO_Comma || E->isLogicalOp() ||
+           (E->isRValue() && E->getType()->isIntegralOrEnumerationType() &&
+            E->getLHS()->getType()->isIntegralOrEnumerationType() &&
+            E->getRHS()->getType()->isIntegralOrEnumerationType());
   }
 
   bool Traverse(const BinaryOperator *E) {
@@ -8516,7 +8515,6 @@ public:
 
   bool operator()(ComparisonCategoryResult ResKind, const Expr *E) {
     assert(isBinCmp(E) && "expected three-way comparison  expression");
-    using CCR = ComparisonCategoryResult;
     const ComparisonCategoryInfo &CmpInfo =
         Info.Ctx.CompCategories.getInfoForType(E->getType());
 
@@ -8547,6 +8545,10 @@ public:
         E->getType()->isUnsignedIntegerOrEnumerationType());
     return true;
   }
+
+  bool operator()(const APValue &V, const Expr *E) {
+    return (*this)(V.getInt(), E);
+  }
 };
 
 } // namespace
@@ -8556,6 +8558,10 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
                                                   APValue &Result,
                                                   const BinaryOperator *E,
                                                   AfterCB &&DoAfter) {
+
+  assert((E->getOpcode() == BO_Cmp ||
+          E->getType()->isIntegralOrEnumerationType()) &&
+         "unsupported binary expression evaluation");
   CmpEvalSuccess Success(Info, Result);
   auto Error = [&](const Expr *E) {
     Info.FFDiag(E, diag::note_invalid_subexpr_in_const_expr);
@@ -8609,11 +8615,12 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
         LHS.getComplexFloatImag().compare(RHS.getComplexFloatImag());
 
       if (E->getOpcode() == BO_EQ)
-        Success((CR_r == APFloat::cmpEqual && CR_i == APFloat::cmpEqual), E);
+        return Success((CR_r == APFloat::cmpEqual && CR_i == APFloat::cmpEqual),
+                       E);
       else {
         assert(E->getOpcode() == BO_NE &&
                "Invalid complex comparison.");
-        Success(
+        return Success(
             ((CR_r == APFloat::cmpGreaterThan || CR_r == APFloat::cmpLessThan ||
               CR_r == APFloat::cmpUnordered) ||
              (CR_i == APFloat::cmpGreaterThan || CR_i == APFloat::cmpLessThan ||
@@ -8622,15 +8629,15 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
       }
     } else {
       if (E->getOpcode() == BO_EQ)
-        Success((LHS.getComplexIntReal() == RHS.getComplexIntReal() &&
-                 LHS.getComplexIntImag() == RHS.getComplexIntImag()),
-                E);
+        return Success((LHS.getComplexIntReal() == RHS.getComplexIntReal() &&
+                        LHS.getComplexIntImag() == RHS.getComplexIntImag()),
+                       E);
       else {
         assert(E->getOpcode() == BO_NE &&
                "Invalid compex comparison.");
-        Success((LHS.getComplexIntReal() != RHS.getComplexIntReal() ||
-                 LHS.getComplexIntImag() != RHS.getComplexIntImag()),
-                E);
+        return Success((LHS.getComplexIntReal() != RHS.getComplexIntReal() ||
+                        LHS.getComplexIntImag() != RHS.getComplexIntImag()),
+                       E);
       }
     }
   }
@@ -8652,19 +8659,21 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
     default:
       llvm_unreachable("Invalid binary operator!");
     case BO_LT:
-      Success(CR == APFloat::cmpLessThan, E);
+      return Success(CR == APFloat::cmpLessThan, E);
     case BO_GT:
-      Success(CR == APFloat::cmpGreaterThan, E);
+      return Success(CR == APFloat::cmpGreaterThan, E);
     case BO_LE:
-      Success(CR == APFloat::cmpLessThan || CR == APFloat::cmpEqual, E);
+      return Success(CR == APFloat::cmpLessThan || CR == APFloat::cmpEqual, E);
     case BO_GE:
-      Success(CR == APFloat::cmpGreaterThan || CR == APFloat::cmpEqual, E);
+      return Success(CR == APFloat::cmpGreaterThan || CR == APFloat::cmpEqual,
+                     E);
     case BO_EQ:
-      Success(CR == APFloat::cmpEqual, E);
+      return Success(CR == APFloat::cmpEqual, E);
     case BO_NE:
-      Success(CR == APFloat::cmpGreaterThan || CR == APFloat::cmpLessThan ||
-                  CR == APFloat::cmpUnordered,
-              E);
+      return Success(CR == APFloat::cmpGreaterThan ||
+                         CR == APFloat::cmpLessThan ||
+                         CR == APFloat::cmpUnordered,
+                     E);
     case BO_Cmp: {
       auto GetCmpRes = [&]() {
         switch (CR) {
@@ -8678,7 +8687,7 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
           return CCR::Greater;
         }
       };
-      Success(GetCmpRes(), E);
+      return Success(GetCmpRes(), E);
     }
     }
   }
@@ -8713,7 +8722,7 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
           if (LHSAddrExpr->getLabel()->getDeclContext() !=
               RHSAddrExpr->getLabel()->getDeclContext())
             return Error(E);
-          Success(APValue(LHSAddrExpr, RHSAddrExpr), E);
+          return Success(APValue(LHSAddrExpr, RHSAddrExpr), E);
         }
         // Inequalities and subtractions between unrelated pointers have
         // unspecified or undefined behavior.
@@ -8749,9 +8758,9 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
             (LHSValue.Base && isZeroSized(RHSValue)))
           return Error(E);
         if (E->getOpcode() == BO_Cmp)
-          Success(CCR::Nonequal, E);
+          return Success(CCR::Nonequal, E);
         // Pointers with different bases cannot represent the same object.
-        Success(E->getOpcode() == BO_NE, E);
+        return Success(E->getOpcode() == BO_NE, E);
       }
 
       const CharUnits &LHSOffset = LHSValue.getLValueOffset();
@@ -8807,7 +8816,7 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
         if (Result.extend(65) != TrueResult &&
             !HandleOverflow(Info, E, TrueResult, E->getType()))
           return false;
-        Success(Result, E);
+        return Success(Result, E);
       }
 
       // C++11 [expr.rel]p3:
@@ -8891,23 +8900,23 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
       switch (E->getOpcode()) {
       default: llvm_unreachable("missing comparison operator");
       case BO_LT:
-        Success(CompareLHS < CompareRHS, E);
+        return Success(CompareLHS < CompareRHS, E);
       case BO_GT:
-        Success(CompareLHS > CompareRHS, E);
+        return Success(CompareLHS > CompareRHS, E);
       case BO_LE:
-        Success(CompareLHS <= CompareRHS, E);
+        return Success(CompareLHS <= CompareRHS, E);
       case BO_GE:
-        Success(CompareLHS >= CompareRHS, E);
+        return Success(CompareLHS >= CompareRHS, E);
       case BO_EQ:
-        Success(CompareLHS == CompareRHS, E);
+        return Success(CompareLHS == CompareRHS, E);
       case BO_NE:
-        Success(CompareLHS != CompareRHS, E);
+        return Success(CompareLHS != CompareRHS, E);
       case BO_Cmp: {
         if (CompareLHS < CompareRHS)
-          Success(CCR::Less, E);
+          return Success(CCR::Less, E);
         if (CompareLHS > CompareRHS)
-          Success(CCR::Greater, E);
-        Success(CCR::Equal, E);
+          return Success(CCR::Greater, E);
+        return Success(CCR::Equal, E);
       }
       }
     }
@@ -8933,8 +8942,8 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
     if (!LHSValue.getDecl() || !RHSValue.getDecl()) {
       bool Equal = !LHSValue.getDecl() && !RHSValue.getDecl();
       if (E->getOpcode() == BO_Cmp)
-        Success(Equal ? CCR::Equal : CCR::Nonequal, E);
-      Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
+        return Success(Equal ? CCR::Equal : CCR::Nonequal, E);
+      return Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
     }
 
     //   Otherwise if either is a pointer to a virtual member function, the
@@ -8952,9 +8961,9 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
     //   class type.
     bool Equal = LHSValue == RHSValue;
     if (E->getOpcode() == BO_Cmp)
-      Success(Equal ? CCR::Equal : CCR::Nonequal, E);
+      return Success(Equal ? CCR::Equal : CCR::Nonequal, E);
 
-    Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
+    return Success(E->getOpcode() == BO_EQ ? Equal : !Equal, E);
   }
 
   if (LHSTy->isNullPtrType()) {
@@ -8965,8 +8974,8 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
     // false otherwise.
     BinaryOperator::Opcode Opcode = E->getOpcode();
     if (Opcode == BO_Cmp)
-      Success(CCR::Equal, E);
-    Success(Opcode == BO_EQ || Opcode == BO_LE || Opcode == BO_GE, E);
+      return Success(CCR::Equal, E);
+    return Success(Opcode == BO_EQ || Opcode == BO_LE || Opcode == BO_GE, E);
   }
 
   if (IsThreeWayCmp && LHSTy->isIntegralOrEnumerationType() &&
@@ -8980,10 +8989,10 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
       return false;
 
     if (LHS < RHS)
-      Success(CCR::Less, E);
+      return Success(CCR::Less, E);
     if (LHS > RHS)
-      Success(CCR::Greater, E);
-    Success(CCR::Equal, E);
+      return Success(CCR::Greater, E);
+    return Success(CCR::Equal, E);
   }
 
   return DoAfter();
