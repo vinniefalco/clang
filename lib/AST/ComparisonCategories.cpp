@@ -25,9 +25,8 @@ ComparisonCategories::getCategoryForType(QualType Ty) const {
   if (const auto *RD = Ty->getAsCXXRecordDecl()) {
     const auto *CanonRD = RD->getCanonicalDecl();
     for (auto &KV : Data) {
-      if (!KV.second.hasValue())
-        continue;
-      const ComparisonCategoryInfo &Info = KV.second.getValue();
+      assert(KV.second != nullptr && "have category entry but no data?");
+      const ComparisonCategoryInfo &Info = *KV.second;
       if (CanonRD == Info.CCDecl->getCanonicalDecl())
         return Info.Kind;
     }

@@ -9925,33 +9925,47 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
 
     QualType CompositeTy = LHS.get()->getType();
     assert(!CompositeTy->isReferenceType());
-    const RecordDecl *CompDecl = nullptr;
-    if (CompositeTy->isVoidPointerType()) {
-      if (!isSFINAEContext()) {
-        Diag(Loc, diag::err_spaceship_comparison_of_void_ptr)
-            << (LHSType->isVoidPointerType() + RHSType->isVoidPointerType() - 1)
-            << LHSType << RHSType;
-      }
+
+    auto buildResultTy = [&](ComparisonCategoryKind Kind) {
+      if (const ComparisonCategoryInfo *Info =
+              BuildComparisonCategoryInfoForType(Kind, Loc))
+        return QualType(Info->CCDecl->getTypeForDecl(), 0);
       return QualType();
-    }
-    ComparisonCategoryKind Kind;
+    };
+
+    // C++2a [expr.spaceship]p7: If the composite pointer type is a function
+    // pointer type, a pointer-to-member type, or std::nullptr_t, the
+    // result is of type std::strong_equality
     if (CompositeTy->isFunctionPointerType() ||
         CompositeTy->isMemberPointerType() || CompositeTy->isNullPtrType())
-      Kind = ComparisonCategoryKind::StrongEquality;
-    else if (CompositeTy->isPointerType()) {
+      return buildResultTy(ComparisonCategoryKind::StrongEquality);
+
+    // C++2a [expr.spaceship]p8: If the composite pointer type is an object
+    // pointer type, p <=> q is of type std::strong_ordering.
+    if (CompositeTy->isPointerType() &&
+        CompositeTy->getPointeeType()->isObjectType())
+      return buildResultTy(ComparisonCategoryKind::StrongOrdering);
+
+    // C++2a [expr.spaceship]p9: Otherwise, the program is ill-formed.
+    if (!CompositeTy->isPointerType()) {
       auto PointeeTy = CompositeTy->getPointeeType();
-      if (!PointeeTy->isObjectType()) {
-        // TODO: Can this case actually occur?
-        Diag(Loc, diag::err_spaceship_comparison_of_invalid_comp_type)
-            << CompositeTy << LHSType << RHSType;
+      assert(PointeeTy->isObjectType() &&
+             "pointers to non-object types should have already been handled");
+      if (PointeeTy->isVoidType()) {
+        if (!isSFINAEContext()) {
+          Diag(Loc, diag::err_spaceship_comparison_of_void_ptr)
+              << (LHSType->isVoidPointerType() + RHSType->isVoidPointerType() -
+                  1)
+              << LHSType << RHSType;
+        }
         return QualType();
       }
-      Kind = ComparisonCategoryKind::StrongOrdering;
-    } else
-      llvm_unreachable("unhandled three-way comparison composite type");
-    if (const ComparisonCategoryInfo *Info =
-            BuildComparisonCategoryInfoForType(Kind, Loc))
-      return QualType(Info->CCDecl->getTypeForDecl(), 0);
+      // fallthrough
+    }
+    // TODO: Can this case actually occur? ie we have a
+    // non-object/function/mem-function pointer, non-enum, and non-integral type
+    Diag(Loc, diag::err_spaceship_comparison_of_invalid_comp_type)
+        << CompositeTy << LHSType << RHSType;
     return QualType();
   };
 
