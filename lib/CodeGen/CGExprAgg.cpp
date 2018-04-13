@@ -921,7 +921,6 @@ static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
 
   if (ArgTy->isRealFloatingType())
     return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS, InstInfo.Name);
-
   if (ArgTy->isIntegralOrEnumerationType() || ArgTy->isPointerType()) {
     auto Inst =
         ArgTy->hasSignedIntegerRepresentation() ? InstInfo.SCmp : InstInfo.UCmp;
