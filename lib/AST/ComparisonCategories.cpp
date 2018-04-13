@@ -24,7 +24,7 @@ ComparisonCategories::getInfoUnsafe(ComparisonCategoryKind Kind) const {
   auto It = Data.find(static_cast<char>(Kind));
   if (It == Data.end())
     return nullptr;
-  return It->second;
+  return &It->second;
 }
 
 const ComparisonCategoryKind *

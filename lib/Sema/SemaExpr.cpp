@@ -11969,9 +11969,6 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
     ConvertHalfVec = true;
     ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc, true);
     assert(ResultTy.isNull() || ResultTy->getAsCXXRecordDecl());
-    if (!ResultTy.isNull())
-      IsCmpOrdered =
-          Context.CompCategories.getInfoForType(ResultTy).isOrdered();
     break;
   case BO_And:
     checkObjCPointerIntrospection(*this, LHS, RHS, OpLoc);
@@ -12079,8 +12076,11 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
                                  OpLoc, FPFeatures);
     BinaryOperator *Op = new (Context) BinaryOperator(
         LHS.get(), RHS.get(), Opc, ResultTy, VK, OK, OpLoc, FPFeatures);
-    if (Opc == BO_Cmp)
-      Op->setIsCmpOrdered(IsCmpOrdered);
+    if (Opc == BO_Cmp && !ResultTy.isNull()) {
+      ComparisonCategoryKind Kind =
+          Context.CompCategories.getInfoForType(ResultTy).Kind;
+      Op->setCmpCategoryKind(Kind);
+    }
     return Op;
   }
 

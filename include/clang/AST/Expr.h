@@ -3027,7 +3027,7 @@ public:
         OpLoc(OpLoc) {
     BinaryOperatorBits.Opc = opc;
     BinaryOperatorBits.FPFeatures = FPFeatures.getInt();
-    BinaryOperatorBits.IsCmpOrdered = false;
+    BinaryOperatorBits.CmpKind = 0;
     SubExprs[LHS] = lhs;
     SubExprs[RHS] = rhs;
     assert(!isCompoundAssignmentOp() &&
@@ -3091,19 +3091,24 @@ public:
   bool isBitwiseOp() const { return isBitwiseOp(getOpcode()); }
 
   static bool isRelationalOp(Opcode Opc) { return Opc >= BO_LT && Opc<=BO_GE; }
-  bool isRelationalOp() const {
-    return isRelationalOp(getOpcode()) ||
-           (getOpcode() == BO_Cmp && getIsCmpOrdered());
-  }
+  bool isRelationalOp() const { return isRelationalOp(getOpcode()); }
 
   static bool isEqualityOp(Opcode Opc) { return Opc == BO_EQ || Opc == BO_NE; }
-  bool isEqualityOp() const {
-    return isEqualityOp(getOpcode()) ||
-           (getOpcode() == BO_Cmp && !getIsCmpOrdered());
-  }
+  bool isEqualityOp() const { return isEqualityOp(getOpcode()); }
 
   static bool isComparisonOp(Opcode Opc) { return Opc >= BO_Cmp && Opc<=BO_NE; }
   bool isComparisonOp() const { return isComparisonOp(getOpcode()); }
+
+  bool isEqualityCmpOp() const {
+    using CCK = ComparisonCategoryKind;
+    return getOpcode() == BO_Cmp &&
+           (getCmpCategoryKind() == CCK::WeakEquality ||
+            getCmpCategoryKind() == CCK::StrongEquality);
+  }
+
+  bool isOrderedCmpOp() const {
+    return getOpcode() == BO_Cmp && !isEqualityCmpOp();
+  }
 
   static Opcode negateComparisonOp(Opcode Opc) {
     switch (Opc) {
@@ -3161,8 +3166,14 @@ public:
     return isShiftAssignOp(getOpcode());
   }
 
-  void setIsCmpOrdered(bool Val) { BinaryOperatorBits.IsCmpOrdered = Val; }
-  bool getIsCmpOrdered() const { return BinaryOperatorBits.IsCmpOrdered; }
+  void setCmpCategoryKind(ComparisonCategoryKind CCK) {
+    assert(getOpcode() == BO_Cmp &&
+           "non three-way comparison cannot have a comparison category kind");
+    BinaryOperatorBits.CmpKind = static_cast<char>(CCK);
+  }
+  ComparisonCategoryKind getCmpCategoryKind() const {
+    return static_cast<ComparisonCategoryKind>(BinaryOperatorBits.CmpKind);
+  }
 
   // Return true if a binary operator using the specified opcode and operands
   // would match the 'p = (i8*)nullptr + n' idiom for casting a pointer-sized

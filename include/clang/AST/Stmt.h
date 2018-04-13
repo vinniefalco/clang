@@ -14,6 +14,7 @@
 #ifndef LLVM_CLANG_AST_STMT_H
 #define LLVM_CLANG_AST_STMT_H
 
+#include "clang/AST/ComparisonCategories.h"
 #include "clang/AST/DeclGroup.h"
 #include "clang/AST/StmtIterator.h"
 #include "clang/Basic/CapturedStmt.h"
@@ -194,9 +195,12 @@ protected:
     // otherwise.
     unsigned FPFeatures : 2;
 
-    // When Opc is BO_Cmp, this is set only when the comparison category is an
-    // ordered comparison. Otherwise the comparison is an equality comparison.
-    unsigned IsCmpOrdered : 1;
+    // When Opc is BO_Cmp, this is set to the `ComparisonCategoryKind` it
+    // represents.
+    unsigned CmpKind : 3;
+    static_assert(static_cast<unsigned>(ComparisonCategoryKind::Last) == 4,
+                  "number of bits required to represent the comparison "
+                  "category kind is incorrect");
   };
 
   class DeclRefExprBitfields {

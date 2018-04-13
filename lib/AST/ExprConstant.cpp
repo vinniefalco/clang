@@ -6246,7 +6246,7 @@ namespace {
       BinaryOperator NewOp(E->getLHS(), E->getRHS(), BO_Cmp, Info.Ctx.IntTy,
                            VK_RValue, OK_Ordinary, E->getOperatorLoc(),
                            E->getFPFeatures());
-      NewOp.setIsCmpOrdered(E->getIsCmpOrdered());
+      NewOp.setCmpCategoryKind(E->getCmpCategoryKind());
 
       APSInt Result;
       if (!EvaluateInteger(&NewOp, Result, Info))

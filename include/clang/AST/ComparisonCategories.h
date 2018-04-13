@@ -43,6 +43,7 @@ enum class ComparisonCategoryKind : unsigned char {
   PartialOrdering,
   WeakOrdering,
   StrongOrdering,
+  Last = StrongOrdering
 };
 
 /// \brief An enumeration representing the possible results of a three-way
