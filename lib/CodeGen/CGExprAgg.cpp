@@ -999,7 +999,7 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
     Select = Builder.CreateSelect(
         EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()), SelectGT, "sel.lt");
   }
-  assert(Select != nullptr);
+
   return EmitFinalDestCopy(
       E->getType(), CGF.MakeNaturalAlignAddrLValue(Select, E->getType()));
 }

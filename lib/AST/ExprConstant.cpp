@@ -6238,7 +6238,7 @@ namespace {
     bool VisitBinCmp(const BinaryOperator *E) {
       using CCR = ComparisonCategoryResult;
       const ComparisonCategoryInfo &CmpInfo =
-          Info.Ctx.CompCategories.getInfoForType(E->getType());
+          Info.Ctx.CompCategories.getInfo(E->getCmpCategoryKind());
 
       // Build a new version of the binary operator which returns an integer
       // representing the ComparisonCategoryResult. Then defer to
