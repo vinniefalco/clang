@@ -8888,7 +8888,6 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
 const ComparisonCategoryInfo *
 Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
                                          SourceLocation Loc) {
-  using CCKT = ComparisonCategoryKind;
   using CCVT = ComparisonCategoryResult;
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");

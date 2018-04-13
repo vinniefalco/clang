@@ -11882,8 +11882,7 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
   ExprValueKind VK = VK_RValue;
   ExprObjectKind OK = OK_Ordinary;
   bool ConvertHalfVec = false;
-  // If the binary operator is <=> and it's an ordered comparison.
-  bool IsCmpOrdered = false;
+
   std::tie(LHS, RHS) = CorrectDelayedTyposInBinOp(*this, Opc, LHSExpr, RHSExpr);
   if (!LHS.isUsable() || !RHS.isUsable())
     return ExprError();
