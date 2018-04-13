@@ -8583,7 +8583,7 @@ EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
 
     APFloat::cmpResult CR = LHS.compare(RHS);
 
-    assert(E->isRelationalOp() && "Invalid binary operator!");
+    assert(E->isComparisonOp() && "Invalid binary operator!");
     auto GetCmpRes = [&]() {
       switch (CR) {
       case APFloat::cmpEqual:
