@@ -8500,8 +8500,9 @@ public:
 }
 
 template <class SuccessCB, class AfterCB>
-static bool EvaluateCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
-                                      SuccessCB &&Success, AfterCB &&DoAfter) {
+static bool
+EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
+                                 SuccessCB &&Success, AfterCB &&DoAfter) {
 
   assert((E->getOpcode() == BO_Cmp ||
           E->getType()->isIntegralOrEnumerationType()) &&
@@ -8513,13 +8514,11 @@ static bool EvaluateCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
   };
 
   using CCR = ComparisonCategoryResult;
-  bool IsThreeWayCmp = false;
   bool IsRelational = E->isRelationalOp();
   bool IsEquality = E->isEqualityOp();
   if (E->getOpcode() == BO_Cmp) {
     const ComparisonCategoryInfo &CmpInfo =
         Info.Ctx.CompCategories.getInfoForType(E->getType());
-    IsThreeWayCmp = true;
     IsRelational = CmpInfo.isOrdered();
     IsEquality = CmpInfo.isEquality();
   }
@@ -8527,7 +8526,21 @@ static bool EvaluateCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
   QualType LHSTy = E->getLHS()->getType();
   QualType RHSTy = E->getRHS()->getType();
 
-    // TODO Add support for BO_Cmp for complex types.
+  if (LHSTy->isIntegralOrEnumerationType() &&
+      RHSTy->isIntegralOrEnumerationType()) {
+    APSInt LHS, RHS;
+    bool LHSOK = EvaluateInteger(E->getLHS(), LHS, Info);
+    if (!LHSOK && !Info.noteFailure())
+      return false;
+    if (!EvaluateInteger(E->getRHS(), RHS, Info) || !LHSOK)
+      return false;
+    if (LHS < RHS)
+      return Success(CCR::Less, E);
+    if (LHS > RHS)
+      return Success(CCR::Greater, E);
+    return Success(CCR::Equal, E);
+  }
+
   if (LHSTy->isAnyComplexType() || RHSTy->isAnyComplexType()) {
     ComplexValue LHS, RHS;
     bool LHSOK;
@@ -8781,21 +8794,6 @@ static bool EvaluateCmpBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     return Success(CCR::Equal, E);
   }
 
-  if (IsThreeWayCmp && LHSTy->isIntegralOrEnumerationType() &&
-      RHSTy->isIntegralOrEnumerationType()) {
-    APSInt LHS, RHS;
-    bool LHSOK = EvaluateInteger(E->getLHS(), LHS, Info);
-    if (!LHSOK && !Info.noteFailure())
-      return false;
-    if (!EvaluateInteger(E->getRHS(), RHS, Info) || !LHSOK)
-      return false;
-    if (LHS < RHS)
-      return Success(CCR::Less, E);
-    if (LHS > RHS)
-      return Success(CCR::Greater, E);
-    return Success(CCR::Equal, E);
-  }
-
   return DoAfter();
 }
 
@@ -8808,7 +8806,7 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
         CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
     return EvaluateAsRValue(Info, Value, Result);
   };
-  return EvaluateCmpBinaryOperator(Info, E, OnSuccess, []() -> bool {
+  return EvaluateComparisonBinaryOperator(Info, E, OnSuccess, []() -> bool {
     llvm_unreachable("operator<=> should have been evaluated to a result");
   });
 }
@@ -8847,7 +8845,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
       case BO_GE: return Success(IsGreater || IsEqual, E);
       }
     };
-    return EvaluateCmpBinaryOperator(Info, E, OnSuccess, [&]() {
+    return EvaluateComparisonBinaryOperator(Info, E, OnSuccess, [&]() {
       return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
     });
   }
