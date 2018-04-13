@@ -976,7 +976,7 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   auto EmitCmp = [&](CompareKind K) {
     return EmitCompare(Builder, CGF, E, LHS, RHS, K);
   };
-  Value *Select = nullptr;
+  Value *Select;
   if (CmpInfo.isEquality()) {
     Select = Builder.CreateSelect(
         EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
