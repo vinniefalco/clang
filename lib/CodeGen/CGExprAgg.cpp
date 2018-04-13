@@ -1005,7 +1005,6 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
 }
 
 void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
-
   if (E->getOpcode() == BO_PtrMemD || E->getOpcode() == BO_PtrMemI)
     VisitPointerToDataMemberBinaryOperator(E);
   else

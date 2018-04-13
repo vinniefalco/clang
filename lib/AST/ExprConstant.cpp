@@ -8560,10 +8560,9 @@ public:
 } // namespace
 
 template <class AfterCB>
-static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
-                                                  APValue &Result,
-                                                  const BinaryOperator *E,
-                                                  AfterCB &&DoAfter) {
+static bool EvaluateIntOrCmpBinaryOperator(EvalInfo &Info, APValue &Result,
+                                           const BinaryOperator *E,
+                                           AfterCB &&DoAfter) {
 
   assert((E->getOpcode() == BO_Cmp ||
           E->getType()->isIntegralOrEnumerationType()) &&
@@ -9004,7 +9003,7 @@ static bool EvaluateIntOrCmpBuiltinBinaryOperator(EvalInfo &Info,
 }
 
 bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
-  return EvaluateIntOrCmpBuiltinBinaryOperator(Info, Result, E, []() -> bool {
+  return EvaluateIntOrCmpBinaryOperator(Info, Result, E, []() -> bool {
     llvm_unreachable("operator<=> should have been evaluated to a result");
   });
 }
@@ -9019,7 +9018,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   if (DataRecursiveIntBinOpEvaluator::shouldEnqueue(E))
     return DataRecursiveIntBinOpEvaluator(*this, Result).Traverse(E);
 
-  return EvaluateIntOrCmpBuiltinBinaryOperator(Info, Result, E, [&]() {
+  return EvaluateIntOrCmpBinaryOperator(Info, Result, E, [&]() {
     assert((!E->getLHS()->getType()->isIntegralOrEnumerationType() ||
             !E->getRHS()->getType()->isIntegralOrEnumerationType()) &&
            "DataRecursiveIntBinOpEvaluator should have handled integral types");
