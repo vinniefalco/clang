@@ -9891,7 +9891,7 @@ static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
 QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
                                     SourceLocation Loc, BinaryOperatorKind Opc,
                                     bool IsRelational) {
-  bool IsSpaceship = Opc == BO_Cmp;
+  bool IsThreeWayCmp = Opc == BO_Cmp;
   // Comparisons expect an rvalue, so convert to rvalue before any
   // type-related checks.
   LHS = DefaultFunctionArrayLvalueConversion(LHS.get());
@@ -9918,7 +9918,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     return checkArithmeticOrEnumeralCompare(*this, LHS, RHS, Loc, Opc);
 
   auto computeResultTy = [&]() {
-    if (!IsSpaceship)
+    if (!IsThreeWayCmp)
       return Context.getLogicalOperationType();
     assert(getLangOpts().CPlusPlus);
     assert(Context.hasSameType(LHS.get()->getType(), RHS.get()->getType()));
@@ -10021,7 +10021,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     //   If both operands are pointers, [...] bring them to their composite
     //   pointer type.
     if ((int)LHSType->isPointerType() + (int)RHSType->isPointerType() >=
-            ((IsRelational && !IsSpaceship) ? 2 : 1) &&
+            ((IsRelational && !IsThreeWayCmp) ? 2 : 1) &&
         (!LangOpts.ObjCAutoRefCount || !(LHSType->isObjCObjectPointerType() ||
                                          RHSType->isObjCObjectPointerType()))) {
       if (convertPointersToCompositeType(*this, Loc, LHS, RHS))
@@ -10041,7 +10041,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     if (Context.typesAreCompatible(LCanPointeeTy.getUnqualifiedType(),
                                    RCanPointeeTy.getUnqualifiedType())) {
       // Valid unless a relational comparison of function pointers
-      if ((IsRelational && !IsSpaceship) && LCanPointeeTy->isFunctionType()) {
+      if ((IsRelational && !IsThreeWayCmp) && LCanPointeeTy->isFunctionType()) {
         Diag(Loc, diag::ext_typecheck_ordered_comparison_of_function_pointers)
           << LHSType << RHSType << LHS.get()->getSourceRange()
           << RHS.get()->getSourceRange();
@@ -10084,7 +10084,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // C++ [expr.eq]p4:
     //   Two operands of type std::nullptr_t or one operand of type
     //   std::nullptr_t and the other a null pointer constant compare equal.
-    if ((!IsRelational || IsSpaceship) && LHSIsNull && RHSIsNull) {
+    if ((!IsRelational || IsThreeWayCmp) && LHSIsNull && RHSIsNull) {
       if (LHSType->isNullPtrType()) {
         RHS = ImpCastExprToType(RHS.get(), LHSType, CK_NullToPointer);
         return computeResultTy();
@@ -10136,7 +10136,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // C++ [expr.eq]p2:
     //   If at least one operand is a pointer to member, [...] bring them to
     //   their composite pointer type.
-    if ((!IsRelational || IsSpaceship) &&
+    if ((!IsRelational || IsThreeWayCmp) &&
         (LHSType->isMemberPointerType() || RHSType->isMemberPointerType())) {
       if (convertPointersToCompositeType(*this, Loc, LHS, RHS))
         return QualType();

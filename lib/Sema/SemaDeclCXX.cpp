@@ -8885,16 +8885,18 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
   return StdExperimentalNamespaceCache;
 }
 
-bool Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
-                                              SourceLocation Loc) {
+const ComparisonCategoryInfo *
+Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
+                                         SourceLocation Loc) {
   using CCKT = ComparisonCategoryKind;
   using CCVT = ComparisonCategoryResult;
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
 
   // Check if we've already successfully built the comparison category data.
-  if (Context.CompCategories.getInfoUnsafe(Kind))
-    return false;
+  if (const ComparisonCategoryInfo *Info =
+          Context.CompCategories.getInfoUnsafe(Kind))
+    return Info;
 
   StringRef Name = ComparisonCategories::getCategoryString(Kind);
   // Build the initial category information
@@ -8940,7 +8942,7 @@ bool Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
     if (!LookupQualifiedName(Found, LookupCtx)) {
       Diag(Loc, diag::err_std_compare_type_missing_member)
           << Info.CCDecl << ValueName;
-      return true;
+      return nullptr;
     }
     auto *VD = Found.getAsSingle<VarDecl>();
 
@@ -8950,19 +8952,21 @@ bool Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryKind Kind,
     if (!VD || !VD->isStaticDataMember() || !VD->isConstexpr()) {
       Diag(Loc, diag::err_std_compare_type_not_supported)
           << Info.CCDecl << ValueName;
-      return true;
+      return nullptr;
     }
 
     ExprResult Res =
         BuildDeclRefExpr(VD, VD->getType(), VK_LValue, SourceLocation());
     if (Res.isInvalid())
-      return true;
+      return nullptr;
 
     Info.Objects.try_emplace((char)CCV, cast<DeclRefExpr>(Res.get()));
   }
-  Context.CompCategories.Data.try_emplace((char)Kind, std::move(Info));
 
-  return false;
+  // We've successfully built the required types and expressions. Update
+  // the cache and return the newly cached value.
+  Context.CompCategories.Data.try_emplace((char)Kind, std::move(Info));
+  return &Context.CompCategories.getInfo(Kind);
 }
 
 /// \brief Retrieve the special "std" namespace, which may require us to

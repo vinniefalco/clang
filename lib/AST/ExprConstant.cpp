@@ -8533,7 +8533,7 @@ public:
 
 bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   using CCR = ComparisonCategoryResult;
-  bool IsSpaceship = E->getOpcode() == BO_Cmp;
+  bool IsThreeWayCmp = E->getOpcode() == BO_Cmp;
   auto &Info = this->Info;
   // We don't call noteFailure immediately because the assignment happens after
   // we evaluate LHS and RHS.
@@ -8932,7 +8932,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     return Success(Opcode == BO_EQ || Opcode == BO_LE || Opcode == BO_GE, E);
   }
 
-  if (IsSpaceship && LHSTy->isIntegralOrEnumerationType() &&
+  if (IsThreeWayCmp && LHSTy->isIntegralOrEnumerationType() &&
       RHSTy->isIntegralOrEnumerationType()) {
     APSInt LHS, RHS;
     bool LHSOK = EvaluateInteger(E->getLHS(), LHS, Info);
@@ -8952,7 +8952,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
   assert((!LHSTy->isIntegralOrEnumerationType() ||
           !RHSTy->isIntegralOrEnumerationType()) &&
          "DataRecursiveIntBinOpEvaluator should have handled integral types");
-  assert(!IsSpaceship && "case not handled for operator<=>");
+  assert(!IsThreeWayCmp && "case not handled for operator<=>");
   // We can't continue from here for non-integral types.
   return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
 
