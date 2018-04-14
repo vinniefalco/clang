@@ -8885,15 +8885,18 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
   return StdExperimentalNamespaceCache;
 }
 
-const ComparisonCategoryInfo *
-Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
-                                         SourceLocation Loc) {
+QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
+                                           SourceLocation Loc) {
   using CCT = ComparisonCategoryType;
   using CCVT = ComparisonCategoryResult;
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
 
   // Check if we've already successfully built the comparison category data.
+  const ComparisonCategoryInfo *CachedInfo =
+      Context.CompCategories.lookupInfo(Kind);
+  if (CachedInfo && CachedInfo->IsFullyChecked)
+    return QualType(CachedInfo->CCDecl->getTypeForDecl(), 0);
 
   StringRef Name = ComparisonCategories::getCategoryString(Kind);
   // Build the initial category information
@@ -8908,7 +8911,7 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
   }
   if (!CCDecl) {
     Diag(Loc, diag::err_implied_comparison_category_type_not_found) << Name;
-    return nullptr;
+    return QualType();
   }
 
   // Calculate the list of values belonging to this comparison category type.
@@ -8939,7 +8942,7 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
     if (!LookupQualifiedName(Found, LookupCtx)) {
       Diag(Loc, diag::err_std_compare_type_missing_member)
           << CCDecl << ValueName;
-      return nullptr;
+      return QualType();
     }
     auto *VD = Found.getAsSingle<VarDecl>();
 
@@ -8949,18 +8952,18 @@ Sema::BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
     if (!VD || !VD->isStaticDataMember() || !VD->isConstexpr()) {
       Diag(Loc, diag::err_std_compare_type_not_supported)
           << CCDecl << ValueName;
-      return nullptr;
+      return QualType();
     }
     MarkVariableReferenced(Loc, VD);
   }
 
   // We've successfully built the required types and expressions. Update
   // the cache and return the newly cached value.
-  const ComparisonCategoryInfo *CachedInfo =
-      Context.CompCategories.lookupInfo(Kind);
+  assert(CachedInfo && "lookup of cached info should have succeeded");
   assert(CachedInfo->CCDecl == CCDecl);
   assert(CachedInfo->Kind == Kind);
-  return CachedInfo;
+  CachedInfo->IsFullyChecked = true;
+  return QualType(CachedInfo->CCDecl->getTypeForDecl(), 0);
 }
 
 /// \brief Retrieve the special "std" namespace, which may require us to

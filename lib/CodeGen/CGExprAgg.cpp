@@ -968,7 +968,6 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
         "unsupported complex expressions should have already been handled");
   }
 
-  auto &Ctx = CGF.getContext();
   auto EmitCmpRes = [&](const VarDecl *VD) {
     DeclRefExpr DE(const_cast<VarDecl *>(VD),
                    /*RefersToEnclosingVariableOrCapture*/ false, E->getType(),

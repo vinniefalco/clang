@@ -4543,16 +4543,13 @@ public:
   EnumDecl *getStdAlignValT() const;
 
   /// \brief Lookup the specified comparison category types in the standard
-  ///   library, an build DeclRefExprs to values returned by the operator<=>
-  ///   builtins for that type. The results are cached in ASTContext so they are
-  ///   accessible outside of Sema. An error is emitted if the type is not found
-  ///   or another error occurs.
+  ///   library, an check the VarDecls possibly returned by the operator<=>
+  ///   builtins for that type.
   ///
-  /// \return the info for the specified kind if no error occurs, otherwise
-  ///   nullptr.
-  const ComparisonCategoryInfo *
-  BuildComparisonCategoryInfoForType(ComparisonCategoryType Kind,
-                                     SourceLocation Loc);
+  /// \return The type of the comparison category type corresponding to the
+  ///   specified Kind, or a null type if an error occurs
+  QualType CheckComparisonCategoryType(ComparisonCategoryType Kind,
+                                       SourceLocation Loc);
 
   /// \brief Tests whether Ty is an instance of std::initializer_list and, if
   /// it is and Element is not NULL, assigns the element type to Element.

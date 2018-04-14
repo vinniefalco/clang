@@ -9840,10 +9840,7 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
     llvm_unreachable("other types are unimplemented");
   }();
 
-  if (const ComparisonCategoryInfo *Info =
-          S.BuildComparisonCategoryInfoForType(TypeKind, Loc))
-    return QualType(Info->CCDecl->getTypeForDecl(), 0);
-  return QualType();
+  return S.CheckComparisonCategoryType(TypeKind, Loc);
 }
 
 static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
@@ -9922,10 +9919,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     assert(!CompositeTy->isReferenceType());
 
     auto buildResultTy = [&](ComparisonCategoryType Kind) {
-      if (const ComparisonCategoryInfo *Info =
-              BuildComparisonCategoryInfoForType(Kind, Loc))
-        return QualType(Info->CCDecl->getTypeForDecl(), 0);
-      return QualType();
+      return CheckComparisonCategoryType(Kind, Loc);
     };
 
     // C++2a [expr.spaceship]p7: If the composite pointer type is a function

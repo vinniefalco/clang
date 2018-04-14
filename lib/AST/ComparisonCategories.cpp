@@ -26,16 +26,12 @@ const VarDecl *ComparisonCategoryInfo::lookupResultValue(
   if (VD)
     return VD;
 
-  StringRef StrName = ComparisonCategories::getResultString(ValueKind);
   const RecordDecl *RD = cast<RecordDecl>(CCDecl->getCanonicalDecl());
-
-  const IdentifierInfo &II = Ctx.Idents.get(StrName);
-  DeclarationName Name(&II);
-  DeclContextLookupResult Lookup =
-      RD->getDeclContext()->getRedeclContext()->lookup(Name);
+  StringRef Name = ComparisonCategories::getResultString(ValueKind);
+  DeclContextLookupResult Lookup = RD->lookup(&Ctx.Idents.get(Name));
   if (Lookup.size() != 1)
     return nullptr;
-  const NamedDecl *ND = Lookup.front();
+  NamedDecl *ND = Lookup.front();
   if (const auto *VD = dyn_cast<VarDecl>(ND)) {
     auto ItPair =
         Objects.try_emplace((char)ValueKind, const_cast<VarDecl *>(VD));
@@ -47,51 +43,50 @@ const VarDecl *ComparisonCategoryInfo::lookupResultValue(
 NamespaceDecl *ComparisonCategories::lookupStdNamespace() const {
   if (!StdNS) {
     IdentifierInfo &StdII = Ctx.Idents.get("std");
-    DeclarationName Name(&StdII);
-    DeclContextLookupResult Lookup = Ctx.getTranslationUnitDecl()->lookup(Name);
+    DeclContextLookupResult Lookup =
+        Ctx.getTranslationUnitDecl()->lookup(&StdII);
     if (Lookup.size() == 1)
       StdNS = dyn_cast<NamespaceDecl>(Lookup.front());
     if (!StdNS) {
-    StdNS = NamespaceDecl::Create(
-      const_cast<ASTContext &>(Ctx), Ctx.getTranslationUnitDecl(),
-      /*Inline*/ false, SourceLocation(), SourceLocation(),
-      &StdII, /*PrevDecl*/ nullptr);
+      StdNS = NamespaceDecl::Create(
+          const_cast<ASTContext &>(Ctx), Ctx.getTranslationUnitDecl(),
+          /*Inline*/ false, SourceLocation(), SourceLocation(), &StdII,
+          /*PrevDecl*/ nullptr);
+      StdNS->setImplicit(true);
     }
   }
   return StdNS;
 }
 
-static const RecordDecl *lookupRecordDecl(const ASTContext &Ctx,
-                                          NamespaceDecl *StdNS,
-                                          ComparisonCategoryType Kind) {
-
-  StringRef StrName = ComparisonCategories::getCategoryString(Kind);
-  const IdentifierInfo &II = Ctx.Idents.get(StrName);
-  DeclarationName Name(&II);
-  DeclContextLookupResult Lookup = StdNS->lookup(Name);
+static RecordDecl *lookupRecordDecl(const ASTContext &Ctx, NamespaceDecl *StdNS,
+                                    ComparisonCategoryType Kind) {
+  StringRef Name = ComparisonCategories::getCategoryString(Kind);
+  DeclContextLookupResult Lookup = StdNS->lookup(&Ctx.Idents.get(Name));
   if (Lookup.size() == 1) {
-    if (const RecordDecl *RD = dyn_cast<RecordDecl>(Lookup.front()))
+    if (RecordDecl *RD = dyn_cast<RecordDecl>(Lookup.front()))
       return RD;
   }
   return nullptr;
 }
 
 const ComparisonCategoryInfo *
-ComparisonCategories::lookupInfoUnchecked(ComparisonCategoryType Kind) const {
+ComparisonCategories::lookupInfo(ComparisonCategoryType Kind) const {
   auto It = Data.find(static_cast<char>(Kind));
   if (It != Data.end())
     return &It->second;
-  const RecordDecl *RD = lookupRecordDecl(Ctx, lookupStdNamespace(), Kind);
-  if (!RD)
-    return nullptr;
-  ComparisonCategoryInfo Info(Ctx);
-  Info.CCDecl = const_cast<RecordDecl *>(RD);
-  Info.Kind = Kind;
-  return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
+  if (NamespaceDecl *NS = lookupStdNamespace()) {
+    if (RecordDecl *RD = lookupRecordDecl(Ctx, NS, Kind)) {
+      ComparisonCategoryInfo Info(Ctx);
+      Info.CCDecl = RD;
+      Info.Kind = Kind;
+      return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
+    }
+  }
+  return nullptr;
 }
 
 const ComparisonCategoryInfo *
-ComparisonCategories::lookupInfoForTypeUnchecked(QualType Ty) const {
+ComparisonCategories::lookupInfoForType(QualType Ty) const {
   assert(!Ty.isNull() && "type must be non-null");
   using CCT = ComparisonCategoryType;
   const auto *RD = Ty->getAsCXXRecordDecl();
@@ -132,7 +127,7 @@ ComparisonCategories::lookupInfoForTypeUnchecked(QualType Ty) const {
 }
 
 const ComparisonCategoryInfo &ComparisonCategories::getInfoForType(QualType Ty) const {
-  const ComparisonCategoryInfo *Info = lookupInfoForTypeUnchecked(Ty);
+  const ComparisonCategoryInfo *Info = lookupInfoForType(Ty);
   assert(Info && "info for comparison category not found");
   return *Info;
 }

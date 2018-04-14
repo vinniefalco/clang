@@ -33,6 +33,8 @@ class VarDecl;
 class RecordDecl;
 class QualType;
 class NamespaceDecl;
+class SourceLocation;
+class Sema;
 
 /// \brief An enumeration representing the different comparison categories
 /// types.
@@ -65,7 +67,18 @@ enum class ComparisonCategoryResult : unsigned char {
 
 class ComparisonCategoryInfo {
   friend class ComparisonCategories;
+  friend QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType,
+                                                    SourceLocation);
+
   const ASTContext &Ctx;
+
+  /// \brief Wether Sema has fully checked the type and result values for this
+  ///   comparison category types before.
+  mutable bool IsFullyChecked = false;
+
+  /// \brief A map containing the comparison category values built from the
+  /// standard library. The key is a value of ComparisonCategoryResult.
+  mutable llvm::DenseMap<char, VarDecl *> Objects;
 
   ComparisonCategoryInfo(const ASTContext &Ctx) : Ctx(Ctx) {}
 
@@ -75,9 +88,6 @@ public:
   // FIXME: Make this const
   RecordDecl *CCDecl = nullptr;
 
-  /// \brief A map containing the comparison category values built from the
-  /// standard library. The key is a value of ComparisonCategoryResult.
-  mutable llvm::DenseMap<char, VarDecl *> Objects;
 
   /// \brief The Kind of the comparison category type
   ComparisonCategoryType Kind;
@@ -153,6 +163,9 @@ public:
 
 class ComparisonCategories {
   friend class ASTContext;
+  friend QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType,
+                                                    SourceLocation);
+
   explicit ComparisonCategories(const ASTContext &Ctx) : Ctx(Ctx) {}
 
 public:
@@ -183,26 +196,18 @@ public:
   /// Note: The comparison category type must have already been built by Sema.
   const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
 
-public:
+private:
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind', or nullptr if it isn't available.
-  const ComparisonCategoryInfo *lookupInfo(ComparisonCategoryType Kind) const {
-    const ComparisonCategoryInfo *Info = lookupInfoUnchecked(Kind);
-    assert(Info && "info for comparison category type not found");
-    return Info;
-  }
+  const ComparisonCategoryInfo *lookupInfo(ComparisonCategoryType Kind) const;
 
-  const ComparisonCategoryInfo *
-  lookupInfoUnchecked(ComparisonCategoryType Kind) const;
+  const ComparisonCategoryInfo *lookupInfoForType(QualType Ty) const;
 
-  const ComparisonCategoryInfo *lookupInfoForTypeUnchecked(QualType Ty) const;
-
-public:
-  const ASTContext &Ctx;
-  mutable llvm::DenseMap<char, ComparisonCategoryInfo> Data;
+  NamespaceDecl *lookupStdNamespace() const;
 
 private:
-  NamespaceDecl *lookupStdNamespace() const;
+  const ASTContext &Ctx;
+  mutable llvm::DenseMap<char, ComparisonCategoryInfo> Data;
   mutable NamespaceDecl *StdNS = nullptr;
 };
 
