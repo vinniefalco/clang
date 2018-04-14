@@ -198,7 +198,6 @@ public:
     RValue Res = CGF.EmitAtomicExpr(E);
     EmitFinalDestCopy(E->getType(), Res);
   }
-
 };
 }  // end anonymous namespace.
 
