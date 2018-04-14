@@ -215,7 +215,7 @@ void test_nullptr(int *x, FnTy *fp, MemFnTy memp, MemDataTy memdp) {
   ASSERT_EXPR_TYPE(r1, std::strong_equality);
 
   auto r2 = (nullptr <=> x);
-  ASSERT_EXPR_TYPE(r2, std::strong_ordering);
+  ASSERT_EXPR_TYPE(r2, std::strong_equality);
 
   auto r3 = (fp <=> nullptr);
   ASSERT_EXPR_TYPE(r3, std::strong_equality);
@@ -253,3 +253,5 @@ auto test_template_overflow() {
 }
 template auto test_template_overflow<0>();
 template auto test_template_overflow<-1>(); // expected-note {{requested here}}
+
+// test null-safety as specified

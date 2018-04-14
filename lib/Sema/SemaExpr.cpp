@@ -9893,6 +9893,13 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
       (RHSType->isArithmeticType() || RHSType->isEnumeralType()))
     return checkArithmeticOrEnumeralCompare(*this, LHS, RHS, Loc, Opc);
 
+  const Expr::NullPointerConstantKind LHSNullKind =
+      LHS.get()->isNullPointerConstant(Context, Expr::NPC_ValueDependentIsNull);
+  const Expr::NullPointerConstantKind RHSNullKind =
+      RHS.get()->isNullPointerConstant(Context, Expr::NPC_ValueDependentIsNull);
+  bool LHSIsNull = LHSNullKind != Expr::NPCK_NotNull;
+  bool RHSIsNull = RHSNullKind != Expr::NPCK_NotNull;
+
   auto computeResultTy = [&]() {
     if (Opc != BO_Cmp)
       return Context.getLogicalOperationType();
@@ -9915,20 +9922,18 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
 
     // C++2a [expr.spaceship]p8: If the composite pointer type is an object
     // pointer type, p <=> q is of type std::strong_ordering.
-    if (CompositeTy->isPointerType())
+    if (CompositeTy->isPointerType()) {
+      // P0946R0: Comparisons between a null pointer constant and an object
+      // pointer result in std::strong_equality
+      if (LHSIsNull != RHSIsNull)
+        return buildResultTy(ComparisonCategoryType::StrongEquality);
       return buildResultTy(ComparisonCategoryType::StrongOrdering);
-
+    }
     // C++2a [expr.spaceship]p9: Otherwise, the program is ill-formed.
     // TODO: Extend support for operator<=> to ObjC types.
     return InvalidOperands(Loc, LHS, RHS);
   };
 
-  const Expr::NullPointerConstantKind LHSNullKind =
-      LHS.get()->isNullPointerConstant(Context, Expr::NPC_ValueDependentIsNull);
-  const Expr::NullPointerConstantKind RHSNullKind =
-      RHS.get()->isNullPointerConstant(Context, Expr::NPC_ValueDependentIsNull);
-  bool LHSIsNull = LHSNullKind != Expr::NPCK_NotNull;
-  bool RHSIsNull = RHSNullKind != Expr::NPCK_NotNull;
 
   if (!IsRelational && LHSIsNull != RHSIsNull) {
     bool IsEquality = Opc == BO_EQ;

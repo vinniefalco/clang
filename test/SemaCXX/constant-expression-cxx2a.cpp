@@ -162,18 +162,25 @@ constexpr bool test_constexpr_success = [] {
   return true;
 }();
 
-template <auto LHS, auto RHS>
+template <auto LHS, auto RHS, bool ExpectTrue = false>
 constexpr bool test_constexpr() {
-  (void)(LHS <=> RHS); // expected-note 1+ {{subexpression not valid in a constant expression}}
-  return true;
+  using nullptr_t = decltype(nullptr);
+  using LHSTy = decltype(LHS);
+  using RHSTy = decltype(RHS);
+  // expected-note@+1 {{subexpression not valid in a constant expression}}
+  auto Res = (LHS <=> RHS);
+  if constexpr (__is_same(LHSTy, nullptr_t) || __is_same(RHSTy, nullptr_t)) {
+    CHECK_TYPE(decltype(Res), std::strong_equality);
+  }
+  if (ExpectTrue)
+    return Res == 0;
+  return Res != 0;
 }
 int dummy = 42;
 int dummy2 = 101;
 
-// expected-error@+1 {{must be initialized by a constant expression}}
-constexpr bool tc1 = test_constexpr<nullptr, &dummy>(); // expected-note {{in call}}
-// expected-error@+1 {{must be initialized by a constant expression}}
-constexpr bool tc2 = test_constexpr<&dummy, nullptr>(); // expected-note {{in call}}
+constexpr bool tc1 = test_constexpr<nullptr, &dummy>();
+constexpr bool tc2 = test_constexpr<&dummy, nullptr>();
 
 // OK, equality comparison only
 constexpr bool tc3 = test_constexpr<&MemPtr::foo, nullptr>();
