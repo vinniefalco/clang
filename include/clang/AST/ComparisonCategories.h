@@ -91,18 +91,18 @@ public:
 public:
   /// \brief Return an expression referencing the member of the specified
   ///   comparison category. For example 'std::strong_equality::equal'
-  const VarDecl *getResultValue(ComparisonCategoryResult ValueKind) const {
-    const VarDecl *VD = lookupResultValue(ValueKind);
+  const VarDecl *getResultDecl(ComparisonCategoryResult ValueKind) const {
+    const VarDecl *VD = lookupResultDecl(ValueKind);
     assert(VD &&
            "comparison category does not contain the specified result kind");
     return VD;
   }
 
-  const VarDecl *lookupResultValue(ComparisonCategoryResult ValueKind) const;
+  const VarDecl *lookupResultDecl(ComparisonCategoryResult ValueKind) const;
 
-  VarDecl *lookupResultValue(ComparisonCategoryResult ValueKind) {
+  VarDecl *lookupResultDecl(ComparisonCategoryResult ValueKind) {
     const auto &This = *this;
-    return const_cast<VarDecl *>(This.lookupResultValue(ValueKind));
+    return const_cast<VarDecl *>(This.lookupResultDecl(ValueKind));
   }
 
   /// \brief True iff the comparison category is an equality comparison.
@@ -143,22 +143,22 @@ public:
   }
 
   const VarDecl *getEqualOrEquiv() const {
-    return getResultValue(makeWeakResult(ComparisonCategoryResult::Equal));
+    return getResultDecl(makeWeakResult(ComparisonCategoryResult::Equal));
   }
   const VarDecl *getNonequalOrNonequiv() const {
-    return getResultValue(makeWeakResult(ComparisonCategoryResult::Nonequal));
+    return getResultDecl(makeWeakResult(ComparisonCategoryResult::Nonequal));
   }
   const VarDecl *getLess() const {
     assert(isOrdered());
-    return getResultValue(ComparisonCategoryResult::Less);
+    return getResultDecl(ComparisonCategoryResult::Less);
   }
   const VarDecl *getGreater() const {
     assert(isOrdered());
-    return getResultValue(ComparisonCategoryResult::Greater);
+    return getResultDecl(ComparisonCategoryResult::Greater);
   }
   const VarDecl *getUnordered() const {
     assert(isPartial());
-    return getResultValue(ComparisonCategoryResult::Unordered);
+    return getResultDecl(ComparisonCategoryResult::Unordered);
   }
 };
 

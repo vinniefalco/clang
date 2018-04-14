@@ -19,8 +19,8 @@
 
 using namespace clang;
 
-const VarDecl *ComparisonCategoryInfo::lookupResultValue(
-    ComparisonCategoryResult ValueKind) const {
+const VarDecl *ComparisonCategoryInfo::lookupResultDecl(
+        ComparisonCategoryResult ValueKind) const {
   char Key = static_cast<char>(ValueKind);
   const VarDecl *VD = Objects.lookup(Key);
   if (VD)

@@ -8810,7 +8810,7 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
     // type and fetch the VarDecl for the result.
     const ComparisonCategoryInfo &CmpInfo =
         Info.Ctx.CompCategories.getInfoForType(E->getType());
-    const VarDecl *VD = CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
+    const VarDecl *VD = CmpInfo.getResultDecl(CmpInfo.makeWeakResult(ResKind));
     assert(!VD->hasLocalStorage() && !VD->getType()->isReferenceType());
     // Check and evaluate the result as a constant expression.
     LValue LV;
