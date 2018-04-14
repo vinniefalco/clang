@@ -159,6 +159,11 @@ public:
   static StringRef getCategoryString(ComparisonCategoryType Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
 
+  /// \brief Return the list of results which are valid for the specified
+  ///   comparison category type.
+  static std::vector<ComparisonCategoryResult>
+  getResultValuesForType(ComparisonCategoryType Type);
+
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind'.
   const ComparisonCategoryInfo &getInfo(ComparisonCategoryType Kind) const {

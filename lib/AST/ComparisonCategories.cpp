@@ -16,6 +16,7 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/Type.h"
+#include "llvm/ADT/SmallVector.h"
 
 using namespace clang;
 
@@ -161,3 +162,26 @@ StringRef ComparisonCategories::getResultString(ComparisonCategoryResult Kind) {
   llvm_unreachable("unhandled case in switch");
 }
 
+std::vector<ComparisonCategoryResult>
+ComparisonCategories::getResultValuesForType(ComparisonCategoryType Type) {
+  using CCT = ComparisonCategoryType;
+  using CCR = ComparisonCategoryResult;
+  std::vector<CCR> Values;
+  Values.reserve(6);
+  Values.push_back(CCR::Equivalent);
+  bool IsStrong = (Type == CCT::StrongEquality || Type == CCT::StrongOrdering);
+  if (IsStrong)
+    Values.push_back(CCR::Equal);
+  if (Type == CCT::StrongOrdering || Type == CCT::WeakOrdering ||
+      Type == CCT::PartialOrdering) {
+    Values.push_back(CCR::Less);
+    Values.push_back(CCR::Greater);
+  } else {
+    Values.push_back(CCR::Nonequivalent);
+    if (IsStrong)
+      Values.push_back(CCR::Nonequal);
+  }
+  if (Type == CCT::PartialOrdering)
+    Values.push_back(CCR::Unordered);
+  return Values;
+}

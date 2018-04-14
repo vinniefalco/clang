@@ -9724,8 +9724,9 @@ static ImplicitConversionKind castKindToImplicitConversionKind(CastKind CK) {
   }
 }
 
-static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
-                                     QualType FromType, SourceLocation Loc) {
+static bool checkThreeWayNarrowingConversion(Sema &S, QualType ToType, Expr *E,
+                                             QualType FromType,
+                                             SourceLocation Loc) {
   // Check for a narrowing implicit conversion.
   StandardConversionSequence SCS;
   SCS.setToType(0, FromType);
@@ -9809,10 +9810,10 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
       return S.InvalidOperands(Loc, LHS, RHS);
     assert(Type->isArithmeticType());
 
-    bool HasNarrowing = checkNarrowingConversion(S, Type, LHS.get(), LHSType,
-                                                 LHS.get()->getLocStart());
-    HasNarrowing |= checkNarrowingConversion(S, Type, RHS.get(), RHSType,
-                                             RHS.get()->getLocStart());
+    bool HasNarrowing = checkThreeWayNarrowingConversion(
+        S, Type, LHS.get(), LHSType, LHS.get()->getLocStart());
+    HasNarrowing |= checkThreeWayNarrowingConversion(
+        S, Type, RHS.get(), RHSType, RHS.get()->getLocStart());
     if (HasNarrowing)
       return QualType();
   }

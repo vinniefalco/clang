@@ -8907,26 +8907,8 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   assert(Info->Kind == Kind);
   assert(Info->CCDecl);
 
-  // Calculate the list of values belonging to this comparison category type.
-  SmallVector<CCVT, 6> Values;
-  Values.push_back(CCVT::Equivalent);
-  bool IsStrong = (Kind == CCT::StrongEquality || Kind == CCT::StrongOrdering);
-  if (IsStrong)
-    Values.push_back(CCVT::Equal);
-  if (Kind == CCT::StrongOrdering || Kind == CCT::WeakOrdering ||
-      Kind == CCT::PartialOrdering) {
-    Values.push_back(CCVT::Less);
-    Values.push_back(CCVT::Greater);
-  } else {
-    Values.push_back(CCVT::Nonequivalent);
-    if (IsStrong)
-      Values.push_back(CCVT::Nonequal);
-  }
-  if (Kind == CCT::PartialOrdering)
-    Values.push_back(CCVT::Unordered);
-
   // Build each of the require values and store them in Info.
-  for (CCVT CCV : Values) {
+  for (CCVT CCV : ComparisonCategories::getResultValuesForType(Kind)) {
     VarDecl *VD = Info->lookupResultDecl(CCV);
     if (!VD) {
       Diag(Loc, diag::err_std_compare_type_missing_member)
