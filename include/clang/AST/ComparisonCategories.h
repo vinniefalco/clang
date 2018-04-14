@@ -90,12 +90,12 @@ public:
     return VD;
   }
 
-  const VarDecl *lookupResultDecl(ComparisonCategoryResult ValueKind) const;
-
-  VarDecl *lookupResultDecl(ComparisonCategoryResult ValueKind) {
-    const auto &This = *this;
-    return const_cast<VarDecl *>(This.lookupResultDecl(ValueKind));
+  const VarDecl *lookupResultDecl(ComparisonCategoryResult ValueKind) const {
+    auto &This = *const_cast<ComparisonCategoryInfo *>(this);
+    return This.lookupResultDecl(ValueKind);
   }
+
+  VarDecl *lookupResultDecl(ComparisonCategoryResult ValueKind);
 
   /// \brief True iff the comparison category is an equality comparison.
   bool isEquality() const { return !isOrdered(); }

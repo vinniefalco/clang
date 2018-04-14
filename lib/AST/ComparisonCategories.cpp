@@ -19,10 +19,10 @@
 
 using namespace clang;
 
-const VarDecl *ComparisonCategoryInfo::lookupResultDecl(
-        ComparisonCategoryResult ValueKind) const {
+VarDecl *
+ComparisonCategoryInfo::lookupResultDecl(ComparisonCategoryResult ValueKind) {
   char Key = static_cast<char>(ValueKind);
-  const VarDecl *VD = Objects.lookup(Key);
+  VarDecl *VD = Objects.lookup(Key);
   if (VD)
     return VD;
 
@@ -81,7 +81,7 @@ const ComparisonCategoryInfo *
 ComparisonCategories::lookupInfoForType(QualType Ty) const {
   assert(!Ty.isNull() && "type must be non-null");
   using CCT = ComparisonCategoryType;
-  const auto *RD = Ty->getAsCXXRecordDecl();
+  auto *RD = Ty->getAsCXXRecordDecl();
   if (!RD)
     return nullptr;
 
@@ -107,8 +107,7 @@ ComparisonCategories::lookupInfoForType(QualType Ty) const {
     // it.
     if (getCategoryString(Kind) == RD->getName()) {
       ComparisonCategoryInfo Info(Ctx);
-      Info.CCDecl =
-          const_cast<RecordDecl *>(static_cast<const RecordDecl *>(RD));
+      Info.CCDecl = RD;
       Info.Kind = Kind;
       return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
     }
