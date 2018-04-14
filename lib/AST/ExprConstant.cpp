@@ -8814,7 +8814,7 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
       return false;
     return CheckConstantExpression(Info, E->getExprLoc(), E->getType(), Result);
   };
-  return EvaluateComparisonBinaryOperator(Info, E, OnSuccess, []() {
+  return EvaluateComparisonBinaryOperator(Info, E, OnSuccess, [&]() {
     return ExprEvaluatorBaseTy::VisitBinaryOperator(E);
   });
 }
