@@ -17,6 +17,7 @@
 
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
+#include <vector>
 #include <cassert>
 
 namespace llvm {
