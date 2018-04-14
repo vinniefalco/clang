@@ -77,7 +77,7 @@ class ComparisonCategoryInfo {
 public:
   /// \brief Wether Sema has fully checked the type and result values for this
   ///   comparison category types before.
-  mutable bool IsFullyChecked = false;
+  bool IsFullyChecked = false;
 
 public:
   /// \brief The declaration for the comparison category type from the
@@ -99,6 +99,11 @@ public:
   }
 
   const VarDecl *lookupResultValue(ComparisonCategoryResult ValueKind) const;
+
+  VarDecl *lookupResultValue(ComparisonCategoryResult ValueKind) {
+    const auto &This = *this;
+    return const_cast<VarDecl *>(This.lookupResultValue(ValueKind));
+  }
 
   /// \brief True iff the comparison category is an equality comparison.
   bool isEquality() const { return !isOrdered(); }
@@ -181,6 +186,11 @@ public:
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind', or nullptr if it isn't available.
   const ComparisonCategoryInfo *lookupInfo(ComparisonCategoryType Kind) const;
+
+  ComparisonCategoryInfo *lookupInfo(ComparisonCategoryType Kind) {
+    const auto &This = *this;
+    return const_cast<ComparisonCategoryInfo *>(This.lookupInfo(Kind));
+  }
 
 private:
   const ComparisonCategoryInfo *lookupInfoForType(QualType Ty) const;

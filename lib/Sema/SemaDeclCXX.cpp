@@ -8894,26 +8894,18 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
 
   // Check if we've already successfully checked the comparison category type
   // before. If so, skip checking it again.
-  const ComparisonCategoryInfo *CachedInfo =
-      Context.CompCategories.lookupInfo(Kind);
-  if (CachedInfo && CachedInfo->IsFullyChecked)
-    return QualType(CachedInfo->CCDecl->getTypeForDecl(), 0);
+  ComparisonCategoryInfo *Info = Context.CompCategories.lookupInfo(Kind);
+  if (Info && Info->IsFullyChecked)
+    return QualType(Info->CCDecl->getTypeForDecl(), 0);
 
-  StringRef Name = ComparisonCategories::getCategoryString(Kind);
-  // Build the initial category information
-  RecordDecl *CCDecl = nullptr;
-  // Lookup the record for the category type
-  if (auto Std = getStdNamespace()) {
-    LookupResult Result(*this, &PP.getIdentifierTable().get(Name),
-                        SourceLocation(), Sema::LookupTagName);
-    if (LookupQualifiedName(Result, Std))
-      CCDecl = Result.getAsSingle<RecordDecl>();
-    Result.suppressDiagnostics();
-  }
-  if (!CCDecl) {
-    Diag(Loc, diag::err_implied_comparison_category_type_not_found) << Name;
+  // If lookup failed
+  if (!Info) {
+    Diag(Loc, diag::err_implied_comparison_category_type_not_found)
+        << ComparisonCategories::getCategoryString(Kind);
     return QualType();
   }
+  assert(Info->Kind == Kind);
+  assert(Info->CCDecl);
 
   // Calculate the list of values belonging to this comparison category type.
   SmallVector<CCVT, 6> Values;
@@ -8935,24 +8927,18 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
 
   // Build each of the require values and store them in Info.
   for (CCVT CCV : Values) {
-    StringRef ValueName = ComparisonCategories::getResultString(CCV);
-    QualType Ty(CCDecl->getTypeForDecl(), 0);
-    DeclContext *LookupCtx = computeDeclContext(Ty);
-    LookupResult Found(*this, &PP.getIdentifierTable().get(ValueName), Loc,
-                       Sema::LookupOrdinaryName);
-    if (!LookupQualifiedName(Found, LookupCtx)) {
+    VarDecl *VD = Info->getResultValue(CCV);
+    if (!VD) {
       Diag(Loc, diag::err_std_compare_type_missing_member)
-          << CCDecl << ValueName;
+          << Info->CCDecl << ComparisonCategories::getResultString(CCV);
       return QualType();
     }
-    auto *VD = Found.getAsSingle<VarDecl>();
-
     // Attempt to diagnose reasons why the STL definition of this type
     // might be foobar, including it failing to be a constant expression.
     // TODO Handle more ways the lookup or result can be invalid.
     if (!VD || !VD->isStaticDataMember() || !VD->isConstexpr()) {
       Diag(Loc, diag::err_std_compare_type_not_supported)
-          << CCDecl << ValueName;
+          << Info->CCDecl << ComparisonCategories::getResultString(CCV);
       return QualType();
     }
     MarkVariableReferenced(Loc, VD);
@@ -8960,11 +8946,8 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
 
   // We've successfully built the required types and expressions. Update
   // the cache and return the newly cached value.
-  assert(CachedInfo && "lookup of cached info should have succeeded");
-  assert(CachedInfo->CCDecl == CCDecl && "ASTContext found different decl?");
-  assert(CachedInfo->Kind == Kind);
-  CachedInfo->IsFullyChecked = true;
-  return QualType(CachedInfo->CCDecl->getTypeForDecl(), 0);
+  Info->IsFullyChecked = true;
+  return QualType(Info->CCDecl->getTypeForDecl(), 0);
 }
 
 /// \brief Retrieve the special "std" namespace, which may require us to
