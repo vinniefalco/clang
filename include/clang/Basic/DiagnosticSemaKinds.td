@@ -9374,7 +9374,7 @@ def err_multiversion_not_supported : Error<
 
 // three-way comparison operator diagnostics
 def err_implied_comparison_category_type_not_found : Error<
-  "cannot deduce return type of operator<=> because type %0 was not found; "
+  "cannot deduce return type of 'operator<=>' because type %0 was not found; "
   "include <compare>">;
 def err_spaceship_argument_narrowing : Error<
   "argument to 'operator<=>' "
@@ -9384,5 +9384,5 @@ def err_std_compare_type_missing_member : Error<
   "%0 is missing a member named '%1'">;
 def err_std_compare_type_not_supported : Error<
   "standard library implementation of comparison category %0 is not supported; "
-   "failed to build reference to member '%1'">;
+   "member '%1' does not have expected form">;
 } // end of sema component.

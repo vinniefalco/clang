@@ -944,13 +944,13 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   // TODO: Handle comparing these types.
   if (ArgTy->isAnyComplexType())
     return CGF.ErrorUnsupported(
-        E, "aggregate binary expression with complex arguments");
+        E, "aggregate three-way comparison with complex arguments");
   if (ArgTy->isVectorType())
     return CGF.ErrorUnsupported(
-        E, "aggregate binary expression with vector arguments");
+        E, "aggregate three-way comparison with vector arguments");
   if (!ArgTy->isIntegralOrEnumerationType() && !ArgTy->isRealFloatingType() &&
       !ArgTy->isPointerType() && !ArgTy->isMemberPointerType())
-    return CGF.ErrorUnsupported(E, "aggregate binary expression");
+    return CGF.ErrorUnsupported(E, "aggregate three-way comparison");
 
   Value *LHS, *RHS;
   switch (CGF.getEvaluationKind(ArgTy)) {

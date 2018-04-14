@@ -9761,19 +9761,6 @@ static bool checkNarrowingConversion(Sema &S, QualType ToType, Expr *E,
   if (E->isValueDependent())
     return false;
 
-  // Check the expression is a constant expression.
-  SmallVector<PartialDiagnosticAt, 8> Notes;
-  Expr::EvalResult Eval;
-  Eval.Diag = &Notes;
-
-  if (ToType->isReferenceType() ? !E->EvaluateAsLValue(Eval, S.Context)
-                                : !E->EvaluateAsRValue(Eval, S.Context)) {
-    // The expression can't be folded, so we can't keep it at this position in
-    // the AST.
-  } else if (Notes.empty()) {
-    // It's a constant expression.
-    return false;
-  }
   S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 0 << FromType << ToType;
 
@@ -9791,10 +9778,10 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
   QualType LHSType = LHS.get()->getType();
   QualType RHSType = RHS.get()->getType();
 
-  // C++2a [expr.spaceship]p3
-  if (int Count = (LHSType->isBooleanType() + RHSType->isBooleanType())) {
-    // TODO: The spec says that if one but not both of the operands is 'bool'
-    // the program is ill-formed. However, what about bool non-narrowing cases?
+  // C++2a [expr.spaceship]p3: If one of the operands is of type bool and the
+  // other is not, the program is ill-formed.
+  if (int Count = LHSType->isBooleanType() + RHSType->isBooleanType()) {
+    // TODO: What about bool non-narrowing cases? Like '0' or '1.
     if (Count != 2) {
       S.InvalidOperands(Loc, LHS, RHS);
       return QualType();
@@ -9811,8 +9798,8 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
     Type = LHSType->getAs<EnumType>()->getDecl()->getIntegerType();
     assert(Type->isArithmeticType());
 
-    LHS = S.ImpCastExprToType(LHS.get(), Type, CK_BitCast);
-    RHS = S.ImpCastExprToType(RHS.get(), Type, CK_BitCast);
+    LHS = S.ImpCastExprToType(LHS.get(), Type, CK_IntegralCast);
+    RHS = S.ImpCastExprToType(RHS.get(), Type, CK_IntegralCast);
   } else {
     // C++2a [expr.spaceship]p4
     Type = S.UsualArithmeticConversions(LHS, RHS);
@@ -9931,14 +9918,11 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
 
     // C++2a [expr.spaceship]p8: If the composite pointer type is an object
     // pointer type, p <=> q is of type std::strong_ordering.
-    if (CompositeTy->isPointerType() &&
-        (CompositeTy->getPointeeType()->isObjectType() ||
-         CompositeTy->getPointeeType()->isVoidType()))
+    if (CompositeTy->isPointerType())
       return buildResultTy(ComparisonCategoryType::StrongOrdering);
 
     // C++2a [expr.spaceship]p9: Otherwise, the program is ill-formed.
-    // TODO: Can this case actually occur? ie we have a
-    // non-object/function/mem-function pointer, non-enum, and non-integral type
+    // TODO: Extend support for operator<=> to ObjC types.
     return InvalidOperands(Loc, LHS, RHS);
   };
 

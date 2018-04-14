@@ -72,7 +72,7 @@ class ComparisonCategoryInfo {
   ComparisonCategoryInfo(const ASTContext &Ctx) : Ctx(Ctx) {}
 
 public:
-  /// \brief Wether Sema has fully checked the type and result values for this
+  /// \brief Whether Sema has fully checked the type and result values for this
   ///   comparison category types before.
   bool IsFullyChecked = false;
 
