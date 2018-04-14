@@ -8801,11 +8801,11 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
 }
 
 bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
+  if (!CheckLiteralType(Info, E))
+    return false;
+
   auto OnSuccess = [&](ComparisonCategoryResult ResKind,
                        const BinaryOperator *E) {
-    if (!CheckLiteralType(Info, E))
-      return false;
-
     // Evaluation succeeded. Lookup the information for the comparison category
     // type and fetch the VarDecl for the result.
     const ComparisonCategoryInfo &CmpInfo =
@@ -8817,7 +8817,6 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
     LV.set(VD);
     if (!handleLValueToRValueConversion(Info, E, E->getType(), LV, Result))
       return false;
-
     return CheckConstantExpression(Info, E->getExprLoc(), E->getType(), Result);
   };
   return EvaluateComparisonBinaryOperator(Info, E, OnSuccess, []() -> bool {
@@ -8840,6 +8839,8 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
          "DataRecursiveIntBinOpEvaluator should have handled integral types");
 
   if (E->isComparisonOp()) {
+    // Evaluate builtin binary comparisons by evaluating them as C++2a three-way
+    // comparisons and then translating the result.
     auto OnSuccess = [&](ComparisonCategoryResult ResKind,
                          const BinaryOperator *E) {
       using CCR = ComparisonCategoryResult;
