@@ -4542,6 +4542,14 @@ public:
   CXXRecordDecl *getStdBadAlloc() const;
   EnumDecl *getStdAlignValT() const;
 
+private:
+  // This stores ComparisonCategoryInfo pointers from ASTContext's cache that
+  // we have already fully checked, and don't need to check again.
+  SmallPtrSet<const ComparisonCategoryInfo *,
+              static_cast<unsigned>(ComparisonCategoryData::Last) + 1>
+      FullyCheckedComparisonCategories;
+
+public:
   /// \brief Lookup the specified comparison category types in the standard
   ///   library, an check the VarDecls possibly returned by the operator<=>
   ///   builtins for that type.

@@ -8895,7 +8895,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   // Check if we've already successfully checked the comparison category type
   // before. If so, skip checking it again.
   ComparisonCategoryInfo *Info = Context.CompCategories.lookupInfo(Kind);
-  if (Info && Info->IsFullyChecked)
+  if (Info && FullyCheckedComparisonCategories.count(Info))
     return QualType(Info->CCDecl->getTypeForDecl(), 0);
 
   // If lookup failed
@@ -8946,7 +8946,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
 
   // We've successfully built the required types and expressions. Update
   // the cache and return the newly cached value.
-  Info->IsFullyChecked = true;
+  FullyCheckedComparisonCategories.insert(Info);
   return QualType(Info->CCDecl->getTypeForDecl(), 0);
 }
 
