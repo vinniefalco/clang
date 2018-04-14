@@ -9747,6 +9747,8 @@ static bool checkThreeWayNarrowingConversion(Sema &S, QualType ToType, Expr *E,
     return false;
 
   case NK_Constant_Narrowing:
+    // Implicit conversion to a narrower type, and the value is not a constant
+    // expression.
     S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 1
         << PreNarrowingValue.getAsString(S.Context, PreNarrowingType) << ToType;
@@ -9754,22 +9756,15 @@ static bool checkThreeWayNarrowingConversion(Sema &S, QualType ToType, Expr *E,
 
   case NK_Variable_Narrowing:
     // Implicit conversion to a narrower type, and the value is not a constant
-    // expression. We'll diagnose this in a moment.
+    // expression.
   case NK_Type_Narrowing:
-    break;
-  }
-
-  if (E->isValueDependent())
-    return false;
-
-  S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
+    S.Diag(E->getLocStart(), diag::err_spaceship_argument_narrowing)
         << /*Constant*/ 0 << FromType << ToType;
-
-  // TODO: It's not a constant expression. If the user intended it to be a
-  // constant expression, can we produce notes to help them figure out why it
-  // isn't?
-
-  return true;
+    // TODO: It's not a constant expression, but what if the user intended it
+    // to be? Can we produce notes to help them figure out why it isn't?
+    return true;
+  }
+  llvm_unreachable("unhandled case in switch");
 }
 
 static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,

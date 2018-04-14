@@ -245,6 +245,7 @@ void test_compatible_pointer(FnTy *f1, FnTy2 *f2, MemFnTy mf1, MemFnTyB mfb,
   (void)(mf3 <=> mf1); // expected-error {{distinct pointer types}}
 }
 
+// Test that variable narrowing is deferred for value dependent expressions
 template <int Val>
 auto test_template_overflow() {
   // expected-error@+1 {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned long'}}
