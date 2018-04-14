@@ -8803,14 +8803,22 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
 bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
   auto OnSuccess = [&](ComparisonCategoryResult ResKind,
                        const BinaryOperator *E) {
+    if (!CheckLiteralType(Info, E))
+      return false;
+
+    // Evaluation succeeded. Lookup the information for the comparison category
+    // type and fetch the VarDecl for the result.
     const ComparisonCategoryInfo &CmpInfo =
         Info.Ctx.CompCategories.getInfoForType(E->getType());
-    const VarDecl *Value =
-        CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
-    DeclRefExpr DE(const_cast<VarDecl *>(Value),
-                   /*RefersToEnclosingVariableOrCapture*/ false, E->getType(),
-                   VK_LValue, E->getExprLoc());
-    return EvaluateAsRValue(Info, &DE, Result);
+    const VarDecl *VD = CmpInfo.getResultValue(CmpInfo.makeWeakResult(ResKind));
+    assert(!VD->hasLocalStorage() && !VD->getType()->isReferenceType());
+    // Check and evaluate the result as a constant expression.
+    LValue LV;
+    LV.set(VD);
+    if (!handleLValueToRValueConversion(Info, E, E->getType(), LV, Result))
+      return false;
+
+    return CheckConstantExpression(Info, E->getExprLoc(), E->getType(), Result);
   };
   return EvaluateComparisonBinaryOperator(Info, E, OnSuccess, []() -> bool {
     llvm_unreachable("operator<=> should have been evaluated to a result");
