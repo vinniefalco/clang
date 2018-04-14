@@ -111,3 +111,13 @@ auto test_constant() {
   const int y = 101;
   return x <=> y;
 }
+
+// CHECK-LABEL: @_Z16test_nullptr_objPiDn
+auto test_nullptr_obj(int* x, decltype(nullptr) y) {
+  // CHECK: %retval = alloca %[[SE]]
+  // CHECK: %cmp.eq = icmp eq i32* %0, null
+  // CHECK: %sel.eq = select i1 %cmp.eq, %[[SE]]* @[[SE_EQ]], %[[SE]]* @[[SE_NE]]
+  // CHECK: %retval
+  // CHECK: %sel.eq
+  return x <=> y;
+}
