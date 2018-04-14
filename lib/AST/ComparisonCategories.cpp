@@ -47,13 +47,6 @@ NamespaceDecl *ComparisonCategories::lookupStdNamespace() const {
         Ctx.getTranslationUnitDecl()->lookup(&StdII);
     if (Lookup.size() == 1)
       StdNS = dyn_cast<NamespaceDecl>(Lookup.front());
-    if (!StdNS) {
-      StdNS = NamespaceDecl::Create(
-          const_cast<ASTContext &>(Ctx), Ctx.getTranslationUnitDecl(),
-          /*Inline*/ false, SourceLocation(), SourceLocation(), &StdII,
-          /*PrevDecl*/ nullptr);
-      StdNS->setImplicit(true);
-    }
   }
   return StdNS;
 }
