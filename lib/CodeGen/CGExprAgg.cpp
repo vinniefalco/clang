@@ -969,6 +969,7 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   }
 
   auto EmitCmpRes = [&](const VarDecl *VD) {
+    assert(VD->isUsed());
     DeclRefExpr DE(const_cast<VarDecl *>(VD),
                    /*RefersToEnclosingVariableOrCapture*/ false, E->getType(),
                    VK_LValue, E->getExprLoc());

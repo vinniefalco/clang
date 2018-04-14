@@ -8892,7 +8892,8 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
 
-  // Check if we've already successfully built the comparison category data.
+  // Check if we've already successfully checked the comparison category type
+  // before. If so, skip checking it again.
   const ComparisonCategoryInfo *CachedInfo =
       Context.CompCategories.lookupInfo(Kind);
   if (CachedInfo && CachedInfo->IsFullyChecked)
@@ -8960,7 +8961,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   // We've successfully built the required types and expressions. Update
   // the cache and return the newly cached value.
   assert(CachedInfo && "lookup of cached info should have succeeded");
-  assert(CachedInfo->CCDecl == CCDecl);
+  assert(CachedInfo->CCDecl == CCDecl && "ASTContext found different decl?");
   assert(CachedInfo->Kind == Kind);
   CachedInfo->IsFullyChecked = true;
   return QualType(CachedInfo->CCDecl->getTypeForDecl(), 0);

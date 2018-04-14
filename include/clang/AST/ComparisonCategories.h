@@ -33,8 +33,6 @@ class VarDecl;
 class RecordDecl;
 class QualType;
 class NamespaceDecl;
-class SourceLocation;
-class Sema;
 
 /// \brief An enumeration representing the different comparison categories
 /// types.
@@ -67,14 +65,8 @@ enum class ComparisonCategoryResult : unsigned char {
 
 class ComparisonCategoryInfo {
   friend class ComparisonCategories;
-  friend QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType,
-                                                    SourceLocation);
 
   const ASTContext &Ctx;
-
-  /// \brief Wether Sema has fully checked the type and result values for this
-  ///   comparison category types before.
-  mutable bool IsFullyChecked = false;
 
   /// \brief A map containing the comparison category values built from the
   /// standard library. The key is a value of ComparisonCategoryResult.
@@ -83,11 +75,15 @@ class ComparisonCategoryInfo {
   ComparisonCategoryInfo(const ASTContext &Ctx) : Ctx(Ctx) {}
 
 public:
+  /// \brief Wether Sema has fully checked the type and result values for this
+  ///   comparison category types before.
+  mutable bool IsFullyChecked = false;
+
+public:
   /// \brief The declaration for the comparison category type from the
   /// standard library.
   // FIXME: Make this const
   RecordDecl *CCDecl = nullptr;
-
 
   /// \brief The Kind of the comparison category type
   ComparisonCategoryType Kind;
@@ -162,12 +158,6 @@ public:
 };
 
 class ComparisonCategories {
-  friend class ASTContext;
-  friend QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType,
-                                                    SourceLocation);
-
-  explicit ComparisonCategories(const ASTContext &Ctx) : Ctx(Ctx) {}
-
 public:
   static StringRef getCategoryString(ComparisonCategoryType Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
@@ -181,31 +171,26 @@ public:
     return *Result;
   }
 
-  /// \brief Return the comparison category decl for the category
-  ///   specified by 'Kind'.
-  ///
-  /// Note: The specified comparison category kind must have already been built
-  ///   by Sema.
-  const RecordDecl *getDecl(ComparisonCategoryType Kind) const {
-    return getInfo(Kind).CCDecl;
-  }
-
   /// \brief Return the comparison category information as specified by
   ///   `getCategoryForType(Ty)`.
   ///
   /// Note: The comparison category type must have already been built by Sema.
   const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
 
-private:
+public:
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind', or nullptr if it isn't available.
   const ComparisonCategoryInfo *lookupInfo(ComparisonCategoryType Kind) const;
 
+private:
   const ComparisonCategoryInfo *lookupInfoForType(QualType Ty) const;
-
   NamespaceDecl *lookupStdNamespace() const;
 
 private:
+  friend class ASTContext;
+
+  explicit ComparisonCategories(const ASTContext &Ctx) : Ctx(Ctx) {}
+
   const ASTContext &Ctx;
   mutable llvm::DenseMap<char, ComparisonCategoryInfo> Data;
   mutable NamespaceDecl *StdNS = nullptr;
