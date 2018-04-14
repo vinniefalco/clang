@@ -996,6 +996,8 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
         EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()), SelectGT, "sel.lt");
   }
 
+  // TODO Is it worthwhile to try to generate a select between the comparison
+  // result values rather than their addresses?
   return EmitFinalDestCopy(
       E->getType(), CGF.MakeNaturalAlignAddrLValue(Select, E->getType()));
 }
