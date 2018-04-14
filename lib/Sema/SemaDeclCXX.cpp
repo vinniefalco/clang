@@ -8887,8 +8887,6 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
 
 QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
                                            SourceLocation Loc) {
-  using CCT = ComparisonCategoryType;
-  using CCVT = ComparisonCategoryResult;
   assert(getLangOpts().CPlusPlus &&
          "Looking for comparison category type outside of C++.");
 
@@ -8908,11 +8906,12 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   assert(Info->CCDecl);
 
   // Build each of the require values and store them in Info.
-  for (CCVT CCV : ComparisonCategories::getResultValuesForType(Kind)) {
-    VarDecl *VD = Info->lookupResultDecl(CCV);
+  for (ComparisonCategoryResult CCR :
+       ComparisonCategories::getResultValuesForType(Kind)) {
+    VarDecl *VD = Info->lookupResultDecl(CCR);
     if (!VD) {
       Diag(Loc, diag::err_std_compare_type_missing_member)
-          << Info->CCDecl << ComparisonCategories::getResultString(CCV);
+          << Info->CCDecl << ComparisonCategories::getResultString(CCR);
       return QualType();
     }
     // Attempt to diagnose reasons why the STL definition of this type
@@ -8920,7 +8919,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
     // TODO Handle more ways the lookup or result can be invalid.
     if (!VD || !VD->isStaticDataMember() || !VD->isConstexpr()) {
       Diag(Loc, diag::err_std_compare_type_not_supported)
-          << Info->CCDecl << ComparisonCategories::getResultString(CCV);
+          << Info->CCDecl << ComparisonCategories::getResultString(CCR);
       return QualType();
     }
     MarkVariableReferenced(Loc, VD);
