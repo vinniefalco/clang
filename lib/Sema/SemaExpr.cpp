@@ -9869,9 +9869,11 @@ static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
 
 // C99 6.5.8, C++ [expr.rel]
 QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
-                                    SourceLocation Loc, BinaryOperatorKind Opc,
-                                    bool IsRelational) {
+                                    SourceLocation Loc,
+                                    BinaryOperatorKind Opc) {
   bool IsThreeWayCmp = Opc == BO_Cmp;
+  bool IsRelational = BinaryOperator::isRelationalOp(Opc);
+
   // Comparisons expect an rvalue, so convert to rvalue before any
   // type-related checks.
   LHS = DefaultFunctionArrayLvalueConversion(LHS.get());
@@ -10042,7 +10044,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // C++ [expr.eq]p4:
     //   Two operands of type std::nullptr_t or one operand of type
     //   std::nullptr_t and the other a null pointer constant compare equal.
-    if ((!IsRelational || IsThreeWayCmp) && LHSIsNull && RHSIsNull) {
+    if (!IsRelational && LHSIsNull && RHSIsNull) {
       if (LHSType->isNullPtrType()) {
         RHS = ImpCastExprToType(RHS.get(), LHSType, CK_NullToPointer);
         return computeResultTy();
@@ -10094,7 +10096,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // C++ [expr.eq]p2:
     //   If at least one operand is a pointer to member, [...] bring them to
     //   their composite pointer type.
-    if ((!IsRelational || IsThreeWayCmp) &&
+    if (!IsRelational &&
         (LHSType->isMemberPointerType() || RHSType->isMemberPointerType())) {
       if (convertPointersToCompositeType(*this, Loc, LHS, RHS))
         return QualType();
@@ -11915,16 +11917,16 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
   case BO_GE:
   case BO_GT:
     ConvertHalfVec = true;
-    ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc, true);
+    ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc);
     break;
   case BO_EQ:
   case BO_NE:
     ConvertHalfVec = true;
-    ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc, false);
+    ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc);
     break;
   case BO_Cmp:
     ConvertHalfVec = true;
-    ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc, true);
+    ResultTy = CheckCompareOperands(LHS, RHS, OpLoc, Opc);
     assert(ResultTy.isNull() || ResultTy->getAsCXXRecordDecl());
     break;
   case BO_And:

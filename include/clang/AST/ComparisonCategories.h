@@ -163,7 +163,7 @@ public:
   /// \brief Return the list of results which are valid for the specified
   ///   comparison category type.
   static std::vector<ComparisonCategoryResult>
-  getResultValuesForType(ComparisonCategoryType Type);
+  getPossibleResultsForType(ComparisonCategoryType Type);
 
   /// \brief Return the comparison category information for the category
   ///   specified by 'Kind'.

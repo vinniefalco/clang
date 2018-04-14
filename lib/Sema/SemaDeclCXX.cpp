@@ -8907,7 +8907,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
 
   // Build each of the require values and store them in Info.
   for (ComparisonCategoryResult CCR :
-       ComparisonCategories::getResultValuesForType(Kind)) {
+       ComparisonCategories::getPossibleResultsForType(Kind)) {
     VarDecl *VD = Info->lookupResultDecl(CCR);
     if (!VD) {
       Diag(Loc, diag::err_std_compare_type_missing_member)

@@ -163,7 +163,7 @@ StringRef ComparisonCategories::getResultString(ComparisonCategoryResult Kind) {
 }
 
 std::vector<ComparisonCategoryResult>
-ComparisonCategories::getResultValuesForType(ComparisonCategoryType Type) {
+ComparisonCategories::getPossibleResultsForType(ComparisonCategoryType Type) {
   using CCT = ComparisonCategoryType;
   using CCR = ComparisonCategoryResult;
   std::vector<CCR> Values;
