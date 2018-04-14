@@ -44,17 +44,31 @@ const VarDecl *ComparisonCategoryInfo::lookupResultValue(
   return nullptr;
 }
 
-static const RecordDecl *lookupRecordDecl(const ASTContext &Ctx,
-                                          ComparisonCategoryType Kind) {
-  NamespaceDecl *NS = NamespaceDecl::Create(
+NamespaceDecl *ComparisonCategories::lookupStdNamespace() const {
+  if (!StdNS) {
+    IdentifierInfo &StdII = Ctx.Idents.get("std");
+    DeclarationName Name(&StdII);
+    DeclContextLookupResult Lookup = Ctx.getTranslationUnitDecl()->lookup(Name);
+    if (Lookup.size() == 1)
+      StdNS = dyn_cast<NamespaceDecl>(Lookup.front());
+    if (!StdNS) {
+    StdNS = NamespaceDecl::Create(
       const_cast<ASTContext &>(Ctx), Ctx.getTranslationUnitDecl(),
       /*Inline*/ false, SourceLocation(), SourceLocation(),
-      &Ctx.Idents.get("std"),
-      /*PrevDecl*/ nullptr);
+      &StdII, /*PrevDecl*/ nullptr);
+    }
+  }
+  return StdNS;
+}
+
+static const RecordDecl *lookupRecordDecl(const ASTContext &Ctx,
+                                          NamespaceDecl *StdNS,
+                                          ComparisonCategoryType Kind) {
+
   StringRef StrName = ComparisonCategories::getCategoryString(Kind);
   const IdentifierInfo &II = Ctx.Idents.get(StrName);
   DeclarationName Name(&II);
-  DeclContextLookupResult Lookup = NS->lookup(Name);
+  DeclContextLookupResult Lookup = StdNS->lookup(Name);
   if (Lookup.size() == 1) {
     if (const RecordDecl *RD = dyn_cast<RecordDecl>(Lookup.front()))
       return RD;
@@ -67,7 +81,7 @@ ComparisonCategories::lookupInfoUnchecked(ComparisonCategoryType Kind) const {
   auto It = Data.find(static_cast<char>(Kind));
   if (It != Data.end())
     return &It->second;
-  const RecordDecl *RD = lookupRecordDecl(Ctx, Kind);
+  const RecordDecl *RD = lookupRecordDecl(Ctx, lookupStdNamespace(), Kind);
   if (!RD)
     return nullptr;
   ComparisonCategoryInfo Info(Ctx);
@@ -79,6 +93,7 @@ ComparisonCategories::lookupInfoUnchecked(ComparisonCategoryType Kind) const {
 const ComparisonCategoryInfo *
 ComparisonCategories::lookupInfoForTypeUnchecked(QualType Ty) const {
   assert(!Ty.isNull() && "type must be non-null");
+  using CCT = ComparisonCategoryType;
   const auto *RD = Ty->getAsCXXRecordDecl();
   if (!RD)
     return nullptr;
@@ -91,29 +106,35 @@ ComparisonCategories::lookupInfoForTypeUnchecked(QualType Ty) const {
       return &Info;
   }
 
+  if (!RD->getEnclosingNamespaceContext()->isStdNamespace())
+    return nullptr;
+
   // If not, check to see if the decl names a type in namespace std with a name
   // matching one of the comparison category types.
-  if (RD->getEnclosingNamespaceContext()->isStdNamespace()) {
-    using CCT = ComparisonCategoryType;
-    for (unsigned I = static_cast<unsigned>(CCT::First),
-                  End = static_cast<unsigned>(CCT::Last);
-         I <= End; ++I) {
-      CCT Kind = static_cast<CCT>(I);
+  for (unsigned I = static_cast<unsigned>(CCT::First),
+                End = static_cast<unsigned>(CCT::Last);
+       I <= End; ++I) {
+    CCT Kind = static_cast<CCT>(I);
 
-      // We've found the comparison category type. Build a new cache entry for
-      // it.
-      if (getCategoryString(Kind) == RD->getName()) {
-        ComparisonCategoryInfo Info(Ctx);
-        Info.CCDecl =
-            const_cast<RecordDecl *>(static_cast<const RecordDecl *>(RD));
-        Info.Kind = Kind;
-        return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
-      }
+    // We've found the comparison category type. Build a new cache entry for
+    // it.
+    if (getCategoryString(Kind) == RD->getName()) {
+      ComparisonCategoryInfo Info(Ctx);
+      Info.CCDecl =
+          const_cast<RecordDecl *>(static_cast<const RecordDecl *>(RD));
+      Info.Kind = Kind;
+      return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
     }
   }
 
   // We've found nothing. This isn't a comparison category type.
   return nullptr;
+}
+
+const ComparisonCategoryInfo &ComparisonCategories::getInfoForType(QualType Ty) const {
+  const ComparisonCategoryInfo *Info = lookupInfoForTypeUnchecked(Ty);
+  assert(Info && "info for comparison category not found");
+  return *Info;
 }
 
 StringRef ComparisonCategories::getCategoryString(ComparisonCategoryType Kind) {

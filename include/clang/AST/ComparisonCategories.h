@@ -153,9 +153,6 @@ public:
 
 class ComparisonCategories {
   friend class ASTContext;
-
-  const ASTContext &Ctx;
-
   explicit ComparisonCategories(const ASTContext &Ctx) : Ctx(Ctx) {}
 
 public:
@@ -184,11 +181,7 @@ public:
   ///   `getCategoryForType(Ty)`.
   ///
   /// Note: The comparison category type must have already been built by Sema.
-  const ComparisonCategoryInfo &getInfoForType(QualType Ty) const {
-    const ComparisonCategoryInfo *Info = lookupInfoForTypeUnchecked(Ty);
-    assert(Info && "info for comparison category not found");
-    return *Info;
-  }
+  const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
 
 public:
   /// \brief Return the comparison category information for the category
@@ -204,9 +197,13 @@ public:
 
   const ComparisonCategoryInfo *lookupInfoForTypeUnchecked(QualType Ty) const;
 
-  NamespaceDecl *StdNs = nullptr;
-
+public:
+  const ASTContext &Ctx;
   mutable llvm::DenseMap<char, ComparisonCategoryInfo> Data;
+
+private:
+  NamespaceDecl *lookupStdNamespace() const;
+  mutable NamespaceDecl *StdNS = nullptr;
 };
 
 } // namespace clang
