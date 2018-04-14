@@ -9871,7 +9871,6 @@ static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
 QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
                                     SourceLocation Loc,
                                     BinaryOperatorKind Opc) {
-  bool IsThreeWayCmp = Opc == BO_Cmp;
   bool IsRelational = BinaryOperator::isRelationalOp(Opc);
 
   // Comparisons expect an rvalue, so convert to rvalue before any
@@ -9900,7 +9899,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     return checkArithmeticOrEnumeralCompare(*this, LHS, RHS, Loc, Opc);
 
   auto computeResultTy = [&]() {
-    if (!IsThreeWayCmp)
+    if (Opc != BO_Cmp)
       return Context.getLogicalOperationType();
     assert(getLangOpts().CPlusPlus);
     assert(Context.hasSameType(LHS.get()->getType(), RHS.get()->getType()));
