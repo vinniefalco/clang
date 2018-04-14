@@ -4545,8 +4545,8 @@ public:
 private:
   // This stores ComparisonCategoryInfo pointers from ASTContext's cache that
   // we have already fully checked, and don't need to check again.
-  SmallPtrSet<const ComparisonCategoryInfo *,
-              static_cast<unsigned>(ComparisonCategoryData::Last) + 1>
+  llvm::SmallPtrSet<const ComparisonCategoryInfo *,
+                    static_cast<unsigned>(ComparisonCategoryType::Last) + 1>
       FullyCheckedComparisonCategories;
 
 public:
