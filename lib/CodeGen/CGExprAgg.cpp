@@ -969,11 +969,7 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   }
 
   auto EmitCmpRes = [&](const VarDecl *VD) {
-    assert(VD->isUsed());
-    DeclRefExpr DE(const_cast<VarDecl *>(VD),
-                   /*RefersToEnclosingVariableOrCapture*/ false, E->getType(),
-                   VK_LValue, E->getExprLoc());
-    return CGF.EmitDeclRefLValue(&DE).getPointer();
+    return CGF.CGM.GetAddrOfGlobalVar(VD);
   };
   auto EmitCmp = [&](CompareKind K) {
     return EmitCompare(Builder, CGF, E, LHS, RHS, K);
