@@ -41,7 +41,8 @@ ComparisonCategoryInfo::lookupResultDecl(ComparisonCategoryResult ValueKind) {
   return nullptr;
 }
 
-NamespaceDecl *ComparisonCategories::lookupStdNamespace() const {
+static const NamespaceDecl *lookupStdNamespace(const ASTContext &Ctx,
+                                               NamespaceDecl *&StdNS) {
   if (!StdNS) {
     DeclContextLookupResult Lookup =
         Ctx.getTranslationUnitDecl()->lookup(&Ctx.Idents.get("std"));
@@ -51,7 +52,8 @@ NamespaceDecl *ComparisonCategories::lookupStdNamespace() const {
   return StdNS;
 }
 
-static RecordDecl *lookupRecordDecl(const ASTContext &Ctx, NamespaceDecl *StdNS,
+static RecordDecl *lookupRecordDecl(const ASTContext &Ctx,
+                                    const NamespaceDecl *StdNS,
                                     ComparisonCategoryType Kind) {
   StringRef Name = ComparisonCategories::getCategoryString(Kind);
   DeclContextLookupResult Lookup = StdNS->lookup(&Ctx.Idents.get(Name));
@@ -67,7 +69,7 @@ ComparisonCategories::lookupInfo(ComparisonCategoryType Kind) const {
   auto It = Data.find(static_cast<char>(Kind));
   if (It != Data.end())
     return &It->second;
-  if (NamespaceDecl *NS = lookupStdNamespace()) {
+  if (const NamespaceDecl *NS = lookupStdNamespace(Ctx, StdNS)) {
     if (RecordDecl *RD = lookupRecordDecl(Ctx, NS, Kind)) {
       ComparisonCategoryInfo Info(Ctx);
       Info.CCDecl = RD;

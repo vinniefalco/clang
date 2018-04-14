@@ -194,7 +194,6 @@ public:
 
 private:
   const ComparisonCategoryInfo *lookupInfoForType(QualType Ty) const;
-  NamespaceDecl *lookupStdNamespace() const;
 
 private:
   friend class ASTContext;
