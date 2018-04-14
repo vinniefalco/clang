@@ -8902,24 +8902,39 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
         << ComparisonCategories::getCategoryString(Kind);
     return QualType();
   }
+
+  QualType CCTy(Info->CCDecl->getTypeForDecl(), 0);
+  // Use an elaborated type for diagnostics which has a name containing the
+  // prepended 'std' namespace but not any inline namespace names.
+  QualType TyForDiags = [&]() {
+    auto *NNS =
+        NestedNameSpecifier::Create(Context, nullptr, getStdNamespace());
+    return Context.getElaboratedType(ETK_None, NNS, CCTy);
+  }();
+  if (RequireCompleteType(Loc, TyForDiags, diag::err_incomplete_type))
+    return QualType();
+
   assert(Info->Kind == Kind);
   assert(Info->CCDecl);
 
   // Build each of the require values and store them in Info.
   for (ComparisonCategoryResult CCR :
        ComparisonCategories::getPossibleResultsForType(Kind)) {
+
     VarDecl *VD = Info->lookupResultDecl(CCR);
     if (!VD) {
       Diag(Loc, diag::err_std_compare_type_missing_member)
-          << Info->CCDecl << ComparisonCategories::getResultString(CCR);
+          << TyForDiags << ComparisonCategories::getResultString(CCR);
       return QualType();
     }
     // Attempt to diagnose reasons why the STL definition of this type
     // might be foobar, including it failing to be a constant expression.
     // TODO Handle more ways the lookup or result can be invalid.
-    if (!VD || !VD->isStaticDataMember() || !VD->isConstexpr()) {
+    if (!VD->isStaticDataMember() || !VD->isConstexpr()) {
       Diag(Loc, diag::err_std_compare_type_not_supported)
-          << Info->CCDecl << ComparisonCategories::getResultString(CCR);
+          << TyForDiags << ComparisonCategories::getResultString(CCR);
+      Diag(VD->getLocation(), diag::note_var_declared_here)
+          << VD << VD->getSourceRange();
       return QualType();
     }
     MarkVariableReferenced(Loc, VD);

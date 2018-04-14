@@ -9383,6 +9383,6 @@ def err_spaceship_argument_narrowing : Error<
 def err_std_compare_type_missing_member : Error<
   "%0 is missing a member named '%1'">;
 def err_std_compare_type_not_supported : Error<
-  "standard library implementation of comparison category %0 is not supported; "
+  "standard library implementation of %0 is not supported; "
    "member '%1' does not have expected form">;
 } // end of sema component.
