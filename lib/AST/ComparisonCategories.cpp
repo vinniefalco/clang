@@ -32,9 +32,9 @@ const VarDecl *ComparisonCategoryInfo::lookupResultDecl(
   if (Lookup.size() != 1)
     return nullptr;
   NamedDecl *ND = Lookup.front();
-  if (const auto *VD = dyn_cast<VarDecl>(ND)) {
+  if (auto *VD = dyn_cast<VarDecl>(ND)) {
     auto ItPair =
-        Objects.try_emplace((char)ValueKind, const_cast<VarDecl *>(VD));
+        Objects.try_emplace((char)ValueKind, VD);
     return ItPair.first->second;
   }
   return nullptr;
@@ -42,9 +42,8 @@ const VarDecl *ComparisonCategoryInfo::lookupResultDecl(
 
 NamespaceDecl *ComparisonCategories::lookupStdNamespace() const {
   if (!StdNS) {
-    IdentifierInfo &StdII = Ctx.Idents.get("std");
     DeclContextLookupResult Lookup =
-        Ctx.getTranslationUnitDecl()->lookup(&StdII);
+        Ctx.getTranslationUnitDecl()->lookup(&Ctx.Idents.get("std"));
     if (Lookup.size() == 1)
       StdNS = dyn_cast<NamespaceDecl>(Lookup.front());
   }
