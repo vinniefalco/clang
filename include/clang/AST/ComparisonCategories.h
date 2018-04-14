@@ -17,10 +17,7 @@
 
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
-#include <array>
 #include <cassert>
-#include <type_traits>
-#include <utility>
 
 namespace llvm {
   class StringRef;
@@ -68,7 +65,7 @@ class ComparisonCategoryInfo {
 
   const ASTContext &Ctx;
 
-  /// \brief A map containing the comparison category values built from the
+  /// \brief A map containing the comparison category result decls from the
   /// standard library. The key is a value of ComparisonCategoryResult.
   mutable llvm::DenseMap<char, VarDecl *> Objects;
 
@@ -89,8 +86,8 @@ public:
   ComparisonCategoryType Kind;
 
 public:
-  /// \brief Return an expression referencing the member of the specified
-  ///   comparison category. For example 'std::strong_equality::equal'
+  /// \brief Return the VarDecl for the specified comparison category result.
+  ///    For example 'std::strong_equality::equal'.
   const VarDecl *getResultDecl(ComparisonCategoryResult ValueKind) const {
     const VarDecl *VD = lookupResultDecl(ValueKind);
     assert(VD &&
@@ -177,14 +174,16 @@ public:
   }
 
   /// \brief Return the comparison category information as specified by
-  ///   `getCategoryForType(Ty)`.
-  ///
-  /// Note: The comparison category type must have already been built by Sema.
+  ///   `getCategoryForType(Ty)`. If the information is not already cached,
+  ///    the declaration is looked up and a cache entry is created.
+  /// NOTE: Lookup is expected to succeed. Use lookupInfo if failure is possible.
   const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
 
 public:
-  /// \brief Return the comparison category information for the category
-  ///   specified by 'Kind', or nullptr if it isn't available.
+  /// \brief Return the cached comparison category information for the
+  ///   specified 'Kind'. If no cache entry is present the comparison category
+  ///   type is looked up. If lookup fails nullptr is returned. Otherwise, a
+  ///   new cache entry is created and returned
   const ComparisonCategoryInfo *lookupInfo(ComparisonCategoryType Kind) const;
 
   ComparisonCategoryInfo *lookupInfo(ComparisonCategoryType Kind) {
