@@ -126,31 +126,12 @@ constexpr bool test_constexpr_success = [] {
     CHECK_TYPE(decltype(neq), SE);
     CHECK(neq.test_eq(NEQ));
   }
-  {
-    using SO = std::strong_ordering;
-    auto EQ = SO::equal;
-    auto LESS = SO::less;
-    auto GREATER = SO::greater;
-
-    int Arr[5] = {};
-    using ArrRef = decltype((Arr));
-
-    int *P1 = (Arr + 1);
-    int *P12 = (Arr + 1);
-    int *P2 = (Arr + 2);
-
-    auto eq = (Arr <=> (ArrRef)Arr); //(P1 <=> P12);
-    CHECK_TYPE(decltype(eq), SO);
-    CHECK(eq.test_eq(EQ));
-  }
   { // mixed nullptr tests
     using SO = std::strong_ordering;
     using SE = std::strong_equality;
 
     int x = 42;
     int *xp = &x;
-
-
 
     MemPtrT mf = nullptr;
     MemPtrT mf2 = &MemPtr::foo;

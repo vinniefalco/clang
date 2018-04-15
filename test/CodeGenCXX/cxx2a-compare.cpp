@@ -121,3 +121,28 @@ auto test_nullptr_obj(int* x, decltype(nullptr) y) {
   // CHECK: %sel.eq
   return x <=> y;
 }
+
+// CHECK-LABEL: @_Z18unscoped_enum_testijlm
+void unscoped_enum_test(int i, unsigned u, long l, unsigned long ul) {
+  enum EnumA : int { A };
+  enum EnumB : unsigned { B };
+  // CHECK: %[[I:.*]] = load {{.*}} %i.addr
+  // CHECK: icmp slt i32 {{.*}} %[[I]]
+  (void)(A <=> i);
+
+  // CHECK: %[[U:.*]] = load {{.*}} %u.addr
+  // CHECK: icmp ult i32 {{.*}} %[[U]]
+  (void)(A <=> u);
+
+  // CHECK: %[[L:.*]] = load {{.*}} %l.addr
+  // CHECK: icmp slt i64 {{.*}} %[[L]]
+  (void)(A <=> l);
+
+  // CHECK: %[[U2:.*]] = load {{.*}} %u.addr
+  // CHECK: icmp ult i32 {{.*}} %[[U2]]
+  (void)(B <=> u);
+
+  // CHECK: %[[UL:.*]] = load {{.*}} %ul.addr
+  // CHECK: icmp ult i64 {{.*}} %[[UL]]
+  (void)(B <=> ul);
+}

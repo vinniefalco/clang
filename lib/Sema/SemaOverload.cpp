@@ -7974,7 +7974,7 @@ public:
   //        bool       operator==(T, T);
   //        bool       operator!=(T, T);
   //           R       operator<=>(T, T)
-  void addRelationalPointerOrEnumeralOverloads() {
+  void addGenericBinaryPointerOrEnumeralOverloads() {
     // C++ [over.match.oper]p3:
     //   [...]the built-in candidates include all of the candidate operator
     //   functions defined in 13.6 that, compared to the given operator, [...]
@@ -8047,7 +8047,6 @@ public:
             UserDefinedBinaryOperators.count(std::make_pair(CanonType,
                                                             CanonType)))
           continue;
-
         QualType ParamTypes[2] = { *Enum, *Enum };
         S.AddBuiltinCandidate(ParamTypes, Args, CandidateSet);
       }
@@ -8194,7 +8193,7 @@ public:
   // To avoid this error, this function deviates from the specification and adds
   // the mixed overloads `operator<=>(L, R)` where L and R are promoted integral
   // types instead of adding 'operator<=>(T, T)' for all integral types T.
-  void addGenericBinaryThreeWayCompareOverloads() {
+  void addThreeWayArithmeticOverloads() {
     if (!HasArithmeticOrEnumeralCandidateType)
       return;
     // Add 'operator<=>(L, R)' for each pair of floating point types.
@@ -8206,14 +8205,11 @@ public:
         S.AddBuiltinCandidate(LandR, Args, CandidateSet);
       }
     }
-    // Add 'operator<=>(L, R)' for each pair of promoted integral types.
-    // NOTE: This deviates from the current specification. See above.
     for (unsigned Left = FirstPromotedIntegralType;
          Left < LastPromotedIntegralType; ++Left) {
       for (unsigned Right = FirstPromotedIntegralType;
            Right < LastPromotedIntegralType; ++Right) {
-        QualType LandR[2] = { ArithmeticTypes[Left],
-                              ArithmeticTypes[Right] };
+        QualType LandR[2] = {ArithmeticTypes[Left], ArithmeticTypes[Right]};
         S.AddBuiltinCandidate(LandR, Args, CandidateSet);
       }
     }
@@ -8788,13 +8784,13 @@ void Sema::AddBuiltinOperatorCandidates(OverloadedOperatorKind Op,
   case OO_Greater:
   case OO_LessEqual:
   case OO_GreaterEqual:
-    OpBuilder.addRelationalPointerOrEnumeralOverloads();
+    OpBuilder.addGenericBinaryPointerOrEnumeralOverloads();
     OpBuilder.addGenericBinaryArithmeticOverloads();
     break;
 
   case OO_Spaceship:
-    OpBuilder.addRelationalPointerOrEnumeralOverloads();
-    OpBuilder.addGenericBinaryThreeWayCompareOverloads();
+    OpBuilder.addGenericBinaryPointerOrEnumeralOverloads();
+    OpBuilder.addGenericBinaryArithmeticOverloads();
     break;
 
   case OO_Percent:

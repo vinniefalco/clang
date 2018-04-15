@@ -9615,10 +9615,16 @@ static void diagnoseTautologicalComparison(Sema &S, SourceLocation Loc,
   Expr *RHSStripped = RHS->IgnoreParenImpCasts();
 
   QualType LHSType = LHS->getType();
+  QualType RHSType = RHS->getType();
   if (LHSType->hasFloatingRepresentation() ||
       (LHSType->isBlockPointerType() && !BinaryOperator::isEqualityOp(Opc)) ||
       LHS->getLocStart().isMacroID() || RHS->getLocStart().isMacroID() ||
       S.inTemplateInstantiation())
+    return;
+
+  // Comparisons between two array types is ill-formed for operator<=>, so
+  // we shouldn't emit any additional warnings about it.
+  if (Opc == BO_Cmp && LHSType->isArrayType() && RHSType->isArrayType())
     return;
 
   // For non-floating point types, check for self-comparisons of the form
@@ -9708,6 +9714,8 @@ static ImplicitConversionKind castKindToImplicitConversionKind(CastKind CK) {
   switch (CK) {
   default:
     llvm_unreachable("unhandled cast kind");
+  case CK_UserDefinedConversion:
+    return ICK_Identity;
   case CK_LValueToRValue:
     return ICK_Lvalue_To_Rvalue;
   case CK_ArrayToPointerDecay:
@@ -9772,28 +9780,37 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
                                                          ExprResult &RHS,
                                                          SourceLocation Loc) {
   using CCT = ComparisonCategoryType;
-  QualType LHSType = LHS.get()->getType();
-  QualType RHSType = RHS.get()->getType();
+
+  // Dig out the original argument type and expression before implicit casts
+  // were applied. These are the types/expressions we need to check the
+  // [expr.spaceship] requirements against.
+  ExprResult OrigLHS = LHS.get()->IgnoreParenImpCasts();
+  ExprResult OrigRHS = RHS.get()->IgnoreParenImpCasts();
+  QualType OrigLHSType = OrigLHS.get()->getType();
+  QualType OrigRHSType = OrigRHS.get()->getType();
 
   // C++2a [expr.spaceship]p3: If one of the operands is of type bool and the
   // other is not, the program is ill-formed.
-  if (int Count = LHSType->isBooleanType() + RHSType->isBooleanType()) {
+  if (int Count = OrigLHSType->isBooleanType() + OrigRHSType->isBooleanType()) {
     // TODO: What about bool non-narrowing cases? Like '0' or '1.
     if (Count != 2) {
-      S.InvalidOperands(Loc, LHS, RHS);
+      S.InvalidOperands(Loc, OrigLHS, OrigRHS);
       return QualType();
     }
   }
 
-  int NumEnumArgs = LHSType->isEnumeralType() + (int)RHSType->isEnumeralType();
+  int NumEnumArgs =
+      (int)OrigLHSType->isEnumeralType() + OrigRHSType->isEnumeralType();
   QualType Type;
   if (NumEnumArgs == 2) {
-    // C++2a [expr.spaceship]p5
-    if (!S.Context.hasSameUnqualifiedType(LHSType, RHSType)) {
-      S.InvalidOperands(Loc, LHS, RHS);
+    // C++2a [expr.spaceship]p5: If both operands have the same enumeration
+    // type E, the operator yields the result of converting the operands
+    // to the underlying type of E and applying <=> to the converted operands.
+    if (!S.Context.hasSameUnqualifiedType(OrigLHSType, OrigRHSType)) {
+      S.InvalidOperands(Loc, OrigLHS, OrigRHS);
       return QualType();
     }
-    Type = LHSType->getAs<EnumType>()->getDecl()->getIntegerType();
+    Type = OrigLHSType->getAs<EnumType>()->getDecl()->getIntegerType();
     assert(Type->isArithmeticType());
 
     LHS = S.ImpCastExprToType(LHS.get(), Type, CK_IntegralCast);
@@ -9802,28 +9819,26 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
   }
 
   if (NumEnumArgs == 1) {
-    bool LHSIsEnum = LHSType->isEnumeralType();
-    QualType OtherTy = LHSIsEnum ? RHSType : LHSType;
+    bool LHSIsEnum = OrigLHSType->isEnumeralType();
+    QualType OtherTy = LHSIsEnum ? OrigRHSType : OrigLHSType;
     if (OtherTy->hasFloatingRepresentation()) {
-      S.InvalidOperands(Loc, LHS, RHS);
+      S.InvalidOperands(Loc, OrigLHS, OrigRHS);
       return QualType();
     }
-    QualType EnumTy = LHSIsEnum ? LHSType : RHSType;
+    QualType EnumTy = LHSIsEnum ? OrigLHSType : OrigRHSType;
     const auto *EDecl = EnumTy->castAs<EnumType>()->getDecl();
     if (EDecl->isScoped()) {
-        S.InvalidOperands(Loc, LHS, RHS);
-        return QualType();
+      S.InvalidOperands(Loc, OrigLHS, OrigRHS);
+      return QualType();
     }
   }
 
-  // C++2a [expr.spaceship]p4
+  QualType LHSType = LHS.get()->getType();
+  QualType RHSType = RHS.get()->getType();
+
+  // C++2a [expr.spaceship]p4: If both operands have arithmetic types, the
+  // usual arithmetic conversions are applied to the operands.
   Type = S.UsualArithmeticConversions(LHS, RHS);
-  if (NumEnumArgs) {
-    LHSType.dump();
-    RHSType.dump();
-    Type.dump();
-    llvm::errs() << "\n";
-  }
   if (LHS.isInvalid() || RHS.isInvalid())
     return QualType();
   if (Type.isNull())
@@ -9891,15 +9906,25 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
                                     SourceLocation Loc,
                                     BinaryOperatorKind Opc) {
   bool IsRelational = BinaryOperator::isRelationalOp(Opc);
+  bool IsThreeWay = Opc == BO_Cmp;
+  auto IsPointerType = [](ExprResult E) {
+    QualType Ty = E.get()->getType().getNonReferenceType();
+    return Ty->isPointerType() || Ty->isMemberPointerType();
+  };
 
-  // Comparisons expect an rvalue, so convert to rvalue before any
-  // type-related checks.
-  LHS = DefaultFunctionArrayLvalueConversion(LHS.get());
-  if (LHS.isInvalid())
-    return QualType();
-  RHS = DefaultFunctionArrayLvalueConversion(RHS.get());
-  if (RHS.isInvalid())
-    return QualType();
+  // C++2a [expr.spaceship]p6: If at least one of the operands is of pointer
+  // type, array-to-pointer, ..., conversions are performed on both operands to
+  // bring them to their composite type.
+  if (!IsThreeWay || IsPointerType(LHS) || IsPointerType(RHS)) {
+    // Comparisons expect an rvalue, so convert to rvalue before any
+    // type-related checks.
+    LHS = DefaultFunctionArrayLvalueConversion(LHS.get());
+    if (LHS.isInvalid())
+      return QualType();
+    RHS = DefaultFunctionArrayLvalueConversion(RHS.get());
+    if (RHS.isInvalid())
+      return QualType();
+  }
 
   checkArithmeticNull(*this, LHS, RHS, Loc, /*isCompare=*/true);
 

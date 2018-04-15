@@ -10,10 +10,10 @@
 
 void self_compare() {
   int a;
-  int b[3], c[3];
+  int *b = nullptr;
+
   (void)(a <=> a); // expected-warning {{self-comparison always evaluates to 'std::strong_ordering::equal'}}
   (void)(b <=> b); // expected-warning {{self-comparison always evaluates to 'std::strong_ordering::equal'}}
-  (void)(b <=> c); // expected-warning {{array comparison always evaluates to a constant}}
 }
 
 void test0(long a, unsigned long b) {
@@ -122,10 +122,12 @@ void test0(long a, unsigned long b) {
 }
 
 void test5(bool b, bool b2) {
+  enum EnumA { A };
   (void)(b <=> b2);      // OK
   (void)(true <=> b);    // OK
   (void)(b <=> -10);     // expected-error {{invalid operands to binary expression ('bool' and 'int')}}
   (void)(b <=> char(1)); // expected-error {{invalid operands to binary expression ('bool' and 'char')}}
+  (void)(b <=> A);       // expected-error {{invalid operands to binary expression ('bool' and 'EnumA')}}
 
   // FIXME: Should this be accepted when narrowing doesn't occur?
   (void)(b <=> 0); // expected-error {{invalid operands to binary expression ('bool' and 'int')}}
@@ -255,6 +257,9 @@ void test_enum_integral_compare() {
   enum EnumA : int {A, ANeg = -1, AMax = __INT_MAX__};
   enum EnumB : unsigned {B, BMax = __UINT32_MAX__ };
   enum EnumC : int {C = -1, C0 = 0};
+
+  (void)(A <=> C); // expected-error {{invalid operands to binary expression ('EnumA' and 'EnumC')}}
+
   (void)(A <=> (unsigned)0);
   (void)((unsigned)0 <=> A);
   (void)(ANeg <=> (unsigned)0); // expected-error {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned int'}}
@@ -302,4 +307,61 @@ void test_enum_ovl_provided() {
   (void)(EnumB::B <=> EnumA::A); // expected-error {{invalid operands to binary expression ('EnumCompareTests::EnumB' and 'EnumCompareTests::EnumA')}}
 }
 
+void enum_float_test() {
+  enum EnumA { A };
+  (void)(A <=> (float)0);       // expected-error {{invalid operands to binary expression ('EnumA' and 'float')}}
+  (void)((double)0 <=> A);      // expected-error {{invalid operands to binary expression ('double' and 'EnumA')}}
+  (void)((long double)0 <=> A); // expected-error {{invalid operands to binary expression ('long double' and 'EnumA')}}
+}
+
 } // namespace EnumCompareTests
+
+namespace TestUserDefinedConvSeq {
+
+template <class T, T Val>
+struct Conv {
+  constexpr operator T() const { return Val; }
+  operator T() { return Val; }
+};
+
+void test_user_conv() {
+  {
+    using C = Conv<int, 0>;
+    C c;
+    const C cc;
+    (void)(0 <=> c);
+    (void)(c <=> -1);
+    (void)((unsigned)0 <=> cc);
+    (void)((unsigned)0 <=> c); // expected-error {{argument to 'operator<=>' cannot be narrowed from type 'int' to 'unsigned int'}}
+  }
+  {
+    using C = Conv<int, -1>;
+    C c;
+    const C cc;
+    (void)(c <=> 0);
+    (void)(cc <=> (unsigned)0); // expected-error {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned int'}}
+    (void)(c <=> (unsigned)0);  // expected-error {{cannot be narrowed from type 'int' to 'unsigned int'}}
+  }
+}
+
+} // namespace TestUserDefinedConvSeq
+
+void test_array_conv() {
+  int arr[5];
+  int *ap = arr + 2;
+  int arr2[3];
+  (void)(arr <=> arr); // expected-error {{invalid operands to binary expression ('int [5]' and 'int [5]')}}
+  (void)(+arr <=> arr);
+}
+
+void test_mixed_float_int(float f, double d, long double ld) {
+  extern int i;
+  extern unsigned u;
+  extern long l;
+  extern short s;
+  extern unsigned short us;
+  auto r1 = (f <=> i);
+  auto r2 = (us <=> ld);
+  auto r3 = (s <=> f);
+  auto r4 = (0.0 <=> i);
+}
