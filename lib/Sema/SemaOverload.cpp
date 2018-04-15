@@ -8186,7 +8186,7 @@ public:
   //   enum A : int {a};
   //   auto x = (a <=> (long)42);
   //
-  //   error: call is ambiguous for arguments 'A' and 'int'.
+  //   error: call is ambiguous for arguments 'A' and 'long'.
   //   note: candidate operator<=>(int, int)
   //   note: candidate operator<=>(long, long)
   //
