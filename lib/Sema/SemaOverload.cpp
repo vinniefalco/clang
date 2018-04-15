@@ -8164,6 +8164,39 @@ public:
     }
   }
 
+  // C++2a [over.built]p14:
+  //
+  //   For every integral type T there exists a candidate operator function
+  //   of the form
+  //
+  //        std::strong_ordering operator<=>(T, T)
+  //
+  // C++2a [over.built]p15:
+  //
+  //   For every pair of floating-point types L and R, there exists a candidate
+  //   operator function of the form
+  //
+  //       std::partial_ordering operator<=>(L, R);
+  //
+  void addGenericBinaryThreeWayCompareOverloads() {
+    if (!HasArithmeticOrEnumeralCandidateType)
+      return;
+    for (unsigned I = FirstIntegralType, Last = LastIntegralType; I < Last;
+         ++I) {
+      QualType LandR[2] = {ArithmeticTypes[I], ArithmeticTypes[I]};
+      S.AddBuiltinCandidate(LandR, Args, CandidateSet);
+    }
+    for (unsigned Left = FirstPromotedArithmeticType; Left < FirstIntegralType;
+         ++Left) {
+      for (unsigned Right = FirstPromotedArithmeticType;
+           Right < FirstIntegralType; ++Right) {
+        QualType LandR[2] = {ArithmeticTypes[Left], ArithmeticTypes[Right]};
+        S.AddBuiltinCandidate(LandR, Args, CandidateSet);
+      }
+    }
+    // TODO Extension: Add the binary operators<=> for vector types.
+  }
+
   // C++ [over.built]p17:
   //
   //   For every pair of promoted integral types L and R, there
@@ -8737,7 +8770,9 @@ void Sema::AddBuiltinOperatorCandidates(OverloadedOperatorKind Op,
     break;
 
   case OO_Spaceship:
-    llvm_unreachable("<=> expressions not supported yet");
+    OpBuilder.addRelationalPointerOrEnumeralOverloads();
+    OpBuilder.addGenericBinaryThreeWayCompareOverloads();
+    break;
 
   case OO_Percent:
   case OO_Caret:
