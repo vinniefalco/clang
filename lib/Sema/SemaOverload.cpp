@@ -8187,7 +8187,7 @@ public:
   //   auto x = (a <=> (long)42);
   //
   //   error: call is ambiguous for arguments 'A' and 'int'.
-  //   note: candidate operator<=>(A, A)
+  //   note: candidate operator<=>(int, int)
   //   note: candidate operator<=>(long, long)
   //
   // To avoid this error, this function deviates from the specification and adds
