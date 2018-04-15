@@ -363,7 +363,15 @@ void test_mixed_float_int(float f, double d, long double ld) {
   extern short s;
   extern unsigned short us;
   auto r1 = (f <=> i);
+  ASSERT_EXPR_TYPE(r1, std::partial_ordering);
+
   auto r2 = (us <=> ld);
+  ASSERT_EXPR_TYPE(r2, std::partial_ordering);
+
   auto r3 = (s <=> f);
+  ASSERT_EXPR_TYPE(r3, std::partial_ordering);
+
   auto r4 = (0.0 <=> i);
+  ASSERT_EXPR_TYPE(r4, std::partial_ordering);
+
 }
