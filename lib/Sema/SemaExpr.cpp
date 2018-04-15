@@ -9784,33 +9784,32 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
   // Dig out the original argument type and expression before implicit casts
   // were applied. These are the types/expressions we need to check the
   // [expr.spaceship] requirements against.
-  ExprResult OrigLHS = LHS.get()->IgnoreParenImpCasts();
-  ExprResult OrigRHS = RHS.get()->IgnoreParenImpCasts();
-  QualType OrigLHSType = OrigLHS.get()->getType();
-  QualType OrigRHSType = OrigRHS.get()->getType();
+  LHS = LHS.get()->IgnoreParenImpCasts();
+  RHS = RHS.get()->IgnoreParenImpCasts();
+  QualType LHSType = LHS.get()->getType();
+  QualType RHSType = RHS.get()->getType();
 
   // C++2a [expr.spaceship]p3: If one of the operands is of type bool and the
   // other is not, the program is ill-formed.
-  if (int Count = OrigLHSType->isBooleanType() + OrigRHSType->isBooleanType()) {
+  if (int Count = LHSType->isBooleanType() + RHSType->isBooleanType()) {
     // TODO: What about bool non-narrowing cases? Like '0' or '1.
     if (Count != 2) {
-      S.InvalidOperands(Loc, OrigLHS, OrigRHS);
+      S.InvalidOperands(Loc, LHS, RHS);
       return QualType();
     }
   }
 
-  int NumEnumArgs =
-      (int)OrigLHSType->isEnumeralType() + OrigRHSType->isEnumeralType();
+  int NumEnumArgs = (int)LHSType->isEnumeralType() + RHSType->isEnumeralType();
   QualType Type;
   if (NumEnumArgs == 2) {
     // C++2a [expr.spaceship]p5: If both operands have the same enumeration
     // type E, the operator yields the result of converting the operands
     // to the underlying type of E and applying <=> to the converted operands.
-    if (!S.Context.hasSameUnqualifiedType(OrigLHSType, OrigRHSType)) {
-      S.InvalidOperands(Loc, OrigLHS, OrigRHS);
+    if (!S.Context.hasSameUnqualifiedType(LHSType, RHSType)) {
+      S.InvalidOperands(Loc, LHS, RHS);
       return QualType();
     }
-    Type = OrigLHSType->getAs<EnumType>()->getDecl()->getIntegerType();
+    Type = LHSType->getAs<EnumType>()->getDecl()->getIntegerType();
     assert(Type->isArithmeticType());
 
     LHS = S.ImpCastExprToType(LHS.get(), Type, CK_IntegralCast);
@@ -9819,22 +9818,19 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
   }
 
   if (NumEnumArgs == 1) {
-    bool LHSIsEnum = OrigLHSType->isEnumeralType();
-    QualType OtherTy = LHSIsEnum ? OrigRHSType : OrigLHSType;
+    bool LHSIsEnum = LHSType->isEnumeralType();
+    QualType OtherTy = LHSIsEnum ? RHSType : LHSType;
     if (OtherTy->hasFloatingRepresentation()) {
-      S.InvalidOperands(Loc, OrigLHS, OrigRHS);
+      S.InvalidOperands(Loc, LHS, RHS);
       return QualType();
     }
-    QualType EnumTy = LHSIsEnum ? OrigLHSType : OrigRHSType;
+    QualType EnumTy = LHSIsEnum ? LHSType : RHSType;
     const auto *EDecl = EnumTy->castAs<EnumType>()->getDecl();
     if (EDecl->isScoped()) {
-      S.InvalidOperands(Loc, OrigLHS, OrigRHS);
+      S.InvalidOperands(Loc, LHS, RHS);
       return QualType();
     }
   }
-
-  QualType LHSType = LHS.get()->getType();
-  QualType RHSType = RHS.get()->getType();
 
   // C++2a [expr.spaceship]p4: If both operands have arithmetic types, the
   // usual arithmetic conversions are applied to the operands.

@@ -21,6 +21,8 @@ void test0(long a, unsigned long b) {
   enum EnumB {B};
   enum EnumC {C = 0x10000};
 
+  (void)((short)a <=> (unsigned short)b);
+
   // (a,b)
   (void)(a <=> (unsigned long)b); // expected-error {{argument to 'operator<=>' cannot be narrowed}}
   (void)(a <=> (unsigned int) b);
