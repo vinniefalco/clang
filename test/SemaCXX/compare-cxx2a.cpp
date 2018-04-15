@@ -270,3 +270,36 @@ void test_enum_integral_compare() {
   (void)(C <=> (unsigned)42); // expected-error {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned int'}}
 }
 
+namespace EnumCompareTests {
+
+enum class EnumA { A, A2 };
+enum class EnumB { B };
+enum class EnumC : unsigned { C };
+
+void test_enum_enum_compare_no_builtin() {
+  auto r1 = (EnumA::A <=> EnumA::A2); // OK
+  ASSERT_EXPR_TYPE(r1, std::strong_ordering);
+  (void)(EnumA::A <=> EnumA::A); // expected-warning {{self-comparison always evaluates to 'std::strong_ordering::equal'}}
+  (void)(EnumA::A <=> EnumB::B); // expected-error {{invalid operands to binary expression ('EnumCompareTests::EnumA' and 'EnumCompareTests::EnumB')}}
+  (void)(EnumB::B <=> EnumA::A); // expected-error {{invalid operands}}
+}
+
+template <int>
+struct Tag {};
+// expected-note@+1 {{candidate}}
+Tag<0> operator<=>(EnumA, EnumA) {
+  return {};
+}
+Tag<1> operator<=>(EnumA, EnumB) {
+  return {};
+}
+
+void test_enum_ovl_provided() {
+  auto r1 = (EnumA::A <=> EnumA::A);
+  ASSERT_EXPR_TYPE(r1, Tag<0>);
+  auto r2 = (EnumA::A <=> EnumB::B);
+  ASSERT_EXPR_TYPE(r2, Tag<1>);
+  (void)(EnumB::B <=> EnumA::A); // expected-error {{invalid operands to binary expression ('EnumCompareTests::EnumB' and 'EnumCompareTests::EnumA')}}
+}
+
+} // namespace EnumCompareTests
