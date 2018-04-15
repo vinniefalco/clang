@@ -7973,6 +7973,7 @@ public:
   //        bool       operator>=(T, T);
   //        bool       operator==(T, T);
   //        bool       operator!=(T, T);
+  //           R       operator<=>(T, T)
   void addRelationalPointerOrEnumeralOverloads() {
     // C++ [over.match.oper]p3:
     //   [...]the built-in candidates include all of the candidate operator
@@ -8178,19 +8179,41 @@ public:
   //
   //       std::partial_ordering operator<=>(L, R);
   //
+  // FIXME: The current specification for integral types doesn't play nice with
+  // the direction of p0946r0, which allows mixed integral and unscoped-enum
+  // comparisons. Under the current spec this can lead to ambiguity during
+  // overload resolution. For example:
+  //
+  //   enum A : int {a};
+  //   auto x = (a <=> (long)42);
+  //
+  //   error: call is ambiguous for arguments 'A' and 'int'.
+  //   note: candidate operator<=>(A, A)
+  //   note: candidate operator<=>(long, long)
+  //
+  // To avoid this error, this function deviates from the specification and adds
+  // the mixed overloads `operator<=>(L, R)` where L and R are promoted integral
+  // types instead of adding 'operator<=>(T, T)' for all integral types T.
   void addGenericBinaryThreeWayCompareOverloads() {
     if (!HasArithmeticOrEnumeralCandidateType)
       return;
-    for (unsigned I = FirstIntegralType, Last = LastIntegralType; I < Last;
-         ++I) {
-      QualType LandR[2] = {ArithmeticTypes[I], ArithmeticTypes[I]};
-      S.AddBuiltinCandidate(LandR, Args, CandidateSet);
-    }
+    // Add 'operator<=>(L, R)' for each pair of floating point types.
     for (unsigned Left = FirstPromotedArithmeticType; Left < FirstIntegralType;
          ++Left) {
       for (unsigned Right = FirstPromotedArithmeticType;
            Right < FirstIntegralType; ++Right) {
         QualType LandR[2] = {ArithmeticTypes[Left], ArithmeticTypes[Right]};
+        S.AddBuiltinCandidate(LandR, Args, CandidateSet);
+      }
+    }
+    // Add 'operator<=>(L, R)' for each pair of promoted integral types.
+    // NOTE: This deviates from the current specification. See above.
+    for (unsigned Left = FirstPromotedIntegralType;
+         Left < LastPromotedIntegralType; ++Left) {
+      for (unsigned Right = FirstPromotedIntegralType;
+           Right < LastPromotedIntegralType; ++Right) {
+        QualType LandR[2] = { ArithmeticTypes[Left],
+                              ArithmeticTypes[Right] };
         S.AddBuiltinCandidate(LandR, Args, CandidateSet);
       }
     }

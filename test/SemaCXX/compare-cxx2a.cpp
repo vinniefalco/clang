@@ -17,13 +17,11 @@ void self_compare() {
 }
 
 void test0(long a, unsigned long b) {
-  enum EnumA {A};
+  enum EnumA : int {A};
   enum EnumB {B};
   enum EnumC {C = 0x10000};
-         // (a,b)
 
-  // FIXME: <=> should never produce -Wsign-compare warnings. All the possible error
-  // cases involve narrowing conversions and so are ill-formed.
+  // (a,b)
   (void)(a <=> (unsigned long)b); // expected-error {{argument to 'operator<=>' cannot be narrowed}}
   (void)(a <=> (unsigned int) b);
   (void)(a <=> (unsigned short) b);
@@ -37,7 +35,7 @@ void test0(long a, unsigned long b) {
   (void)((short) a <=> (unsigned short) b);
   (void)((signed char) a <=> (unsigned char) b);
 
-#if 0
+  (void)(A < 42);
   // (A,b)
   (void)(A <=> (unsigned long) b);
   (void)(A <=> (unsigned int) b);
@@ -53,7 +51,7 @@ void test0(long a, unsigned long b) {
   (void)((signed char) A <=> (unsigned char) b);
 
   // (a,B)
-  (void)(a <=> (unsigned long) B);
+  (void)(a <=> (unsigned long) B); // expected-error {{argument to 'operator<=>' cannot be narrowed from type 'long' to 'unsigned long'}}
   (void)(a <=> (unsigned int) B);
   (void)(a <=> (unsigned short) B);
   (void)(a <=> (unsigned char) B);
@@ -61,8 +59,8 @@ void test0(long a, unsigned long b) {
   (void)((int) a <=> B);
   (void)((short) a <=> B);
   (void)((signed char) a <=> B);
-  (void)((long) a <=> (unsigned long) B);
-  (void)((int) a <=> (unsigned int) B);
+  (void)((long) a <=> (unsigned long) B); // expected-error {{argument to 'operator<=>' cannot be narrowed from type 'long' to 'unsigned long'}}
+  (void)((int) a <=> (unsigned int) B); // expected-error {{argument to 'operator<=>' cannot be narrowed from type 'int' to 'unsigned int'}}
   (void)((short) a <=> (unsigned short) B);
   (void)((signed char) a <=> (unsigned char) B);
 
@@ -81,7 +79,7 @@ void test0(long a, unsigned long b) {
   (void)((signed char) C <=> (unsigned char) b);
 
   // (a,C)
-  (void)(a <=> (unsigned long) C);
+  (void)(a <=> (unsigned long) C); // expected-error {{argument to 'operator<=>' cannot be narrowed from type 'long' to 'unsigned long'}}
   (void)(a <=> (unsigned int) C);
   (void)(a <=> (unsigned short) C);
   (void)(a <=> (unsigned char) C);
@@ -89,11 +87,10 @@ void test0(long a, unsigned long b) {
   (void)((int) a <=> C);
   (void)((short) a <=> C); // expected-warning {{comparison of constant 'C' (65536) with expression of type 'short' is always 'std::strong_ordering::less'}}
   (void)((signed char) a <=> C); // expected-warning {{comparison of constant 'C' (65536) with expression of type 'signed char' is always 'std::strong_ordering::less'}}
-  (void)((long) a <=> (unsigned long) C);
-  (void)((int) a <=> (unsigned int) C);
+  (void)((long) a <=> (unsigned long) C); // expected-error {{argument to 'operator<=>' cannot be narrowed from type 'long' to 'unsigned long'}}
+  (void)((int) a <=> (unsigned int) C); // expected-error {{argument to 'operator<=>' cannot be narrowed from type 'int' to 'unsigned int'}}
   (void)((short) a <=> (unsigned short) C);
   (void)((signed char) a <=> (unsigned char) C);
-#endif
 
   // (0x80000,b)
   (void)(0x80000 <=> (unsigned long) b);
@@ -254,4 +251,22 @@ auto test_template_overflow() {
 template auto test_template_overflow<0>();
 template auto test_template_overflow<-1>(); // expected-note {{requested here}}
 
-// test null-safety as specified
+void test_enum_integral_compare() {
+  enum EnumA : int {A, ANeg = -1, AMax = __INT_MAX__};
+  enum EnumB : unsigned {B, BMax = __UINT32_MAX__ };
+  enum EnumC : int {C = -1, C0 = 0};
+  (void)(A <=> (unsigned)0);
+  (void)((unsigned)0 <=> A);
+  (void)(ANeg <=> (unsigned)0); // expected-error {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned int'}}
+  (void)((unsigned)0 <=> ANeg); // expected-error {{cannot be narrowed}}
+
+  (void)(B <=> 42);
+  (void)(42 <=> B);
+  (void)(B <=> (unsigned long long)42);
+  (void)(B <=> -1); // expected-error {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned int'}}
+  (void)(BMax <=> (unsigned long)-1);
+
+  (void)(C0 <=> (unsigned)42);
+  (void)(C <=> (unsigned)42); // expected-error {{argument to 'operator<=>' evaluates to -1, which cannot be narrowed to type 'unsigned int'}}
+}
+

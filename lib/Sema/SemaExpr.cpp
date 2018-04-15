@@ -9818,6 +9818,12 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
 
   // C++2a [expr.spaceship]p4
   Type = S.UsualArithmeticConversions(LHS, RHS);
+  if (NumEnumArgs) {
+    LHSType.dump();
+    RHSType.dump();
+    Type.dump();
+    llvm::errs() << "\n";
+  }
   if (LHS.isInvalid() || RHS.isInvalid())
     return QualType();
   if (Type.isNull())
