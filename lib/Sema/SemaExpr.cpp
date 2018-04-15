@@ -9771,6 +9771,7 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
                                                          ExprResult &LHS,
                                                          ExprResult &RHS,
                                                          SourceLocation Loc) {
+  using CCT = ComparisonCategoryType;
   QualType LHSType = LHS.get()->getType();
   QualType RHSType = RHS.get()->getType();
 
@@ -9784,8 +9785,9 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
     }
   }
 
+  int NumEnumArgs = LHSType->isEnumeralType() + (int)RHSType->isEnumeralType();
   QualType Type;
-  if (LHSType->isEnumeralType() || RHSType->isEnumeralType()) {
+  if (NumEnumArgs == 2) {
     // C++2a [expr.spaceship]p5
     if (!S.Context.hasSameUnqualifiedType(LHSType, RHSType)) {
       S.InvalidOperands(Loc, LHS, RHS);
@@ -9796,30 +9798,46 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
 
     LHS = S.ImpCastExprToType(LHS.get(), Type, CK_IntegralCast);
     RHS = S.ImpCastExprToType(RHS.get(), Type, CK_IntegralCast);
-  } else {
-    // C++2a [expr.spaceship]p4
-    Type = S.UsualArithmeticConversions(LHS, RHS);
-    if (LHS.isInvalid() || RHS.isInvalid())
-      return QualType();
-    if (Type.isNull())
-      return S.InvalidOperands(Loc, LHS, RHS);
-    assert(Type->isArithmeticType());
-
-    bool HasNarrowing = checkThreeWayNarrowingConversion(
-        S, Type, LHS.get(), LHSType, LHS.get()->getLocStart());
-    HasNarrowing |= checkThreeWayNarrowingConversion(
-        S, Type, RHS.get(), RHSType, RHS.get()->getLocStart());
-    if (HasNarrowing)
-      return QualType();
+    return S.CheckComparisonCategoryType(CCT::StrongOrdering, Loc);
   }
+
+  if (NumEnumArgs == 1) {
+    bool LHSIsEnum = LHSType->isEnumeralType();
+    QualType OtherTy = LHSIsEnum ? RHSType : LHSType;
+    if (OtherTy->hasFloatingRepresentation()) {
+      S.InvalidOperands(Loc, LHS, RHS);
+      return QualType();
+    }
+    QualType EnumTy = LHSIsEnum ? LHSType : RHSType;
+    const auto *EDecl = EnumTy->castAs<EnumType>()->getDecl();
+    if (EDecl->isScoped()) {
+        S.InvalidOperands(Loc, LHS, RHS);
+        return QualType();
+    }
+  }
+
+  // C++2a [expr.spaceship]p4
+  Type = S.UsualArithmeticConversions(LHS, RHS);
+  if (LHS.isInvalid() || RHS.isInvalid())
+    return QualType();
+  if (Type.isNull())
+    return S.InvalidOperands(Loc, LHS, RHS);
+  assert(Type->isArithmeticType());
+
+  bool HasNarrowing = checkThreeWayNarrowingConversion(
+      S, Type, LHS.get(), LHSType, LHS.get()->getLocStart());
+  HasNarrowing |= checkThreeWayNarrowingConversion(
+      S, Type, RHS.get(), RHSType, RHS.get()->getLocStart());
+  if (HasNarrowing)
+    return QualType();
+
   assert(!Type.isNull() && "composite type for <=> has not been set");
 
   auto TypeKind = [&]() {
-    using CCK = ComparisonCategoryType;
     if (Type->isIntegralOrEnumerationType())
-      return CCK::StrongOrdering;
+      return CCT::StrongOrdering;
     if (Type->hasFloatingRepresentation())
-      return CCK::PartialOrdering;
+      return CCT::PartialOrdering;
     llvm_unreachable("other types are unimplemented");
   }();
 
@@ -9918,6 +9936,9 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     // result is of type std::strong_equality
     if (CompositeTy->isFunctionPointerType() ||
         CompositeTy->isMemberPointerType() || CompositeTy->isNullPtrType())
+      // FIXME: consider making the function pointer case produce
+      // strong_ordering not strong_equality, per P0946R0-Jax18 discussion
+      // and direction polls
       return buildResultTy(ComparisonCategoryType::StrongEquality);
 
     // C++2a [expr.spaceship]p8: If the composite pointer type is an object
