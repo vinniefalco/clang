@@ -8191,29 +8191,12 @@ public:
   //   note: candidate operator<=>(long, long)
   //
   // To avoid this error, this function deviates from the specification and adds
-  // the mixed overloads `operator<=>(L, R)` where L and R are promoted integral
-  // types instead of adding 'operator<=>(T, T)' for all integral types T.
+  // the mixed overloads `operator<=>(L, R)` where L and R are promoted
+  // arithmetic types (the same as the generic relational overloads).
+  //
+  // For now this function acts as a placeholder.
   void addThreeWayArithmeticOverloads() {
-    if (!HasArithmeticOrEnumeralCandidateType)
-      return;
-    // Add 'operator<=>(L, R)' for each pair of floating point types.
-    for (unsigned Left = FirstPromotedArithmeticType; Left < FirstIntegralType;
-         ++Left) {
-      for (unsigned Right = FirstPromotedArithmeticType;
-           Right < FirstIntegralType; ++Right) {
-        QualType LandR[2] = {ArithmeticTypes[Left], ArithmeticTypes[Right]};
-        S.AddBuiltinCandidate(LandR, Args, CandidateSet);
-      }
-    }
-    for (unsigned Left = FirstPromotedIntegralType;
-         Left < LastPromotedIntegralType; ++Left) {
-      for (unsigned Right = FirstPromotedIntegralType;
-           Right < LastPromotedIntegralType; ++Right) {
-        QualType LandR[2] = {ArithmeticTypes[Left], ArithmeticTypes[Right]};
-        S.AddBuiltinCandidate(LandR, Args, CandidateSet);
-      }
-    }
-    // TODO Extension: Add the binary operators<=> for vector types.
+    addGenericBinaryArithmeticOverloads();
   }
 
   // C++ [over.built]p17:
@@ -8790,7 +8773,7 @@ void Sema::AddBuiltinOperatorCandidates(OverloadedOperatorKind Op,
 
   case OO_Spaceship:
     OpBuilder.addGenericBinaryPointerOrEnumeralOverloads();
-    OpBuilder.addGenericBinaryArithmeticOverloads();
+    OpBuilder.addThreeWayArithmeticOverloads();
     break;
 
   case OO_Percent:
