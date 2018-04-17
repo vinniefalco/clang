@@ -9791,12 +9791,9 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
 
   // C++2a [expr.spaceship]p3: If one of the operands is of type bool and the
   // other is not, the program is ill-formed.
-  if (int Count = LHSType->isBooleanType() + RHSType->isBooleanType()) {
-    // TODO: What about bool non-narrowing cases? Like '0' or '1.
-    if (Count != 2) {
-      S.InvalidOperands(Loc, LHS, RHS);
-      return QualType();
-    }
+  if (LHSType->isBooleanType() != RHSType->isBooleanType()) {
+    S.InvalidOperands(Loc, LHS, RHS);
+    return QualType();
   }
 
   int NumEnumArgs = (int)LHSType->isEnumeralType() + RHSType->isEnumeralType();
@@ -9814,19 +9811,12 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
 
     LHS = S.ImpCastExprToType(LHS.get(), Type, CK_IntegralCast);
     RHS = S.ImpCastExprToType(RHS.get(), Type, CK_IntegralCast);
-    return S.CheckComparisonCategoryType(CCT::StrongOrdering, Loc);
   }
 
   if (NumEnumArgs == 1) {
     bool LHSIsEnum = LHSType->isEnumeralType();
     QualType OtherTy = LHSIsEnum ? RHSType : LHSType;
     if (OtherTy->hasFloatingRepresentation()) {
-      S.InvalidOperands(Loc, LHS, RHS);
-      return QualType();
-    }
-    QualType EnumTy = LHSIsEnum ? LHSType : RHSType;
-    const auto *EDecl = EnumTy->castAs<EnumType>()->getDecl();
-    if (EDecl->isScoped()) {
       S.InvalidOperands(Loc, LHS, RHS);
       return QualType();
     }
@@ -9839,7 +9829,7 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
     return QualType();
   if (Type.isNull())
     return S.InvalidOperands(Loc, LHS, RHS);
-  assert(Type->isArithmeticType());
+  assert(Type->isArithmeticType() || Type->isEnumeralType());
 
   bool HasNarrowing = checkThreeWayNarrowingConversion(
       S, Type, LHS.get(), LHSType, LHS.get()->getLocStart());
@@ -9878,15 +9868,7 @@ static QualType checkArithmeticOrEnumeralCompare(Sema &S, ExprResult &LHS,
 
   checkEnumComparison(S, Loc, LHS.get(), RHS.get());
 
-  enum { StrongEquality, PartialOrdering, StrongOrdering } Ordering;
-  if (Type->isAnyComplexType())
-    Ordering = StrongEquality;
-  else if (Type->isFloatingType())
-    Ordering = PartialOrdering;
-  else
-    Ordering = StrongOrdering;
-
-  if (Ordering == StrongEquality && BinaryOperator::isRelationalOp(Opc))
+  if (Type->isAnyComplexType() && BinaryOperator::isRelationalOp(Opc))
     return S.InvalidOperands(Loc, LHS, RHS);
 
   // Check for comparisons of floating point operands using != and ==.
@@ -9903,15 +9885,15 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
                                     BinaryOperatorKind Opc) {
   bool IsRelational = BinaryOperator::isRelationalOp(Opc);
   bool IsThreeWay = Opc == BO_Cmp;
-  auto IsPointerType = [](ExprResult E) {
-    QualType Ty = E.get()->getType().getNonReferenceType();
+  auto IsAnyPointerType = [](ExprResult E) {
+    QualType Ty = E.get()->getType();
     return Ty->isPointerType() || Ty->isMemberPointerType();
   };
 
   // C++2a [expr.spaceship]p6: If at least one of the operands is of pointer
   // type, array-to-pointer, ..., conversions are performed on both operands to
   // bring them to their composite type.
-  if (!IsThreeWay || IsPointerType(LHS) || IsPointerType(RHS)) {
+  if (!IsThreeWay || IsAnyPointerType(LHS) || IsAnyPointerType(RHS)) {
     // Comparisons expect an rvalue, so convert to rvalue before any
     // type-related checks.
     LHS = DefaultFunctionArrayLvalueConversion(LHS.get());
