@@ -9797,22 +9797,6 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
   }
 
   int NumEnumArgs = (int)LHSType->isEnumeralType() + RHSType->isEnumeralType();
-  QualType Type;
-  if (NumEnumArgs == 2) {
-    // C++2a [expr.spaceship]p5: If both operands have the same enumeration
-    // type E, the operator yields the result of converting the operands
-    // to the underlying type of E and applying <=> to the converted operands.
-    if (!S.Context.hasSameUnqualifiedType(LHSType, RHSType)) {
-      S.InvalidOperands(Loc, LHS, RHS);
-      return QualType();
-    }
-    Type = LHSType->getAs<EnumType>()->getDecl()->getIntegerType();
-    assert(Type->isArithmeticType());
-
-    LHS = S.ImpCastExprToType(LHS.get(), Type, CK_IntegralCast);
-    RHS = S.ImpCastExprToType(RHS.get(), Type, CK_IntegralCast);
-  }
-
   if (NumEnumArgs == 1) {
     bool LHSIsEnum = LHSType->isEnumeralType();
     QualType OtherTy = LHSIsEnum ? RHSType : LHSType;
@@ -9821,10 +9805,25 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
       return QualType();
     }
   }
+  if (NumEnumArgs == 2) {
+    // C++2a [expr.spaceship]p5: If both operands have the same enumeration
+    // type E, the operator yields the result of converting the operands
+    // to the underlying type of E and applying <=> to the converted operands.
+    if (!S.Context.hasSameUnqualifiedType(LHSType, RHSType)) {
+      S.InvalidOperands(Loc, LHS, RHS);
+      return QualType();
+    }
+    QualType IntType = LHSType->getAs<EnumType>()->getDecl()->getIntegerType();
+    assert(IntType->isArithmeticType());
+
+    LHS = S.ImpCastExprToType(LHS.get(), IntType, CK_IntegralCast);
+    RHS = S.ImpCastExprToType(RHS.get(), IntType, CK_IntegralCast);
+    LHSType = RHSType = IntType;
+  }
 
   // C++2a [expr.spaceship]p4: If both operands have arithmetic types, the
   // usual arithmetic conversions are applied to the operands.
-  Type = S.UsualArithmeticConversions(LHS, RHS);
+  QualType Type = S.UsualArithmeticConversions(LHS, RHS);
   if (LHS.isInvalid() || RHS.isInvalid())
     return QualType();
   if (Type.isNull())
