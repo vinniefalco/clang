@@ -398,14 +398,8 @@ def VCOMBINE : NoTestOpInst<"vcombine", "kdd", "csilhfUcUsUiUlPcPs", OP_CONC>;
 ////////////////////////////////////////////////////////////////////////////////
 // E.3.21 Splitting vectors
 let InstName = "vmov" in {
-def VGET_HIGH : NoTestOpInst<"vget_high", "dk", "csilfUcUsUiUlPcPs", OP_HI>;
-def VGET_LOW  : NoTestOpInst<"vget_low", "dk", "csilfUcUsUiUlPcPs", OP_LO>;
-}
-let ArchGuard = "__ARM_ARCH >= 8 && defined(__aarch64__)" in {
-  let InstName = "vmov" in {
-  def VGET_HIGH_F16 : NoTestOpInst<"vget_high", "dk", "h", OP_HI>;
-  def VGET_LOW_F16  : NoTestOpInst<"vget_low", "dk", "h", OP_LO>;
-  }
+def VGET_HIGH : NoTestOpInst<"vget_high", "dk", "csilhfUcUsUiUlPcPs", OP_HI>;
+def VGET_LOW  : NoTestOpInst<"vget_low", "dk", "csilhfUcUsUiUlPcPs", OP_LO>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -537,6 +531,7 @@ def VREINTERPRET
 let ArchGuard = "defined(__ARM_FEATURE_FMA)" in {
   def VFMA : SInst<"vfma", "dddd", "fQf">;
   def VFMS : SOpInst<"vfms", "dddd", "fQf", OP_FMLS>;
+  def FMLA_N_F32 : SOpInst<"vfma_n", "ddds", "fQf", OP_FMLA_N>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -627,7 +622,7 @@ def FMLS : SOpInst<"vfms", "dddd", "dQd", OP_FMLS>;
 // MUL, MLA, MLS, FMA, FMS definitions with scalar argument
 def VMUL_N_A64 : IOpInst<"vmul_n", "dds", "Qd", OP_MUL_N>;
 
-def FMLA_N : SOpInst<"vfma_n", "ddds", "fdQfQd", OP_FMLA_N>;
+def FMLA_N : SOpInst<"vfma_n", "ddds", "dQd", OP_FMLA_N>;
 def FMLS_N : SOpInst<"vfms_n", "ddds", "fdQfQd", OP_FMLS_N>;
 
 def MLA_N : SOpInst<"vmla_n", "ddds", "Qd", OP_MLA_N>;

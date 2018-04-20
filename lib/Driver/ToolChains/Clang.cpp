@@ -2546,11 +2546,13 @@ static void RenderModulesOptions(Compilation &C, const Driver &D,
     CmdArgs.push_back("-fmodules-strict-decluse");
 
   // -fno-implicit-modules turns off implicitly compiling modules on demand.
+  bool ImplicitModules = false;
   if (!Args.hasFlag(options::OPT_fimplicit_modules,
                     options::OPT_fno_implicit_modules, HaveClangModules)) {
     if (HaveModules)
       CmdArgs.push_back("-fno-implicit-modules");
   } else if (HaveModules) {
+    ImplicitModules = true;
     // -fmodule-cache-path specifies where our implicitly-built module files
     // should be written.
     SmallString<128> Path;
@@ -2657,7 +2659,11 @@ static void RenderModulesOptions(Compilation &C, const Driver &D,
                     options::OPT_fmodules_validate_once_per_build_session);
   }
 
-  Args.AddLastArg(CmdArgs, options::OPT_fmodules_validate_system_headers);
+  if (Args.hasFlag(options::OPT_fmodules_validate_system_headers,
+                   options::OPT_fno_modules_validate_system_headers,
+                   ImplicitModules))
+    CmdArgs.push_back("-fmodules-validate-system-headers");
+
   Args.AddLastArg(CmdArgs, options::OPT_fmodules_disable_diagnostic_validation);
 }
 
@@ -3316,6 +3322,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     RenderAnalyzerOptions(Args, CmdArgs, Triple, Input);
 
   CheckCodeGenerationOptions(D, Args);
+
+  unsigned FunctionAlignment = ParseFunctionAlignment(getToolChain(), Args);
+  assert(FunctionAlignment <= 31 && "function alignment will be truncated!");
+  if (FunctionAlignment) {
+    CmdArgs.push_back("-function-alignment");
+    CmdArgs.push_back(Args.MakeArgString(std::to_string(FunctionAlignment)));
+  }
 
   llvm::Reloc::Model RelocationModel;
   unsigned PICLevel;
