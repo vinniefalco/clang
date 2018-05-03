@@ -496,14 +496,17 @@ void DeclPrinter::VisitTypeAliasDecl(TypeAliasDecl *D) {
 void DeclPrinter::VisitEnumDecl(EnumDecl *D) {
   if (!Policy.SuppressSpecifiers && D->isModulePrivate())
     Out << "__module_private__ ";
-  Out << "enum ";
+  Out << "enum";
   if (D->isScoped()) {
     if (D->isScopedUsingClassTag())
-      Out << "class ";
+      Out << " class";
     else
-      Out << "struct ";
+      Out << " struct";
   }
-  Out << *D;
+
+  prettyPrintAttributes(D);
+
+  Out << ' ' << *D;
 
   if (D->isFixed() && D->getASTContext().getLangOpts().CPlusPlus11)
     Out << " : " << D->getIntegerType().stream(Policy);
@@ -513,7 +516,6 @@ void DeclPrinter::VisitEnumDecl(EnumDecl *D) {
     VisitDeclContext(D);
     Indent() << "}";
   }
-  prettyPrintAttributes(D);
 }
 
 void DeclPrinter::VisitRecordDecl(RecordDecl *D) {
@@ -670,7 +672,7 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
       Proto += ")";
     } else if (FT && isNoexceptExceptionSpec(FT->getExceptionSpecType())) {
       Proto += " noexcept";
-      if (FT->getExceptionSpecType() == EST_ComputedNoexcept) {
+      if (isComputedNoexcept(FT->getExceptionSpecType())) {
         Proto += "(";
         llvm::raw_string_ostream EOut(Proto);
         FT->getNoexceptExpr()->printPretty(EOut, nullptr, SubPolicy,

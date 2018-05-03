@@ -25,6 +25,21 @@ namespace format {
 
 namespace {
 
+/// \brief Returns \c true if the token can be used as an identifier in
+/// an Objective-C \c @selector, \c false otherwise.
+///
+/// Because getFormattingLangOpts() always lexes source code as
+/// Objective-C++, C++ keywords like \c new and \c delete are
+/// lexed as tok::kw_*, not tok::identifier, even for Objective-C.
+///
+/// For Objective-C and Objective-C++, both identifiers and keywords
+/// are valid inside @selector(...) (or a macro which
+/// invokes @selector(...)). So, we allow treat any identifier or
+/// keyword as a potential Objective-C selector component.
+static bool canBeObjCSelectorComponent(const FormatToken &Tok) {
+  return Tok.Tok.getIdentifierInfo() != nullptr;
+}
+
 /// \brief A parser that gathers additional information about tokens.
 ///
 /// The \c TokenAnnotator tries to match parenthesis and square brakets and
@@ -592,8 +607,7 @@ private:
           return false;
       }
     }
-    // There are no top-level unbalanced braces in text protos.
-    return Style.Language != FormatStyle::LK_TextProto;
+    return true;
   }
 
   void updateParameterCount(FormatToken *Left, FormatToken *Current) {
@@ -704,20 +718,16 @@ private:
           Tok->Type = TT_CtorInitializerColon;
         else
           Tok->Type = TT_InheritanceColon;
-      } else if (Tok->Previous->is(tok::identifier) && Tok->Next &&
+      } else if (canBeObjCSelectorComponent(*Tok->Previous) && Tok->Next &&
                  (Tok->Next->isOneOf(tok::r_paren, tok::comma) ||
-                  Tok->Next->startsSequence(tok::identifier, tok::colon))) {
+                  (canBeObjCSelectorComponent(*Tok->Next) && Tok->Next->Next &&
+                   Tok->Next->Next->is(tok::colon)))) {
         // This handles a special macro in ObjC code where selectors including
         // the colon are passed as macro arguments.
         Tok->Type = TT_ObjCMethodExpr;
       } else if (Contexts.back().ContextKind == tok::l_paren) {
         Tok->Type = TT_InlineASMColon;
       }
-      // Detects trailing pieces like key:
-      if ((Style.Language == FormatStyle::LK_Proto ||
-           Style.Language == FormatStyle::LK_TextProto) &&
-          !CurrentToken)
-        return false;
       break;
     case tok::pipe:
     case tok::amp:
@@ -804,10 +814,6 @@ private:
           if (Previous && Previous->Type != TT_DictLiteral)
             Previous->Type = TT_SelectorName;
         }
-      } else if (Style.Language == FormatStyle::LK_TextProto ||
-                 Style.Language == FormatStyle::LK_Proto) {
-        // In TT_Proto and TT_TextProto, tok::less cannot be a binary operator.
-        return false;
       } else {
         Tok->Type = TT_BinaryOperator;
         NonTemplateLess.insert(Tok);
@@ -819,16 +825,13 @@ private:
     case tok::r_square:
       return false;
     case tok::r_brace:
-      // Lines can start with '}' except in text protos.
-      if (Tok->Previous || Style.Language == FormatStyle::LK_TextProto)
+      // Lines can start with '}'.
+      if (Tok->Previous)
         return false;
       break;
     case tok::greater:
-      // In protos and text protos tok::greater cannot be a binary operator.
-      if (Style.Language == FormatStyle::LK_Proto ||
-          Style.Language == FormatStyle::LK_TextProto)
-        return false;
-      Tok->Type = TT_BinaryOperator;
+      if (Style.Language != FormatStyle::LK_TextProto)
+        Tok->Type = TT_BinaryOperator;
       break;
     case tok::kw_operator:
       if (Style.Language == FormatStyle::LK_TextProto ||
@@ -1359,7 +1362,7 @@ private:
                                          TT_LeadingJavaAnnotation)) {
         Current.Type = Current.Previous->Type;
       }
-    } else if (Current.isOneOf(tok::identifier, tok::kw_new) &&
+    } else if (canBeObjCSelectorComponent(Current) &&
                // FIXME(bug 36976): ObjC return types shouldn't use TT_CastRParen.
                Current.Previous && Current.Previous->is(TT_CastRParen) &&
                Current.Previous->MatchingParen &&
@@ -2663,7 +2666,7 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
   if (Line.Type == LT_ObjCMethodDecl) {
     if (Left.is(TT_ObjCMethodSpecifier))
       return true;
-    if (Left.is(tok::r_paren) && Right.isOneOf(tok::identifier, tok::kw_new))
+    if (Left.is(tok::r_paren) && canBeObjCSelectorComponent(Right))
       // Don't space between ')' and <id> or ')' and 'new'. 'new' is not a
       // keyword in Objective-C, and '+ (instancetype)new;' is a standard class
       // method declaration.
@@ -3141,6 +3144,7 @@ void TokenAnnotator::printDebugInfo(const AnnotatedLine &Line) {
     for (unsigned i = 0, e = Tok->FakeLParens.size(); i != e; ++i)
       llvm::errs() << Tok->FakeLParens[i] << "/";
     llvm::errs() << " FakeRParens=" << Tok->FakeRParens;
+    llvm::errs() << " II=" << Tok->Tok.getIdentifierInfo();
     llvm::errs() << " Text='" << Tok->TokenText << "'\n";
     if (!Tok->Next)
       assert(Tok == Line.Last);

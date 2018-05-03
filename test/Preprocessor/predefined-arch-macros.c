@@ -1466,6 +1466,8 @@
 // CHECK_TRM_M32: #define __FXSR__ 1
 // CHECK_TRM_M32: #define __GFNI__ 1
 // CHECK_TRM_M32: #define __MMX__ 1
+// CHECK_TRM_M32: #define __MOVDIR64B__ 1
+// CHECK_TRM_M32: #define __MOVDIRI__ 1
 // CHECK_TRM_M32: #define __MPX__ 1
 // CHECK_TRM_M32: #define __PCLMUL__ 1
 // CHECK_TRM_M32: #define __POPCNT__ 1
@@ -1482,6 +1484,7 @@
 // CHECK_TRM_M32: #define __SSE_MATH__ 1
 // CHECK_TRM_M32: #define __SSE__ 1
 // CHECK_TRM_M32: #define __SSSE3__ 1
+// CHECK_TRM_M32: #define __WAITPKG__ 1
 // CHECK_TRM_M32: #define __XSAVEC__ 1
 // CHECK_TRM_M32: #define __XSAVEOPT__ 1
 // CHECK_TRM_M32: #define __XSAVES__ 1
@@ -1503,6 +1506,8 @@
 // CHECK_TRM_M64: #define __FXSR__ 1
 // CHECK_TRM_M64: #define __GFNI__ 1
 // CHECK_TRM_M64: #define __MMX__ 1
+// CHECK_TRM_M64: #define __MOVDIR64B__ 1
+// CHECK_TRM_M64: #define __MOVDIRI__ 1
 // CHECK_TRM_M64: #define __MPX__ 1
 // CHECK_TRM_M64: #define __PCLMUL__ 1
 // CHECK_TRM_M64: #define __POPCNT__ 1
@@ -1518,6 +1523,7 @@
 // CHECK_TRM_M64: #define __SSE4_2__ 1
 // CHECK_TRM_M64: #define __SSE__ 1
 // CHECK_TRM_M64: #define __SSSE3__ 1
+// CHECK_TRM_M64: #define __WAITPKG__ 1
 // CHECK_TRM_M64: #define __XSAVEC__ 1
 // CHECK_TRM_M64: #define __XSAVEOPT__ 1
 // CHECK_TRM_M64: #define __XSAVES__ 1

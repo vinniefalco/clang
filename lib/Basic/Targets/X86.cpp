@@ -246,7 +246,10 @@ bool X86TargetInfo::initFeatureMap(
 
   case CK_Tremont:
     setFeatureEnabledImpl(Features, "cldemote", true);
+    setFeatureEnabledImpl(Features, "movdiri", true);
+    setFeatureEnabledImpl(Features, "movdir64b", true);
     setFeatureEnabledImpl(Features, "gfni", true);
+    setFeatureEnabledImpl(Features, "waitpkg", true);
     LLVM_FALLTHROUGH;
   case CK_GoldmontPlus:
     setFeatureEnabledImpl(Features, "rdpid", true);
@@ -818,6 +821,12 @@ bool X86TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasRetpolineExternalThunk = true;
     } else if (Feature == "+sahf") {
       HasLAHFSAHF = true;
+    } else if (Feature == "+waitpkg") {
+      HasWAITPKG = true;
+    } else if (Feature == "+movdiri") {
+      HasMOVDIRI = true;
+    } else if (Feature == "+movdir64b") {
+      HasMOVDIR64B = true;
     }
 
     X86SSEEnum Level = llvm::StringSwitch<X86SSEEnum>(Feature)
@@ -1172,6 +1181,12 @@ void X86TargetInfo::getTargetDefines(const LangOptions &Opts,
     Builder.defineMacro("__RDPID__");
   if (HasCLDEMOTE)
     Builder.defineMacro("__CLDEMOTE__");
+  if (HasWAITPKG)
+    Builder.defineMacro("__WAITPKG__");
+  if (HasMOVDIRI)
+    Builder.defineMacro("__MOVDIRI__");
+  if (HasMOVDIR64B)
+    Builder.defineMacro("__MOVDIR64B__");
 
   // Each case falls through to the previous one here.
   switch (SSELevel) {
@@ -1296,6 +1311,8 @@ bool X86TargetInfo::isValidFeatureName(StringRef Name) const {
       .Case("lzcnt", true)
       .Case("mmx", true)
       .Case("movbe", true)
+      .Case("movdiri", true)
+      .Case("movdir64b", true)
       .Case("mpx", true)
       .Case("mwaitx", true)
       .Case("pclmul", true)
@@ -1323,6 +1340,7 @@ bool X86TargetInfo::isValidFeatureName(StringRef Name) const {
       .Case("vaes", true)
       .Case("vpclmulqdq", true)
       .Case("wbnoinvd", true)
+      .Case("waitpkg", true)
       .Case("x87", true)
       .Case("xop", true)
       .Case("xsave", true)
@@ -1371,6 +1389,8 @@ bool X86TargetInfo::hasFeature(StringRef Feature) const {
       .Case("mm3dnowa", MMX3DNowLevel >= AMD3DNowAthlon)
       .Case("mmx", MMX3DNowLevel >= MMX)
       .Case("movbe", HasMOVBE)
+      .Case("movdiri", HasMOVDIRI)
+      .Case("movdir64b", HasMOVDIR64B)
       .Case("mpx", HasMPX)
       .Case("mwaitx", HasMWAITX)
       .Case("pclmul", HasPCLMUL)
@@ -1399,6 +1419,7 @@ bool X86TargetInfo::hasFeature(StringRef Feature) const {
       .Case("vaes", HasVAES)
       .Case("vpclmulqdq", HasVPCLMULQDQ)
       .Case("wbnoinvd", HasWBNOINVD)
+      .Case("waitpkg", HasWAITPKG)
       .Case("x86", true)
       .Case("x86_32", getTriple().getArch() == llvm::Triple::x86)
       .Case("x86_64", getTriple().getArch() == llvm::Triple::x86_64)

@@ -2421,6 +2421,9 @@ def err_template_different_associated_constraints : Error<
 def warn_cxx98_compat_unicode_type : Warning<
   "'%0' type specifier is incompatible with C++98">,
   InGroup<CXX98Compat>, DefaultIgnore;
+def warn_cxx17_compat_unicode_type : Warning<
+  "'char8_t' type specifier is incompatible with C++ standards before C++20">,
+  InGroup<CXXPre2aCompat>, DefaultIgnore;
 
 // __make_integer_seq
 def err_integer_sequence_negative_length : Error<
@@ -3333,6 +3336,9 @@ def err_attribute_not_supported_in_lang : Error<
   "%0 attribute is not supported in %select{C|C++|Objective-C}1">;
 def err_attribute_not_supported_on_arch
     : Error<"%0 attribute is not supported on '%1'">;
+def warn_gcc_ignores_type_attr : Warning<
+  "GCC does not allow the %0 attribute to be written on a type">,
+  InGroup<GccCompat>;
 
 // Clang-Specific Attributes
 def warn_attribute_iboutlet : Warning<
@@ -3991,8 +3997,6 @@ def err_template_member_noparams : Error<
   "extraneous 'template<>' in declaration of member %0">;
 def err_template_tag_noparams : Error<
   "extraneous 'template<>' in declaration of %0 %1">;
-def err_template_decl_ref : Error<
-  "cannot refer to %select{class|variable}0 template %1 without a template argument list">;
 
 // C++ Template Argument Lists
 def err_template_missing_args : Error<
@@ -5612,9 +5616,12 @@ def warn_addition_in_bitshift : Warning<
   "operator '%0' has lower precedence than '%1'; "
   "'%1' will be evaluated first">, InGroup<ShiftOpParentheses>;
 
-def warn_self_assignment : Warning<
+def warn_self_assignment_builtin : Warning<
   "explicitly assigning value of variable of type %0 to itself">,
   InGroup<SelfAssignment>, DefaultIgnore;
+def warn_self_assignment_overloaded : Warning<
+  "explicitly assigning value of variable of type %0 to itself">,
+  InGroup<SelfAssignmentOverloaded>, DefaultIgnore;
 def warn_self_move : Warning<
   "explicitly moving variable of type %0 to itself">,
   InGroup<SelfMove>, DefaultIgnore;
@@ -5821,6 +5828,13 @@ def err_array_init_wide_string_into_char : Error<
   "initializing char array with wide string literal">;
 def err_array_init_incompat_wide_string_into_wchar : Error<
   "initializing wide char array with incompatible wide string literal">;
+def err_array_init_plain_string_into_char8_t : Error<
+  "initializing 'char8_t' array with plain string literal">;
+def note_array_init_plain_string_into_char8_t : Note<
+  "add 'u8' prefix to form a 'char8_t' string literal">;
+def err_array_init_utf8_string_into_char : Error<
+  "initialization of char array with UTF-8 string literal is not permitted "
+  "by '-fchar8_t'">;
 def err_array_init_different_type : Error<
   "cannot initialize array %diff{of type $ with array of type $|"
   "with different type of array}0,1">;
@@ -7111,6 +7125,9 @@ def warn_atomic_op_has_invalid_memory_order : Warning<
   InGroup<DiagGroup<"atomic-memory-ordering">>;
 def err_atomic_op_has_invalid_synch_scope : Error<
   "synchronization scope argument to atomic operation is invalid">;
+def warn_atomic_op_misaligned : Warning<
+  "misaligned or large atomic operation may incur significant performance penalty">,
+  InGroup<DiagGroup<"atomic-alignment">>;
 
 def err_overflow_builtin_must_be_int : Error<
   "operand argument to overflow builtin must be an integer (%0 invalid)">;
@@ -8247,6 +8264,8 @@ def err_systemz_invalid_tabort_code : Error<
   "invalid transaction abort code">;
 def err_64_bit_builtin_32_bit_tgt : Error<
   "this builtin is only available on 64-bit targets">;
+def err_32_bit_builtin_64_bit_tgt : Error<
+  "this builtin is only available on 32-bit targets">;
 def err_builtin_x64_aarch64_only : Error<
   "this builtin is only available on x86-64 and aarch64 targets">;
 def err_ppc_builtin_only_on_pwr7 : Error<

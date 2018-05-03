@@ -62,8 +62,9 @@ Improvements to Clang's diagnostics
 - ``-Wself-assign`` and ``-Wself-assign-field`` were extended to diagnose
   self-assignment operations using overloaded operators (i.e. classes).
   If you are doing such an assignment intentionally, e.g. in a unit test for
-  a data structure, the warning can be suppressed by adding ``*&`` to the
-  right-hand side or casting it to the appropriate reference type.
+  a data structure, the first warning can be disabled by passing
+  ``-Wno-self-assign-overloaded``, also the warning can be suppressed by adding
+  ``*&`` to the right-hand side or casting it to the appropriate reference type.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -77,10 +78,24 @@ Non-comprehensive list of changes in this release
   standard-layout if all base classes and the first data member (or bit-field)
   can be laid out at offset zero.
 
+- Clang's handling of the GCC ``packed`` class attribute in C++ has been fixed
+  to apply only to non-static data members and not to base classes. This fixes
+  an ABI difference between Clang and GCC, but creates an ABI difference between
+  Clang 7 and earlier versions. The old behavior can be restored by setting
+  ``-fclang-abi-compat`` to ``6`` or earlier.
+
 - ...
 
 New Compiler Flags
 ------------------
+
+- :option:`-fstrict-float-cast-overflow` and
+  :option:`-fno-strict-float-cast-overflow` -
+   When a floating-point value is not representable in a destination integer
+   type, the code has undefined behavior according to the language standard.
+   By default, Clang will not guarantee any particular result in that case.
+   With the 'no-strict' option, Clang attempts to match the overflowing behavior
+   of the target's native float-to-int conversion instructions.
 
 - ...
 
@@ -162,6 +177,18 @@ OpenMP Support in Clang
 ----------------------------------
 
 - ...
+
+CUDA Support in Clang
+---------------------
+
+- Clang will now try to locate the CUDA installation next to :program:`ptxas`
+  in the `PATH` environment variable. This behavior can be turned off by passing
+  the new flag `--cuda-path-ignore-env`.
+
+- Clang now supports generating object files with relocatable device code. This
+  feature needs to be enabled with `-fcuda-rdc` and my result in performance
+  penalties compared to whole program compilation. Please note that NVIDIA's
+  :program:`nvcc` must be used for linking.
 
 Internal API Changes
 --------------------

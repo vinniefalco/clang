@@ -1277,6 +1277,11 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
       Result = Context.getUnsignedWCharType();
     }
     break;
+  case DeclSpec::TST_char8:
+      assert(DS.getTypeSpecSign() == DeclSpec::TSS_unspecified &&
+        "Unknown TSS value");
+      Result = Context.Char8Ty;
+    break;
   case DeclSpec::TST_char16:
       assert(DS.getTypeSpecSign() == DeclSpec::TSS_unspecified &&
         "Unknown TSS value");
@@ -4489,7 +4494,8 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
           // the predefined
           // __strong/__weak/__autoreleasing/__unsafe_unretained.
           if (AttrLoc.isMacroID())
-            AttrLoc = S.SourceMgr.getImmediateExpansionRange(AttrLoc).first;
+            AttrLoc =
+                S.SourceMgr.getImmediateExpansionRange(AttrLoc).getBegin();
 
           S.Diag(AttrLoc, diag::warn_arc_lifetime_result_type)
             << T.getQualifiers().getObjCLifetime();
@@ -4671,7 +4677,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
             DynamicExceptions.push_back(FTI.Exceptions[I].Ty);
             DynamicExceptionRanges.push_back(FTI.Exceptions[I].Range);
           }
-        } else if (FTI.getExceptionSpecType() == EST_ComputedNoexcept) {
+        } else if (isComputedNoexcept(FTI.getExceptionSpecType())) {
           NoexceptExpr = FTI.NoexceptExpr;
         }
 
@@ -5893,7 +5899,8 @@ static bool handleObjCOwnershipTypeAttr(TypeProcessingState &state,
   Sema &S = state.getSema();
   SourceLocation AttrLoc = attr.getLoc();
   if (AttrLoc.isMacroID())
-    AttrLoc = S.getSourceManager().getImmediateExpansionRange(AttrLoc).first;
+    AttrLoc =
+        S.getSourceManager().getImmediateExpansionRange(AttrLoc).getBegin();
 
   if (!attr.isArgIdent(0)) {
     S.Diag(AttrLoc, diag::err_attribute_argument_type)
@@ -7178,14 +7185,19 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
 
     if (attr.isCXX11Attribute()) {
       // [[gnu::...]] attributes are treated as declaration attributes, so may
-      // not appertain to a DeclaratorChunk, even if we handle them as type
-      // attributes.
+      // not appertain to a DeclaratorChunk. If we handle them as type
+      // attributes, accept them in that position and diagnose the GCC
+      // incompatibility.
       if (attr.getScopeName() && attr.getScopeName()->isStr("gnu")) {
+        bool IsTypeAttr = attr.isTypeAttr();
         if (TAL == TAL_DeclChunk) {
           state.getSema().Diag(attr.getLoc(),
-                               diag::warn_cxx11_gnu_attribute_on_type)
+                               IsTypeAttr
+                                   ? diag::warn_gcc_ignores_type_attr
+                                   : diag::warn_cxx11_gnu_attribute_on_type)
               << attr.getName();
-          continue;
+          if (!IsTypeAttr)
+            continue;
         }
       } else if (TAL != TAL_DeclChunk) {
         // Otherwise, only consider type processing for a C++11 attribute if

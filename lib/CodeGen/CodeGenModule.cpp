@@ -571,7 +571,8 @@ void CodeGenModule::Release() {
   if (DebugInfo)
     DebugInfo->finalize();
 
-  EmitVersionIdentMetadata();
+  if (getCodeGenOpts().EmitVersionIdentMetadata)
+    EmitVersionIdentMetadata();
 
   EmitTargetMetadata();
 }
@@ -2397,7 +2398,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
   if (const FunctionDecl *FD = cast_or_null<FunctionDecl>(D)) {
     // For the device mark the function as one that should be emitted.
     if (getLangOpts().OpenMPIsDevice && OpenMPRuntime &&
-        !OpenMPRuntime->markAsGlobalTarget(FD) && FD->isDefined() &&
+        !OpenMPRuntime->markAsGlobalTarget(GD) && FD->isDefined() &&
         !DontDefer && !IsForDefinition)
       addDeferredDeclToEmit(GD);
 
@@ -3625,6 +3626,9 @@ void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
   setGVProperties(Fn, GD);
 
   MaybeHandleStaticInExternC(D, Fn);
+
+  if (D->hasAttr<CUDAGlobalAttr>())
+    getTargetCodeGenInfo().setCUDAKernelCallingConvention(Fn);
 
   maybeSetTrivialComdat(*D, *Fn);
 

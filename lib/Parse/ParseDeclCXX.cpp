@@ -602,7 +602,7 @@ bool Parser::ParseUsingDeclarator(DeclaratorContext Context,
             /*AllowConstructorName=*/!(Tok.is(tok::identifier) &&
                                        NextToken().is(tok::equal)),
             /*AllowDeductionGuide=*/false,
-            nullptr, D.TemplateKWLoc, D.Name))
+            nullptr, nullptr, D.Name))
       return true;
   }
 
@@ -2476,7 +2476,7 @@ Parser::ParseCXXClassMemberDeclaration(AccessSpecifier AS,
       SourceLocation TemplateKWLoc;
       UnqualifiedId Name;
       if (ParseUnqualifiedId(SS, false, true, true, false, nullptr,
-                             TemplateKWLoc, Name)) {
+                             &TemplateKWLoc, Name)) {
         SkipUntil(tok::semi);
         return nullptr;
       }
@@ -2488,6 +2488,7 @@ Parser::ParseCXXClassMemberDeclaration(AccessSpecifier AS,
         return nullptr;
       }
 
+      // FIXME: We should do something with the 'template' keyword here.
       return DeclGroupPtrTy::make(DeclGroupRef(Actions.ActOnUsingDeclaration(
           getCurScope(), AS, /*UsingLoc*/ SourceLocation(),
           /*TypenameLoc*/ SourceLocation(), SS, Name,
@@ -3585,15 +3586,11 @@ Parser::tryParseExceptionSpecification(bool Delayed,
     // There is an argument.
     BalancedDelimiterTracker T(*this, tok::l_paren);
     T.consumeOpen();
-    NoexceptType = EST_ComputedNoexcept;
     NoexceptExpr = ParseConstantExpression();
     T.consumeClose();
-    // The argument must be contextually convertible to bool. We use
-    // CheckBooleanCondition for this purpose.
-    // FIXME: Add a proper Sema entry point for this.
     if (!NoexceptExpr.isInvalid()) {
-      NoexceptExpr =
-          Actions.CheckBooleanCondition(KeywordLoc, NoexceptExpr.get());
+      NoexceptExpr = Actions.ActOnNoexceptSpec(KeywordLoc, NoexceptExpr.get(),
+                                               NoexceptType);
       NoexceptRange = SourceRange(KeywordLoc, T.getCloseLocation());
     } else {
       NoexceptType = EST_BasicNoexcept;
