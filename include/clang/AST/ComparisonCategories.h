@@ -28,7 +28,7 @@ namespace clang {
 
 class ASTContext;
 class VarDecl;
-class RecordDecl;
+class CXXRecordDecl;
 class QualType;
 class NamespaceDecl;
 
@@ -76,12 +76,14 @@ public:
   /// \brief The declaration for the comparison category type from the
   /// standard library.
   // FIXME: Make this const
-  RecordDecl *CCDecl = nullptr;
+  CXXRecordDecl *Record = nullptr;
 
   /// \brief The Kind of the comparison category type
   ComparisonCategoryType Kind;
 
 public:
+  QualType getType() const;
+
   /// \brief Return the VarDecl for the specified comparison category result.
   ///    For example 'std::strong_equality::equal'.
   const VarDecl *getResultDecl(ComparisonCategoryResult ValueKind) const {

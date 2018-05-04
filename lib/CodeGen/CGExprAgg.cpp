@@ -998,6 +998,8 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
 
   // TODO Is it worthwhile to try to generate a select between the comparison
   // result values rather than their addresses?
+  assert(CmpInfo.Record->isTriviallyCopyable() &&
+         "cannot copy non-trivially copyable aggregate");
   return EmitFinalDestCopy(
       E->getType(), CGF.MakeNaturalAlignAddrLValue(Select, E->getType()));
 }

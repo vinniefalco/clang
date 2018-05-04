@@ -8901,7 +8901,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   // before. If so, skip checking it again.
   ComparisonCategoryInfo *Info = Context.CompCategories.lookupInfo(Kind);
   if (Info && FullyCheckedComparisonCategories.count(Info))
-    return QualType(Info->CCDecl->getTypeForDecl(), 0);
+    return Info->getType();
 
   // If lookup failed
   if (!Info) {
@@ -8910,19 +8910,23 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
     return QualType();
   }
 
-  QualType CCTy(Info->CCDecl->getTypeForDecl(), 0);
   // Use an elaborated type for diagnostics which has a name containing the
   // prepended 'std' namespace but not any inline namespace names.
   QualType TyForDiags = [&]() {
     auto *NNS =
         NestedNameSpecifier::Create(Context, nullptr, getStdNamespace());
-    return Context.getElaboratedType(ETK_None, NNS, CCTy);
+    return Context.getElaboratedType(ETK_None, NNS, Info->getType());
   }();
   if (RequireCompleteType(Loc, TyForDiags, diag::err_incomplete_type))
     return QualType();
 
   assert(Info->Kind == Kind);
-  assert(Info->CCDecl);
+  assert(Info->Record);
+
+  if (!Info->Record->isTriviallyCopyable()) {
+    Diag(Loc, diag::err_std_compare_type_not_supported) << TyForDiags << 1;
+    return QualType();
+  }
 
   // Build each of the require values and store them in Info.
   for (ComparisonCategoryResult CCR :
@@ -8939,7 +8943,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
     // TODO Handle more ways the lookup or result can be invalid.
     if (!VD->isStaticDataMember() || !VD->isConstexpr()) {
       Diag(Loc, diag::err_std_compare_type_not_supported)
-          << TyForDiags << ComparisonCategories::getResultString(CCR);
+          << TyForDiags << 0 << ComparisonCategories::getResultString(CCR);
       Diag(VD->getLocation(), diag::note_var_declared_here)
           << VD << VD->getSourceRange();
       return QualType();
@@ -8950,7 +8954,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   // We've successfully built the required types and expressions. Update
   // the cache and return the newly cached value.
   FullyCheckedComparisonCategories.insert(Info);
-  return QualType(Info->CCDecl->getTypeForDecl(), 0);
+  return Info->getType();
 }
 
 /// \brief Retrieve the special "std" namespace, which may require us to

@@ -9427,5 +9427,6 @@ def err_std_compare_type_missing_member : Error<
   "%0 is missing a member named '%1'">;
 def err_std_compare_type_not_supported : Error<
   "standard library implementation of %0 is not supported; "
-   "member '%1' does not have expected form">;
+   "%select{member '%2' does not have expected form|"
+   "the type is not trivially copyable}1">;
 } // end of sema component.

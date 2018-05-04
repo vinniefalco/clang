@@ -20,6 +20,10 @@
 
 using namespace clang;
 
+QualType ComparisonCategoryInfo::getType() const {
+  return QualType(Record->getTypeForDecl(), 0);
+}
+
 VarDecl *
 ComparisonCategoryInfo::lookupResultDecl(ComparisonCategoryResult ValueKind) {
   char Key = static_cast<char>(ValueKind);
@@ -27,7 +31,7 @@ ComparisonCategoryInfo::lookupResultDecl(ComparisonCategoryResult ValueKind) {
   if (VD)
     return VD;
 
-  const RecordDecl *RD = cast<RecordDecl>(CCDecl->getCanonicalDecl());
+  const CXXRecordDecl *RD = Record->getCanonicalDecl();
   StringRef Name = ComparisonCategories::getResultString(ValueKind);
   DeclContextLookupResult Lookup = RD->lookup(&Ctx.Idents.get(Name));
   if (Lookup.size() != 1)
@@ -52,13 +56,13 @@ static const NamespaceDecl *lookupStdNamespace(const ASTContext &Ctx,
   return StdNS;
 }
 
-static RecordDecl *lookupRecordDecl(const ASTContext &Ctx,
-                                    const NamespaceDecl *StdNS,
-                                    ComparisonCategoryType Kind) {
+static CXXRecordDecl *lookupCXXRecordDecl(const ASTContext &Ctx,
+                                          const NamespaceDecl *StdNS,
+                                          ComparisonCategoryType Kind) {
   StringRef Name = ComparisonCategories::getCategoryString(Kind);
   DeclContextLookupResult Lookup = StdNS->lookup(&Ctx.Idents.get(Name));
   if (Lookup.size() == 1) {
-    if (RecordDecl *RD = dyn_cast<RecordDecl>(Lookup.front()))
+    if (CXXRecordDecl *RD = dyn_cast<CXXRecordDecl>(Lookup.front()))
       return RD;
   }
   return nullptr;
@@ -70,9 +74,9 @@ ComparisonCategories::lookupInfo(ComparisonCategoryType Kind) const {
   if (It != Data.end())
     return &It->second;
   if (const NamespaceDecl *NS = lookupStdNamespace(Ctx, StdNS)) {
-    if (RecordDecl *RD = lookupRecordDecl(Ctx, NS, Kind)) {
+    if (CXXRecordDecl *RD = lookupCXXRecordDecl(Ctx, NS, Kind)) {
       ComparisonCategoryInfo Info(Ctx);
-      Info.CCDecl = RD;
+      Info.Record = RD;
       Info.Kind = Kind;
       return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
     }
@@ -92,7 +96,7 @@ ComparisonCategories::lookupInfoForType(QualType Ty) const {
   const auto *CanonRD = RD->getCanonicalDecl();
   for (auto &KV : Data) {
     const ComparisonCategoryInfo &Info = KV.second;
-    if (CanonRD == Info.CCDecl->getCanonicalDecl())
+    if (CanonRD == Info.Record->getCanonicalDecl())
       return &Info;
   }
 
@@ -110,7 +114,7 @@ ComparisonCategories::lookupInfoForType(QualType Ty) const {
     // it.
     if (getCategoryString(Kind) == RD->getName()) {
       ComparisonCategoryInfo Info(Ctx);
-      Info.CCDecl = RD;
+      Info.Record = RD;
       Info.Kind = Kind;
       return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
     }

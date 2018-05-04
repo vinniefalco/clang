@@ -42,3 +42,21 @@ auto test_non_constexpr_var() {
   // expected-error@+1 {{standard library implementation of 'std::strong_ordering' is not supported; member 'equivalent' does not have expected form}}
   return (1 <=> 0);
 }
+
+namespace std {
+inline namespace __1 {
+struct strong_equality {
+  constexpr strong_equality() = default;
+  // non-trivial
+  constexpr strong_equality(strong_equality const &) {}
+};
+} // namespace __1
+} // namespace std
+
+struct Class {};
+using MemPtr = void (Class::*)(int);
+
+auto test_non_trivial(MemPtr LHS, MemPtr RHS) {
+  // expected-error@+1 {{standard library implementation of 'std::strong_equality' is not supported; the type is not trivially copyable}}
+  return LHS <=> RHS;
+}
