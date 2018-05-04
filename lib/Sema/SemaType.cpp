@@ -8033,12 +8033,9 @@ Sema::CheckTransformTraitArity(TransformTraitType::TTKind Kind,
   return None;
 }
 
-QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
-                                       TransformTraitType::TTKind TKind,
-                                       SourceLocation Loc) {
-  auto MakeTrait = [&](QualType TransformedType) {
-    return Context.getTransformTraitType(ArgTypes, TransformedType, TKind);
-  };
+QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
+                                               TransformTraitType::TTKind TKind,
+                                               SourceLocation Loc) {
 
   bool IsInstantDependent = llvm::any_of(ArgTypes, [](QualType Ty) {
     return Ty->isInstantiationDependentType() ||
@@ -8047,7 +8044,7 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
 
   // Delay all checking while any of the arguments are instantiation dependent.
   if (IsInstantDependent)
-    return MakeTrait(Context.DependentTy);
+    return Context.DependentTy;
 
   if (auto ArityDiag =
           CheckTransformTraitArity(TKind, ArgTypes.size(), SourceRange(Loc))) {
@@ -8059,7 +8056,7 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
   case TransformTraitType::EnumUnderlyingType: {
     assert(ArgTypes.size() == 1);
     if (ArgTypes[0]->isDependentType())
-      return MakeTrait(Context.DependentTy);
+      return Context.DependentTy;
 
     QualType BaseType = ArgTypes[0];
     if (!BaseType->isEnumeralType()) {
@@ -8080,11 +8077,20 @@ QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
 
     DiagnoseUseOfDecl(ED, Loc);
     assert(!ED->getIntegerType().isNull());
-    return MakeTrait(ED->getIntegerType());
+    return ED->getIntegerType();
   }
   }
 
   llvm_unreachable("unknown transform type");
+}
+
+QualType Sema::BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
+                                       TransformTraitType::TTKind TKind,
+                                       SourceLocation Loc) {
+  QualType ResultType = ComputeTransformTraitResultType(ArgTypes, TKind, Loc);
+  if (ResultType.isNull())
+    return QualType();
+  return Context.getTransformTraitType(ArgTypes, ResultType, TKind);
 }
 
 QualType Sema::BuildAtomicType(QualType T, SourceLocation Loc) {

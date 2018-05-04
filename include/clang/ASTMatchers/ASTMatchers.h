@@ -5251,6 +5251,16 @@ extern const AstTypeMatcher<EnumType> enumType;
 extern const AstTypeMatcher<TemplateSpecializationType>
     templateSpecializationType;
 
+/// \brief Matches types nodes representing type-trait transformations.
+///
+/// Given:
+/// \code
+///   typedef __underlying_type(T) type;
+/// \endcode
+/// transformTraitType()
+///   matches "__underlying_type(T)"
+extern const AstTypeMatcher<TransformTraitType> transformTraitType;
+
 /// \brief Matches types nodes representing unary type transformations.
 ///
 /// Given:

@@ -1648,6 +1648,10 @@ public:
   CheckTransformTraitArity(TransformTraitType::TTKind, unsigned NumArgs,
                            SourceRange R);
 
+  QualType ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
+                                           TransformTraitType::TTKind Kind,
+                                           SourceLocation Loc);
+
   QualType BuildTransformTraitType(ArrayRef<QualType> ArgTypes,
                                    TransformTraitType::TTKind Kind,
                                    SourceLocation Loc);

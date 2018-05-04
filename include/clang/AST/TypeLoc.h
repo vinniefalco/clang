@@ -1989,8 +1989,6 @@ public:
   }
 
   unsigned getExtraLocalDataAlignment() const {
-    static_assert(alignof(TransformTraitTypeLoc) >= alignof(TypeSourceInfo *),
-                  "not enough alignment for tail-allocated data");
     return alignof(TypeSourceInfo *);
   }
 };

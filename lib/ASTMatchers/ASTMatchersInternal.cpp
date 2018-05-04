@@ -809,7 +809,7 @@ const AstTypeMatcher<RValueReferenceType> rValueReferenceType;
 const AstTypeMatcher<TypedefType> typedefType;
 const AstTypeMatcher<EnumType> enumType;
 const AstTypeMatcher<TemplateSpecializationType> templateSpecializationType;
-const AstTypeMatcher<TransformTraitType> transformTraingType;
+const AstTypeMatcher<TransformTraitType> transformTraitType;
 const AstTypeMatcher<RecordType> recordType;
 const AstTypeMatcher<TagType> tagType;
 const AstTypeMatcher<ElaboratedType> elaboratedType;

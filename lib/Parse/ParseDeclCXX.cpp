@@ -1022,7 +1022,10 @@ void Parser::AnnotateExistingDecltypeSpecifier(const DeclSpec& DS,
 
 
 void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
-
+  auto Error = [&]() {
+    DS.SetTypeSpecError();
+    return;
+  };
   auto KindInfo =
       [&]() -> std::pair<TransformTraitType::TTKind, DeclSpec::TST> {
     using EnumKind = TransformTraitType::TTKind;
@@ -1037,7 +1040,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   SourceLocation StartLoc = ConsumeToken();
   BalancedDelimiterTracker Parens(*this, tok::l_paren);
   if (Parens.expectAndConsume())
-    return;
+    return Error();
 
   SmallVector<ParsedType, 2> Args;
   bool HasPackExpand = false;
@@ -1047,7 +1050,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
       TypeResult Ty = ParseTypeName();
       if (Ty.isInvalid()) {
         Parens.skipToEnd();
-        return;
+        return Error();
       }
 
       // Parse the ellipsis, if present.
@@ -1056,7 +1059,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
         Ty = Actions.ActOnPackExpansion(Ty.get(), ConsumeToken());
         if (Ty.isInvalid()) {
           Parens.skipToEnd();
-          return;
+          return Error();
         }
       }
 
@@ -1065,7 +1068,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     } while (TryConsumeToken(tok::comma));
   }
   if (Parens.consumeClose())
-    return;
+    return Error();
 
   SourceLocation EndLoc = Parens.getCloseLocation();
 
@@ -1074,7 +1077,7 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
                                                   SourceRange(StartLoc));
     if (PDiag.hasValue()) {
       Diag(EndLoc, PDiag.getValue());
-      return;
+      return Error();
     }
   }
 

@@ -4612,8 +4612,8 @@ QualType ASTContext::getDecltypeType(Expr *e, QualType UnderlyingType) const {
   return QualType(dt, 0);
 }
 
-/// getTransformTraitType - We don't unique these, since the memory
-/// savings are minimal and these are rare.
+/// We don't unique these, since the memory savings are minimal and these are
+/// rare.
 QualType
 ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
                                   QualType TransformedType,
