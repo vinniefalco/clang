@@ -1497,24 +1497,8 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
     break;
   }
   case DeclSpec::TST_underlyingType: {
-    ArrayRef<ParsedType> ParsedArgs = DS.getRepAsTypeList();
-    SmallVector<QualType, 2> Args;
-    Args.reserve(ParsedArgs.size());
-    for (auto PT : ParsedArgs) {
-      QualType NewArg = S.GetTypeFromParser(PT);
-      assert(!NewArg.isNull());
-      Args.push_back(NewArg);
-    }
-    TransformTraitType::TTKind TKind;
-    switch (DS.getTypeSpecType()) {
-    case DeclSpec::TST_underlyingType:
-      TKind = TransformTraitType::EnumUnderlyingType;
-      break;
-    default:
-      llvm_unreachable("unhandled case");
-    }
-
-    Result = S.BuildTransformTraitType(Args, TKind, DS.getTypeSpecTypeLoc());
+    ParsedType ParsedTT = DS.getRepAsType();
+    Result = S.GetTypeFromParser(ParsedTT);
     if (Result.isNull()) {
       Result = Context.IntTy;
       declarator.setInvalidType(true);
@@ -5334,11 +5318,13 @@ namespace {
       assert(DS.getTypeSpecType() == DeclSpec::TST_underlyingType);
       TL.setKWLoc(DS.getTypeSpecTypeLoc());
       TL.setParensRange(DS.getTypeofParensRange());
-      ArrayRef<ParsedType> ParsedArgs = DS.getRepAsTypeList();
+      ParsedType ParsedTT = DS.getRepAsType();
+      QualType TransformTy = Sema::GetTypeFromParser(ParsedTT, nullptr);
+      const TransformTraitType *Ty = TransformTy->getAs<TransformTraitType>();
       SmallVector<TypeSourceInfo *, 2> ArgInfo;
-      for (auto PT : ParsedArgs) {
+      for (auto QT : Ty->getArgs()) {
         TypeSourceInfo *TInfo = nullptr;
-        Sema::GetTypeFromParser(PT, &TInfo);
+        Sema::GetTypeFromParser(ParsedType::make(QT), &TInfo);
         ArgInfo.push_back(TInfo);
       }
       TL.setArgTInfo(ArgInfo);
@@ -8005,7 +7991,7 @@ static bool CheckTransformTraitArity(Sema &S, TransformTraitType::TTKind Kind,
   switch (Kind) {
   case TransformTraitType::EnumUnderlyingType:
     Arity = 1;
-    break;
+    break;f
   }
 
   struct DiagInfo {
