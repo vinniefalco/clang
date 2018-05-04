@@ -233,11 +233,15 @@ void CodeGenFunction::StartThunk(llvm::Function *Fn, GlobalDecl GD,
   const CXXMethodDecl *MD = cast<CXXMethodDecl>(GD.getDecl());
   QualType ThisType = MD->getThisType(getContext());
   const FunctionProtoType *FPT = MD->getType()->getAs<FunctionProtoType>();
-  QualType ResultType = CGM.getCXXABI().HasThisReturn(GD)
-                            ? ThisType
-                            : CGM.getCXXABI().hasMostDerivedReturn(GD)
-                                  ? CGM.getContext().VoidPtrTy
-                                  : FPT->getReturnType();
+  QualType ResultType;
+  if (IsUnprototyped)
+    ResultType = CGM.getContext().VoidTy;
+  else if (CGM.getCXXABI().HasThisReturn(GD))
+    ResultType = ThisType;
+  else if (CGM.getCXXABI().hasMostDerivedReturn(GD))
+    ResultType = CGM.getContext().VoidPtrTy;
+  else
+    ResultType = FPT->getReturnType();
   FunctionArgList FunctionArgs;
 
   // Create the implicit 'this' parameter declaration.
@@ -870,7 +874,7 @@ CodeGenModule::getVTableLinkage(const CXXRecordDecl *RD) {
   llvm_unreachable("Invalid TemplateSpecializationKind!");
 }
 
-/// This is a callback from Sema to tell us that that a particular vtable is
+/// This is a callback from Sema to tell us that a particular vtable is
 /// required to be emitted in this translation unit.
 ///
 /// This is only called for vtables that _must_ be emitted (mainly due to key

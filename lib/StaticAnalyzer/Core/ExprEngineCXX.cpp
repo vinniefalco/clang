@@ -180,14 +180,25 @@ ExprEngine::getRegionForConstructedObject(const CXXConstructExpr *CE,
     }
     case ConstructionContext::TemporaryObjectKind: {
       const auto *TOCC = cast<TemporaryObjectConstructionContext>(CC);
-      // See if we're lifetime-extended via our field. If so, take a note.
-      // Because automatic destructors aren't quite working in this case.
       if (const auto *MTE = TOCC->getMaterializedTemporaryExpr()) {
         if (const ValueDecl *VD = MTE->getExtendingDecl()) {
-          assert(VD->getType()->isReferenceType());
-          if (VD->getType()->getPointeeType().getCanonicalType() !=
-              MTE->GetTemporaryExpr()->getType().getCanonicalType()) {
-            CallOpts.IsTemporaryLifetimeExtendedViaSubobject = true;
+          // Pattern-match various forms of lifetime extension that aren't
+          // currently supported by the CFG.
+          // FIXME: Is there a better way to retrieve this information from
+          // the MaterializeTemporaryExpr?
+          assert(MTE->getStorageDuration() != SD_FullExpression);
+          if (VD->getType()->isReferenceType()) {
+            assert(VD->getType()->isReferenceType());
+            if (VD->getType()->getPointeeType().getCanonicalType() !=
+                MTE->GetTemporaryExpr()->getType().getCanonicalType()) {
+              // We're lifetime-extended via our field. Automatic destructors
+              // aren't quite working in this case.
+              CallOpts.IsTemporaryLifetimeExtendedViaSubobject = true;
+            }
+          } else {
+            // We're lifetime-extended by a surrounding aggregate.
+            // Automatic destructors aren't quite working in this case.
+            CallOpts.IsTemporaryLifetimeExtendedViaAggregate = true;
           }
         }
       }
@@ -410,7 +421,7 @@ void ExprEngine::VisitCXXConstructExpr(const CXXConstructExpr *CE,
       defaultEvalCall(Bldr, *I, *Call, CallOpts);
   }
 
-  // If the CFG was contructed without elements for temporary destructors
+  // If the CFG was constructed without elements for temporary destructors
   // and the just-called constructor created a temporary object then
   // stop exploration if the temporary object has a noreturn constructor.
   // This can lose coverage because the destructor, if it were present
@@ -538,7 +549,7 @@ void ExprEngine::VisitCXXNewAllocatorCall(const CXXNewExpr *CNE,
     if (const FunctionDecl *FD = CNE->getOperatorNew()) {
       QualType Ty = FD->getType();
       if (const auto *ProtoType = Ty->getAs<FunctionProtoType>())
-        if (!ProtoType->isNothrow(getContext()))
+        if (!ProtoType->isNothrow())
           State = State->assume(RetVal.castAs<DefinedOrUnknownSVal>(), true);
     }
 
@@ -611,7 +622,7 @@ void ExprEngine::VisitCXXNewExpr(const CXXNewExpr *CNE, ExplodedNode *Pred,
     if (FD) {
       QualType Ty = FD->getType();
       if (const auto *ProtoType = Ty->getAs<FunctionProtoType>())
-        if (!ProtoType->isNothrow(getContext()))
+        if (!ProtoType->isNothrow())
           if (auto dSymVal = symVal.getAs<DefinedOrUnknownSVal>())
             State = State->assume(*dSymVal, true);
     }

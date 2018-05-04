@@ -1188,6 +1188,19 @@ compileModuleImpl(CompilerInstance &ImportingInstance, SourceLocation ImportLoc,
   return !Instance.getDiagnostics().hasErrorOccurred();
 }
 
+static const FileEntry *getPublicModuleMap(const FileEntry *File,
+                                           FileManager &FileMgr) {
+  StringRef Filename = llvm::sys::path::filename(File->getName());
+  SmallString<128> PublicFilename(File->getDir()->getName());
+  if (Filename == "module_private.map")
+    llvm::sys::path::append(PublicFilename, "module.map");
+  else if (Filename == "module.private.modulemap")
+    llvm::sys::path::append(PublicFilename, "module.modulemap");
+  else
+    return nullptr;
+  return FileMgr.getFile(PublicFilename);
+}
+
 /// \brief Compile a module file for the given module, using the options 
 /// provided by the importing compiler instance. Returns true if the module
 /// was built without errors.
@@ -1204,6 +1217,13 @@ static bool compileModuleImpl(CompilerInstance &ImportingInstance,
   bool Result;
   if (const FileEntry *ModuleMapFile =
           ModMap.getContainingModuleMapFile(Module)) {
+    // Canonicalize compilation to start with the public module map. This is
+    // vital for submodules declarations in the private module maps to be
+    // correctly parsed when depending on a top level module in the public one.
+    if (const FileEntry *PublicMMFile = getPublicModuleMap(
+            ModuleMapFile, ImportingInstance.getFileManager()))
+      ModuleMapFile = PublicMMFile;
+
     // Use the module map where this module resides.
     Result = compileModuleImpl(
         ImportingInstance, ImportLoc, Module->getTopLevelModuleName(),
@@ -1300,7 +1320,7 @@ static bool compileAndLoadModule(CompilerInstance &ImportingInstance,
         // case of timeout, build it ourselves.
         Diags.Report(ModuleNameLoc, diag::remark_module_lock_timeout)
             << Module->Name;
-        // Clear the lock file so that future invokations can make progress.
+        // Clear the lock file so that future invocations can make progress.
         Locked.unsafeRemoveLockFile();
         continue;
       }
@@ -1978,6 +1998,12 @@ CompilerInstance::loadModule(SourceLocation ImportLoc,
     checkConfigMacro(getPreprocessor(), TopModule->ConfigMacros[I],
                      Module, ImportLoc);
   }
+
+  // Resolve any remaining module using export_as for this one.
+  getPreprocessor()
+      .getHeaderSearchInfo()
+      .getModuleMap()
+      .resolveLinkAsDependencies(TopModule);
 
   LastModuleImportLoc = ImportLoc;
   LastModuleImportResult = ModuleLoadResult(Module);

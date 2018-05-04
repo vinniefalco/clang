@@ -14,7 +14,6 @@
 #ifndef LLVM_CLANG_LIB_BASIC_TARGETS_AMDGPU_H
 #define LLVM_CLANG_LIB_BASIC_TARGETS_AMDGPU_H
 
-#include "clang/Basic/Cuda.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
 #include "llvm/ADT/StringSet.h"
@@ -79,9 +78,11 @@ class LLVM_LIBRARY_VISIBILITY AMDGPUTargetInfo final : public TargetInfo {
     GK_GFX810,
     GK_GFX900,
     GK_GFX902,
+    GK_GFX904,
+    GK_GFX906,
 
     GK_AMDGCN_FIRST = GK_GFX600,
-    GK_AMDGCN_LAST = GK_GFX902,
+    GK_AMDGCN_LAST = GK_GFX906,
   };
 
   struct GPUInfo {
@@ -128,7 +129,7 @@ class LLVM_LIBRARY_VISIBILITY AMDGPUTargetInfo final : public TargetInfo {
     {{"cayman"},  {"cayman"},  GK_CAYMAN,  true,  false, false, false, false},
     {{"turks"},   {"turks"},   GK_TURKS,   false, false, false, false, false},
   };
-  static constexpr GPUInfo AMDGCNGPUs[30] = {
+  static constexpr GPUInfo AMDGCNGPUs[32] = {
   // Name           Canonical    Kind        Has   Has    Has    Has   Has
   //                Name                     FMAF  Fast   LDEXPF FP64  Fast
   //                                               FMAF                FMA
@@ -162,6 +163,8 @@ class LLVM_LIBRARY_VISIBILITY AMDGPUTargetInfo final : public TargetInfo {
     {{"stoney"},    {"gfx810"},  GK_GFX810,  true, false, true,  true, true},
     {{"gfx900"},    {"gfx900"},  GK_GFX900,  true, true,  true,  true, true},
     {{"gfx902"},    {"gfx902"},  GK_GFX900,  true, true,  true,  true, true},
+    {{"gfx904"},    {"gfx904"},  GK_GFX904,  true, true,  true,  true, true},
+    {{"gfx906"},    {"gfx906"},  GK_GFX906,  true, true,  true,  true, true},
   };
 
   static GPUInfo parseR600Name(StringRef Name);
@@ -175,7 +178,6 @@ class LLVM_LIBRARY_VISIBILITY AMDGPUTargetInfo final : public TargetInfo {
   static bool isAMDGCN(const llvm::Triple &TT) {
     return TT.getArch() == llvm::Triple::amdgcn;
   }
-  CudaArch GCN_Subarch;
 
 public:
   AMDGPUTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts);
@@ -332,7 +334,6 @@ public:
     else
       GPU = parseR600Name(Name);
 
-    GCN_Subarch = StringToCudaArch(Name);
     return GK_NONE != GPU.Kind;
   }
 

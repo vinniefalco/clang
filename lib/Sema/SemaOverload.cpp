@@ -998,6 +998,13 @@ Sema::CheckOverload(Scope *S, FunctionDecl *New, const LookupResult &Old,
         Match = *I;
         return Ovl_Match;
       }
+
+      // Builtins that have custom typechecking or have a reference should
+      // not be overloadable or redeclarable.
+      if (!getASTContext().canBuiltinBeRedeclared(OldF)) {
+        Match = *I;
+        return Ovl_NonFunction;
+      }
     } else if (isa<UsingDecl>(OldD) || isa<UsingPackDecl>(OldD)) {
       // We can overload with these, which can show up when doing
       // redeclaration checks for UsingDecls.
@@ -1474,7 +1481,7 @@ bool Sema::IsFunctionConversion(QualType FromType, QualType ToType,
   // Drop 'noexcept' if not present in target type.
   if (const auto *FromFPT = dyn_cast<FunctionProtoType>(FromFn)) {
     const auto *ToFPT = cast<FunctionProtoType>(ToFn);
-    if (FromFPT->isNothrow(Context) && !ToFPT->isNothrow(Context)) {
+    if (FromFPT->isNothrow() && !ToFPT->isNothrow()) {
       FromFn = cast<FunctionType>(
           Context.getFunctionTypeWithExceptionSpec(QualType(FromFPT, 0),
                                                    EST_None)
@@ -2802,9 +2809,9 @@ void Sema::HandleFunctionTypeMismatch(PartialDiagnostic &PDiag,
   // Handle exception specification differences on canonical type (in C++17
   // onwards).
   if (cast<FunctionProtoType>(FromFunction->getCanonicalTypeUnqualified())
-          ->isNothrow(Context) !=
+          ->isNothrow() !=
       cast<FunctionProtoType>(ToFunction->getCanonicalTypeUnqualified())
-          ->isNothrow(Context)) {
+          ->isNothrow()) {
     PDiag << ft_noexcept;
     return;
   }
@@ -6384,7 +6391,7 @@ void Sema::AddFunctionCandidates(const UnresolvedSetImpl &Fns,
         Expr::Classification ObjectClassification;
         if (Args.size() > 0) {
           if (Expr *E = Args[0]) {
-            // Use the explit base to restrict the lookup:
+            // Use the explicit base to restrict the lookup:
             ObjectType = E->getType();
             ObjectClassification = E->Classify(Context);
           } // .. else there is an implit base.
@@ -6412,7 +6419,7 @@ void Sema::AddFunctionCandidates(const UnresolvedSetImpl &Fns,
         QualType ObjectType;
         Expr::Classification ObjectClassification;
         if (Expr *E = Args[0]) {
-          // Use the explit base to restrict the lookup:
+          // Use the explicit base to restrict the lookup:
           ObjectType = E->getType();
           ObjectClassification = E->Classify(Context);
         } // .. else there is an implit base.
@@ -7700,6 +7707,8 @@ class BuiltinOperatorOverloadBuilder {
     ArithmeticTypes.push_back(S.Context.BoolTy);
     ArithmeticTypes.push_back(S.Context.CharTy);
     ArithmeticTypes.push_back(S.Context.WCharTy);
+    if (S.Context.getLangOpts().Char8)
+      ArithmeticTypes.push_back(S.Context.Char8Ty);
     ArithmeticTypes.push_back(S.Context.Char16Ty);
     ArithmeticTypes.push_back(S.Context.Char32Ty);
     ArithmeticTypes.push_back(S.Context.SignedCharTy);
@@ -7775,11 +7784,13 @@ public:
     InitArithmeticTypes();
   }
 
+  // Increment is deprecated for bool since C++17.
+  //
   // C++ [over.built]p3:
   //
-  //   For every pair (T, VQ), where T is an arithmetic type, and VQ
-  //   is either volatile or empty, there exist candidate operator
-  //   functions of the form
+  //   For every pair (T, VQ), where T is an arithmetic type other
+  //   than bool, and VQ is either volatile or empty, there exist
+  //   candidate operator functions of the form
   //
   //       VQ T&      operator++(VQ T&);
   //       T          operator++(VQ T&, int);
@@ -7796,10 +7807,16 @@ public:
     if (!HasArithmeticOrEnumeralCandidateType)
       return;
 
-    for (unsigned Arith = (Op == OO_PlusPlus? 0 : 1);
-         Arith < NumArithmeticTypes; ++Arith) {
+    for (unsigned Arith = 0; Arith < NumArithmeticTypes; ++Arith) {
+      const auto TypeOfT = ArithmeticTypes[Arith];
+      if (TypeOfT == S.Context.BoolTy) {
+        if (Op == OO_MinusMinus)
+          continue;
+        if (Op == OO_PlusPlus && S.getLangOpts().CPlusPlus17)
+          continue;
+      }
       addPlusPlusMinusMinusStyleOverloads(
-        ArithmeticTypes[Arith],
+        TypeOfT,
         VisibleTypeConversionsQuals.hasVolatile(),
         VisibleTypeConversionsQuals.hasRestrict());
     }
@@ -11915,7 +11932,7 @@ static ExprResult FinishOverloadedCallExpr(Sema &SemaRef, Scope *S, Expr *Fn,
       << Fn->getSourceRange();
     CandidateSet->NoteCandidates(SemaRef, OCD_AllCandidates, Args);
 
-    // We emitted an error for the unvailable/deleted function call but keep
+    // We emitted an error for the unavailable/deleted function call but keep
     // the call in the AST.
     FunctionDecl *FDecl = (*Best)->Function;
     Fn = SemaRef.FixOverloadedFunctionReference(Fn, (*Best)->FoundDecl, FDecl);
@@ -12395,7 +12412,7 @@ Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
       if (Opc == BO_Comma)
         break;
 
-      // For class as left operand for assignment or compound assigment
+      // For class as left operand for assignment or compound assignment
       // operator do not fall through to handling in built-in, but report that
       // no overloaded assignment operator found
       ExprResult Result = ExprError();

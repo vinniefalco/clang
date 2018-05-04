@@ -294,7 +294,7 @@ static void addExceptionSpec(const FunctionProtoType *T,
     Record.push_back(T->getNumExceptions());
     for (unsigned I = 0, N = T->getNumExceptions(); I != N; ++I)
       Record.AddTypeRef(T->getExceptionType(I));
-  } else if (T->getExceptionSpecType() == EST_ComputedNoexcept) {
+  } else if (isComputedNoexcept(T->getExceptionSpecType())) {
     Record.AddStmt(T->getNoexceptExpr());
   } else if (T->getExceptionSpecType() == EST_Uninstantiated) {
     Record.AddDeclRef(T->getExceptionSpecDecl());
@@ -1911,6 +1911,7 @@ static unsigned CreateSLocExpansionAbbrev(llvm::BitstreamWriter &Stream) {
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 8)); // Spelling location
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 8)); // Start location
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 8)); // End location
+  Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // Is token range
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6)); // Token length
   return Stream.EmitAbbrev(std::move(Abbrev));
 }
@@ -2327,6 +2328,7 @@ void ASTWriter::WriteSourceManagerBlock(SourceManager &SourceMgr,
                             ? SourceLocation()
                             : Expansion.getExpansionLocEnd(),
                         Record);
+      Record.push_back(Expansion.isExpansionTokenRange());
 
       // Compute the token length for this macro expansion.
       unsigned NextOffset = SourceMgr.getNextLocalOffset();
@@ -2815,6 +2817,7 @@ void ASTWriter::WriteSubmodules(Module *WritingModule) {
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // InferExplicit...
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // InferExportWild...
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // ConfigMacrosExh...
+  Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // ModuleMapIsPriv...
   Abbrev->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Blob)); // Name
   unsigned DefinitionAbbrev = Stream.EmitAbbrev(std::move(Abbrev));
 
@@ -2919,7 +2922,8 @@ void ASTWriter::WriteSubmodules(Module *WritingModule) {
                                          Mod->InferSubmodules,
                                          Mod->InferExplicitSubmodules,
                                          Mod->InferExportWildcard,
-                                         Mod->ConfigMacrosExhaustive};
+                                         Mod->ConfigMacrosExhaustive,
+                                         Mod->ModuleMapIsPrivate};
       Stream.EmitRecordWithBlob(DefinitionAbbrev, Record, Mod->Name);
     }
 
@@ -3167,7 +3171,7 @@ void ASTWriter::WriteType(QualType T) {
 /// lexically declared within the given DeclContext.
 ///
 /// \returns the offset of the DECL_CONTEXT_LEXICAL block within the
-/// bistream, or 0 if no block was written.
+/// bitstream, or 0 if no block was written.
 uint64_t ASTWriter::WriteDeclContextLexicalBlock(ASTContext &Context,
                                                  DeclContext *DC) {
   if (DC->decls_empty())
@@ -5199,8 +5203,8 @@ void ASTWriter::WriteDeclUpdatesBlocks(RecordDataImpl &OffsetsRecord) {
       case UPD_CXX_INSTANTIATED_CLASS_DEFINITION: {
         auto *RD = cast<CXXRecordDecl>(D);
         UpdatedDeclContexts.insert(RD->getPrimaryContext());
-        Record.push_back(RD->canPassInRegisters());
         Record.push_back(RD->isParamDestroyedInCallee());
+        Record.push_back(RD->getArgPassingRestrictions());
         Record.AddCXXDefinitionData(RD);
         Record.AddOffset(WriteDeclContextLexicalBlock(
             *Context, const_cast<CXXRecordDecl *>(RD)));
@@ -6001,7 +6005,9 @@ void ASTRecordWriter::AddCXXDefinitionData(const CXXRecordDecl *D) {
   Record->push_back(Data.Polymorphic);
   Record->push_back(Data.Abstract);
   Record->push_back(Data.IsStandardLayout);
-  Record->push_back(Data.HasNoNonEmptyBases);
+  Record->push_back(Data.IsCXX11StandardLayout);
+  Record->push_back(Data.HasBasesWithFields);
+  Record->push_back(Data.HasBasesWithNonStaticDataMembers);
   Record->push_back(Data.HasPrivateFields);
   Record->push_back(Data.HasProtectedFields);
   Record->push_back(Data.HasPublicFields);

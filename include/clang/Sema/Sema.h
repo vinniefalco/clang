@@ -3805,7 +3805,11 @@ public:
     CES_Strict = 0,
     CES_AllowParameters = 1,
     CES_AllowDifferentTypes = 2,
+    CES_AllowExceptionVariables = 4,
+    CES_FormerDefault = (CES_AllowParameters),
     CES_Default = (CES_AllowParameters | CES_AllowDifferentTypes),
+    CES_AsIfByStdMove = (CES_AllowParameters | CES_AllowDifferentTypes |
+                         CES_AllowExceptionVariables),
   };
 
   VarDecl *getCopyElisionCandidate(QualType ReturnType, Expr *E,
@@ -4717,7 +4721,7 @@ public:
 
     /// \brief Get the computed exception specification type.
     ExceptionSpecificationType getExceptionSpecType() const {
-      assert(ComputedEST != EST_ComputedNoexcept &&
+      assert(!isComputedNoexcept(ComputedEST) &&
              "noexcept(expr) should not be a possible result");
       return ComputedEST;
     }
@@ -4745,7 +4749,7 @@ public:
         /// C++11 [except.spec]p14:
         ///   The exception-specification is noexcept(false) if the set of
         ///   potential exceptions of the special member function contains "any"
-        ESI.Type = EST_ComputedNoexcept;
+        ESI.Type = EST_NoexceptFalse;
         ESI.NoexceptExpr = Self->ActOnCXXBoolLiteral(SourceLocation(),
                                                      tok::kw_false).get();
       }
@@ -4795,6 +4799,11 @@ public:
   /// \brief Evaluate the implicit exception specification for a defaulted
   /// special member function.
   void EvaluateImplicitExceptionSpec(SourceLocation Loc, CXXMethodDecl *MD);
+
+  /// Check the given noexcept-specifier, convert its expression, and compute
+  /// the appropriate ExceptionSpecificationType.
+  ExprResult ActOnNoexceptSpec(SourceLocation NoexceptLoc, Expr *NoexceptExpr,
+                               ExceptionSpecificationType &EST);
 
   /// \brief Check the given exception-specification and update the
   /// exception specification information with the results.
@@ -6075,7 +6084,7 @@ public:
   TemplateNameKind isTemplateName(Scope *S,
                                   CXXScopeSpec &SS,
                                   bool hasTemplateKeyword,
-                                  UnqualifiedId &Name,
+                                  const UnqualifiedId &Name,
                                   ParsedType ObjectType,
                                   bool EnteringContext,
                                   TemplateTy &Template,
@@ -6230,6 +6239,8 @@ public:
                                 SourceLocation TemplateLoc,
                                 const TemplateArgumentListInfo *TemplateArgs);
 
+  void diagnoseMissingTemplateArguments(TemplateName Name, SourceLocation Loc);
+
   ExprResult BuildTemplateIdExpr(const CXXScopeSpec &SS,
                                  SourceLocation TemplateKWLoc,
                                  LookupResult &R,
@@ -6243,7 +6254,7 @@ public:
 
   TemplateNameKind ActOnDependentTemplateName(
       Scope *S, CXXScopeSpec &SS, SourceLocation TemplateKWLoc,
-      UnqualifiedId &Name, ParsedType ObjectType, bool EnteringContext,
+      const UnqualifiedId &Name, ParsedType ObjectType, bool EnteringContext,
       TemplateTy &Template, bool AllowInjectedClassName = false);
 
   DeclResult
@@ -8634,29 +8645,29 @@ public:
   /// reference.
   /// \param Level Relative level of nested OpenMP construct for that the check
   /// is performed.
-  bool IsOpenMPCapturedByRef(ValueDecl *D, unsigned Level);
+  bool isOpenMPCapturedByRef(const ValueDecl *D, unsigned Level) const;
 
   /// \brief Check if the specified variable is used in one of the private
   /// clauses (private, firstprivate, lastprivate, reduction etc.) in OpenMP
   /// constructs.
-  VarDecl *IsOpenMPCapturedDecl(ValueDecl *D);
+  VarDecl *isOpenMPCapturedDecl(ValueDecl *D) const;
   ExprResult getOpenMPCapturedExpr(VarDecl *Capture, ExprValueKind VK,
                                    ExprObjectKind OK, SourceLocation Loc);
 
   /// \brief Check if the specified variable is used in 'private' clause.
   /// \param Level Relative level of nested OpenMP construct for that the check
   /// is performed.
-  bool isOpenMPPrivateDecl(ValueDecl *D, unsigned Level);
+  bool isOpenMPPrivateDecl(const ValueDecl *D, unsigned Level) const;
 
   /// Sets OpenMP capture kind (OMPC_private, OMPC_firstprivate, OMPC_map etc.)
   /// for \p FD based on DSA for the provided corresponding captured declaration
   /// \p D.
-  void setOpenMPCaptureKind(FieldDecl *FD, ValueDecl *D, unsigned Level);
+  void setOpenMPCaptureKind(FieldDecl *FD, const ValueDecl *D, unsigned Level);
 
   /// \brief Check if the specified variable is captured  by 'target' directive.
   /// \param Level Relative level of nested OpenMP construct for that the check
   /// is performed.
-  bool isOpenMPTargetCapturedDecl(ValueDecl *D, unsigned Level);
+  bool isOpenMPTargetCapturedDecl(const ValueDecl *D, unsigned Level) const;
 
   ExprResult PerformOpenMPImplicitIntegerConversion(SourceLocation OpLoc,
                                                     Expr *Op);
@@ -8688,9 +8699,8 @@ public:
                                      SourceLocation Loc,
                                      ArrayRef<Expr *> VarList);
   /// \brief Builds a new OpenMPThreadPrivateDecl and checks its correctness.
-  OMPThreadPrivateDecl *CheckOMPThreadPrivateDecl(
-                                     SourceLocation Loc,
-                                     ArrayRef<Expr *> VarList);
+  OMPThreadPrivateDecl *CheckOMPThreadPrivateDecl(SourceLocation Loc,
+                                                  ArrayRef<Expr *> VarList);
   /// \brief Check if the specified type is allowed to be used in 'omp declare
   /// reduction' construct.
   QualType ActOnOpenMPDeclareReductionType(SourceLocation TyLoc,
@@ -8761,24 +8771,26 @@ public:
                                           Stmt *AStmt,
                                           SourceLocation StartLoc,
                                           SourceLocation EndLoc);
+  using VarsWithInheritedDSAType =
+      llvm::SmallDenseMap<const ValueDecl *, const Expr *, 4>;
   /// \brief Called on well-formed '\#pragma omp simd' after parsing
   /// of the associated statement.
-  StmtResult ActOnOpenMPSimdDirective(
-      ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+  StmtResult
+  ActOnOpenMPSimdDirective(ArrayRef<OMPClause *> Clauses, Stmt *AStmt,
+                           SourceLocation StartLoc, SourceLocation EndLoc,
+                           VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp for' after parsing
   /// of the associated statement.
-  StmtResult ActOnOpenMPForDirective(
-      ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+  StmtResult
+  ActOnOpenMPForDirective(ArrayRef<OMPClause *> Clauses, Stmt *AStmt,
+                          SourceLocation StartLoc, SourceLocation EndLoc,
+                          VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp for simd' after parsing
   /// of the associated statement.
-  StmtResult ActOnOpenMPForSimdDirective(
-      ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+  StmtResult
+  ActOnOpenMPForSimdDirective(ArrayRef<OMPClause *> Clauses, Stmt *AStmt,
+                              SourceLocation StartLoc, SourceLocation EndLoc,
+                              VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp sections' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenMPSectionsDirective(ArrayRef<OMPClause *> Clauses,
@@ -8807,14 +8819,12 @@ public:
   /// of the  associated statement.
   StmtResult ActOnOpenMPParallelForDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp parallel for simd' after
   /// parsing of the  associated statement.
   StmtResult ActOnOpenMPParallelForSimdDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp parallel sections' after
   /// parsing of the  associated statement.
   StmtResult ActOnOpenMPParallelSectionsDirective(ArrayRef<OMPClause *> Clauses,
@@ -8885,8 +8895,7 @@ public:
   /// parsing of the  associated statement.
   StmtResult ActOnOpenMPTargetParallelForDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp teams' after parsing of the
   /// associated statement.
   StmtResult ActOnOpenMPTeamsDirective(ArrayRef<OMPClause *> Clauses,
@@ -8904,22 +8913,21 @@ public:
                                         OpenMPDirectiveKind CancelRegion);
   /// \brief Called on well-formed '\#pragma omp taskloop' after parsing of the
   /// associated statement.
-  StmtResult ActOnOpenMPTaskLoopDirective(
-      ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+  StmtResult
+  ActOnOpenMPTaskLoopDirective(ArrayRef<OMPClause *> Clauses, Stmt *AStmt,
+                               SourceLocation StartLoc, SourceLocation EndLoc,
+                               VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp taskloop simd' after parsing of
   /// the associated statement.
   StmtResult ActOnOpenMPTaskLoopSimdDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp distribute' after parsing
   /// of the associated statement.
-  StmtResult ActOnOpenMPDistributeDirective(
-      ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+  StmtResult
+  ActOnOpenMPDistributeDirective(ArrayRef<OMPClause *> Clauses, Stmt *AStmt,
+                                 SourceLocation StartLoc, SourceLocation EndLoc,
+                                 VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp target update'.
   StmtResult ActOnOpenMPTargetUpdateDirective(ArrayRef<OMPClause *> Clauses,
                                               SourceLocation StartLoc,
@@ -8929,56 +8937,48 @@ public:
   /// parsing of the associated statement.
   StmtResult ActOnOpenMPDistributeParallelForDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp distribute parallel for simd'
   /// after parsing of the associated statement.
   StmtResult ActOnOpenMPDistributeParallelForSimdDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp distribute simd' after
   /// parsing of the associated statement.
   StmtResult ActOnOpenMPDistributeSimdDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp target parallel for simd' after
   /// parsing of the associated statement.
   StmtResult ActOnOpenMPTargetParallelForSimdDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// \brief Called on well-formed '\#pragma omp target simd' after parsing of
   /// the associated statement.
-  StmtResult ActOnOpenMPTargetSimdDirective(
-      ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+  StmtResult
+  ActOnOpenMPTargetSimdDirective(ArrayRef<OMPClause *> Clauses, Stmt *AStmt,
+                                 SourceLocation StartLoc, SourceLocation EndLoc,
+                                 VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// Called on well-formed '\#pragma omp teams distribute' after parsing of
   /// the associated statement.
   StmtResult ActOnOpenMPTeamsDistributeDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// Called on well-formed '\#pragma omp teams distribute simd' after parsing
   /// of the associated statement.
   StmtResult ActOnOpenMPTeamsDistributeSimdDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// Called on well-formed '\#pragma omp teams distribute parallel for simd'
   /// after parsing of the associated statement.
   StmtResult ActOnOpenMPTeamsDistributeParallelForSimdDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// Called on well-formed '\#pragma omp teams distribute parallel for'
   /// after parsing of the associated statement.
   StmtResult ActOnOpenMPTeamsDistributeParallelForDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// Called on well-formed '\#pragma omp target teams' after parsing of the
   /// associated statement.
   StmtResult ActOnOpenMPTargetTeamsDirective(ArrayRef<OMPClause *> Clauses,
@@ -8989,33 +8989,29 @@ public:
   /// of the associated statement.
   StmtResult ActOnOpenMPTargetTeamsDistributeDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// Called on well-formed '\#pragma omp target teams distribute parallel for'
   /// after parsing of the associated statement.
   StmtResult ActOnOpenMPTargetTeamsDistributeParallelForDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// Called on well-formed '\#pragma omp target teams distribute parallel for
   /// simd' after parsing of the associated statement.
   StmtResult ActOnOpenMPTargetTeamsDistributeParallelForSimdDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
   /// Called on well-formed '\#pragma omp target teams distribute simd' after
   /// parsing of the associated statement.
   StmtResult ActOnOpenMPTargetTeamsDistributeSimdDirective(
       ArrayRef<OMPClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc,
-      llvm::DenseMap<ValueDecl *, Expr *> &VarsWithImplicitDSA);
+      SourceLocation EndLoc, VarsWithInheritedDSAType &VarsWithImplicitDSA);
 
   /// Checks correctness of linear modifiers.
   bool CheckOpenMPLinearModifier(OpenMPLinearClauseKind LinKind,
                                  SourceLocation LinLoc);
   /// Checks that the specified declaration matches requirements for the linear
   /// decls.
-  bool CheckOpenMPLinearDecl(ValueDecl *D, SourceLocation ELoc,
+  bool CheckOpenMPLinearDecl(const ValueDecl *D, SourceLocation ELoc,
                              OpenMPLinearClauseKind LinKind, QualType Type);
 
   /// \brief Called on well-formed '\#pragma omp declare simd' after parsing of

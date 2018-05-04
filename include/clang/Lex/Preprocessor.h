@@ -1041,12 +1041,14 @@ public:
 
   macro_iterator macro_begin(bool IncludeExternalMacros = true) const;
   macro_iterator macro_end(bool IncludeExternalMacros = true) const;
-  llvm::iterator_range<macro_iterator>
 
+  llvm::iterator_range<macro_iterator>
   macros(bool IncludeExternalMacros = true) const {
-    return llvm::make_range(macro_begin(IncludeExternalMacros),
-                            macro_end(IncludeExternalMacros));
+    macro_iterator begin = macro_begin(IncludeExternalMacros);
+    macro_iterator end = macro_end(IncludeExternalMacros);
+    return llvm::make_range(begin, end);
   }
+
   /// \}
 
   /// \brief Return the name of the macro defined before \p Loc that has
@@ -1613,6 +1615,11 @@ public:
   void CreateString(StringRef Str, Token &Tok,
                     SourceLocation ExpansionLocStart = SourceLocation(),
                     SourceLocation ExpansionLocEnd = SourceLocation());
+
+  /// Split the first Length characters out of the token starting at TokLoc
+  /// and return a location pointing to the split token. Re-lexing from the
+  /// split token will return the split token rather than the original.
+  SourceLocation SplitToken(SourceLocation TokLoc, unsigned Length);
 
   /// \brief Computes the source location just past the end of the
   /// token at this source location.

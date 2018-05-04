@@ -57,6 +57,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/OptSpecifier.h"
@@ -89,14 +90,14 @@ Driver::Driver(StringRef ClangExecutable, StringRef DefaultTargetTriple,
     : Opts(createDriverOptTable()), Diags(Diags), VFS(std::move(VFS)),
       Mode(GCCMode), SaveTemps(SaveTempsNone), BitcodeEmbed(EmbedNone),
       LTOMode(LTOK_None), ClangExecutable(ClangExecutable),
-      SysRoot(DEFAULT_SYSROOT), 
-      DriverTitle("clang LLVM compiler"), CCPrintOptionsFilename(nullptr),
-      CCPrintHeadersFilename(nullptr), CCLogDiagnosticsFilename(nullptr),
-      CCCPrintBindings(false), CCPrintHeaders(false), CCLogDiagnostics(false),
+      SysRoot(DEFAULT_SYSROOT), DriverTitle("clang LLVM compiler"),
+      CCPrintOptionsFilename(nullptr), CCPrintHeadersFilename(nullptr),
+      CCLogDiagnosticsFilename(nullptr), CCCPrintBindings(false),
+      CCPrintOptions(false), CCPrintHeaders(false), CCLogDiagnostics(false),
       CCGenDiagnostics(false), DefaultTargetTriple(DefaultTargetTriple),
-      CCCGenericGCCName(""), Saver(Alloc),
-      CheckInputsExist(true), CCCUsePCH(true),
-      GenReproducer(false), SuppressMissingInputWarning(false) {
+      CCCGenericGCCName(""), Saver(Alloc), CheckInputsExist(true),
+      CCCUsePCH(true), GenReproducer(false),
+      SuppressMissingInputWarning(false) {
 
   // Provide a sane fallback if no VFS is specified.
   if (!this->VFS)
@@ -129,7 +130,8 @@ Driver::Driver(StringRef ClangExecutable, StringRef DefaultTargetTriple,
 
 void Driver::ParseDriverMode(StringRef ProgramName,
                              ArrayRef<const char *> Args) {
-  ClangNameParts = ToolChain::getTargetAndModeFromProgramName(ProgramName);
+  if (ClangNameParts.isEmpty())
+    ClangNameParts = ToolChain::getTargetAndModeFromProgramName(ProgramName);
   setDriverModeFromOption(ClangNameParts.DriverMode);
 
   for (const char *ArgPtr : Args) {
@@ -396,7 +398,7 @@ static llvm::Triple computeTargetTriple(const Driver &D,
 
   // Handle Apple-specific options available here.
   if (Target.isOSBinFormatMachO()) {
-    // If an explict Darwin arch name is given, that trumps all.
+    // If an explicit Darwin arch name is given, that trumps all.
     if (!DarwinArchName.empty()) {
       tools::darwin::setTripleTypeForMachOArchName(Target, DarwinArchName);
       return Target;
@@ -875,11 +877,14 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
                                               : std::move(*CLOptions));
   if (HasConfigFile)
     for (auto *Opt : *CLOptions) {
+      if (Opt->getOption().matches(options::OPT_config))
+        continue;
+      unsigned Index = Args.MakeIndex(Opt->getSpelling());
       const Arg *BaseArg = &Opt->getBaseArg();
       if (BaseArg == Opt)
         BaseArg = nullptr;
       Arg *Copy = new llvm::opt::Arg(Opt->getOption(), Opt->getSpelling(),
-                                     Args.size(), BaseArg);
+                                     Index, BaseArg);
       Copy->getValues() = Opt->getValues();
       if (Opt->isClaimed())
         Copy->claim();
@@ -1111,8 +1116,9 @@ bool Driver::getCrashDiagnosticFile(StringRef ReproCrashFilename,
 // When clang crashes, produce diagnostic information including the fully
 // preprocessed source file(s).  Request that the developer attach the
 // diagnostic information to a bug report.
-void Driver::generateCompilationDiagnostics(Compilation &C,
-                                            const Command &FailingCommand) {
+void Driver::generateCompilationDiagnostics(
+    Compilation &C, const Command &FailingCommand,
+    StringRef AdditionalInformation, CompilationDiagnosticReport *Report) {
   if (C.getArgs().hasArg(options::OPT_fno_crash_diagnostics))
     return;
 
@@ -1238,6 +1244,8 @@ void Driver::generateCompilationDiagnostics(Compilation &C,
   SmallString<128> ReproCrashFilename;
   for (const char *TempFile : TempFiles) {
     Diag(clang::diag::note_drv_command_failed_diag_msg) << TempFile;
+    if (Report)
+      Report->TemporaryFiles.push_back(TempFile);
     if (ReproCrashFilename.empty()) {
       ReproCrashFilename = TempFile;
       llvm::sys::path::replace_extension(ReproCrashFilename, ".crash");
@@ -1266,6 +1274,11 @@ void Driver::generateCompilationDiagnostics(Compilation &C,
     ScriptOS << "# Original command: ";
     Cmd.Print(ScriptOS, "\n", /*Quote=*/true);
     Cmd.Print(ScriptOS, "\n", /*Quote=*/true, &CrashInfo);
+    if (!AdditionalInformation.empty())
+      ScriptOS << "\n# Additional information: " << AdditionalInformation
+               << "\n";
+    if (Report)
+      Report->TemporaryFiles.push_back(Script);
     Diag(clang::diag::note_drv_command_failed_diag_msg) << Script;
   }
 
@@ -1581,7 +1594,13 @@ bool Driver::HandleImmediateArgs(const Compilation &C) {
   }
 
   if (Arg *A = C.getArgs().getLastArg(options::OPT_print_prog_name_EQ)) {
-    llvm::outs() << GetProgramPath(A->getValue(), TC) << "\n";
+    StringRef ProgName = A->getValue();
+
+    // Null program name cannot have a path.
+    if (! ProgName.empty())
+      llvm::outs() << GetProgramPath(ProgName, TC);
+
+    llvm::outs() << "\n";
     return false;
   }
 
@@ -2249,9 +2268,10 @@ class OffloadingActionBuilder final {
         assert(!GpuArchList.empty() &&
                "We should have at least one GPU architecture.");
 
-        // If the host input is not CUDA, we don't need to bother about this
-        // input.
-        if (IA->getType() != types::TY_CUDA) {
+        // If the host input is not CUDA or HIP, we don't need to bother about
+        // this input.
+        if (IA->getType() != types::TY_CUDA &&
+            IA->getType() != types::TY_HIP) {
           // The builder will ignore this input.
           IsActive = false;
           return ABRT_Inactive;
@@ -2264,9 +2284,12 @@ class OffloadingActionBuilder final {
           return ABRT_Success;
 
         // Replicate inputs for each GPU architecture.
-        for (unsigned I = 0, E = GpuArchList.size(); I != E; ++I)
-          CudaDeviceActions.push_back(C.MakeAction<InputAction>(
-              IA->getInputArg(), types::TY_CUDA_DEVICE));
+        auto Ty = IA->getType() == types::TY_HIP ? types::TY_HIP_DEVICE
+                                                 : types::TY_CUDA_DEVICE;
+        for (unsigned I = 0, E = GpuArchList.size(); I != E; ++I) {
+          CudaDeviceActions.push_back(
+              C.MakeAction<InputAction>(IA->getInputArg(), Ty));
+        }
 
         return ABRT_Success;
       }
@@ -3371,11 +3394,26 @@ class ToolSelector final {
   const Tool *combineBackendCompile(ArrayRef<JobActionInfo> ActionInfo,
                                     const ActionList *&Inputs,
                                     ActionList &CollapsedOffloadAction) {
-    if (ActionInfo.size() < 2 || !canCollapsePreprocessorAction())
+    if (ActionInfo.size() < 2)
       return nullptr;
     auto *BJ = dyn_cast<BackendJobAction>(ActionInfo[0].JA);
     auto *CJ = dyn_cast<CompileJobAction>(ActionInfo[1].JA);
     if (!BJ || !CJ)
+      return nullptr;
+
+    // Check if the initial input (to the compile job or its predessor if one
+    // exists) is LLVM bitcode. In that case, no preprocessor step is required
+    // and we can still collapse the compile and backend jobs when we have
+    // -save-temps. I.e. there is no need for a separate compile job just to
+    // emit unoptimized bitcode.
+    bool InputIsBitcode = true;
+    for (size_t i = 1; i < ActionInfo.size(); i++)
+      if (ActionInfo[i].JA->getType() != types::TY_LLVM_BC &&
+          ActionInfo[i].JA->getType() != types::TY_LTO_BC) {
+        InputIsBitcode = false;
+        break;
+      }
+    if (!InputIsBitcode && !canCollapsePreprocessorAction())
       return nullptr;
 
     // Get compiler tool.
@@ -3383,7 +3421,7 @@ class ToolSelector final {
     if (!T)
       return nullptr;
 
-    if (T->canEmitIR() && (SaveTemps || EmbedBitcode))
+    if (T->canEmitIR() && ((SaveTemps && !InputIsBitcode) || EmbedBitcode))
       return nullptr;
 
     Inputs = &CJ->getInputs();

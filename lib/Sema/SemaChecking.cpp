@@ -28,6 +28,7 @@
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/NSAPI.h"
+#include "clang/AST/NonTrivialTypeVisitor.h"
 #include "clang/AST/OperationKinds.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/TemplateBase.h"
@@ -1105,6 +1106,63 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
       CorrectDelayedTyposInExpr(TheCallResult.get());
     return Res;
   }
+  case Builtin::BI__builtin_dump_struct: {
+    // We first want to ensure we are called with 2 arguments
+    if (checkArgCount(*this, TheCall, 2))
+      return ExprError();
+    // Ensure that the first argument is of type 'struct XX *'
+    const Expr *PtrArg = TheCall->getArg(0)->IgnoreParenImpCasts();
+    const QualType PtrArgType = PtrArg->getType();
+    if (!PtrArgType->isPointerType() ||
+        !PtrArgType->getPointeeType()->isRecordType()) {
+      Diag(PtrArg->getLocStart(), diag::err_typecheck_convert_incompatible)
+          << PtrArgType << "structure pointer" << 1 << 0 << 3 << 1 << PtrArgType
+          << "structure pointer";
+      return ExprError();
+    }
+
+    // Ensure that the second argument is of type 'FunctionType'
+    const Expr *FnPtrArg = TheCall->getArg(1)->IgnoreImpCasts();
+    const QualType FnPtrArgType = FnPtrArg->getType();
+    if (!FnPtrArgType->isPointerType()) {
+      Diag(FnPtrArg->getLocStart(), diag::err_typecheck_convert_incompatible)
+          << FnPtrArgType << "'int (*)(const char *, ...)'" << 1 << 0 << 3
+          << 2 << FnPtrArgType << "'int (*)(const char *, ...)'";
+      return ExprError();
+    }
+
+    const auto *FuncType =
+        FnPtrArgType->getPointeeType()->getAs<FunctionType>();
+
+    if (!FuncType) {
+      Diag(FnPtrArg->getLocStart(), diag::err_typecheck_convert_incompatible)
+          << FnPtrArgType << "'int (*)(const char *, ...)'" << 1 << 0 << 3
+          << 2 << FnPtrArgType << "'int (*)(const char *, ...)'";
+      return ExprError();
+    }
+
+    if (const auto *FT = dyn_cast<FunctionProtoType>(FuncType)) {
+      if (!FT->getNumParams()) {
+        Diag(FnPtrArg->getLocStart(), diag::err_typecheck_convert_incompatible)
+            << FnPtrArgType << "'int (*)(const char *, ...)'" << 1 << 0 << 3
+            << 2 << FnPtrArgType << "'int (*)(const char *, ...)'";
+        return ExprError();
+      }
+      QualType PT = FT->getParamType(0);
+      if (!FT->isVariadic() || FT->getReturnType() != Context.IntTy ||
+          !PT->isPointerType() || !PT->getPointeeType()->isCharType() ||
+          !PT->getPointeeType().isConstQualified()) {
+        Diag(FnPtrArg->getLocStart(), diag::err_typecheck_convert_incompatible)
+            << FnPtrArgType << "'int (*)(const char *, ...)'" << 1 << 0 << 3
+            << 2 << FnPtrArgType << "'int (*)(const char *, ...)'";
+        return ExprError();
+      }
+    }
+
+    TheCall->setType(Context.IntTy);
+    break;
+  }
+
   // check secure string manipulation functions where overflows
   // are detectable at compile time
   case Builtin::BI__builtin___memcpy_chk:
@@ -1661,7 +1719,7 @@ bool Sema::CheckMipsBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
   case Mips::BI__builtin_msa_srlri_h: i = 1; l = 0; u = 15; break;
   case Mips::BI__builtin_msa_binsli_h:
   case Mips::BI__builtin_msa_binsri_h: i = 2; l = 0; u = 15; break;
-  // These intrinsics take an unsigned 5 bit immedate.
+  // These intrinsics take an unsigned 5 bit immediate.
   // The first block of intrinsics actually have an unsigned 5 bit field,
   // not a df/n field.
   case Mips::BI__builtin_msa_clei_u_b:
@@ -2251,12 +2309,29 @@ bool Sema::CheckX86BuiltinGatherScatterScale(unsigned BuiltinID,
     << Arg->getSourceRange();
 }
 
+static bool isX86_32Builtin(unsigned BuiltinID) {
+  // These builtins only work on x86-32 targets.
+  switch (BuiltinID) {
+  case X86::BI__builtin_ia32_readeflags_u32:
+  case X86::BI__builtin_ia32_writeeflags_u32:
+    return true;
+  }
+
+  return false;
+}
+
 bool Sema::CheckX86BuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
   if (BuiltinID == X86::BI__builtin_cpu_supports)
     return SemaBuiltinCpuSupports(*this, TheCall);
 
   if (BuiltinID == X86::BI__builtin_cpu_is)
     return SemaBuiltinCpuIs(*this, TheCall);
+
+  // Check for 32-bit only builtins on a 64-bit target.
+  const llvm::Triple &TT = Context.getTargetInfo().getTriple();
+  if (TT.getArch() != llvm::Triple::x86 && isX86_32Builtin(BuiltinID))
+    return Diag(TheCall->getCallee()->getLocStart(),
+                diag::err_32_bit_builtin_64_bit_tgt);
 
   // If the intrinsic has rounding or SAE make sure its valid.
   if (CheckX86BuiltinRoundingOrSAE(BuiltinID, TheCall))
@@ -5625,7 +5700,7 @@ void CheckFormatHandler::EmitFormatDiagnostic(PartialDiagnostic PDiag,
                        Loc, IsStringLocation, StringRange, FixIt);
 }
 
-/// \brief If the format string is not within the funcion call, emit a note
+/// \brief If the format string is not within the function call, emit a note
 /// so that the function call and string are in diagnostic messages.
 ///
 /// \param InFunctionCall if true, the format string is within the function
@@ -7321,6 +7396,98 @@ static QualType getSizeOfArgType(const Expr *E) {
   return QualType();
 }
 
+namespace {
+
+struct SearchNonTrivialToInitializeField
+    : DefaultInitializedTypeVisitor<SearchNonTrivialToInitializeField> {
+  using Super =
+      DefaultInitializedTypeVisitor<SearchNonTrivialToInitializeField>;
+
+  SearchNonTrivialToInitializeField(const Expr *E, Sema &S) : E(E), S(S) {}
+
+  void visitWithKind(QualType::PrimitiveDefaultInitializeKind PDIK, QualType FT,
+                     SourceLocation SL) {
+    if (const auto *AT = asDerived().getContext().getAsArrayType(FT)) {
+      asDerived().visitArray(PDIK, AT, SL);
+      return;
+    }
+
+    Super::visitWithKind(PDIK, FT, SL);
+  }
+
+  void visitARCStrong(QualType FT, SourceLocation SL) {
+    S.DiagRuntimeBehavior(SL, E, S.PDiag(diag::note_nontrivial_field) << 1);
+  }
+  void visitARCWeak(QualType FT, SourceLocation SL) {
+    S.DiagRuntimeBehavior(SL, E, S.PDiag(diag::note_nontrivial_field) << 1);
+  }
+  void visitStruct(QualType FT, SourceLocation SL) {
+    for (const FieldDecl *FD : FT->castAs<RecordType>()->getDecl()->fields())
+      visit(FD->getType(), FD->getLocation());
+  }
+  void visitArray(QualType::PrimitiveDefaultInitializeKind PDIK,
+                  const ArrayType *AT, SourceLocation SL) {
+    visit(getContext().getBaseElementType(AT), SL);
+  }
+  void visitTrivial(QualType FT, SourceLocation SL) {}
+
+  static void diag(QualType RT, const Expr *E, Sema &S) {
+    SearchNonTrivialToInitializeField(E, S).visitStruct(RT, SourceLocation());
+  }
+
+  ASTContext &getContext() { return S.getASTContext(); }
+
+  const Expr *E;
+  Sema &S;
+};
+
+struct SearchNonTrivialToCopyField
+    : CopiedTypeVisitor<SearchNonTrivialToCopyField, false> {
+  using Super = CopiedTypeVisitor<SearchNonTrivialToCopyField, false>;
+
+  SearchNonTrivialToCopyField(const Expr *E, Sema &S) : E(E), S(S) {}
+
+  void visitWithKind(QualType::PrimitiveCopyKind PCK, QualType FT,
+                     SourceLocation SL) {
+    if (const auto *AT = asDerived().getContext().getAsArrayType(FT)) {
+      asDerived().visitArray(PCK, AT, SL);
+      return;
+    }
+
+    Super::visitWithKind(PCK, FT, SL);
+  }
+
+  void visitARCStrong(QualType FT, SourceLocation SL) {
+    S.DiagRuntimeBehavior(SL, E, S.PDiag(diag::note_nontrivial_field) << 0);
+  }
+  void visitARCWeak(QualType FT, SourceLocation SL) {
+    S.DiagRuntimeBehavior(SL, E, S.PDiag(diag::note_nontrivial_field) << 0);
+  }
+  void visitStruct(QualType FT, SourceLocation SL) {
+    for (const FieldDecl *FD : FT->castAs<RecordType>()->getDecl()->fields())
+      visit(FD->getType(), FD->getLocation());
+  }
+  void visitArray(QualType::PrimitiveCopyKind PCK, const ArrayType *AT,
+                  SourceLocation SL) {
+    visit(getContext().getBaseElementType(AT), SL);
+  }
+  void preVisit(QualType::PrimitiveCopyKind PCK, QualType FT,
+                SourceLocation SL) {}
+  void visitTrivial(QualType FT, SourceLocation SL) {}
+  void visitVolatileTrivial(QualType FT, SourceLocation SL) {}
+
+  static void diag(QualType RT, const Expr *E, Sema &S) {
+    SearchNonTrivialToCopyField(E, S).visitStruct(RT, SourceLocation());
+  }
+
+  ASTContext &getContext() { return S.getASTContext(); }
+
+  const Expr *E;
+  Sema &S;
+};
+
+}
+
 /// \brief Check for dangerous or invalid arguments to memset().
 ///
 /// This issues warnings on known problematic, dangerous or unspecified
@@ -7486,7 +7653,23 @@ void Sema::CheckMemaccessArguments(const CallExpr *Call,
         PDiag(diag::warn_arc_object_memaccess)
           << ArgIdx << FnName << PointeeTy
           << Call->getCallee()->getSourceRange());
-    else
+    else if (const auto *RT = PointeeTy->getAs<RecordType>()) {
+      if ((BId == Builtin::BImemset || BId == Builtin::BIbzero) &&
+          RT->getDecl()->isNonTrivialToPrimitiveDefaultInitialize()) {
+        DiagRuntimeBehavior(Dest->getExprLoc(), Dest,
+                            PDiag(diag::warn_cstruct_memaccess)
+                                << ArgIdx << FnName << PointeeTy << 0);
+        SearchNonTrivialToInitializeField::diag(PointeeTy, Dest, *this);
+      } else if ((BId == Builtin::BImemcpy || BId == Builtin::BImemmove) &&
+                 RT->getDecl()->isNonTrivialToPrimitiveCopy()) {
+        DiagRuntimeBehavior(Dest->getExprLoc(), Dest,
+                            PDiag(diag::warn_cstruct_memaccess)
+                                << ArgIdx << FnName << PointeeTy << 1);
+        SearchNonTrivialToCopyField::diag(PointeeTy, Dest, *this);
+      } else {
+        continue;
+      }
+    } else
       continue;
 
     DiagRuntimeBehavior(
@@ -8139,7 +8322,7 @@ Sema::CheckReturnValExpr(Expr *RetValExp, QualType lhsType,
     if (Op == OO_New || Op == OO_Array_New) {
       const FunctionProtoType *Proto
         = FD->getType()->castAs<FunctionProtoType>();
-      if (!Proto->isNothrow(Context, /*ResultIfDependent*/true) &&
+      if (!Proto->isNothrow(/*ResultIfDependent*/true) &&
           CheckNonNullExpr(*this, RetValExp))
         Diag(ReturnLoc, diag::warn_operator_new_returns_null)
           << FD << getLangOpts().CPlusPlus11;
@@ -9379,7 +9562,7 @@ static void DiagnoseNullConversion(Sema &S, Expr *E, QualType T,
     StringRef MacroName = Lexer::getImmediateMacroNameForDiagnostics(
         Loc, S.SourceMgr, S.getLangOpts());
     if (MacroName == "NULL")
-      Loc = S.SourceMgr.getImmediateExpansionRange(Loc).first;
+      Loc = S.SourceMgr.getImmediateExpansionRange(Loc).getBegin();
   }
 
   // Only warn if the null and context location are in the same macro expansion.
@@ -9936,7 +10119,7 @@ static void AnalyzeImplicitConversions(Sema &S, Expr *OrigE,
       ::CheckBoolLikeConversion(S, U->getSubExpr(), CC);
 }
 
-/// Diagnose integer type and any valid implicit convertion to it.
+/// Diagnose integer type and any valid implicit conversion to it.
 static bool checkOpenCLEnqueueIntType(Sema &S, Expr *E, const QualType &IntT) {
   // Taking into account implicit conversions,
   // allow any integer.
@@ -10844,7 +11027,7 @@ bool Sema::CheckParmsForFunctionDef(ArrayRef<ParmVarDecl *> Parameters,
 
     // If the parameter is a c++ class type and it has to be destructed in the
     // callee function, declare the destructor so that it can be called by the
-    // callee function. Do not perfom any direct access check on the dtor here.
+    // callee function. Do not perform any direct access check on the dtor here.
     if (!Param->isInvalidDecl()) {
       if (CXXRecordDecl *ClassDecl = Param->getType()->getAsCXXRecordDecl()) {
         if (!ClassDecl->isInvalidDecl() &&
@@ -11111,7 +11294,12 @@ void Sema::CheckArrayAccess(const Expr *expr) {
         const ArraySubscriptExpr *ASE = cast<ArraySubscriptExpr>(expr);
         CheckArrayAccess(ASE->getBase(), ASE->getIdx(), ASE,
                          AllowOnePastEnd > 0);
-        return;
+        expr = ASE->getBase();
+        break;
+      }
+      case Stmt::MemberExprClass: {
+        expr = cast<MemberExpr>(expr)->getBase();
+        break;
       }
       case Stmt::OMPArraySectionExprClass: {
         const OMPArraySectionExpr *ASE = cast<OMPArraySectionExpr>(expr);

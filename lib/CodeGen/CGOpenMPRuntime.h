@@ -133,7 +133,7 @@ private:
   /// Base declarations for the reduction items.
   SmallVector<const VarDecl *, 4> BaseDecls;
 
-  /// Emits lvalue for shared expresion.
+  /// Emits lvalue for shared expression.
   LValue emitSharedLValue(CodeGenFunction &CGF, const Expr *E);
   /// Emits upper bound for shared expression (if array section).
   LValue emitSharedLValueUB(CodeGenFunction &CGF, const Expr *E);
@@ -213,6 +213,11 @@ public:
 
 protected:
   CodeGenModule &CGM;
+  StringRef FirstSeparator, Separator;
+
+  /// Constructor allowing to redefine the name separator for the variables.
+  explicit CGOpenMPRuntime(CodeGenModule &CGM, StringRef FirstSeparator,
+                           StringRef Separator);
 
   /// \brief Creates offloading entry for the provided entry ID \a ID,
   /// address \a Addr, size \a Size, and flags \a Flags.
@@ -282,6 +287,7 @@ private:
   OpenMPDefaultLocMapTy OpenMPDefaultLocMap;
   Address getOrCreateDefaultLocation(unsigned Flags);
 
+  QualType IdentQTy;
   llvm::StructType *IdentTy = nullptr;
   /// \brief Map for SourceLocation and OpenMP runtime library debug locations.
   typedef llvm::DenseMap<unsigned, llvm::Value *> OpenMPDebugLocMapTy;
@@ -692,7 +698,7 @@ private:
     llvm::Value *TaskEntry = nullptr;
     llvm::Value *NewTaskNewTaskTTy = nullptr;
     LValue TDBase;
-    RecordDecl *KmpTaskTQTyRD = nullptr;
+    const RecordDecl *KmpTaskTQTyRD = nullptr;
     llvm::Value *TaskDupFn = nullptr;
   };
   /// Emit task region for the task directive. The task region is emitted in
@@ -723,9 +729,13 @@ private:
                             Address Shareds, const OMPTaskDataTy &Data);
 
 public:
-  explicit CGOpenMPRuntime(CodeGenModule &CGM);
+  explicit CGOpenMPRuntime(CodeGenModule &CGM)
+      : CGOpenMPRuntime(CGM, ".", ".") {}
   virtual ~CGOpenMPRuntime() {}
   virtual void clear();
+
+  /// Get the platform-specific name separator.
+  std::string getName(ArrayRef<StringRef> Parts) const;
 
   /// Emit code for the specified user defined reduction construct.
   virtual void emitUserDefinedReduction(CodeGenFunction *CGF,
@@ -1463,7 +1473,7 @@ public:
 
   /// Translates the native parameter of outlined function if this is required
   /// for target.
-  /// \param FD Field decl from captured record for the paramater.
+  /// \param FD Field decl from captured record for the parameter.
   /// \param NativeParam Parameter itself.
   virtual const VarDecl *translateParameter(const FieldDecl *FD,
                                             const VarDecl *NativeParam) const {
@@ -1495,7 +1505,7 @@ public:
 
   /// Marks the declaration as alread emitted for the device code and returns
   /// true, if it was marked already, and false, otherwise.
-  bool markAsGlobalTarget(const FunctionDecl *D);
+  bool markAsGlobalTarget(GlobalDecl GD);
 
 };
 
@@ -2049,7 +2059,7 @@ public:
 
   /// Translates the native parameter of outlined function if this is required
   /// for target.
-  /// \param FD Field decl from captured record for the paramater.
+  /// \param FD Field decl from captured record for the parameter.
   /// \param NativeParam Parameter itself.
   const VarDecl *translateParameter(const FieldDecl *FD,
                                     const VarDecl *NativeParam) const override;

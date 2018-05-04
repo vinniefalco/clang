@@ -397,6 +397,7 @@ void CodeGenModule::Release() {
   emitMultiVersionFunctions();
   EmitCXXGlobalInitFunc();
   EmitCXXGlobalDtorFunc();
+  registerGlobalDtorsWithAtExit();
   EmitCXXThreadLocalInitFunc();
   if (ObjCRuntime)
     if (llvm::Function *ObjCInitFunction = ObjCRuntime->ModuleInitFunction())
@@ -570,7 +571,8 @@ void CodeGenModule::Release() {
   if (DebugInfo)
     DebugInfo->finalize();
 
-  EmitVersionIdentMetadata();
+  if (getCodeGenOpts().EmitVersionIdentMetadata)
+    EmitVersionIdentMetadata();
 
   EmitTargetMetadata();
 }
@@ -1026,6 +1028,11 @@ void CodeGenModule::AddGlobalCtor(llvm::Function *Ctor, int Priority,
 /// AddGlobalDtor - Add a function to the list that will be called
 /// when the module is unloaded.
 void CodeGenModule::AddGlobalDtor(llvm::Function *Dtor, int Priority) {
+  if (CodeGenOpts.RegisterGlobalDtorsWithAtExit) {
+    DtorsUsingAtExit[Priority].push_back(Dtor);
+    return;
+  }
+
   // FIXME: Type coercion of void()* types.
   GlobalDtors.push_back(Structor(Priority, Dtor, nullptr));
 }
@@ -1231,6 +1238,10 @@ void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
   unsigned alignment = D->getMaxAlignment() / Context.getCharWidth();
   if (alignment)
     F->setAlignment(alignment);
+
+  if (!D->hasAttr<AlignedAttr>())
+    if (LangOpts.FunctionAlignment)
+      F->setAlignment(1 << LangOpts.FunctionAlignment);
 
   // Some C++ ABIs require 2-byte alignment for member functions, in order to
   // reserve a bit for differentiating between virtual and non-virtual member
@@ -1556,6 +1567,12 @@ static void addLinkOptionsPostorder(CodeGenModule &CGM, Module *Mod,
   // Add linker options to link against the libraries/frameworks
   // described by this module.
   llvm::LLVMContext &Context = CGM.getLLVMContext();
+
+  // For modules that use export_as for linking, use that module
+  // name instead.
+  if (Mod->UseExportAsModuleLinkName)
+    return;
+
   for (unsigned I = Mod->LinkLibraries.size(); I > 0; --I) {
     // Link against a framework.  Frameworks are currently Darwin only, so we
     // don't to ask TargetCodeGenInfo for the spelling of the linker option.
@@ -1817,7 +1834,8 @@ bool CodeGenModule::isInSanitizerBlacklist(llvm::GlobalVariable *GV,
                                            StringRef Category) const {
   // For now globals can be blacklisted only in ASan and KASan.
   const SanitizerMask EnabledAsanMask = LangOpts.Sanitize.Mask &
-      (SanitizerKind::Address | SanitizerKind::KernelAddress | SanitizerKind::HWAddress);
+      (SanitizerKind::Address | SanitizerKind::KernelAddress |
+       SanitizerKind::HWAddress | SanitizerKind::KernelHWAddress);
   if (!EnabledAsanMask)
     return false;
   const auto &SanitizerBL = getContext().getSanitizerBlacklist();
@@ -1846,9 +1864,10 @@ bool CodeGenModule::imbueXRayAttrs(llvm::Function *Fn, SourceLocation Loc,
                                    StringRef Category) const {
   if (!LangOpts.XRayInstrument)
     return false;
+
   const auto &XRayFilter = getContext().getXRayFilter();
   using ImbueAttr = XRayFunctionFilter::ImbueAttribute;
-  auto Attr = XRayFunctionFilter::ImbueAttribute::NONE;
+  auto Attr = ImbueAttr::NONE;
   if (Loc.isValid())
     Attr = XRayFilter.shouldImbueLocation(Loc, Category);
   if (Attr == ImbueAttr::NONE)
@@ -2379,7 +2398,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
   if (const FunctionDecl *FD = cast_or_null<FunctionDecl>(D)) {
     // For the device mark the function as one that should be emitted.
     if (getLangOpts().OpenMPIsDevice && OpenMPRuntime &&
-        !OpenMPRuntime->markAsGlobalTarget(FD) && FD->isDefined() &&
+        !OpenMPRuntime->markAsGlobalTarget(GD) && FD->isDefined() &&
         !DontDefer && !IsForDefinition)
       addDeferredDeclToEmit(GD);
 
@@ -2675,7 +2694,7 @@ bool CodeGenModule::isTypeConstant(QualType Ty, bool ExcludeCtor) {
 /// If D is non-null, it specifies a decl that correspond to this.  This is used
 /// to set the attributes on the global when it is first created.
 ///
-/// If IsForDefinition is true, it is guranteed that an actual global with
+/// If IsForDefinition is true, it is guaranteed that an actual global with
 /// type Ty will be returned, not conversion of a variable with the same
 /// mangled name but some other type.
 llvm::Constant *
@@ -2934,7 +2953,7 @@ CodeGenModule::CreateOrReplaceCXXRuntimeVariable(StringRef Name,
 /// GetAddrOfGlobalVar - Return the llvm::Constant for the address of the
 /// given global variable.  If Ty is non-null and if the global doesn't exist,
 /// then it will be created with the specified type instead of whatever the
-/// normal requested type would be. If IsForDefinition is true, it is guranteed
+/// normal requested type would be. If IsForDefinition is true, it is guaranteed
 /// that an actual global with type Ty will be returned, not conversion of a
 /// variable with the same mangled name but some other type.
 llvm::Constant *CodeGenModule::GetAddrOfGlobalVar(const VarDecl *D,
@@ -3330,7 +3349,7 @@ static bool isVarDeclStrongDefinition(const ASTContext &Context,
     return true;
 
   // A variable cannot be both common and exist in a section.
-  // We dont try to determine which is the right section in the front-end.
+  // We don't try to determine which is the right section in the front-end.
   // If no specialized section name is applicable, it will resort to default.
   if (D->hasAttr<PragmaClangBSSSectionAttr>() ||
       D->hasAttr<PragmaClangDataSectionAttr>() ||
@@ -3607,6 +3626,9 @@ void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
   setGVProperties(Fn, GD);
 
   MaybeHandleStaticInExternC(D, Fn);
+
+  if (D->hasAttr<CUDAGlobalAttr>())
+    getTargetCodeGenInfo().setCUDAKernelCallingConvention(Fn);
 
   maybeSetTrivialComdat(*D, *Fn);
 
@@ -4188,7 +4210,7 @@ ConstantAddress CodeGenModule::GetAddrOfGlobalTemporary(
     if (VD->isStaticDataMember() && VD->getAnyInitializer(InitVD) &&
         isa<CXXRecordDecl>(InitVD->getLexicalDeclContext())) {
       // Temporaries defined inside a class get linkonce_odr linkage because the
-      // class can be defined in multipe translation units.
+      // class can be defined in multiple translation units.
       Linkage = llvm::GlobalVariable::LinkOnceODRLinkage;
     } else {
       // There is no need for this temporary to have external linkage if the

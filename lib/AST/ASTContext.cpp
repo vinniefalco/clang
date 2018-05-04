@@ -788,7 +788,8 @@ ASTContext::ASTContext(LangOptions &LOpts, SourceManager &SM,
       SubstTemplateTemplateParmPacks(this_()), SourceMgr(SM), LangOpts(LOpts),
       SanitizerBL(new SanitizerBlacklist(LangOpts.SanitizerBlacklistFiles, SM)),
       XRayFilter(new XRayFunctionFilter(LangOpts.XRayAlwaysInstrumentFiles,
-                                        LangOpts.XRayNeverInstrumentFiles, SM)),
+                                        LangOpts.XRayNeverInstrumentFiles,
+                                        LangOpts.XRayAttrListFiles, SM)),
       PrintingPolicy(LOpts), Idents(idents), Selectors(sels),
       BuiltinInfo(builtins), DeclarationNames(*this), Comments(SM),
       CommentCommandTraits(BumpAlloc, LOpts.CommentOpts), LastSDM(nullptr, 0) {
@@ -1149,6 +1150,9 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target,
   }
 
   WIntTy = getFromTargetType(Target.getWIntType());
+
+  // C++20 (proposed)
+  InitBuiltinType(Char8Ty,              BuiltinType::Char8);
 
   if (LangOpts.CPlusPlus) // C++0x 3.9.1p5, extension for C++
     InitBuiltinType(Char16Ty,           BuiltinType::Char16);
@@ -1738,6 +1742,7 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
     case BuiltinType::Char_U:
     case BuiltinType::UChar:
     case BuiltinType::SChar:
+    case BuiltinType::Char8:
       Width = Target->getCharWidth();
       Align = Target->getCharAlign();
       break;
@@ -3415,6 +3420,11 @@ static bool isCanonicalExceptionSpecification(
   if (ESI.Type == EST_BasicNoexcept)
     return true;
 
+  // A noexcept(expr) specification is (possibly) canonical if expr is
+  // value-dependent.
+  if (ESI.Type == EST_DependentNoexcept)
+    return true;
+
   // A dynamic exception specification is canonical if it only contains pack
   // expansions (so we can't tell whether it's non-throwing) and all its
   // contained types are canonical.
@@ -3428,11 +3438,6 @@ static bool isCanonicalExceptionSpecification(
     }
     return AnyPackExpansions;
   }
-
-  // A noexcept(expr) specification is (possibly) canonical if expr is
-  // value-dependent.
-  if (ESI.Type == EST_ComputedNoexcept)
-    return ESI.NoexceptExpr && ESI.NoexceptExpr->isValueDependent();
 
   return false;
 }
@@ -3461,7 +3466,7 @@ QualType ASTContext::getFunctionTypeInternal(
     // noexcept expression, or we're just looking for a canonical type.
     // Otherwise, we're going to need to create a type
     // sugar node to hold the concrete expression.
-    if (OnlyWantCanonical || EPI.ExceptionSpec.Type != EST_ComputedNoexcept ||
+    if (OnlyWantCanonical || !isComputedNoexcept(EPI.ExceptionSpec.Type) ||
         EPI.ExceptionSpec.NoexceptExpr == FPT->getNoexceptExpr())
       return Existing;
 
@@ -3508,7 +3513,7 @@ QualType ASTContext::getFunctionTypeInternal(
         // We don't know yet. It shouldn't matter what we pick here; no-one
         // should ever look at this.
         LLVM_FALLTHROUGH;
-      case EST_None: case EST_MSAny:
+      case EST_None: case EST_MSAny: case EST_NoexceptFalse:
         CanonicalEPI.ExceptionSpec.Type = EST_None;
         break;
 
@@ -3530,24 +3535,12 @@ QualType ASTContext::getFunctionTypeInternal(
         break;
       }
 
-      case EST_DynamicNone: case EST_BasicNoexcept:
+      case EST_DynamicNone: case EST_BasicNoexcept: case EST_NoexceptTrue:
         CanonicalEPI.ExceptionSpec.Type = EST_BasicNoexcept;
         break;
 
-      case EST_ComputedNoexcept:
-        llvm::APSInt Value(1);
-        auto *E = CanonicalEPI.ExceptionSpec.NoexceptExpr;
-        if (!E || !E->isIntegerConstantExpr(Value, *this, nullptr,
-                                            /*IsEvaluated*/false)) {
-          // This noexcept specification is invalid.
-          // FIXME: Should this be able to happen?
-          CanonicalEPI.ExceptionSpec.Type = EST_None;
-          break;
-        }
-
-        CanonicalEPI.ExceptionSpec.Type =
-            Value.getBoolValue() ? EST_BasicNoexcept : EST_None;
-        break;
+      case EST_DependentNoexcept:
+        llvm_unreachable("dependent noexcept is already canonical");
       }
     } else {
       CanonicalEPI.ExceptionSpec = FunctionProtoType::ExceptionSpecInfo();
@@ -3572,18 +3565,10 @@ QualType ASTContext::getFunctionTypeInternal(
   // Instead of the exception types, there could be a noexcept
   // expression, or information used to resolve the exception
   // specification.
-  size_t Size = sizeof(FunctionProtoType) +
-                NumArgs * sizeof(QualType);
-
-  if (EPI.ExceptionSpec.Type == EST_Dynamic) {
-    Size += EPI.ExceptionSpec.Exceptions.size() * sizeof(QualType);
-  } else if (EPI.ExceptionSpec.Type == EST_ComputedNoexcept) {
-    Size += sizeof(Expr*);
-  } else if (EPI.ExceptionSpec.Type == EST_Uninstantiated) {
-    Size += 2 * sizeof(FunctionDecl*);
-  } else if (EPI.ExceptionSpec.Type == EST_Unevaluated) {
-    Size += sizeof(FunctionDecl*);
-  }
+  size_t Size =
+      sizeof(FunctionProtoType) + NumArgs * sizeof(QualType) +
+      FunctionProtoType::getExceptionSpecSize(
+          EPI.ExceptionSpec.Type, EPI.ExceptionSpec.Exceptions.size());
 
   // Put the ExtParameterInfos last.  If all were equal, it would make
   // more sense to put these before the exception specification, because
@@ -4463,7 +4448,7 @@ bool ASTContext::QIdProtocolsAdoptObjCObjectProtocols(QualType QT,
   CollectInheritedProtocols(IDecl, InheritedProtocols);
   if (InheritedProtocols.empty())
     return false;
-  // Check that if every protocol in list of id<plist> conforms to a protcol
+  // Check that if every protocol in list of id<plist> conforms to a protocol
   // of IDecl's, then bridge casting is ok.
   bool Conforms = false;
   for (auto *Proto : OPT->quals()) {
@@ -5461,6 +5446,7 @@ QualType ASTContext::getPromotedIntegerType(QualType Promotable) const {
     // FIXME: Is there some better way to compute this?
     if (BT->getKind() == BuiltinType::WChar_S ||
         BT->getKind() == BuiltinType::WChar_U ||
+        BT->getKind() == BuiltinType::Char8 ||
         BT->getKind() == BuiltinType::Char16 ||
         BT->getKind() == BuiltinType::Char32) {
       bool FromIsSigned = BT->getKind() == BuiltinType::WChar_S;
@@ -6207,6 +6193,7 @@ static char getObjCEncodingForPrimitiveKind(const ASTContext *C,
     switch (kind) {
     case BuiltinType::Void:       return 'v';
     case BuiltinType::Bool:       return 'B';
+    case BuiltinType::Char8:
     case BuiltinType::Char_U:
     case BuiltinType::UChar:      return 'C';
     case BuiltinType::Char16:
@@ -6551,7 +6538,7 @@ void ASTContext::getObjCEncodingForTypeImpl(QualType T, std::string& S,
       S += "{objc_class=}";
       return;
     }
-    // TODO: Double check to make sure this intentially falls through.
+    // TODO: Double check to make sure this intentionally falls through.
     LLVM_FALLTHROUGH;
   }
   
@@ -6590,7 +6577,7 @@ void ASTContext::getObjCEncodingForTypeImpl(QualType T, std::string& S,
     if (OPT->isObjCClassType() || OPT->isObjCQualifiedClassType()) {
       // FIXME: Consider if we need to output qualifiers for 'Class<p>'.
       // Since this is a binary compatibility issue, need to consult with runtime
-      // folks. Fortunately, this is a *very* obsure construct.
+      // folks. Fortunately, this is a *very* obscure construct.
       S += '#';
       return;
     }
@@ -7247,6 +7234,10 @@ TypedefDecl *ASTContext::getBuiltinMSVaListDecl() const {
     BuiltinMSVaListDecl = CreateMSVaListDecl(this);
 
   return BuiltinMSVaListDecl;
+}
+
+bool ASTContext::canBuiltinBeRedeclared(const FunctionDecl *FD) const {
+  return BuiltinInfo.canBeRedeclared(FD->getBuiltinID());
 }
 
 void ASTContext::setObjCConstantStringInterface(ObjCInterfaceDecl *Decl) {

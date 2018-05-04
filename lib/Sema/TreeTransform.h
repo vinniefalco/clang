@@ -57,7 +57,7 @@ using namespace sema;
 /// subclasses to customize any of its operations. Thus, a subclass can
 /// override any of the transformation or rebuild operators by providing an
 /// operation with the same signature as the default implementation. The
-/// overridding function should not be virtual.
+/// overriding function should not be virtual.
 ///
 /// Semantic tree transformations are split into two stages, either of which
 /// can be replaced by a subclass. The "transform" step transforms an AST node
@@ -2242,7 +2242,6 @@ public:
       // We have a reference to an unnamed field.  This is always the
       // base of an anonymous struct/union member access, i.e. the
       // field is always of record type.
-      assert(!QualifierLoc && "Can't have an unnamed field with a qualifier!");
       assert(Member->getType()->isRecordType() &&
              "unnamed member not of record type?");
 
@@ -2253,11 +2252,11 @@ public:
       if (BaseResult.isInvalid())
         return ExprError();
       Base = BaseResult.get();
-      ExprValueKind VK = isArrow ? VK_LValue : Base->getValueKind();
-      MemberExpr *ME = new (getSema().Context)
-          MemberExpr(Base, isArrow, OpLoc, Member, MemberNameInfo,
-                     cast<FieldDecl>(Member)->getType(), VK, OK_Ordinary);
-      return ME;
+
+      CXXScopeSpec EmptySS;
+      return getSema().BuildFieldReferenceExpr(
+          Base, isArrow, OpLoc, EmptySS, cast<FieldDecl>(Member),
+          DeclAccessPair::make(FoundDecl, FoundDecl->getAccess()), MemberNameInfo);
     }
 
     CXXScopeSpec SS;
@@ -5268,30 +5267,23 @@ bool TreeTransform<Derived>::TransformExceptionSpec(
   assert(ESI.Type != EST_Uninstantiated && ESI.Type != EST_Unevaluated);
 
   // Instantiate a dynamic noexcept expression, if any.
-  if (ESI.Type == EST_ComputedNoexcept) {
+  if (isComputedNoexcept(ESI.Type)) {
     EnterExpressionEvaluationContext Unevaluated(
         getSema(), Sema::ExpressionEvaluationContext::ConstantEvaluated);
     ExprResult NoexceptExpr = getDerived().TransformExpr(ESI.NoexceptExpr);
     if (NoexceptExpr.isInvalid())
       return true;
 
-    // FIXME: This is bogus, a noexcept expression is not a condition.
-    NoexceptExpr = getSema().CheckBooleanCondition(Loc, NoexceptExpr.get());
+    ExceptionSpecificationType EST = ESI.Type;
+    NoexceptExpr =
+        getSema().ActOnNoexceptSpec(Loc, NoexceptExpr.get(), EST);
     if (NoexceptExpr.isInvalid())
       return true;
 
-    if (!NoexceptExpr.get()->isValueDependent()) {
-      NoexceptExpr = getSema().VerifyIntegerConstantExpression(
-          NoexceptExpr.get(), nullptr,
-          diag::err_noexcept_needs_constant_expression,
-          /*AllowFold*/false);
-      if (NoexceptExpr.isInvalid())
-        return true;
-    }
-
-    if (ESI.NoexceptExpr != NoexceptExpr.get())
+    if (ESI.NoexceptExpr != NoexceptExpr.get() || EST != ESI.Type)
       Changed = true;
     ESI.NoexceptExpr = NoexceptExpr.get();
+    ESI.Type = EST;
   }
 
   if (ESI.Type != EST_Dynamic)

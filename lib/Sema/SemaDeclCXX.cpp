@@ -170,43 +170,40 @@ Sema::ImplicitExceptionSpecification::CalledDecl(SourceLocation CallLoc,
   if (EST == EST_None && Method->hasAttr<NoThrowAttr>())
     EST = EST_BasicNoexcept;
 
-  switch(EST) {
+  switch (EST) {
+  case EST_Unparsed:
+  case EST_Uninstantiated:
+  case EST_Unevaluated:
+    llvm_unreachable("should not see unresolved exception specs here");
+
   // If this function can throw any exceptions, make a note of that.
   case EST_MSAny:
   case EST_None:
+    // FIXME: Whichever we see last of MSAny and None determines our result.
+    // We should make a consistent, order-independent choice here.
     ClearExceptions();
     ComputedEST = EST;
+    return;
+  case EST_NoexceptFalse:
+    ClearExceptions();
+    ComputedEST = EST_None;
     return;
   // FIXME: If the call to this decl is using any of its default arguments, we
   // need to search them for potentially-throwing calls.
   // If this function has a basic noexcept, it doesn't affect the outcome.
   case EST_BasicNoexcept:
+  case EST_NoexceptTrue:
     return;
-  // If we're still at noexcept(true) and there's a nothrow() callee,
+  // If we're still at noexcept(true) and there's a throw() callee,
   // change to that specification.
   case EST_DynamicNone:
     if (ComputedEST == EST_BasicNoexcept)
       ComputedEST = EST_DynamicNone;
     return;
-  // Check out noexcept specs.
-  case EST_ComputedNoexcept:
-  {
-    FunctionProtoType::NoexceptResult NR =
-        Proto->getNoexceptSpec(Self->Context);
-    assert(NR != FunctionProtoType::NR_NoNoexcept &&
-           "Must have noexcept result for EST_ComputedNoexcept.");
-    assert(NR != FunctionProtoType::NR_Dependent &&
-           "Should not generate implicit declarations for dependent cases, "
-           "and don't know how to handle them anyway.");
-    // noexcept(false) -> no spec on the new function
-    if (NR == FunctionProtoType::NR_Throw) {
-      ClearExceptions();
-      ComputedEST = EST_None;
-    }
-    // noexcept(true) won't change anything either.
-    return;
-  }
-  default:
+  case EST_DependentNoexcept:
+    llvm_unreachable(
+        "should not generate implicit declarations for dependent cases");
+  case EST_Dynamic:
     break;
   }
   assert(EST == EST_Dynamic && "EST case not considered earlier.");
@@ -2771,7 +2768,7 @@ void Sema::DiagnoseAbsenceOfOverrideControl(NamedDecl *D) {
   SourceLocation Loc = MD->getLocation();
   SourceLocation SpellingLoc = Loc;
   if (getSourceManager().isMacroArgExpansion(Loc))
-    SpellingLoc = getSourceManager().getImmediateExpansionRange(Loc).first;
+    SpellingLoc = getSourceManager().getImmediateExpansionRange(Loc).getBegin();
   SpellingLoc = getSourceManager().getSpellingLoc(SpellingLoc);
   if (SpellingLoc.isValid() && getSourceManager().isInSystemHeader(SpellingLoc))
       return;
@@ -5847,20 +5844,20 @@ static bool paramCanBeDestroyedInCallee(Sema &S, CXXRecordDecl *D,
   return HasNonDeletedCopyOrMove;
 }
 
-static bool computeCanPassInRegister(bool DestroyedInCallee,
-                                     const CXXRecordDecl *RD,
-                                     TargetInfo::CallingConvKind CCK,
-                                     Sema &S) {
+static RecordDecl::ArgPassingKind
+computeArgPassingRestrictions(bool DestroyedInCallee, const CXXRecordDecl *RD,
+                              TargetInfo::CallingConvKind CCK, Sema &S) {
   if (RD->isDependentType() || RD->isInvalidDecl())
-    return true;
+    return RecordDecl::APK_CanPassInRegs;
 
-  // The param cannot be passed in registers if CanPassInRegisters is already
-  // set to false.
-  if (!RD->canPassInRegisters())
-    return false;
+  // The param cannot be passed in registers if ArgPassingRestrictions is set to
+  // APK_CanNeverPassInRegs.
+  if (RD->getArgPassingRestrictions() == RecordDecl::APK_CanNeverPassInRegs)
+    return RecordDecl::APK_CanNeverPassInRegs;
 
   if (CCK != TargetInfo::CCK_MicrosoftX86_64)
-    return DestroyedInCallee;
+    return DestroyedInCallee ? RecordDecl::APK_CanPassInRegs
+                             : RecordDecl::APK_CannotPassInRegs;
 
   bool CopyCtorIsTrivial = false, CopyCtorIsTrivialForCall = false;
   bool DtorIsTrivialForCall = false;
@@ -5900,7 +5897,7 @@ static bool computeCanPassInRegister(bool DestroyedInCallee,
 
   // If the copy ctor and dtor are both trivial-for-calls, pass direct.
   if (CopyCtorIsTrivialForCall && DtorIsTrivialForCall)
-    return true;
+    return RecordDecl::APK_CanPassInRegs;
 
   // If a class has a destructor, we'd really like to pass it indirectly
   // because it allows us to elide copies.  Unfortunately, MSVC makes that
@@ -5914,8 +5911,8 @@ static bool computeCanPassInRegister(bool DestroyedInCallee,
   // passed in registers, which is non-conforming.
   if (CopyCtorIsTrivial &&
       S.getASTContext().getTypeSize(RD->getTypeForDecl()) <= 64)
-    return true;
-  return false;
+    return RecordDecl::APK_CanPassInRegs;
+  return RecordDecl::APK_CannotPassInRegs;
 }
 
 /// \brief Perform semantic checks on a class definition that has been
@@ -6090,8 +6087,8 @@ void Sema::CheckCompletedCXXClass(CXXRecordDecl *Record) {
   if (Record->hasNonTrivialDestructor())
     Record->setParamDestroyedInCallee(DestroyedInCallee);
 
-  Record->setCanPassInRegisters(
-      computeCanPassInRegister(DestroyedInCallee, Record, CCK, *this));
+  Record->setArgPassingRestrictions(
+      computeArgPassingRestrictions(DestroyedInCallee, Record, CCK, *this));
 }
 
 /// Look up the special member function that would be called by a special
@@ -8319,7 +8316,8 @@ void Sema::CheckConversionDeclarator(Declarator &D, QualType &R,
   QualType ConvType =
       GetTypeFromParser(D.getName().ConversionFunctionId, &ConvTSI);
 
-  if (D.getDeclSpec().hasTypeSpecifier() && !D.isInvalidType()) {
+  const DeclSpec &DS = D.getDeclSpec();
+  if (DS.hasTypeSpecifier() && !D.isInvalidType()) {
     // Conversion functions don't have return types, but the parser will
     // happily parse something like:
     //
@@ -8329,8 +8327,17 @@ void Sema::CheckConversionDeclarator(Declarator &D, QualType &R,
     //
     // The return type will be changed later anyway.
     Diag(D.getIdentifierLoc(), diag::err_conv_function_return_type)
-      << SourceRange(D.getDeclSpec().getTypeSpecTypeLoc())
+      << SourceRange(DS.getTypeSpecTypeLoc())
       << SourceRange(D.getIdentifierLoc());
+    D.setInvalidType();
+  } else if (DS.getTypeQualifiers() && !D.isInvalidType()) {
+    // It's also plausible that the user writes type qualifiers in the wrong
+    // place, such as:
+    //   struct S { const operator int(); };
+    // FIXME: we could provide a fixit to move the qualifiers onto the
+    // conversion type.
+    Diag(D.getIdentifierLoc(), diag::err_conv_function_with_complex_decl)
+        << SourceRange(D.getIdentifierLoc()) << 0;
     D.setInvalidType();
   }
 
@@ -8444,12 +8451,12 @@ void Sema::CheckConversionDeclarator(Declarator &D, QualType &R,
     R = Context.getFunctionType(ConvType, None, Proto->getExtProtoInfo());
 
   // C++0x explicit conversion operators.
-  if (D.getDeclSpec().isExplicitSpecified())
-    Diag(D.getDeclSpec().getExplicitSpecLoc(),
-         getLangOpts().CPlusPlus11 ?
-           diag::warn_cxx98_compat_explicit_conversion_functions :
-           diag::ext_explicit_conversion_functions)
-      << SourceRange(D.getDeclSpec().getExplicitSpecLoc());
+  if (DS.isExplicitSpecified())
+    Diag(DS.getExplicitSpecLoc(),
+         getLangOpts().CPlusPlus11
+             ? diag::warn_cxx98_compat_explicit_conversion_functions
+             : diag::ext_explicit_conversion_functions)
+        << SourceRange(DS.getExplicitSpecLoc());
 }
 
 /// ActOnConversionDeclarator - Called by ActOnDeclarator to complete
@@ -13177,6 +13184,7 @@ bool Sema::CheckLiteralOperatorDeclaration(FunctionDecl *FnDecl) {
         ParamType->isSpecificBuiltinType(BuiltinType::LongDouble) ||
         Context.hasSameType(ParamType, Context.CharTy) ||
         Context.hasSameType(ParamType, Context.WideCharTy) ||
+        Context.hasSameType(ParamType, Context.Char8Ty) ||
         Context.hasSameType(ParamType, Context.Char16Ty) ||
         Context.hasSameType(ParamType, Context.Char32Ty)) {
     } else if (const PointerType *Ptr = ParamType->getAs<PointerType>()) {
@@ -13237,10 +13245,12 @@ bool Sema::CheckLiteralOperatorDeclaration(FunctionDecl *FnDecl) {
     }
 
     QualType InnerType = PointeeType.getUnqualifiedType();
-    // Only const char *, const wchar_t*, const char16_t*, and const char32_t*
-    // are allowed as the first parameter to a two-parameter function
+    // Only const char *, const wchar_t*, const char8_t*, const char16_t*, and
+    // const char32_t* are allowed as the first parameter to a two-parameter
+    // function
     if (!(Context.hasSameType(InnerType, Context.CharTy) ||
           Context.hasSameType(InnerType, Context.WideCharTy) ||
+          Context.hasSameType(InnerType, Context.Char8Ty) ||
           Context.hasSameType(InnerType, Context.Char16Ty) ||
           Context.hasSameType(InnerType, Context.Char32Ty))) {
       Diag((*Param)->getSourceRange().getBegin(),
@@ -15027,7 +15037,9 @@ bool Sema::checkThisInStaticMemberFunctionExceptionSpec(CXXMethodDecl *Method) {
   case EST_None:
     break;
 
-  case EST_ComputedNoexcept:
+  case EST_DependentNoexcept:
+  case EST_NoexceptFalse:
+  case EST_NoexceptTrue:
     if (!Finder.TraverseStmt(Proto->getNoexceptExpr()))
       return true;
     LLVM_FALLTHROUGH;
@@ -15124,31 +15136,17 @@ void Sema::checkExceptionSpecification(
     return;
   }
 
-  if (EST == EST_ComputedNoexcept) {
-    // If an error occurred, there's no expression here.
-    if (NoexceptExpr) {
-      assert((NoexceptExpr->isTypeDependent() ||
-              NoexceptExpr->getType()->getCanonicalTypeUnqualified() ==
-              Context.BoolTy) &&
-             "Parser should have made sure that the expression is boolean");
-      if (IsTopLevel && NoexceptExpr &&
-          DiagnoseUnexpandedParameterPack(NoexceptExpr)) {
-        ESI.Type = EST_BasicNoexcept;
-        return;
-      }
-
-      if (!NoexceptExpr->isValueDependent()) {
-        ExprResult Result = VerifyIntegerConstantExpression(
-            NoexceptExpr, nullptr, diag::err_noexcept_needs_constant_expression,
-            /*AllowFold*/ false);
-        if (Result.isInvalid()) {
-          ESI.Type = EST_BasicNoexcept;
-          return;
-        }
-        NoexceptExpr = Result.get();
-      }
-      ESI.NoexceptExpr = NoexceptExpr;
+  if (isComputedNoexcept(EST)) {
+    assert((NoexceptExpr->isTypeDependent() ||
+            NoexceptExpr->getType()->getCanonicalTypeUnqualified() ==
+            Context.BoolTy) &&
+           "Parser should have made sure that the expression is boolean");
+    if (IsTopLevel && DiagnoseUnexpandedParameterPack(NoexceptExpr)) {
+      ESI.Type = EST_BasicNoexcept;
+      return;
     }
+
+    ESI.NoexceptExpr = NoexceptExpr;
     return;
   }
 }

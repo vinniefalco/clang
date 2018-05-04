@@ -266,12 +266,20 @@ static void DiagnoseObjCImplementedDeprecations(Sema &S, const NamedDecl *ND,
   if (!ND)
     return;
   bool IsCategory = false;
-  AvailabilityResult Availability = ND->getAvailability();
+  StringRef RealizedPlatform;
+  AvailabilityResult Availability = ND->getAvailability(
+      /*Message=*/nullptr, /*EnclosingVersion=*/VersionTuple(),
+      &RealizedPlatform);
   if (Availability != AR_Deprecated) {
     if (isa<ObjCMethodDecl>(ND)) {
       if (Availability != AR_Unavailable)
         return;
-      // Warn about implementing unavailable methods.
+      if (RealizedPlatform.empty())
+        RealizedPlatform = S.Context.getTargetInfo().getPlatformName();
+      // Warn about implementing unavailable methods, unless the unavailable
+      // is for an app extension.
+      if (RealizedPlatform.endswith("_app_extension"))
+        return;
       S.Diag(ImplLoc, diag::warn_unavailable_def);
       S.Diag(ND->getLocation(), diag::note_method_declared_at)
           << ND->getDeclName();
@@ -340,6 +348,13 @@ void Sema::ActOnStartOfObjCMethodDef(Scope *FnBodyScope, Decl *D) {
   // If we don't have a valid method decl, simply return.
   if (!MDecl)
     return;
+
+  QualType ResultType = MDecl->getReturnType();
+  if (!ResultType->isDependentType() && !ResultType->isVoidType() &&
+      !MDecl->isInvalidDecl() &&
+      RequireCompleteType(MDecl->getLocation(), ResultType,
+                          diag::err_func_def_incomplete_result))
+    MDecl->setInvalidDecl();
 
   // Allow all of Sema to see that we are entering a method definition.
   PushDeclContext(FnBodyScope, MDecl);
@@ -2723,7 +2738,7 @@ static void CheckProtocolMethodDefs(Sema &S,
             // This is because method will be implemented in the primary class 
             // or one of its super class implementation.
             
-            // Ugly, but necessary. Method declared in protcol might have
+            // Ugly, but necessary. Method declared in protocol might have
             // have been synthesized due to a property declared in the class which
             // uses the protocol.
             if (ObjCMethodDecl *MethodInClass =
@@ -3433,7 +3448,7 @@ static bool FilterMethodsByTypeBound(ObjCMethodDecl *Method,
            MethodInterface->isSuperClassOf(BoundInterface) ||
            BoundInterface->isSuperClassOf(MethodInterface);
   }
-  llvm_unreachable("unknow method context");
+  llvm_unreachable("unknown method context");
 }
 
 /// We first select the type of the method: Instance or Factory, then collect
@@ -4726,6 +4741,17 @@ Decl *Sema::ActOnMethodDeclaration(
   if (MethodDefinition &&
       Context.getTargetInfo().getTriple().getArch() == llvm::Triple::x86)
     checkObjCMethodX86VectorTypes(*this, ObjCMethod);
+
+  // + load method cannot have availability attributes. It get called on
+  // startup, so it has to have the availability of the deployment target.
+  if (const auto *attr = ObjCMethod->getAttr<AvailabilityAttr>()) {
+    if (ObjCMethod->isClassMethod() &&
+        ObjCMethod->getSelector().getAsString() == "load") {
+      Diag(attr->getLocation(), diag::warn_availability_on_static_initializer)
+          << 0;
+      ObjCMethod->dropAttr<AvailabilityAttr>();
+    }
+  }
 
   ActOnDocumentableDecl(ObjCMethod);
 

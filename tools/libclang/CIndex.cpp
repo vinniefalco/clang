@@ -146,9 +146,13 @@ CXSourceRange cxloc::translateSourceRange(const SourceManager &SM,
   // We want the last character in this location, so we will adjust the
   // location accordingly.
   SourceLocation EndLoc = R.getEnd();
-  if (EndLoc.isValid() && EndLoc.isMacroID() && !SM.isMacroArgExpansion(EndLoc))
-    EndLoc = SM.getExpansionRange(EndLoc).second;
-  if (R.isTokenRange() && EndLoc.isValid()) {
+  bool IsTokenRange = R.isTokenRange();
+  if (EndLoc.isValid() && EndLoc.isMacroID() && !SM.isMacroArgExpansion(EndLoc)) {
+    CharSourceRange Expansion = SM.getExpansionRange(EndLoc);
+    EndLoc = Expansion.getEnd();
+    IsTokenRange = Expansion.isTokenRange();
+  }
+  if (IsTokenRange && EndLoc.isValid()) {
     unsigned Length = Lexer::MeasureTokenLength(SM.getSpellingLoc(EndLoc),
                                                 SM, LangOpts);
     EndLoc = EndLoc.getLocWithOffset(Length);
@@ -1796,7 +1800,7 @@ bool CursorVisitor::VisitCXXRecordDecl(CXXRecordDecl *D) {
 
 bool CursorVisitor::VisitAttributes(Decl *D) {
   for (const auto *I : D->attrs())
-    if (Visit(MakeCXCursor(I, D, TU)))
+    if (!I->isImplicit() && Visit(MakeCXCursor(I, D, TU)))
         return true;
 
   return false;
@@ -2593,7 +2597,7 @@ void EnqueueVisitor::VisitMemberExpr(const MemberExpr *M) {
     return;
 
   // Ignore base anonymous struct/union fields, otherwise they will shadow the
-  // real field that that we are interested in.
+  // real field that we are interested in.
   if (auto *SubME = dyn_cast<MemberExpr>(M->getBase())) {
     if (auto *FD = dyn_cast_or_null<FieldDecl>(SubME->getMemberDecl())) {
       if (FD->isAnonymousStructOrUnion()) {
@@ -4247,6 +4251,14 @@ int clang_File_isEqual(CXFile file1, CXFile file2) {
   FileEntry *FEnt1 = static_cast<FileEntry *>(file1);
   FileEntry *FEnt2 = static_cast<FileEntry *>(file2);
   return FEnt1->getUniqueID() == FEnt2->getUniqueID();
+}
+
+CXString clang_File_tryGetRealPathName(CXFile SFile) {
+  if (!SFile)
+    return cxstring::createNull();
+
+  FileEntry *FEnt = static_cast<FileEntry *>(SFile);
+  return cxstring::createRef(FEnt->tryGetRealPathName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -7695,7 +7707,7 @@ CXTLSKind clang_getCursorTLSKind(CXCursor cursor) {
 }
 
  /// \brief If the given cursor is the "templated" declaration
- /// descibing a class or function template, return the class or
+ /// describing a class or function template, return the class or
  /// function template.
 static const Decl *maybeGetTemplateCursor(const Decl *D) {
   if (!D)
@@ -8464,7 +8476,7 @@ void cxindex::printDiagsToStderr(ASTUnit *Unit) {
     fprintf(stderr, "%s\n", clang_getCString(Msg));
     clang_disposeString(Msg);
   }
-#ifdef LLVM_ON_WIN32
+#ifdef _WIN32
   // On Windows, force a flush, since there may be multiple copies of
   // stderr and stdout in the file system, all with different buffers
   // but writing to the same device.

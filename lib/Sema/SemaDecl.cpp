@@ -148,6 +148,9 @@ bool Sema::isSimpleTypeSpecifier(tok::TokenKind Kind) const {
   case tok::kw_decltype:
     return getLangOpts().CPlusPlus;
 
+  case tok::kw_char8_t:
+    return getLangOpts().Char8;
+
   default:
     break;
   }
@@ -724,13 +727,7 @@ void Sema::DiagnoseUnknownTypeName(IdentifierInfo *&II,
     if (isTemplateName(S, SS ? *SS : EmptySS, /*hasTemplateKeyword=*/false,
                        Name, nullptr, true, TemplateResult,
                        MemberOfUnknownSpecialization) == TNK_Type_template) {
-      TemplateName TplName = TemplateResult.get();
-      Diag(IILoc, diag::err_template_missing_args)
-        << (int)getTemplateNameKindForDiagnostics(TplName) << TplName;
-      if (TemplateDecl *TplDecl = TplName.getAsTemplateDecl()) {
-        Diag(TplDecl->getLocation(), diag::note_template_decl_here)
-          << TplDecl->getTemplateParameters()->getSourceRange();
-      }
+      diagnoseMissingTemplateArguments(TemplateResult.get(), IILoc);
       return;
     }
   }
@@ -3010,6 +3007,14 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
   // If the old declaration is invalid, just give up here.
   if (Old->isInvalidDecl())
     return true;
+
+  // Disallow redeclaration of some builtins.
+  if (!getASTContext().canBuiltinBeRedeclared(Old)) {
+    Diag(New->getLocation(), diag::err_builtin_redeclare) << Old->getDeclName();
+    Diag(Old->getLocation(), diag::note_previous_builtin_declaration)
+        << Old << Old->getType();
+    return true;
+  }
 
   diag::kind PrevDiag;
   SourceLocation OldLocation;
@@ -6977,7 +6982,7 @@ NamedDecl *Sema::getShadowedDeclaration(const TypedefNameDecl *D,
   // Don't warn if typedef declaration is part of a class
   if (D->getDeclContext()->isRecord())
     return nullptr;
-  
+
   if (!shouldWarnIfShadowedDecl(Diags, R))
     return nullptr;
 
@@ -7558,7 +7563,7 @@ enum OverrideErrorKind { OEK_All, OEK_NonDeleted, OEK_Deleted };
 } // end anonymous namespace
 
 /// \brief Report an error regarding overriding, along with any relevant
-/// overriden methods.
+/// overridden methods.
 ///
 /// \param DiagID the primary error to report.
 /// \param MD the overriding method.
@@ -9048,11 +9053,13 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
 
   if (getLangOpts().CUDA) {
     IdentifierInfo *II = NewFD->getIdentifier();
-    if (II && II->isStr("cudaConfigureCall") && !NewFD->isInvalidDecl() &&
+    if (II &&
+        II->isStr(getLangOpts().HIP ? "hipConfigureCall"
+                                    : "cudaConfigureCall") &&
+        !NewFD->isInvalidDecl() &&
         NewFD->getDeclContext()->getRedeclContext()->isTranslationUnit()) {
       if (!R->getAs<FunctionType>()->getReturnType()->isScalarType())
         Diag(NewFD->getLocation(), diag::err_config_scalar_return);
-
       Context.setcudaConfigureCallDecl(NewFD);
     }
 
@@ -9129,6 +9136,21 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
                                 HasExplicitTemplateArgs, TemplateArgs);
     CurContext->addDecl(NewSpec);
     AddToScope = false;
+  }
+
+  // Diagnose availability attributes. Availability cannot be used on functions
+  // that are run during load/unload.
+  if (const auto *attr = NewFD->getAttr<AvailabilityAttr>()) {
+    if (NewFD->hasAttr<ConstructorAttr>()) {
+      Diag(attr->getLocation(), diag::warn_availability_on_static_initializer)
+          << 1;
+      NewFD->dropAttr<AvailabilityAttr>();
+    }
+    if (NewFD->hasAttr<DestructorAttr>()) {
+      Diag(attr->getLocation(), diag::warn_availability_on_static_initializer)
+          << 2;
+      NewFD->dropAttr<AvailabilityAttr>();
+    }
   }
 
   return NewFD;
@@ -9826,7 +9848,7 @@ bool Sema::CheckFunctionDeclaration(Scope *S, FunctionDecl *NewFD,
         else if (auto *MPT = T->getAs<MemberPointerType>())
           T = MPT->getPointeeType();
         if (auto *FPT = T->getAs<FunctionProtoType>())
-          if (FPT->isNothrow(Context))
+          if (FPT->isNothrow())
             return true;
         return false;
       };
@@ -10917,7 +10939,7 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
   } else if (VDecl->isFileVarDecl()) {
     // In C, extern is typically used to avoid tentative definitions when
     // declaring variables in headers, but adding an intializer makes it a
-    // defintion. This is somewhat confusing, so GCC and Clang both warn on it.
+    // definition. This is somewhat confusing, so GCC and Clang both warn on it.
     // In C++, extern is often used to give implictly static const variables
     // external linkage, so don't warn in that case. If selectany is present,
     // this might be header code intended for C and C++ inclusion, so apply the
@@ -15465,8 +15487,13 @@ void Sema::ActOnFields(Scope *S, SourceLocation RecLoc, Decl *EnclosingDecl,
         Record->setNonTrivialToPrimitiveDestroy(true);
         Record->setParamDestroyedInCallee(true);
       }
-      if (!FT.canPassInRegisters())
-        Record->setCanPassInRegisters(false);
+
+      if (const auto *RT = FT->getAs<RecordType>()) {
+        if (RT->getDecl()->getArgPassingRestrictions() ==
+            RecordDecl::APK_CanNeverPassInRegs)
+          Record->setArgPassingRestrictions(RecordDecl::APK_CanNeverPassInRegs);
+      } else if (FT.getQualifiers().getObjCLifetime() == Qualifiers::OCL_Weak)
+        Record->setArgPassingRestrictions(RecordDecl::APK_CanNeverPassInRegs);
     }
 
     if (Record && FD->getType().isVolatileQualified())
@@ -15514,7 +15541,7 @@ void Sema::ActOnFields(Scope *S, SourceLocation RecLoc, Decl *EnclosingDecl,
                                             SOEnd = M->second.end();
                    SO != SOEnd; ++SO) {
                 assert(SO->second.size() > 0 &&
-                       "Virtual function without overridding functions?");
+                       "Virtual function without overriding functions?");
                 if (SO->second.size() == 1)
                   continue;
 

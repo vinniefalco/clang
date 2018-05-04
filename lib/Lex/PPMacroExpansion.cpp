@@ -41,7 +41,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
@@ -1105,7 +1104,8 @@ static bool HasFeature(const Preprocessor &PP, StringRef Feature) {
             LangOpts.Sanitize.hasOneOf(SanitizerKind::Address |
                                        SanitizerKind::KernelAddress))
       .Case("hwaddress_sanitizer",
-            LangOpts.Sanitize.hasOneOf(SanitizerKind::HWAddress))
+            LangOpts.Sanitize.hasOneOf(SanitizerKind::HWAddress |
+                                       SanitizerKind::KernelHWAddress))
       .Case("assume_nonnull", true)
       .Case("attribute_analyzer_noreturn", true)
       .Case("attribute_availability", true)
@@ -1688,7 +1688,7 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
     // can matter for a function-like macro that expands to contain __LINE__.
     // Skip down through expansion points until we find a file loc for the
     // end of the expansion history.
-    Loc = SourceMgr.getExpansionRange(Loc).second;
+    Loc = SourceMgr.getExpansionRange(Loc).getEnd();
     PresumedLoc PLoc = SourceMgr.getPresumedLoc(Loc);
 
     // __LINE__ expands to a simple numeric value.

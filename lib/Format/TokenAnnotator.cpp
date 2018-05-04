@@ -25,6 +25,21 @@ namespace format {
 
 namespace {
 
+/// \brief Returns \c true if the token can be used as an identifier in
+/// an Objective-C \c @selector, \c false otherwise.
+///
+/// Because getFormattingLangOpts() always lexes source code as
+/// Objective-C++, C++ keywords like \c new and \c delete are
+/// lexed as tok::kw_*, not tok::identifier, even for Objective-C.
+///
+/// For Objective-C and Objective-C++, both identifiers and keywords
+/// are valid inside @selector(...) (or a macro which
+/// invokes @selector(...)). So, we allow treat any identifier or
+/// keyword as a potential Objective-C selector component.
+static bool canBeObjCSelectorComponent(const FormatToken &Tok) {
+  return Tok.Tok.getIdentifierInfo() != nullptr;
+}
+
 /// \brief A parser that gathers additional information about tokens.
 ///
 /// The \c TokenAnnotator tries to match parenthesis and square brakets and
@@ -391,6 +406,7 @@ private:
          Parent->isOneOf(tok::colon, tok::l_square, tok::l_paren,
                          tok::kw_return, tok::kw_throw) ||
          Parent->isUnaryOperator() ||
+         // FIXME(bug 36976): ObjC return types shouldn't use TT_CastRParen.
          Parent->isOneOf(TT_ObjCForIn, TT_CastRParen) ||
          getBinOpPrecedence(Parent->Tok.getKind(), true, true) > prec::Unknown);
     bool ColonFound = false;
@@ -524,6 +540,7 @@ private:
           Left->ParameterCount = 0;
           Contexts.back().ColonIsObjCMethodExpr = true;
           if (Parent && Parent->is(tok::r_paren))
+            // FIXME(bug 36976): ObjC return types shouldn't use TT_CastRParen.
             Parent->Type = TT_CastRParen;
         }
         ColonFound = true;
@@ -676,6 +693,7 @@ private:
         Tok->Type = TT_ObjCMethodExpr;
         const FormatToken *BeforePrevious = Tok->Previous->Previous;
         if (!BeforePrevious ||
+            // FIXME(bug 36976): ObjC return types shouldn't use TT_CastRParen.
             !(BeforePrevious->is(TT_CastRParen) ||
               (BeforePrevious->is(TT_ObjCMethodExpr) &&
                BeforePrevious->is(tok::colon))) ||
@@ -700,9 +718,10 @@ private:
           Tok->Type = TT_CtorInitializerColon;
         else
           Tok->Type = TT_InheritanceColon;
-      } else if (Tok->Previous->is(tok::identifier) && Tok->Next &&
+      } else if (canBeObjCSelectorComponent(*Tok->Previous) && Tok->Next &&
                  (Tok->Next->isOneOf(tok::r_paren, tok::comma) ||
-                  Tok->Next->startsSequence(tok::identifier, tok::colon))) {
+                  (canBeObjCSelectorComponent(*Tok->Next) && Tok->Next->Next &&
+                   Tok->Next->Next->is(tok::colon)))) {
         // This handles a special macro in ObjC code where selectors including
         // the colon are passed as macro arguments.
         Tok->Type = TT_ObjCMethodExpr;
@@ -1343,6 +1362,17 @@ private:
                                          TT_LeadingJavaAnnotation)) {
         Current.Type = Current.Previous->Type;
       }
+    } else if (canBeObjCSelectorComponent(Current) &&
+               // FIXME(bug 36976): ObjC return types shouldn't use TT_CastRParen.
+               Current.Previous && Current.Previous->is(TT_CastRParen) &&
+               Current.Previous->MatchingParen &&
+               Current.Previous->MatchingParen->Previous &&
+               Current.Previous->MatchingParen->Previous->is(
+                   TT_ObjCMethodSpecifier)) {
+      // This is the first part of an Objective-C selector name. (If there's no
+      // colon after this, this is the only place which annotates the identifier
+      // as a selector.)
+      Current.Type = TT_SelectorName;
     } else if (Current.isOneOf(tok::identifier, tok::kw_const) &&
                Current.Previous &&
                !Current.Previous->isOneOf(tok::equal, tok::at) &&
@@ -2258,6 +2288,13 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
   if (Left.is(tok::colon) && Left.is(TT_ObjCMethodExpr))
     return Line.MightBeFunctionDecl ? 50 : 500;
 
+  // In Objective-C type declarations, avoid breaking after the category's
+  // open paren (we'll prefer breaking after the protocol list's opening
+  // angle bracket, if present).
+  if (Line.Type == LT_ObjCDecl && Left.is(tok::l_paren) && Left.Previous &&
+      Left.Previous->isOneOf(tok::identifier, tok::greater))
+    return 500;
+
   if (Left.is(tok::l_paren) && InFunctionDecl &&
       Style.AlignAfterOpenBracket != FormatStyle::BAS_DontAlign)
     return 100;
@@ -2335,9 +2372,12 @@ bool TokenAnnotator::spaceRequiredBetween(const AnnotatedLine &Line,
                : Style.SpacesInParentheses;
   if (Right.isOneOf(tok::semi, tok::comma))
     return false;
-  if (Right.is(tok::less) && Line.Type == LT_ObjCDecl &&
-      Style.ObjCSpaceBeforeProtocolList)
-    return true;
+  if (Right.is(tok::less) && Line.Type == LT_ObjCDecl) {
+    bool IsLightweightGeneric =
+        Right.MatchingParen && Right.MatchingParen->Next &&
+        Right.MatchingParen->Next->is(tok::colon);
+    return !IsLightweightGeneric && Style.ObjCSpaceBeforeProtocolList;
+  }
   if (Right.is(tok::less) && Left.is(tok::kw_template))
     return Style.SpaceAfterTemplateKeyword;
   if (Left.isOneOf(tok::exclaim, tok::tilde))
@@ -2518,6 +2558,10 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
     // A percent is probably part of a formatting specification, such as %lld.
     if (Left.is(tok::percent))
       return false;
+    // Preserve the existence of a space before a percent for cases like 0x%04x
+    // and "%d %d"
+    if (Left.is(tok::numeric_constant) && Right.is(tok::percent))
+      return Right.WhitespaceRange.getEnd() != Right.WhitespaceRange.getBegin();
   } else if (Style.Language == FormatStyle::LK_JavaScript) {
     if (Left.is(TT_JsFatArrow))
       return true;
@@ -2622,7 +2666,7 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
   if (Line.Type == LT_ObjCMethodDecl) {
     if (Left.is(TT_ObjCMethodSpecifier))
       return true;
-    if (Left.is(tok::r_paren) && Right.isOneOf(tok::identifier, tok::kw_new))
+    if (Left.is(tok::r_paren) && canBeObjCSelectorComponent(Right))
       // Don't space between ')' and <id> or ')' and 'new'. 'new' is not a
       // keyword in Objective-C, and '+ (instancetype)new;' is a standard class
       // method declaration.
@@ -3100,6 +3144,7 @@ void TokenAnnotator::printDebugInfo(const AnnotatedLine &Line) {
     for (unsigned i = 0, e = Tok->FakeLParens.size(); i != e; ++i)
       llvm::errs() << Tok->FakeLParens[i] << "/";
     llvm::errs() << " FakeRParens=" << Tok->FakeRParens;
+    llvm::errs() << " II=" << Tok->Tok.getIdentifierInfo();
     llvm::errs() << " Text='" << Tok->TokenText << "'\n";
     if (!Tok->Next)
       assert(Tok == Line.Last);

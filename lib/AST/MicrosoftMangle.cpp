@@ -1009,7 +1009,7 @@ void MicrosoftCXXNameMangler::mangleNestedName(const NamedDecl *ND) {
           if (const auto *ND = dyn_cast<NamedDecl>(MC))
             mangleUnqualifiedName(ND);
       // MS ABI and Itanium manglings are in inverted scopes.  In the case of a
-      // RecordDecl, mangle the entire scope hierachy at this point rather than
+      // RecordDecl, mangle the entire scope hierarchy at this point rather than
       // just the unqualified name to get the ordering correct.
       if (const auto *RD = dyn_cast<RecordDecl>(DC))
         mangleName(RD);
@@ -1919,8 +1919,15 @@ void MicrosoftCXXNameMangler::mangleType(const BuiltinType *T, Qualifiers,
     break;
 
   case BuiltinType::Float16:
-  case BuiltinType::Float128:
-  case BuiltinType::Half: {
+    mangleArtificalTagType(TTK_Struct, "_Float16", {"__clang"});
+    break;
+
+  case BuiltinType::Half:
+    mangleArtificalTagType(TTK_Struct, "_Half", {"__clang"});
+    break;
+
+  case BuiltinType::Char8:
+  case BuiltinType::Float128: {
     DiagnosticsEngine &Diags = Context.getDiags();
     unsigned DiagID = Diags.getCustomDiagID(
         DiagnosticsEngine::Error, "cannot mangle this built-in %0 type yet");

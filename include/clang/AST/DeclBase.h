@@ -309,6 +309,7 @@ private:
 protected:
   friend class ASTDeclReader;
   friend class ASTDeclWriter;
+  friend class ASTImporter;
   friend class ASTReader;
   friend class CXXClassMemberWrapper;
   friend class LinkageComputer;
@@ -643,9 +644,14 @@ public:
   ///
   /// \param EnclosingVersion The version to compare with. If empty, assume the
   /// deployment target version.
+  ///
+  /// \param RealizedPlatform If non-NULL and the availability result is found
+  /// in an available attribute it will set to the platform which is written in
+  /// the available attribute.
   AvailabilityResult
   getAvailability(std::string *Message = nullptr,
-                  VersionTuple EnclosingVersion = VersionTuple()) const;
+                  VersionTuple EnclosingVersion = VersionTuple(),
+                  StringRef *RealizedPlatform = nullptr) const;
 
   /// \brief Retrieve the version of the target platform in which this
   /// declaration was introduced.

@@ -798,7 +798,8 @@ public:
 
   /// Return true if this is a POD type according to the more relaxed rules
   /// of the C++11 standard, regardless of the current compilation's language.
-  /// (C++0x [basic.types]p9)
+  /// (C++0x [basic.types]p9). Note that, unlike
+  /// CXXRecordDecl::isCXX11StandardLayout, this takes DRs into account.
   bool isCXX11PODType(const ASTContext &Context) const;
 
   /// Return true if this is a trivial type per (C++0x [basic.types]p9)
@@ -1147,8 +1148,6 @@ public:
   /// after it is moved, as opposed to a truly destructive move in which the
   /// source object is placed in an uninitialized state.
   PrimitiveCopyKind isNonTrivialToPrimitiveDestructiveMove() const;
-
-  bool canPassInRegisters() const;
 
   enum DestructionKind {
     DK_none,
@@ -1791,6 +1790,7 @@ public:
   bool isBooleanType() const;
   bool isCharType() const;
   bool isWideCharType() const;
+  bool isChar8Type() const;
   bool isChar16Type() const;
   bool isChar32Type() const;
   bool isAnyCharacterType() const;
@@ -2022,7 +2022,7 @@ public:
   TagDecl *getAsTagDecl() const;
 
   /// If this is a pointer or reference to a RecordType, return the
-  /// CXXRecordDecl that that type refers to.
+  /// CXXRecordDecl that the type refers to.
   ///
   /// If this is not a pointer or reference, or the type being pointed to does
   /// not refer to a CXXRecordDecl, returns NULL.
@@ -3459,7 +3459,7 @@ public:
     /// Explicitly-specified list of exception types.
     ArrayRef<QualType> Exceptions;
 
-    /// Noexcept expression, if this is EST_ComputedNoexcept.
+    /// Noexcept expression, if this is a computed noexcept specification.
     Expr *NoexceptExpr = nullptr;
 
     /// The function whose exception specification this is, for
@@ -3562,19 +3562,34 @@ private:
     return reinterpret_cast<const ExtParameterInfo *>(ptr);
   }
 
-  size_t getExceptionSpecSize() const {
-    switch (getExceptionSpecType()) {
-    case EST_None:             return 0;
-    case EST_DynamicNone:      return 0;
-    case EST_MSAny:            return 0;
-    case EST_BasicNoexcept:    return 0;
-    case EST_Unparsed:         return 0;
-    case EST_Dynamic:          return getNumExceptions() * sizeof(QualType);
-    case EST_ComputedNoexcept: return sizeof(Expr*);
-    case EST_Uninstantiated:   return 2 * sizeof(FunctionDecl*);
-    case EST_Unevaluated:      return sizeof(FunctionDecl*);
+  static size_t getExceptionSpecSize(ExceptionSpecificationType EST,
+                                     unsigned NumExceptions) {
+    switch (EST) {
+    case EST_None:
+    case EST_DynamicNone:
+    case EST_MSAny:
+    case EST_BasicNoexcept:
+    case EST_Unparsed:
+      return 0;
+
+    case EST_Dynamic:
+      return NumExceptions * sizeof(QualType);
+
+    case EST_DependentNoexcept:
+    case EST_NoexceptFalse:
+    case EST_NoexceptTrue:
+      return sizeof(Expr *);
+
+    case EST_Uninstantiated:
+      return 2 * sizeof(FunctionDecl *);
+
+    case EST_Unevaluated:
+      return sizeof(FunctionDecl *);
     }
     llvm_unreachable("bad exception specification kind");
+  }
+  size_t getExceptionSpecSize() const {
+    return getExceptionSpecSize(getExceptionSpecType(), getNumExceptions());
   }
 
 public:
@@ -3599,7 +3614,7 @@ public:
     EPI.RefQualifier = getRefQualifier();
     if (EPI.ExceptionSpec.Type == EST_Dynamic) {
       EPI.ExceptionSpec.Exceptions = exceptions();
-    } else if (EPI.ExceptionSpec.Type == EST_ComputedNoexcept) {
+    } else if (isComputedNoexcept(EPI.ExceptionSpec.Type)) {
       EPI.ExceptionSpec.NoexceptExpr = getNoexceptExpr();
     } else if (EPI.ExceptionSpec.Type == EST_Uninstantiated) {
       EPI.ExceptionSpec.SourceDecl = getExceptionSpecDecl();
@@ -3639,33 +3654,13 @@ public:
   /// spec.
   bool hasInstantiationDependentExceptionSpec() const;
 
-  /// Result type of getNoexceptSpec().
-  enum NoexceptResult {
-    /// There is no noexcept specifier.
-    NR_NoNoexcept,
-
-    /// The noexcept specifier has a bad expression.
-    NR_BadNoexcept,
-
-    /// The noexcept specifier is dependent.
-    NR_Dependent,
-
-    /// The noexcept specifier evaluates to false.
-    NR_Throw,
-
-    /// The noexcept specifier evaluates to true.
-    NR_Nothrow
-  };
-
-  /// Get the meaning of the noexcept spec on this function, if any.
-  NoexceptResult getNoexceptSpec(const ASTContext &Ctx) const;
   unsigned getNumExceptions() const { return NumExceptions; }
   QualType getExceptionType(unsigned i) const {
     assert(i < NumExceptions && "Invalid exception number!");
     return exception_begin()[i];
   }
   Expr *getNoexceptExpr() const {
-    if (getExceptionSpecType() != EST_ComputedNoexcept)
+    if (!isComputedNoexcept(getExceptionSpecType()))
       return nullptr;
     // NoexceptExpr sits where the arguments end.
     return *reinterpret_cast<Expr *const *>(param_type_end());
@@ -3694,14 +3689,14 @@ public:
 
   /// Determine whether this function type has a non-throwing exception
   /// specification.
-  CanThrowResult canThrow(const ASTContext &Ctx) const;
+  CanThrowResult canThrow() const;
 
   /// Determine whether this function type has a non-throwing exception
   /// specification. If this depends on template arguments, returns
   /// \c ResultIfDependent.
-  bool isNothrow(const ASTContext &Ctx, bool ResultIfDependent = false) const {
-    return ResultIfDependent ? canThrow(Ctx) != CT_Can
-                             : canThrow(Ctx) == CT_Cannot;
+  bool isNothrow(bool ResultIfDependent = false) const {
+    return ResultIfDependent ? canThrow() != CT_Can
+                             : canThrow() == CT_Cannot;
   }
 
   bool isVariadic() const { return Variadic; }

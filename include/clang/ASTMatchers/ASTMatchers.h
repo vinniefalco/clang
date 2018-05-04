@@ -3760,7 +3760,7 @@ AST_POLYMORPHIC_MATCHER(isNoThrow,
   if (isUnresolvedExceptionSpec(FnTy->getExceptionSpecType()))
     return true;
 
-  return FnTy->isNothrow(Finder->getASTContext());
+  return FnTy->isNothrow();
 }
 
 /// \brief Matches constexpr variable and function declarations.
@@ -4038,7 +4038,7 @@ AST_POLYMORPHIC_MATCHER_P(hasOperatorName,
   return Name == Node.getOpcodeStr(Node.getOpcode());
 }
 
-/// \brief Matches on all kinds of assignment operators.
+/// \brief Matches all kinds of assignment operators.
 ///
 /// Example 1: matches a += b (matcher = binaryOperator(isAssignmentOperator()))
 /// \code
@@ -4298,7 +4298,7 @@ AST_MATCHER_P(CXXMethodDecl, ofClass,
           InnerMatcher.matches(*Parent, Finder, Builder));
 }
 
-/// \brief Matches each method overriden by the given method. This matcher may
+/// \brief Matches each method overridden by the given method. This matcher may
 /// produce multiple matches.
 ///
 /// Given

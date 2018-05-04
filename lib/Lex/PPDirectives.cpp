@@ -1364,7 +1364,7 @@ void Preprocessor::HandleUserDiagnosticDirective(Token &Tok,
   // Read the rest of the line raw.  We do this because we don't want macros
   // to be expanded and we don't require that the tokens be valid preprocessing
   // tokens.  For example, this is allowed: "#warning `   'foo".  GCC does
-  // collapse multiple consequtive white space between tokens, but this isn't
+  // collapse multiple consecutive white space between tokens, but this isn't
   // specified by the standard.
   SmallString<128> Message;
   CurLexer->ReadToEndOfLine(&Message);
@@ -1806,7 +1806,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   SmallString<128> NormalizedPath;
   if (LangOpts.MSVCCompat) {
     NormalizedPath = Filename.str();
-#ifndef LLVM_ON_WIN32
+#ifndef _WIN32
     llvm::sys::path::native(NormalizedPath);
 #endif
   }
@@ -2043,7 +2043,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   // If the filename string was the result of macro expansions, set the include
   // position on the file where it will be included and after the expansions.
   if (IncludePos.isMacroID())
-    IncludePos = SourceMgr.getExpansionRange(IncludePos).second;
+    IncludePos = SourceMgr.getExpansionRange(IncludePos).getEnd();
   FileID FID = SourceMgr.createFileID(File, IncludePos, FileCharacter);
   assert(FID.isValid() && "Expected valid file ID");
 

@@ -999,6 +999,7 @@ public:
   CanQualType WCharTy;  // [C++ 3.9.1p5].
   CanQualType WideCharTy; // Same as WCharTy in C++, integer type in C99.
   CanQualType WIntTy;   // [C99 7.24.1], integer type unchanged by default promotions.
+  CanQualType Char8Ty;  // [C++20 proposal]
   CanQualType Char16Ty; // [C++0x 3.9.1p5], integer type in C99.
   CanQualType Char32Ty; // [C++0x 3.9.1p5], integer type in C99.
   CanQualType SignedCharTy, ShortTy, IntTy, LongTy, LongLongTy, Int128Ty;
@@ -1113,7 +1114,7 @@ public:
   /// \brief Apply Objective-C protocol qualifiers to the given type.
   /// \param allowOnPointerType specifies if we can apply protocol
   /// qualifiers on ObjCObjectPointerType. It can be set to true when
-  /// contructing the canonical type of a Objective-C type parameter.
+  /// constructing the canonical type of a Objective-C type parameter.
   QualType applyObjCProtocolQualifiers(QualType type,
       ArrayRef<ObjCProtocolDecl *> protocols, bool &hasError,
       bool allowOnPointerType = false) const;
@@ -1881,6 +1882,10 @@ public:
   QualType getBuiltinMSVaListType() const {
     return getTypeDeclType(getBuiltinMSVaListDecl());
   }
+
+  /// Return whether a declaration to a builtin is allowed to be
+  /// overloaded/redeclared.
+  bool canBuiltinBeRedeclared(const FunctionDecl *) const;
 
   /// \brief Return a type with additional \c const, \c volatile, or
   /// \c restrict qualifiers.

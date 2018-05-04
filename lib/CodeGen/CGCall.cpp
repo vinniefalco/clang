@@ -1679,7 +1679,7 @@ static void AddAttributesFromFunctionProtoType(ASTContext &Ctx,
     return;
 
   if (!isUnresolvedExceptionSpec(FPT->getExceptionSpecType()) &&
-      FPT->isNothrow(Ctx))
+      FPT->isNothrow())
     FuncAttrs.addAttribute(llvm::Attribute::NoUnwind);
 }
 
@@ -1727,6 +1727,11 @@ void CodeGenModule::ConstructDefaultFnAttrList(StringRef Name, bool HasOptnone,
     FuncAttrs.addAttribute("no-trapping-math",
                            llvm::toStringRef(CodeGenOpts.NoTrappingMath));
 
+    // Strict (compliant) code is the default, so only add this attribute to
+    // indicate that we are trying to workaround a problem case.
+    if (!CodeGenOpts.StrictFloatCastOverflow)
+      FuncAttrs.addAttribute("strict-float-cast-overflow", "false");
+
     // TODO: Are these all needed?
     // unsafe/inf/nan/nsz are handled by instruction-level FastMathFlags.
     FuncAttrs.addAttribute("no-infs-fp-math",
@@ -1744,6 +1749,10 @@ void CodeGenModule::ConstructDefaultFnAttrList(StringRef Name, bool HasOptnone,
     FuncAttrs.addAttribute(
         "correctly-rounded-divide-sqrt-fp-math",
         llvm::toStringRef(CodeGenOpts.CorrectlyRoundedDivSqrt));
+
+    if (getLangOpts().OpenCL)
+      FuncAttrs.addAttribute("denorms-are-zero",
+                             llvm::toStringRef(CodeGenOpts.FlushDenorm));
 
     // TODO: Reciprocal estimate codegen options should apply to instructions?
     const std::vector<std::string> &Recips = CodeGenOpts.Reciprocals;
@@ -1800,7 +1809,7 @@ void CodeGenModule::ConstructAttributeList(
     FuncAttrs.addAttribute(llvm::Attribute::NoReturn);
 
   // If we have information about the function prototype, we can learn
-  // attributes form there.
+  // attributes from there.
   AddAttributesFromFunctionProtoType(getContext(), FuncAttrs,
                                      CalleeInfo.getCalleeFunctionProtoType());
 
@@ -3018,7 +3027,8 @@ static AggValueSlot createPlaceholderSlot(CodeGenFunction &CGF,
                                Ty.getQualifiers(),
                                AggValueSlot::IsNotDestructed,
                                AggValueSlot::DoesNotNeedGCBarriers,
-                               AggValueSlot::IsNotAliased);
+                               AggValueSlot::IsNotAliased,
+                               AggValueSlot::DoesNotOverlap);
 }
 
 void CodeGenFunction::EmitDelegateCallArg(CallArgList &args,
@@ -3057,6 +3067,18 @@ void CodeGenFunction::EmitDelegateCallArg(CallArgList &args,
   // aggregate r-values are actually pointers to temporaries.
   } else {
     args.add(convertTempToRValue(local, type, loc), type);
+  }
+
+  // Deactivate the cleanup for the callee-destructed param that was pushed.
+  if (hasAggregateEvaluationKind(type) && !CurFuncIsThunk &&
+      getContext().isParamDestroyedInCallee(type) && type.isDestructedType()) {
+    EHScopeStack::stable_iterator cleanup =
+        CalleeDestructedParamCleanups.lookup(cast<ParmVarDecl>(param));
+    assert(cleanup.isValid() &&
+           "cleanup for callee-destructed param not recorded");
+    // This unreachable is a temporary marker which will be removed later.
+    llvm::Instruction *isActive = Builder.CreateUnreachable();
+    args.addArgCleanupDeactivation(cleanup, isActive);
   }
 }
 
@@ -3486,7 +3508,8 @@ RValue CallArg::getRValue(CodeGenFunction &CGF) const {
   if (!HasLV)
     return RV;
   LValue Copy = CGF.MakeAddrLValue(CGF.CreateMemTemp(Ty), Ty);
-  CGF.EmitAggregateCopy(Copy, LV, Ty, LV.isVolatile());
+  CGF.EmitAggregateCopy(Copy, LV, Ty, AggValueSlot::DoesNotOverlap,
+                        LV.isVolatile());
   IsUsed = true;
   return RValue::getAggregate(Copy.getAddress());
 }
@@ -3500,7 +3523,8 @@ void CallArg::copyInto(CodeGenFunction &CGF, Address Addr) const {
   else {
     auto Addr = HasLV ? LV.getAddress() : RV.getAggregateAddress();
     LValue SrcLV = CGF.MakeAddrLValue(Addr, Ty);
-    CGF.EmitAggregateCopy(Dst, SrcLV, Ty,
+    // We assume that call args are never copied into subobjects.
+    CGF.EmitAggregateCopy(Dst, SrcLV, Ty, AggValueSlot::DoesNotOverlap,
                           HasLV ? LV.isVolatileQualified()
                                 : RV.isVolatileQualified());
   }
@@ -3538,13 +3562,20 @@ void CodeGenFunction::EmitCallArg(CallArgList &args, const Expr *E,
     else
       Slot = CreateAggTemp(type, "agg.tmp");
 
-    Slot.setExternallyDestructed();
+    bool DestroyedInCallee = true, NeedsEHCleanup = true;
+    if (const auto *RD = type->getAsCXXRecordDecl())
+      DestroyedInCallee = RD->hasNonTrivialDestructor();
+    else
+      NeedsEHCleanup = needsEHCleanup(type.isDestructedType());
+
+    if (DestroyedInCallee)
+      Slot.setExternallyDestructed();
 
     EmitAggExpr(E, Slot);
     RValue RV = Slot.asRValue();
     args.add(RV, type);
 
-    if (type->getAsCXXRecordDecl() || needsEHCleanup(type.isDestructedType())) {
+    if (DestroyedInCallee && NeedsEHCleanup) {
       // Create a no-op GEP between the placeholder and the cleanup so we can
       // RAUW it successfully.  It also serves as a marker of the first
       // instruction where the cleanup is active.

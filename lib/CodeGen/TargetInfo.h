@@ -266,7 +266,7 @@ public:
   virtual llvm::SyncScope::ID getLLVMSyncScopeID(SyncScope S,
                                                  llvm::LLVMContext &C) const;
 
-  /// Inteface class for filling custom fields of a block literal for OpenCL.
+  /// Interface class for filling custom fields of a block literal for OpenCL.
   class TargetOpenCLBlockHelper {
   public:
     typedef std::pair<llvm::Value *, StringRef> ValueTy;
@@ -301,6 +301,8 @@ public:
   /// mangled name of functions declared within an extern "C" region and marked
   /// as 'used', and having internal linkage.
   virtual bool shouldEmitStaticExternCAliases() const { return true; }
+
+  virtual void setCUDAKernelCallingConvention(llvm::Function *F) const {}
 };
 
 } // namespace CodeGen
