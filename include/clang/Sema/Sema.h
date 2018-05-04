@@ -1644,9 +1644,9 @@ public:
   QualType BuildDecltypeType(Expr *E, SourceLocation Loc,
                              bool AsUnevaluated = true);
 
-  Optional<PartialDiagnostic>
-  CheckTransformTraitArity(TransformTraitType::TTKind, unsigned NumArgs,
-                           SourceRange R);
+  TypeResult ActOnTransformTraitType(ArrayRef<ParsedType> ArgTypes,
+                                     TransformTraitType::TTKind Kind,
+                                     SourceLocation Loc);
 
   QualType ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
                                            TransformTraitType::TTKind Kind,

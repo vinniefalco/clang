@@ -7998,9 +7998,8 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
   return Context.getDecltypeType(E, getDecltypeForExpr(*this, E));
 }
 
-Optional<PartialDiagnostic>
-Sema::CheckTransformTraitArity(TransformTraitType::TTKind Kind,
-                               unsigned NumArgs, SourceRange R) {
+static bool CheckTransformTraitArity(Sema &S, TransformTraitType::TTKind Kind,
+                               unsigned NumArgs, SourceLocation Loc, SourceRange R) {
   unsigned Arity;
   bool IsVariadic = false;
   switch (Kind) {
@@ -8025,32 +8024,46 @@ Sema::CheckTransformTraitArity(TransformTraitType::TTKind Kind,
 
   if (DiagSelect.hasValue()) {
     auto Info = DiagSelect.getValue();
-    PartialDiagnostic PD = PDiag(diag::err_type_trait_arity);
-    PD << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
-       << (int)NumArgs << R;
-    return PD;
+    S.Diag(Loc, diag::err_type_trait_arity)
+      << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
+      << (int)NumArgs << R;
+    return true;
   }
-  return None;
+  return false;
+}
+
+TypeResult Sema::ActOnTransformTraitType(ArrayRef<ParsedType> ParsedArgs,
+                                     TransformTraitType::TTKind Kind,
+                                     SourceLocation Loc) {
+  SmallVector<QualType, 2> Args;
+    Args.reserve(ParsedArgs.size());
+  for (auto PT : ParsedArgs) {
+      QualType NewArg = GetTypeFromParser(PT);
+      assert(!NewArg.isNull());
+      Args.push_back(NewArg);
+    }
+  QualType Result = BuildTransformTraitType(Args, Kind, Loc);
+  if (Result.isNull())
+    return TypeResult(/*IsInvalid*/true);
+
+  return ParsedType::make(Result);
 }
 
 QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
                                                TransformTraitType::TTKind TKind,
                                                SourceLocation Loc) {
-
-  bool IsInstantDependent = llvm::any_of(ArgTypes, [](QualType Ty) {
-    return Ty->isInstantiationDependentType() ||
+  auto Error = []() { return QualType(); };
+  bool DelayChecking = llvm::any_of(ArgTypes, [](QualType Ty) {
+    return Ty->isDependentType() ||
            Ty->containsUnexpandedParameterPack();
   });
 
   // Delay all checking while any of the arguments are instantiation dependent.
-  if (IsInstantDependent)
+  if (DelayChecking)
     return Context.DependentTy;
 
-  if (auto ArityDiag =
-          CheckTransformTraitArity(TKind, ArgTypes.size(), SourceRange(Loc))) {
-    Diag(Loc, ArityDiag.getValue());
-    return QualType();
-  }
+  if (CheckTransformTraitArity(*this, TKind, ArgTypes.size(), Loc, SourceRange(Loc)))
+    return Error();
 
   switch (TKind) {
   case TransformTraitType::EnumUnderlyingType: {
@@ -8061,7 +8074,7 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
     QualType BaseType = ArgTypes[0];
     if (!BaseType->isEnumeralType()) {
       Diag(Loc, diag::err_only_enums_have_underlying_types);
-      return QualType();
+      return Error();
     }
     // The enum could be incomplete if we're parsing its definition or
     // recovering from an error.
@@ -8069,7 +8082,7 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
     if (BaseType->isIncompleteType(&FwdDecl)) {
       Diag(Loc, diag::err_underlying_type_of_incomplete_enum) << BaseType;
       Diag(FwdDecl->getLocation(), diag::note_forward_declaration) << FwdDecl;
-      return QualType();
+      return Error();
     }
 
     EnumDecl *ED = BaseType->getAs<EnumType>()->getDecl();

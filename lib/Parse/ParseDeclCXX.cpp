@@ -1043,7 +1043,6 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
     return Error();
 
   SmallVector<ParsedType, 2> Args;
-  bool HasPackExpand = false;
   if (Tok.isNot(tok::r_paren)) {
     do {
       // Parse the next type.
@@ -1055,7 +1054,6 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
 
       // Parse the ellipsis, if present.
       if (Tok.is(tok::ellipsis)) {
-        HasPackExpand = true;
         Ty = Actions.ActOnPackExpansion(Ty.get(), ConsumeToken());
         if (Ty.isInvalid()) {
           Parens.skipToEnd();
@@ -1072,19 +1070,14 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
 
   SourceLocation EndLoc = Parens.getCloseLocation();
 
-  if (!HasPackExpand) {
-    auto PDiag = Actions.CheckTransformTraitArity(KindInfo.first, Args.size(),
-                                                  SourceRange(StartLoc));
-    if (PDiag.hasValue()) {
-      Diag(EndLoc, PDiag.getValue());
-      return Error();
-    }
-  }
+  TypeResult TyRes = Actions.ActOnTransformTraitType(Args, KindInfo.first, StartLoc);
+  if (TyRes.isInvalid())
+    return Error();
 
   // TST
   const char *PrevSpec = nullptr;
   unsigned DiagID;
-  if (DS.SetTypeSpecType(KindInfo.second, StartLoc, PrevSpec, DiagID, Args,
+  if (DS.SetTypeSpecType(KindInfo.second, StartLoc, PrevSpec, DiagID, TyRes.get(),
                          Actions.getASTContext().getPrintingPolicy()))
     Diag(StartLoc, DiagID) << PrevSpec;
   DS.setTypeofParensRange(Parens.getRange());
