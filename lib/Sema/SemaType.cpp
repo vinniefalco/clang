@@ -5329,6 +5329,7 @@ namespace {
       }
       TL.setArgTInfo(ArgInfo);
     }
+
     void VisitBuiltinTypeLoc(BuiltinTypeLoc TL) {
       // By default, use the source location of the type specifier.
       TL.setBuiltinLoc(DS.getTypeSpecTypeLoc());
@@ -7991,7 +7992,7 @@ static bool CheckTransformTraitArity(Sema &S, TransformTraitType::TTKind Kind,
   switch (Kind) {
   case TransformTraitType::EnumUnderlyingType:
     Arity = 1;
-    break;f
+    break;
   }
 
   struct DiagInfo {
