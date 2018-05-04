@@ -5324,6 +5324,7 @@ namespace {
       Ty->dump();
       SmallVector<TypeSourceInfo *, 2> ArgInfo;
       for (auto QT : Ty->getArgs()) {
+        assert(!QT.isNull());
         TypeSourceInfo *TInfo = nullptr;
         Sema::GetTypeFromParser(ParsedType::make(QT), &TInfo);
         ArgInfo.push_back(TInfo);
@@ -7993,7 +7994,7 @@ static bool CheckTransformTraitArity(Sema &S, TransformTraitType::TTKind Kind,
   switch (Kind) {
   case TransformTraitType::EnumUnderlyingType:
     Arity = 1;
-    break;f
+    break;
   }
 
   struct DiagInfo {
