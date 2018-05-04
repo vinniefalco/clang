@@ -3053,13 +3053,18 @@ TransformTraitType::TransformTraitType(const ASTContext &Ctx,
                                        ArrayRef<QualType> ArgTys,
                                        QualType TransformedTy, TTKind TKind,
                                        QualType CanonicalType)
-    : Type(TransformTrait, CanonicalType, CanonicalType->isDependentType(),
-           false, CanonicalType->isVariablyModifiedType(), false),
+    : Type(TransformTrait, CanonicalType, false, false, false, false),
       TransformedType(TransformedTy) {
   TransformTraitTypeBits.TTKind = TKind;
   TransformTraitTypeBits.NumArgs = ArgTys.size();
   ArgStorage = (QualType *)Ctx.Allocate(sizeof(QualType) * ArgTys.size(),
                                         alignof(QualType));
+
+
+  QualType ResultTy = TransformedTy.isNull() ? CanonicalType : TransformedTy;
+  assert(!ResultTy.isNull());
+  this->setDependent(ResultTy->isDependentType());
+  this->setVariablyModified(ResultTy->isVariablyModifiedType());
 
   for (unsigned I = 0, NumArgs = ArgTys.size(); I < NumArgs; ++I) {
     QualType T = ArgTys[I];
