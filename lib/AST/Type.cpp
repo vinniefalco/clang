@@ -3059,12 +3059,9 @@ TransformTraitType::TransformTraitType(const ASTContext &Ctx,
   TransformTraitTypeBits.NumArgs = ArgTys.size();
   ArgStorage = (QualType *)Ctx.Allocate(sizeof(QualType) * ArgTys.size(),
                                         alignof(QualType));
-
-
-  QualType ResultTy = TransformedTy.isNull() ? CanonicalType : TransformedTy;
-  assert(!ResultTy.isNull());
-  this->setDependent(ResultTy->isDependentType());
-  this->setVariablyModified(ResultTy->isVariablyModifiedType());
+  assert(!TransformedTy.isNull());
+  this->setDependent(TransformedTy->isDependentType());
+  this->setVariablyModified(TransformedTy->isVariablyModifiedType());
 
   for (unsigned I = 0, NumArgs = ArgTys.size(); I < NumArgs; ++I) {
     QualType T = ArgTys[I];

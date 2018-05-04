@@ -4618,10 +4618,10 @@ QualType
 ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
                                   QualType TransformedType,
                                   TransformTraitType::TTKind Kind) const {
+  assert(!TransformedType.isNull());
   TransformTraitType *ut = nullptr;
 
-  bool IsDependent =
-      llvm::any_of(ArgTypes, [](QualType T) { return T->isDependentType(); });
+  bool IsDependent = TransformedType->isDependentType();
 
   if (IsDependent) {
     SmallVector<QualType, 6> CanonArgs;
@@ -4643,7 +4643,7 @@ ASTContext::getTransformTraitType(ArrayRef<QualType> ArgTypes,
       DependentTransformTraitTypes.InsertNode(Canon, InsertPos);
     }
     ut = new (*this, TypeAlignment) TransformTraitType(
-        *this, ArgTypes, QualType(), Kind, QualType(Canon, 0));
+        *this, ArgTypes, DependentTy, Kind, QualType(Canon, 0));
   } else {
     assert(!TransformedType->isDependentType() &&
            "dependent transformed type with non-dependent argument types");

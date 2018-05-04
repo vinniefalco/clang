@@ -5321,7 +5321,7 @@ namespace {
       ParsedType ParsedTT = DS.getRepAsType();
       QualType TransformTy = Sema::GetTypeFromParser(ParsedTT, nullptr);
       const TransformTraitType *Ty = TransformTy->getAs<TransformTraitType>();
-      Ty->dump();
+
       SmallVector<TypeSourceInfo *, 2> ArgInfo;
       for (auto QT : Ty->getArgs()) {
         assert(!QT.isNull());
