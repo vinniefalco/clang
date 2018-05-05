@@ -20,6 +20,14 @@
 
 using namespace clang;
 
+/// Attempt to determine the integer value used to represent the comparison
+/// category result by evaluating the initializer for the specified VarDecl as
+/// a constant expression and retreiving the value of the classes first
+/// (and only) field.
+///
+/// Note: The STL types are expected to have the form:
+///    struct X { T value; };
+/// where T is an integral or enumeration type.
 static bool evaluateIntValue(const ASTContext &Ctx,
                              ComparisonCategoryInfo::ValueInfo *Info) {
   if (Info->hasValidIntValue())
