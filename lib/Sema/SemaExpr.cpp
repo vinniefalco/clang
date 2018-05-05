@@ -9821,6 +9821,14 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
     QualType IntType = LHSType->getAs<EnumType>()->getDecl()->getIntegerType();
     assert(IntType->isArithmeticType());
 
+    // We can't use `CK_IntegralCast` when the underlying type is 'bool', so we
+    // promote the boolean type to avoid this.
+    if (IntType->isBooleanType()) {
+      IntType = S.Context.getPromotedIntegerType(IntType);
+      LHS = S.DefaultLvalueConversion(LHS.get());
+      RHS = S.DefaultLvalueConversion(RHS.get());
+    }
+
     LHS = S.ImpCastExprToType(LHS.get(), IntType, CK_IntegralCast);
     RHS = S.ImpCastExprToType(RHS.get(), IntType, CK_IntegralCast);
     LHSType = RHSType = IntType;

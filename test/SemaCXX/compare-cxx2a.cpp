@@ -316,6 +316,16 @@ void enum_float_test() {
   (void)((long double)0 <=> A); // expected-error {{invalid operands to binary expression ('long double' and 'EnumA')}}
 }
 
+enum class Bool1 : bool { Zero,
+                          One };
+enum Bool2 : bool { B2_Zero,
+                    B2_One };
+
+void test_bool_enum(Bool1 A1, Bool1 A2, Bool2 B1, Bool2 B2) {
+  (void)(A1 <=> A2);
+  (void)(B1 <=> B2);
+}
+
 } // namespace EnumCompareTests
 
 namespace TestUserDefinedConvSeq {
@@ -373,5 +383,4 @@ void test_mixed_float_int(float f, double d, long double ld) {
 
   auto r4 = (0.0 <=> i);
   ASSERT_EXPR_TYPE(r4, std::partial_ordering);
-
 }
