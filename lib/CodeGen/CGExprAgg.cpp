@@ -1004,9 +1004,6 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
         EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()), SelectGT, "sel.lt");
   }
   // Create the return value in the destination slot.
-  // FIXME(EricWF): When the destination type and its first field have the same
-  // offset we should be able to avoid re-loading the address below. (And they
-  // should have the same offset)
   EnsureDest(E->getType());
   LValue DestLV = CGF.MakeAddrLValue(Dest.getAddress(), E->getType());
 
