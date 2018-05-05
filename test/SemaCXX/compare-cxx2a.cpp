@@ -388,6 +388,37 @@ void test_mixed_float_int(float f, double d, long double ld) {
 namespace NullptrTest {
 using nullptr_t = decltype(nullptr);
 void foo(nullptr_t x, nullptr_t y) {
-  (void)(x <=> y);
+  auto r = x <=> y;
+  ASSERT_EXPR_TYPE(r, std::strong_equality);
 }
 } // namespace NullptrTest
+
+namespace ComplexTest {
+
+enum class StrongE {};
+enum WeakE { E_One,
+             E_Two };
+
+void test_diag(_Complex int ci, _Complex float cf, _Complex double cd, int i, float f, StrongE E1, WeakE E2, int *p) {
+  (void)(ci <=> (_Complex int &)ci);
+  (void)(ci <=> cf);
+  (void)(ci <=> i);
+  (void)(ci <=> f);
+  (void)(cf <=> i);
+  (void)(cf <=> f);
+  (void)(ci <=> p); // expected-error {{invalid operands}}
+  (void)(ci <=> E1); // expected-error {{invalid operands}}
+  (void)(E2 <=> cf); // expected-error {{invalid operands}}
+}
+
+void test_int(_Complex int x, _Complex int y) {
+  auto r = x <=> y;
+  ASSERT_EXPR_TYPE(r, std::strong_equality);
+}
+
+void test_double(_Complex double x, _Complex double y) {
+  auto r = x <=> y;
+  ASSERT_EXPR_TYPE(r, std::weak_equality);
+}
+
+} // namespace ComplexTest

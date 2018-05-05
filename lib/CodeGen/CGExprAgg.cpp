@@ -889,8 +889,12 @@ enum CompareKind {
 
 static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
                                 const BinaryOperator *E, llvm::Value *LHS,
-                                llvm::Value *RHS, CompareKind Kind) {
+                                llvm::Value *RHS, CompareKind Kind,
+                                const char *NameSuffix = "") {
   QualType ArgTy = E->getLHS()->getType();
+  if (const ComplexType *CT = ArgTy->getAs<ComplexType>())
+    ArgTy = CT->getElementType();
+
   if (const auto *MPT = ArgTy->getAs<MemberPointerType>()) {
     assert(Kind == CK_Equal &&
            "member pointers may only be compared for equality");
@@ -917,13 +921,15 @@ static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
       return {"cmp.eq", FI::FCMP_OEQ, II::ICMP_EQ, II::ICMP_EQ};
     }
   }();
-
-  if (ArgTy->isRealFloatingType())
-    return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS, InstInfo.Name);
+  ArgTy->isAnyComplexType();
+  if (ArgTy->hasFloatingRepresentation())
+    return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS,
+                              llvm::Twine(InstInfo.Name) + NameSuffix);
   if (ArgTy->isIntegralOrEnumerationType() || ArgTy->isPointerType()) {
     auto Inst =
         ArgTy->hasSignedIntegerRepresentation() ? InstInfo.SCmp : InstInfo.UCmp;
-    return Builder.CreateICmp(Inst, LHS, RHS, InstInfo.Name);
+    return Builder.CreateICmp(Inst, LHS, RHS,
+                              llvm::Twine(InstInfo.Name) + NameSuffix);
   }
 
   llvm_unreachable("unsupported aggregate binary expression should have "
@@ -944,19 +950,17 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   QualType ArgTy = E->getLHS()->getType();
 
   // TODO: Handle comparing these types.
-  if (ArgTy->isAnyComplexType())
-    return CGF.ErrorUnsupported(
-        E, "aggregate three-way comparison with complex arguments");
   if (ArgTy->isVectorType())
     return CGF.ErrorUnsupported(
         E, "aggregate three-way comparison with vector arguments");
   if (!ArgTy->isIntegralOrEnumerationType() && !ArgTy->isRealFloatingType() &&
       !ArgTy->isNullPtrType() && !ArgTy->isPointerType() &&
-      !ArgTy->isMemberPointerType()) {
+      !ArgTy->isMemberPointerType() && !ArgTy->isAnyComplexType()) {
     return CGF.ErrorUnsupported(E, "aggregate three-way comparisoaoeun");
   }
+  bool IsComplex = ArgTy->isAnyComplexType();
 
-  Value *LHS, *RHS;
+  Value *LHS, *RHS, *LHSImag, *RHSImag;
   switch (CGF.getEvaluationKind(ArgTy)) {
   case TEK_Scalar:
     LHS = CGF.EmitScalarExpr(E->getLHS());
@@ -967,15 +971,27 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
     RHS = CGF.EmitAnyExpr(E->getRHS()).getAggregatePointer();
     break;
   case TEK_Complex:
-    llvm_unreachable(
-        "unsupported complex expressions should have already been handled");
+    assert(ArgTy->isAnyComplexType());
+    CodeGenFunction::ComplexPairTy ComplexVal =
+        CGF.EmitComplexExpr(E->getLHS());
+    LHS = ComplexVal.first;
+    LHSImag = ComplexVal.second;
+    ComplexVal = CGF.EmitComplexExpr(E->getRHS());
+    RHS = ComplexVal.first;
+    RHSImag = ComplexVal.second;
   }
 
   auto EmitCmpRes = [&](const ComparisonCategoryInfo::ValueInfo *VInfo) {
     return Builder.getInt(VInfo->getIntValue());
   };
   auto EmitCmp = [&](CompareKind K) {
-    return EmitCompare(Builder, CGF, E, LHS, RHS, K);
+    Value *Cmp =
+        EmitCompare(Builder, CGF, E, LHS, RHS, K, IsComplex ? ".r" : "");
+    if (!IsComplex)
+      return Cmp;
+    assert(K == CompareKind::CK_Equal);
+    Value *CmpImag = EmitCompare(Builder, CGF, E, LHSImag, RHSImag, K, ".i");
+    return Builder.CreateAnd(Cmp, CmpImag, "and.eq");
   };
 
   Value *Select;

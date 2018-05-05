@@ -175,5 +175,32 @@ constexpr bool tc8 = test_constexpr<&MemPtr::data, &MemPtr::data2>();
 // expected-error@+1 {{must be initialized by a constant expression}}
 constexpr bool tc9 = test_constexpr<&dummy, &dummy2>(); // expected-note {{in call}}
 
+template <class T, class R, class I>
+constexpr T makeComplex(R r, I i) {
+  T res{r, i};
+  return res;
+};
+
+template <class T, class ResultT>
+constexpr bool complex_test(T x, T y, ResultT Expect) {
+  auto res = x <=> y;
+  CHECK_TYPE(decltype(res), ResultT);
+  return res.test_eq(Expect);
+}
+static_assert(complex_test(makeComplex<_Complex double>(0.0, 0.0),
+                           makeComplex<_Complex double>(0.0, 0.0),
+                           std::weak_equality::equivalent));
+static_assert(complex_test(makeComplex<_Complex double>(0.0, 0.0),
+                           makeComplex<_Complex double>(1.0, 0.0),
+                           std::weak_equality::nonequivalent));
+static_assert(complex_test(makeComplex<_Complex double>(0.0, 0.0),
+                           makeComplex<_Complex double>(0.0, 1.0),
+                           std::weak_equality::nonequivalent));
+static_assert(complex_test(makeComplex<_Complex int>(0, 0),
+                           makeComplex<_Complex int>(0, 0),
+                           std::strong_equality::equal));
+static_assert(complex_test(makeComplex<_Complex int>(0, 0),
+                           makeComplex<_Complex int>(1, 0),
+                           std::strong_equality::nonequal));
 // TODO: defaulted operator <=>
 } // namespace ThreeWayComparison

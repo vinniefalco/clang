@@ -9717,8 +9717,13 @@ static void diagnoseTautologicalComparison(Sema &S, SourceLocation Loc,
 
 static ImplicitConversionKind castKindToImplicitConversionKind(CastKind CK) {
   switch (CK) {
-  default:
+  default: {
+#ifndef NDEBUG
+    llvm::errs() << "unhandled cast kind: " << CastExpr::getCastKindName(CK)
+                 << "\n";
+#endif
     llvm_unreachable("unhandled cast kind");
+  }
   case CK_UserDefinedConversion:
     return ICK_Identity;
   case CK_LValueToRValue:
@@ -9734,6 +9739,16 @@ static ImplicitConversionKind castKindToImplicitConversionKind(CastKind CK) {
   case CK_IntegralToFloating:
   case CK_FloatingToIntegral:
     return ICK_Floating_Integral;
+  case CK_IntegralComplexCast:
+  case CK_FloatingComplexCast:
+  case CK_FloatingComplexToIntegralComplex:
+  case CK_IntegralComplexToFloatingComplex:
+    return ICK_Complex_Conversion;
+  case CK_FloatingComplexToReal:
+  case CK_FloatingRealToComplex:
+  case CK_IntegralComplexToReal:
+  case CK_IntegralRealToComplex:
+    return ICK_Complex_Real;
   }
 }
 
@@ -9855,6 +9870,11 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
   assert(!Type.isNull() && "composite type for <=> has not been set");
 
   auto TypeKind = [&]() {
+    if (const ComplexType *CT = Type->getAs<ComplexType>()) {
+      if (CT->getElementType()->hasFloatingRepresentation())
+        return CCT::WeakEquality;
+      return CCT::StrongEquality;
+    }
     if (Type->isIntegralOrEnumerationType())
       return CCT::StrongOrdering;
     if (Type->hasFloatingRepresentation())

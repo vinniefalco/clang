@@ -1,5 +1,6 @@
 // RUN: %clang_cc1 -std=c++2a -emit-llvm %s -o - -triple %itanium_abi_triple | \
 // RUN:    FileCheck %s \
+// RUN:          '-DWE="class.std::__1::weak_equality"' \
 // RUN:          '-DSO="class.std::__1::strong_ordering"' \
 // RUN:          '-DSE="class.std::__1::strong_equality"' \
 // RUN:          '-DPO="class.std::__1::partial_ordering"' \
@@ -143,7 +144,38 @@ void unscoped_enum_test(int i, unsigned u, long l, unsigned long ul) {
 
 namespace NullptrTest {
 using nullptr_t = decltype(nullptr);
-void foo(nullptr_t x, nullptr_t y) {
-  (void)(x <=> y);
+
+// CHECK-LABEL: @_ZN11NullptrTest4testEDnDn(
+auto test(nullptr_t x, nullptr_t y) {
+  // CHECK-NOT: select
+  // CHECK: %__value_ = getelementptr inbounds %[[SE]], %[[SE]]* %retval
+  // CHECK-NEXT: store i8 [[EQ]], i8* %__value_
+  // CHECK: ret
+  return x <=> y;
 }
 } // namespace NullptrTest
+
+namespace ComplexTest {
+
+auto test_float(_Complex float x, _Complex float y) {
+  // CHECK: %cmp.eq.r = fcmp oeq float %x.real, %y.real
+  // CHECK: %cmp.eq.i = fcmp oeq float %x.imag, %y.imag
+  // CHECK: %and.eq = and i1 %cmp.eq.r, %cmp.eq.i
+  // CHECK: %sel.eq = select i1 %and.eq, i8 [[EQ]], i8 [[NE]]
+  // CHECK: %__value_ = getelementptr inbounds %[[WE]], %[[WE]]* %retval
+  // CHECK: store i8 %sel.eq, i8* %__value_, align 1
+  return x <=> y;
+}
+
+// CHECK-LABEL: @_ZN11ComplexTest8test_intECiS0_(
+auto test_int(_Complex int x, _Complex int y) {
+  // CHECK: %cmp.eq.r = icmp eq i32 %x.real, %y.real
+  // CHECK: %cmp.eq.i = icmp eq i32 %x.imag, %y.imag
+  // CHECK: %and.eq = and i1 %cmp.eq.r, %cmp.eq.i
+  // CHECK: %sel.eq = select i1 %and.eq, i8 [[EQ]], i8 [[NE]]
+  // CHECK: %__value_ = getelementptr inbounds %[[SE]], %[[SE]]* %retval
+  // CHECK: store i8 %sel.eq, i8* %__value_, align 1
+  return x <=> y;
+}
+
+} // namespace ComplexTest
