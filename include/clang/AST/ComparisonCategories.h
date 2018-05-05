@@ -70,6 +70,10 @@ class ComparisonCategoryInfo {
   friend class Sema;
 
 public:
+  ComparisonCategoryInfo(const ASTContext &Ctx, CXXRecordDecl *RD,
+                         ComparisonCategoryType Kind)
+      : Ctx(Ctx), Record(RD), Kind(Kind) {}
+
   struct ValueInfo {
     ComparisonCategoryResult Kind;
     VarDecl *VD;
@@ -99,7 +103,6 @@ public:
     llvm::APSInt IntValue;
     bool HasValue : 1;
   };
-
 private:
   const ASTContext &Ctx;
 
@@ -108,8 +111,6 @@ private:
   mutable llvm::SmallVector<
       ValueInfo, static_cast<unsigned>(ComparisonCategoryResult::Last) + 1>
       Objects;
-
-  ComparisonCategoryInfo(const ASTContext &Ctx) : Ctx(Ctx) {}
 
   /// \brief Lookup the ValueInfo struct for the specified ValueKind. If the
   /// VarDecl for the value cannot be found, nullptr is returned.

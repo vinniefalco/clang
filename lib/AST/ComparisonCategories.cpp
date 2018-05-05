@@ -20,6 +20,13 @@
 
 using namespace clang;
 
+static CXXRecordDecl *getDefiningDecl(CXXRecordDecl *RD) {
+  if (RD->hasDefinition())
+    return RD->getDefinition();
+  return RD;
+}
+
+
 bool ComparisonCategoryInfo::ValueInfo::updateIntValue(const ASTContext &Ctx) {
   if (hasValidIntValue())
     return false;
@@ -55,7 +62,6 @@ ComparisonCategoryInfo::ValueInfo *ComparisonCategoryInfo::lookupValueInfo(
     It = Objects.end() - 1;
   }
   assert(It != Objects.end());
-
   // Success! Attempt to update the int value in case the variables initializer
   // wasn't present the last time we were here.
   ValueInfo *Info = &(*It);
@@ -80,10 +86,9 @@ static CXXRecordDecl *lookupCXXRecordDecl(const ASTContext &Ctx,
                                           ComparisonCategoryType Kind) {
   StringRef Name = ComparisonCategories::getCategoryString(Kind);
   DeclContextLookupResult Lookup = StdNS->lookup(&Ctx.Idents.get(Name));
-  if (Lookup.size() == 1) {
+  if (Lookup.size() == 1)
     if (CXXRecordDecl *RD = dyn_cast<CXXRecordDecl>(Lookup.front()))
-      return RD;
-  }
+      return getDefiningDecl(RD);
   return nullptr;
 }
 
@@ -92,14 +97,11 @@ ComparisonCategories::lookupInfo(ComparisonCategoryType Kind) const {
   auto It = Data.find(static_cast<char>(Kind));
   if (It != Data.end())
     return &It->second;
-  if (const NamespaceDecl *NS = lookupStdNamespace(Ctx, StdNS)) {
-    if (CXXRecordDecl *RD = lookupCXXRecordDecl(Ctx, NS, Kind)) {
-      ComparisonCategoryInfo Info(Ctx);
-      Info.Record = RD;
-      Info.Kind = Kind;
-      return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
-    }
-  }
+
+  if (const NamespaceDecl *NS = lookupStdNamespace(Ctx, StdNS))
+    if (CXXRecordDecl *RD = lookupCXXRecordDecl(Ctx, NS, Kind))
+      return &Data.try_emplace((char)Kind, Ctx, RD, Kind).first->second;
+
   return nullptr;
 }
 
@@ -132,10 +134,8 @@ ComparisonCategories::lookupInfoForType(QualType Ty) const {
     // We've found the comparison category type. Build a new cache entry for
     // it.
     if (getCategoryString(Kind) == RD->getName()) {
-      ComparisonCategoryInfo Info(Ctx);
-      Info.Record = RD;
-      Info.Kind = Kind;
-      return &Data.try_emplace((char)Kind, std::move(Info)).first->second;
+      return &Data.try_emplace((char)Kind, Ctx, getDefiningDecl(RD), Kind)
+                  .first->second;
     }
   }
 

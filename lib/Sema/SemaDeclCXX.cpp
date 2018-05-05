@@ -8937,6 +8937,13 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
     return QualType();
   }
 
+  assert(Info->Kind == Kind);
+  assert(Info->Record);
+
+  // Update the Record decl in case we encountered a forward declaration on our
+  // first pass. FIXME(EricWF): This is a bit of a hack.
+  Info->Record = Info->Record->getDefinition();
+
   // Use an elaborated type for diagnostics which has a name containing the
   // prepended 'std' namespace but not any inline namespace names.
   QualType TyForDiags = [&]() {
@@ -8946,9 +8953,6 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   }();
   if (RequireCompleteType(Loc, TyForDiags, diag::err_incomplete_type))
     return QualType();
-
-  assert(Info->Kind == Kind);
-  assert(Info->Record);
 
   InvalidSTLDiagnoser UnsupportedSTLError{*this, Loc, TyForDiags};
 
