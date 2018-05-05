@@ -979,7 +979,10 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   };
 
   Value *Select;
-  if (CmpInfo.isEquality()) {
+  if (ArgTy->isNullPtrType()) {
+    Select = EmitCmpRes(CmpInfo.getEqualOrEquiv());
+  }
+  else if (CmpInfo.isEquality()) {
     Select = Builder.CreateSelect(
         EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
         EmitCmpRes(CmpInfo.getNonequalOrNonequiv()), "sel.eq");
