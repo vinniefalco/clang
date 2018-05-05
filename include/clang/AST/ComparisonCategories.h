@@ -81,22 +81,21 @@ public:
     ValueInfo(ComparisonCategoryResult Kind, VarDecl *VD)
         : Kind(Kind), VD(VD), HasValue(false) {}
 
+    /// \brief True iff we've successfully evaluated the variable as a constant
+    /// expression and extracted its integer value.
+    bool hasValidIntValue() const { return HasValue; }
+
     /// \brief Get the constant integer value used by this variable to represent
     /// the comparison category result type.
     llvm::APSInt getIntValue() const {
       assert(hasValidIntValue());
       return IntValue;
     }
-    /// \brief True iff we've successfully evaluated the variable as a constant
-    /// expression and extracted its integer value.
-    bool hasValidIntValue() const { return HasValue; }
 
-    /// \brief If hasValidIntValue() is false, attempt to evaluate the variable
-    /// as a constant expression in order to extract its integer value and
-    /// update the cache.
-    ///
-    /// \return True if an error occurs, false otherwise.
-    bool updateIntValue(const ASTContext &Ctx);
+    void setIntValue(llvm::APSInt Val) {
+      IntValue = Val;
+      HasValue = true;
+    }
 
   private:
     friend class ComparisonCategoryInfo;

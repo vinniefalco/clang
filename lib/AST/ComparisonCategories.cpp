@@ -20,17 +20,25 @@
 
 using namespace clang;
 
-bool ComparisonCategoryInfo::ValueInfo::updateIntValue(const ASTContext &Ctx) {
-  if (hasValidIntValue())
+static bool evaluateIntValue(const ASTContext &Ctx,
+                             ComparisonCategoryInfo::ValueInfo *Info) {
+  if (Info->hasValidIntValue())
     return false;
 
+  // Before we attempt to get the value of the first field, ensure that we
+  // actually have one (and only one) field.
+  auto *Record = Info->VD->getType()->getAsCXXRecordDecl();
+  if (std::distance(Record->field_begin(), Record->field_end()) != 1 ||
+      !Record->field_begin()->getType()->isIntegralOrEnumerationType())
+    return true;
+
   Expr::EvalResult Result;
-  if (!VD->hasInit() || !VD->getInit()->EvaluateAsRValue(Result, Ctx))
+  if (!Info->VD->hasInit() ||
+      !Info->VD->getInit()->EvaluateAsRValue(Result, Ctx))
     return true;
 
   assert(Result.Val.isStruct());
-  IntValue = Result.Val.getStructField(0).getInt();
-  HasValue = true;
+  Info->setIntValue(Result.Val.getStructField(0).getInt());
   return false;
 }
 
@@ -54,7 +62,7 @@ ComparisonCategoryInfo::ValueInfo *ComparisonCategoryInfo::lookupValueInfo(
   // Success! Attempt to update the int value in case the variables initializer
   // wasn't present the last time we were here.
   ValueInfo *Info = &(*It);
-  Info->updateIntValue(Ctx);
+  evaluateIntValue(Ctx, Info);
 
   return Info;
 }

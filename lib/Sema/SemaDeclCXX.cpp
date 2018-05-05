@@ -8998,8 +8998,6 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
     VarDecl *VD = ValInfo->VD;
     assert(VD && "should not be null!");
 
-    MarkVariableReferenced(Loc, VD);
-
     // Attempt to diagnose reasons why the STL definition of this type
     // might be foobar, including it failing to be a constant expression.
     // TODO Handle more ways the lookup or result can be invalid.
@@ -9010,8 +9008,10 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
     // Attempt to evaluate the var decl as a constant expression and extract
     // the value of its first field as a ICE. If this fails, the STL
     // implementation is not supported.
-    if (ValInfo->updateIntValue(Context))
+    if (!ValInfo->hasValidIntValue())
       return UnsupportedSTLError();
+
+    MarkVariableReferenced(Loc, VD);
   }
 
   // We've successfully built the required types and expressions. Update
