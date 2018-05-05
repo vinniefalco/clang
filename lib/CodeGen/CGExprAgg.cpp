@@ -951,8 +951,10 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
     return CGF.ErrorUnsupported(
         E, "aggregate three-way comparison with vector arguments");
   if (!ArgTy->isIntegralOrEnumerationType() && !ArgTy->isRealFloatingType() &&
-      !ArgTy->isPointerType() && !ArgTy->isMemberPointerType())
-    return CGF.ErrorUnsupported(E, "aggregate three-way comparison");
+      !ArgTy->isNullPtrType() && !ArgTy->isPointerType() &&
+      !ArgTy->isMemberPointerType()) {
+    return CGF.ErrorUnsupported(E, "aggregate three-way comparisoaoeun");
+  }
 
   Value *LHS, *RHS;
   switch (CGF.getEvaluationKind(ArgTy)) {
