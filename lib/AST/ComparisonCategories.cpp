@@ -20,12 +20,6 @@
 
 using namespace clang;
 
-static CXXRecordDecl *getDefiningDecl(CXXRecordDecl *RD) {
-  if (RD->hasDefinition())
-    return RD->getDefinition();
-  return RD;
-}
-
 bool ComparisonCategoryInfo::ValueInfo::updateIntValue(const ASTContext &Ctx) {
   if (hasValidIntValue())
     return false;
@@ -83,7 +77,7 @@ static CXXRecordDecl *lookupCXXRecordDecl(const ASTContext &Ctx,
   DeclContextLookupResult Lookup = StdNS->lookup(&Ctx.Idents.get(Name));
   if (Lookup.size() == 1)
     if (CXXRecordDecl *RD = dyn_cast<CXXRecordDecl>(Lookup.front()))
-      return getDefiningDecl(RD);
+      return RD;
   return nullptr;
 }
 
@@ -129,8 +123,7 @@ ComparisonCategories::lookupInfoForType(QualType Ty) const {
     // We've found the comparison category type. Build a new cache entry for
     // it.
     if (getCategoryString(Kind) == RD->getName()) {
-      return &Data.try_emplace((char)Kind, Ctx, getDefiningDecl(RD), Kind)
-                  .first->second;
+      return &Data.try_emplace((char)Kind, Ctx, RD, Kind).first->second;
     }
   }
 
