@@ -23,9 +23,9 @@ using namespace clang;
 bool ComparisonCategoryInfo::ValueInfo::updateIntValue(const ASTContext &Ctx) {
   if (hasValidIntValue())
     return false;
-  assert(VD->hasInit() && VD->isInitKnownICE());
+
   Expr::EvalResult Result;
-  if (!VD->getInit()->EvaluateAsRValue(Result, Ctx))
+  if (!VD->hasInit() || !VD->getInit()->EvaluateAsRValue(Result, Ctx))
     return true;
 
   assert(Result.Val.isStruct());
@@ -40,23 +40,27 @@ QualType ComparisonCategoryInfo::getType() const {
 
 ComparisonCategoryInfo::ValueInfo *ComparisonCategoryInfo::lookupValueInfo(
     ComparisonCategoryResult ValueKind) const {
-  unsigned Key = static_cast<unsigned>(ValueKind);
-  // If we're looking this value up, then it's required for the given type.
-  ValueInfo *Info = &Objects[Key];
-  Info->IsRequired = true;
-  if (!Info->VD) {
-    const CXXRecordDecl *RD = Record->getCanonicalDecl();
-    StringRef Name = ComparisonCategories::getResultString(ValueKind);
-    DeclContextLookupResult Lookup = RD->lookup(&Ctx.Idents.get(Name));
-    if (Lookup.size() != 1)
+  // Check if we already have a cache entry for this value.
+  auto It = llvm::find_if(
+      Objects, [&](ValueInfo const &Info) { return Info.Kind == ValueKind; });
+
+  // We don't have a cached result. Lookup the variable declaration and create
+  // a new entry representing it.
+  if (It == Objects.end()) {
+    DeclContextLookupResult Lookup = Record->getCanonicalDecl()->lookup(
+        &Ctx.Idents.get(ComparisonCategories::getResultString(ValueKind)));
+    if (Lookup.size() != 1 || !isa<VarDecl>(Lookup.front()))
       return nullptr;
-    auto *VD = dyn_cast<VarDecl>(Lookup.front());
-    if (!VD)
-      return nullptr;
-    Info->VD = VD;
+    Objects.emplace_back(ValueKind, cast<VarDecl>(Lookup.front()));
+    It = Objects.end() - 1;
   }
-  assert(!Info->isInvalid());
+  assert(It != Objects.end());
+
+  // Success! Attempt to update the int value in case the variables initializer
+  // wasn't present the last time we were here.
+  ValueInfo *Info = &(*It);
   Info->updateIntValue(Ctx);
+
   return Info;
 }
 

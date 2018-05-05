@@ -21,6 +21,7 @@ auto compare_incomplete_test() {
 namespace std {
 inline namespace __1 {
 struct partial_ordering {
+  unsigned value;
 };
 } // namespace __1
 } // namespace std
@@ -33,6 +34,7 @@ auto missing_member_test() {
 namespace std {
 inline namespace __1 {
 struct strong_ordering {
+  long long value;
   static const strong_ordering equivalent; // expected-note {{declared here}}
 };
 } // namespace __1
@@ -46,9 +48,10 @@ auto test_non_constexpr_var() {
 namespace std {
 inline namespace __1 {
 struct strong_equality {
+  char value = 0;
   constexpr strong_equality() = default;
   // non-trivial
-  constexpr strong_equality(strong_equality const &) {}
+  constexpr strong_equality(strong_equality const &other) : value(other.value) {}
 };
 } // namespace __1
 } // namespace std

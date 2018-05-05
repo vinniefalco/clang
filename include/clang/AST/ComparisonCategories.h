@@ -71,12 +71,11 @@ class ComparisonCategoryInfo {
 
 public:
   struct ValueInfo {
+    ComparisonCategoryResult Kind;
     VarDecl *VD;
 
-    ValueInfo() : VD(nullptr), IsRequired(false), HasValue(false) {}
-    ValueInfo(VarDecl *VD) : VD(VD), IsRequired(true), HasValue(false) {}
-
-    bool isInvalid() const { return VD == nullptr; }
+    ValueInfo(ComparisonCategoryResult Kind, VarDecl *VD)
+        : Kind(Kind), VD(VD), HasValue(false) {}
 
     /// \brief Get the constant integer value used by this variable to represent
     /// the comparison category result type.
@@ -91,12 +90,13 @@ public:
     /// \brief If hasValidIntValue() is false, attempt to evaluate the variable
     /// as a constant expression in order to extract its integer value and
     /// update the cache.
+    ///
+    /// \return True if an error occurs, false otherwise.
     bool updateIntValue(const ASTContext &Ctx);
 
   private:
     friend class ComparisonCategoryInfo;
     llvm::APSInt IntValue;
-    bool IsRequired : 1;
     bool HasValue : 1;
   };
 
@@ -105,8 +105,8 @@ private:
 
   /// \brief A map containing the comparison category result decls from the
   /// standard library. The key is a value of ComparisonCategoryResult.
-  mutable std::array<ValueInfo,
-                     static_cast<unsigned>(ComparisonCategoryResult::Last) + 1>
+  mutable llvm::SmallVector<
+      ValueInfo, static_cast<unsigned>(ComparisonCategoryResult::Last) + 1>
       Objects;
 
   ComparisonCategoryInfo(const ASTContext &Ctx) : Ctx(Ctx) {}

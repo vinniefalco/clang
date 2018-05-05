@@ -140,3 +140,10 @@ void unscoped_enum_test(int i, unsigned u, long l, unsigned long ul) {
   // CHECK: icmp ult i64 {{.*}} %[[UL]]
   (void)(B <=> ul);
 }
+
+namespace NullptrTest {
+using nullptr_t = decltype(nullptr);
+void foo(nullptr_t x, nullptr_t y) {
+  (void)(x <=> y);
+}
+} // namespace NullptrTest

@@ -8970,6 +8970,10 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   auto FIt = Info->Record->field_begin(), FEnd = Info->Record->field_end();
   if (std::distance(FIt, FEnd) != 1 ||
       !FIt->getType()->isIntegralOrEnumerationType()) {
+    llvm::errs() << "HERE1\n";
+    llvm::errs() << "Distance = " << std::distance(FIt, FEnd) << "\n";
+    if (std::distance(FIt, FEnd) >= 1)
+      FIt->getType()->dump();
     return UnsupportedSTLError(USS_Other);
   }
 
@@ -8984,11 +8988,13 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
       return QualType();
     }
     VarDecl *VD = ValInfo->VD;
+    assert(VD && "should not be null!");
 
     // Attempt to diagnose reasons why the STL definition of this type
     // might be foobar, including it failing to be a constant expression.
     // TODO Handle more ways the lookup or result can be invalid.
-    if (!VD->isStaticDataMember() || !VD->isConstexpr())
+    if (!VD->isStaticDataMember() || !VD->isConstexpr() || !VD->hasInit() ||
+        !VD->checkInitIsICE())
       return UnsupportedSTLError(
           USS_InvalidMember, ComparisonCategories::getResultString(CCR), VD);
 
