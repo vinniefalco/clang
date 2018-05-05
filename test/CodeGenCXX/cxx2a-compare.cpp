@@ -3,7 +3,7 @@
 // RUN:          '-DSO="class.std::__1::strong_ordering"' \
 // RUN:          '-DSE="class.std::__1::strong_equality"' \
 // RUN:          '-DPO="class.std::__1::partial_ordering"' \
-// RUN:           -DEQ=0 -DLT=-1 -DGT=1 -DUNORD=-127 -DNE=1 \
+// RUN:           -DEQ=0 -DLT=-1 -DGT=1 -DUNORD=-127 -DNE=1
 
 #include "Inputs/std-compare.h"
 
@@ -18,10 +18,9 @@ auto test_signed(int x, int y) {
   // CHECK: %sel.eq = select i1 %cmp.eq, i8 [[EQ]], i8 %sel.lt
   // CHECK: %__value_ = getelementptr inbounds %[[SO]], %[[SO]]* %retval, i32 0, i32 0
   // CHECK: store i8 %sel.eq, i8* %__value_, align 1
-  // CHECK: %[[FINAL:.*]] = getelemintptr inbounds %[[SO]], %[[SO]]* %retval
-
-  // CHECK: call void @llvm.memcpy{{.*}}(i8* align 1 %[[TMPRET]], i8* align 1 %[[TMPSRC]]
-  // CHECK: ret
+  // CHECK: %[[FINAL:.*]] = getelementptr inbounds %[[SO]], %[[SO]]* %retval
+  // CHECK: %[[RET:.*]] = load i8, i8* %[[FINAL]]
+  // CHECK: ret i8 %[[RET]]
   return x <=> y;
 }
 
@@ -97,10 +96,11 @@ auto mem_data_test(MemDataT x, MemDataT y) {
 auto test_constant() {
   // CHECK: entry:
   // CHECK-NOT: icmp
-  // CHECK-NOT: [[SO_GT]]
-  // CHECK-NOT: [[SO_EQ]]
-  // CHECK: memcpy{{.*}}[[SO_LT]]
-  // CHECK: ret
+  // CHECK: %__value_ = getelementptr inbounds %[[SO]], %[[SO]]* %retval
+  // CHECK-NEXT: store i8 [[LT]], i8* %__value_
+  // CHECK-NEXT: %[[TMP:.*]] = getelementptr inbounds %[[SO]], %[[SO]]* %retval
+  // CHECK-NEXT: %[[RET:.*]] = load i8, i8* %[[TMP]]
+  // CHECK-NEXT: ret i8 %[[RET]]
   const int x = 42;
   const int y = 101;
   return x <=> y;

@@ -8892,6 +8892,33 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
   return StdExperimentalNamespaceCache;
 }
 
+namespace {
+
+enum UnsupportedSTLSelect { USS_InvalidMember, USS_NonTrivial, USS_Other };
+
+struct InvalidSTLDiagnoser {
+  Sema &S;
+  SourceLocation Loc;
+  QualType TyForDiags;
+
+  QualType operator()(UnsupportedSTLSelect Sel = USS_Other, StringRef Name = "",
+                      const VarDecl *VD = nullptr) {
+    assert((Sel != USS_InvalidMember) || (!Name.empty() && VD));
+    {
+      auto D = S.Diag(Loc, diag::err_std_compare_type_not_supported)
+               << TyForDiags << ((int)Sel);
+      if (Sel == USS_InvalidMember)
+        D << Name;
+    }
+    if (Sel == USS_InvalidMember) {
+      S.Diag(VD->getLocation(), diag::note_var_declared_here)
+          << VD << VD->getSourceRange();
+    }
+    return QualType();
+  }
+};
+} // namespace
+
 QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
                                            SourceLocation Loc) {
   assert(getLangOpts().CPlusPlus &&
@@ -8900,7 +8927,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   // Check if we've already successfully checked the comparison category type
   // before. If so, skip checking it again.
   ComparisonCategoryInfo *Info = Context.CompCategories.lookupInfo(Kind);
-  if (Info && FullyCheckedComparisonCategories.count(Info))
+  if (Info && FullyCheckedComparisonCategories[static_cast<unsigned>(Kind)])
     return Info->getType();
 
   // If lookup failed
@@ -8923,9 +8950,17 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   assert(Info->Kind == Kind);
   assert(Info->Record);
 
-  if (!Info->Record->isTriviallyCopyable()) {
-    Diag(Loc, diag::err_std_compare_type_not_supported) << TyForDiags << 1;
-    return QualType();
+  InvalidSTLDiagnoser UnsupportedSTLError{*this, Loc, TyForDiags};
+
+  if (!Info->Record->isTriviallyCopyable())
+    return UnsupportedSTLError(USS_NonTrivial);
+
+  for (const CXXBaseSpecifier &BaseSpec : Info->Record->bases()) {
+    CXXRecordDecl *Base = BaseSpec.getType()->getAsCXXRecordDecl();
+    if (Base->isEmpty())
+      continue;
+    // Disallow STL implementations which have at least one non-empty base.
+    return UnsupportedSTLError(USS_Other);
   }
 
   // Check that the STL has implemented the types using a single integer field.
@@ -8935,36 +8970,40 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   auto FIt = Info->Record->field_begin(), FEnd = Info->Record->field_end();
   if (std::distance(FIt, FEnd) != 1 ||
       !FIt->getType()->isIntegralOrEnumerationType()) {
-    Diag(Loc, diag::err_std_compare_type_not_supported) << TyForDiags << 2;
-    return QualType();
+    return UnsupportedSTLError(USS_Other);
   }
 
   // Build each of the require values and store them in Info.
   for (ComparisonCategoryResult CCR :
        ComparisonCategories::getPossibleResultsForType(Kind)) {
+    ComparisonCategoryInfo::ValueInfo *ValInfo = Info->lookupValueInfo(CCR);
 
-    VarDecl *VD = Info->lookupResultDecl(CCR);
-    if (!VD) {
+    if (!ValInfo) {
       Diag(Loc, diag::err_std_compare_type_missing_member)
           << TyForDiags << ComparisonCategories::getResultString(CCR);
       return QualType();
     }
+    VarDecl *VD = ValInfo->VD;
+
     // Attempt to diagnose reasons why the STL definition of this type
     // might be foobar, including it failing to be a constant expression.
     // TODO Handle more ways the lookup or result can be invalid.
-    if (!VD->isStaticDataMember() || !VD->isConstexpr()) {
-      Diag(Loc, diag::err_std_compare_type_not_supported)
-          << TyForDiags << 0 << ComparisonCategories::getResultString(CCR);
-      Diag(VD->getLocation(), diag::note_var_declared_here)
-          << VD << VD->getSourceRange();
-      return QualType();
-    }
+    if (!VD->isStaticDataMember() || !VD->isConstexpr())
+      return UnsupportedSTLError(
+          USS_InvalidMember, ComparisonCategories::getResultString(CCR), VD);
+
     MarkVariableReferenced(Loc, VD);
+
+    // Attempt to evaluate the var decl as a constant expression and extract
+    // the value of its first field as a ICE. If this fails, the STL
+    // implementation is not supported.
+    if (ValInfo->updateIntValue(Context))
+      return UnsupportedSTLError(USS_Other);
   }
 
   // We've successfully built the required types and expressions. Update
   // the cache and return the newly cached value.
-  FullyCheckedComparisonCategories.insert(Info);
+  FullyCheckedComparisonCategories[static_cast<unsigned>(Kind)] = true;
   return Info->getType();
 }
 

@@ -967,17 +967,8 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
         "unsupported complex expressions should have already been handled");
   }
 
-  auto EmitCmpRes = [&](const VarDecl *VD) {
-    assert(VD->hasInit() && VD->isInitKnownICE());
-
-    Expr::EvalResult Result;
-    if (!VD->getInit()->EvaluateAsRValue(Result, CGF.getContext())) {
-      CGF.ErrorUnsupported(E, "unsupported standard library type");
-      llvm_unreachable("FIXME(EricWF)");
-    }
-    assert(Result.Val.isStruct());
-    llvm::APSInt FieldVal = Result.Val.getStructField(0).getInt();
-    return Builder.getInt(FieldVal);
+  auto EmitCmpRes = [&](const ComparisonCategoryInfo::ValueInfo *VInfo) {
+    return Builder.getInt(VInfo->getIntValue());
   };
   auto EmitCmp = [&](CompareKind K) {
     return EmitCompare(Builder, CGF, E, LHS, RHS, K);
@@ -1007,12 +998,18 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   }
   assert(CmpInfo.Record->isTriviallyCopyable() &&
          "cannot copy non-trivially copyable aggregate");
+
+  // Create the return value in the destination slot.
   EnsureDest(E->getType());
   LValue DestLV = CGF.MakeAddrLValue(Dest.getAddress(), E->getType());
+
+  // Emit the address of the first (and only) field in the comparison category
+  // type, and initialize it from the constant integer value selected above.
   LValue FieldLV = CGF.EmitLValueForFieldInitialization(
       DestLV, *CmpInfo.Record->field_begin());
-  return CGF.EmitStoreThroughLValue(RValue::get(Select), FieldLV,
-                                    /*IsInit*/ true);
+  CGF.EmitStoreThroughLValue(RValue::get(Select), FieldLV, /*IsInit*/ true);
+
+  // All done! The result is in the Dest slot.
 }
 
 void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {

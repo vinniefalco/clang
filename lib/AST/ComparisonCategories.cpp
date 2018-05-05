@@ -20,29 +20,44 @@
 
 using namespace clang;
 
+bool ComparisonCategoryInfo::ValueInfo::updateIntValue(const ASTContext &Ctx) {
+  if (hasValidIntValue())
+    return false;
+  assert(VD->hasInit() && VD->isInitKnownICE());
+  Expr::EvalResult Result;
+  if (!VD->getInit()->EvaluateAsRValue(Result, Ctx))
+    return true;
+
+  assert(Result.Val.isStruct());
+  IntValue = Result.Val.getStructField(0).getInt();
+  HasValue = true;
+  return false;
+}
+
 QualType ComparisonCategoryInfo::getType() const {
   return QualType(Record->getTypeForDecl(), 0);
 }
 
-VarDecl *
-ComparisonCategoryInfo::lookupResultDecl(ComparisonCategoryResult ValueKind) {
-  char Key = static_cast<char>(ValueKind);
-  VarDecl *VD = Objects.lookup(Key);
-  if (VD)
-    return VD;
-
-  const CXXRecordDecl *RD = Record->getCanonicalDecl();
-  StringRef Name = ComparisonCategories::getResultString(ValueKind);
-  DeclContextLookupResult Lookup = RD->lookup(&Ctx.Idents.get(Name));
-  if (Lookup.size() != 1)
-    return nullptr;
-  NamedDecl *ND = Lookup.front();
-  if (auto *VD = dyn_cast<VarDecl>(ND)) {
-    auto ItPair =
-        Objects.try_emplace((char)ValueKind, VD);
-    return ItPair.first->second;
+ComparisonCategoryInfo::ValueInfo *ComparisonCategoryInfo::lookupValueInfo(
+    ComparisonCategoryResult ValueKind) const {
+  unsigned Key = static_cast<unsigned>(ValueKind);
+  // If we're looking this value up, then it's required for the given type.
+  ValueInfo *Info = &Objects[Key];
+  Info->IsRequired = true;
+  if (!Info->VD) {
+    const CXXRecordDecl *RD = Record->getCanonicalDecl();
+    StringRef Name = ComparisonCategories::getResultString(ValueKind);
+    DeclContextLookupResult Lookup = RD->lookup(&Ctx.Idents.get(Name));
+    if (Lookup.size() != 1)
+      return nullptr;
+    auto *VD = dyn_cast<VarDecl>(Lookup.front());
+    if (!VD)
+      return nullptr;
+    Info->VD = VD;
   }
-  return nullptr;
+  assert(!Info->isInvalid());
+  Info->updateIntValue(Ctx);
+  return Info;
 }
 
 static const NamespaceDecl *lookupStdNamespace(const ASTContext &Ctx,

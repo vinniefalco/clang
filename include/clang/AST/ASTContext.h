@@ -1981,9 +1981,6 @@ public:
 
   /// \brief Types and expressions required to build C++2a three-way comparisons
   ///   using operator<=>, including the values return by builtin <=> operators.
-  ///
-  /// This object needs to be initialized by Sema the first time it checks
-  /// a three-way comparison.
   ComparisonCategories CompCategories;
 
 private:

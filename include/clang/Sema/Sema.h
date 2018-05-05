@@ -50,6 +50,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -4547,11 +4548,10 @@ public:
   EnumDecl *getStdAlignValT() const;
 
 private:
-  // This stores ComparisonCategoryInfo pointers from ASTContext's cache that
-  // we have already fully checked, and don't need to check again.
-  llvm::SmallPtrSet<const ComparisonCategoryInfo *,
-                    static_cast<unsigned>(ComparisonCategoryType::Last) + 1>
-      FullyCheckedComparisonCategories;
+  // A cache representing if we've fully checked the various comparison category
+  // types stored in ASTContext. The bit-index corresponds to the integer value
+  // of a ComparisonCategoryType enumerator.
+  llvm::SmallBitVector FullyCheckedComparisonCategories;
 
 public:
   /// \brief Lookup the specified comparison category types in the standard

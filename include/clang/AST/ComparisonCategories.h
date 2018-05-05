@@ -16,12 +16,14 @@
 #define LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 
 #include "clang/Basic/LLVM.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseMap.h"
-#include <vector>
+#include <array>
 #include <cassert>
 
 namespace llvm {
   class StringRef;
+  class APSInt;
 }
 
 namespace clang {
@@ -29,6 +31,7 @@ namespace clang {
 class ASTContext;
 class VarDecl;
 class CXXRecordDecl;
+class Sema;
 class QualType;
 class NamespaceDecl;
 
@@ -59,18 +62,61 @@ enum class ComparisonCategoryResult : unsigned char {
   Less,
   Greater,
   Unordered,
+  Last = Unordered
 };
 
 class ComparisonCategoryInfo {
   friend class ComparisonCategories;
+  friend class Sema;
 
+public:
+  struct ValueInfo {
+    VarDecl *VD;
+
+    ValueInfo() : VD(nullptr), IsRequired(false), HasValue(false) {}
+    ValueInfo(VarDecl *VD) : VD(VD), IsRequired(true), HasValue(false) {}
+
+    bool isInvalid() const { return VD == nullptr; }
+
+    /// \brief Get the constant integer value used by this variable to represent
+    /// the comparison category result type.
+    llvm::APSInt getIntValue() const {
+      assert(hasValidIntValue());
+      return IntValue;
+    }
+    /// \brief True iff we've successfully evaluated the variable as a constant
+    /// expression and extracted its integer value.
+    bool hasValidIntValue() const { return HasValue; }
+
+    /// \brief If hasValidIntValue() is false, attempt to evaluate the variable
+    /// as a constant expression in order to extract its integer value and
+    /// update the cache.
+    bool updateIntValue(const ASTContext &Ctx);
+
+  private:
+    friend class ComparisonCategoryInfo;
+    llvm::APSInt IntValue;
+    bool IsRequired : 1;
+    bool HasValue : 1;
+  };
+
+private:
   const ASTContext &Ctx;
 
   /// \brief A map containing the comparison category result decls from the
   /// standard library. The key is a value of ComparisonCategoryResult.
-  mutable llvm::DenseMap<char, VarDecl *> Objects;
+  mutable std::array<ValueInfo,
+                     static_cast<unsigned>(ComparisonCategoryResult::Last) + 1>
+      Objects;
 
   ComparisonCategoryInfo(const ASTContext &Ctx) : Ctx(Ctx) {}
+
+  /// \brief Lookup the ValueInfo struct for the specified ValueKind. If the
+  /// VarDecl for the value cannot be found, nullptr is returned.
+  ///
+  /// If the ValueInfo does not have a valid integer value the variable
+  /// is evaluated as a constant expression to determine that value.
+  ValueInfo *lookupValueInfo(ComparisonCategoryResult ValueKind) const;
 
 public:
   /// \brief The declaration for the comparison category type from the
@@ -84,21 +130,14 @@ public:
 public:
   QualType getType() const;
 
-  /// \brief Return the VarDecl for the specified comparison category result.
-  ///    For example 'std::strong_equality::equal'.
-  const VarDecl *getResultDecl(ComparisonCategoryResult ValueKind) const {
-    const VarDecl *VD = lookupResultDecl(ValueKind);
-    assert(VD &&
+  const ValueInfo *getValueInfo(ComparisonCategoryResult ValueKind) const {
+    ValueInfo *Info = lookupValueInfo(ValueKind);
+    assert(Info &&
            "comparison category does not contain the specified result kind");
-    return VD;
+    assert(Info->hasValidIntValue() &&
+           "couldn't determine the integer constant for this value");
+    return Info;
   }
-
-  const VarDecl *lookupResultDecl(ComparisonCategoryResult ValueKind) const {
-    auto &This = *const_cast<ComparisonCategoryInfo *>(this);
-    return This.lookupResultDecl(ValueKind);
-  }
-
-  VarDecl *lookupResultDecl(ComparisonCategoryResult ValueKind);
 
   /// \brief True iff the comparison category is an equality comparison.
   bool isEquality() const { return !isOrdered(); }
@@ -137,23 +176,23 @@ public:
     return Res;
   }
 
-  const VarDecl *getEqualOrEquiv() const {
-    return getResultDecl(makeWeakResult(ComparisonCategoryResult::Equal));
+  const ValueInfo *getEqualOrEquiv() const {
+    return getValueInfo(makeWeakResult(ComparisonCategoryResult::Equal));
   }
-  const VarDecl *getNonequalOrNonequiv() const {
-    return getResultDecl(makeWeakResult(ComparisonCategoryResult::Nonequal));
+  const ValueInfo *getNonequalOrNonequiv() const {
+    return getValueInfo(makeWeakResult(ComparisonCategoryResult::Nonequal));
   }
-  const VarDecl *getLess() const {
+  const ValueInfo *getLess() const {
     assert(isOrdered());
-    return getResultDecl(ComparisonCategoryResult::Less);
+    return getValueInfo(ComparisonCategoryResult::Less);
   }
-  const VarDecl *getGreater() const {
+  const ValueInfo *getGreater() const {
     assert(isOrdered());
-    return getResultDecl(ComparisonCategoryResult::Greater);
+    return getValueInfo(ComparisonCategoryResult::Greater);
   }
-  const VarDecl *getUnordered() const {
+  const ValueInfo *getUnordered() const {
     assert(isPartial());
-    return getResultDecl(ComparisonCategoryResult::Unordered);
+    return getValueInfo(ComparisonCategoryResult::Unordered);
   }
 };
 
@@ -203,6 +242,9 @@ private:
   explicit ComparisonCategories(const ASTContext &Ctx) : Ctx(Ctx) {}
 
   const ASTContext &Ctx;
+
+  /// A map from the ComparisonCategoryType (represented as 'char') to the
+  /// cached information for the specified category.
   mutable llvm::DenseMap<char, ComparisonCategoryInfo> Data;
   mutable NamespaceDecl *StdNS = nullptr;
 };
