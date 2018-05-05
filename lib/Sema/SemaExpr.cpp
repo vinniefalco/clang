@@ -9786,27 +9786,30 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
                                                          SourceLocation Loc) {
   using CCT = ComparisonCategoryType;
 
+  QualType LHSType = LHS.get()->getType();
+  QualType RHSType = RHS.get()->getType();
   // Dig out the original argument type and expression before implicit casts
   // were applied. These are the types/expressions we need to check the
   // [expr.spaceship] requirements against.
-  LHS = LHS.get()->IgnoreParenImpCasts();
-  RHS = RHS.get()->IgnoreParenImpCasts();
-  QualType LHSType = LHS.get()->getType();
-  QualType RHSType = RHS.get()->getType();
+  ExprResult LHSStripped = LHS.get()->IgnoreParenImpCasts();
+  ExprResult RHSStripped = RHS.get()->IgnoreParenImpCasts();
+  QualType LHSStrippedType = LHSStripped.get()->getType();
+  QualType RHSStrippedType = RHSStripped.get()->getType();
 
   // C++2a [expr.spaceship]p3: If one of the operands is of type bool and the
   // other is not, the program is ill-formed.
-  if (LHSType->isBooleanType() != RHSType->isBooleanType()) {
-    S.InvalidOperands(Loc, LHS, RHS);
+  if (LHSStrippedType->isBooleanType() != RHSStrippedType->isBooleanType()) {
+    S.InvalidOperands(Loc, LHSStripped, RHSStripped);
     return QualType();
   }
 
-  int NumEnumArgs = (int)LHSType->isEnumeralType() + RHSType->isEnumeralType();
+  int NumEnumArgs = (int)LHSStrippedType->isEnumeralType() +
+                    RHSStrippedType->isEnumeralType();
   if (NumEnumArgs == 1) {
-    bool LHSIsEnum = LHSType->isEnumeralType();
-    QualType OtherTy = LHSIsEnum ? RHSType : LHSType;
+    bool LHSIsEnum = LHSStrippedType->isEnumeralType();
+    QualType OtherTy = LHSIsEnum ? RHSStrippedType : LHSStrippedType;
     if (OtherTy->hasFloatingRepresentation()) {
-      S.InvalidOperands(Loc, LHS, RHS);
+      S.InvalidOperands(Loc, LHSStripped, RHSStripped);
       return QualType();
     }
   }
@@ -9814,20 +9817,19 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
     // C++2a [expr.spaceship]p5: If both operands have the same enumeration
     // type E, the operator yields the result of converting the operands
     // to the underlying type of E and applying <=> to the converted operands.
-    if (!S.Context.hasSameUnqualifiedType(LHSType, RHSType)) {
-      S.InvalidOperands(Loc, LHS, RHS);
+    if (!S.Context.hasSameUnqualifiedType(LHSStrippedType, RHSStrippedType)) {
+      S.InvalidOperands(Loc, LHSStripped, RHSStripped);
       return QualType();
     }
-    QualType IntType = LHSType->getAs<EnumType>()->getDecl()->getIntegerType();
+    QualType IntType =
+        LHSStrippedType->getAs<EnumType>()->getDecl()->getIntegerType();
     assert(IntType->isArithmeticType());
 
     // We can't use `CK_IntegralCast` when the underlying type is 'bool', so we
-    // promote the boolean type to avoid this.
-    if (IntType->isBooleanType()) {
+    // promote the boolean type, and all other promotable integer types, to
+    // avoid this.
+    if (IntType->isPromotableIntegerType())
       IntType = S.Context.getPromotedIntegerType(IntType);
-      LHS = S.DefaultLvalueConversion(LHS.get());
-      RHS = S.DefaultLvalueConversion(RHS.get());
-    }
 
     LHS = S.ImpCastExprToType(LHS.get(), IntType, CK_IntegralCast);
     RHS = S.ImpCastExprToType(RHS.get(), IntType, CK_IntegralCast);
@@ -9905,13 +9907,20 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
   // C++2a [expr.spaceship]p6: If at least one of the operands is of pointer
   // type, array-to-pointer, ..., conversions are performed on both operands to
   // bring them to their composite type.
+  // Otherwise, all comparisons expect an rvalue, so convert to rvalue before
+  // any type-related checks.
   if (!IsThreeWay || IsAnyPointerType(LHS) || IsAnyPointerType(RHS)) {
-    // Comparisons expect an rvalue, so convert to rvalue before any
-    // type-related checks.
     LHS = DefaultFunctionArrayLvalueConversion(LHS.get());
     if (LHS.isInvalid())
       return QualType();
     RHS = DefaultFunctionArrayLvalueConversion(RHS.get());
+    if (RHS.isInvalid())
+      return QualType();
+  } else {
+    LHS = DefaultLvalueConversion(LHS.get());
+    if (LHS.isInvalid())
+      return QualType();
+    RHS = DefaultLvalueConversion(RHS.get());
     if (RHS.isInvalid())
       return QualType();
   }

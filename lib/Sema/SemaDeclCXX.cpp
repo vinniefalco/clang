@@ -8894,7 +8894,12 @@ NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
 
 namespace {
 
-enum UnsupportedSTLSelect { USS_InvalidMember, USS_NonTrivial, USS_Other };
+enum UnsupportedSTLSelect {
+  USS_InvalidMember,
+  USS_MissingMember,
+  USS_NonTrivial,
+  USS_Other
+};
 
 struct InvalidSTLDiagnoser {
   Sema &S;
@@ -8903,12 +8908,13 @@ struct InvalidSTLDiagnoser {
 
   QualType operator()(UnsupportedSTLSelect Sel = USS_Other, StringRef Name = "",
                       const VarDecl *VD = nullptr) {
-    assert((Sel != USS_InvalidMember) || (!Name.empty() && VD));
     {
       auto D = S.Diag(Loc, diag::err_std_compare_type_not_supported)
                << TyForDiags << ((int)Sel);
-      if (Sel == USS_InvalidMember)
+      if (Sel == USS_InvalidMember || Sel == USS_MissingMember) {
+        assert(!Name.empty());
         D << Name;
+      }
     }
     if (Sel == USS_InvalidMember) {
       S.Diag(VD->getLocation(), diag::note_var_declared_here)
@@ -8942,7 +8948,8 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
 
   // Update the Record decl in case we encountered a forward declaration on our
   // first pass. FIXME(EricWF): This is a bit of a hack.
-  Info->Record = Info->Record->getDefinition();
+  if (Info->Record->hasDefinition())
+    Info->Record = Info->Record->getDefinition();
 
   // Use an elaborated type for diagnostics which has a name containing the
   // prepended 'std' namespace but not any inline namespace names.
@@ -8951,6 +8958,7 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
         NestedNameSpecifier::Create(Context, nullptr, getStdNamespace());
     return Context.getElaboratedType(ETK_None, NNS, Info->getType());
   }();
+
   if (RequireCompleteType(Loc, TyForDiags, diag::err_incomplete_type))
     return QualType();
 
@@ -8961,10 +8969,11 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
 
   for (const CXXBaseSpecifier &BaseSpec : Info->Record->bases()) {
     CXXRecordDecl *Base = BaseSpec.getType()->getAsCXXRecordDecl();
+    // Tolerate empty base classes.
     if (Base->isEmpty())
       continue;
-    // Disallow STL implementations which have at least one non-empty base.
-    return UnsupportedSTLError(USS_Other);
+    // Reject STL implementations which have at least one non-empty base.
+    return UnsupportedSTLError();
   }
 
   // Check that the STL has implemented the types using a single integer field.
@@ -8974,41 +8983,35 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   auto FIt = Info->Record->field_begin(), FEnd = Info->Record->field_end();
   if (std::distance(FIt, FEnd) != 1 ||
       !FIt->getType()->isIntegralOrEnumerationType()) {
-    llvm::errs() << "HERE1\n";
-    llvm::errs() << "Distance = " << std::distance(FIt, FEnd) << "\n";
-    if (std::distance(FIt, FEnd) >= 1)
-      FIt->getType()->dump();
-    return UnsupportedSTLError(USS_Other);
+    return UnsupportedSTLError();
   }
 
   // Build each of the require values and store them in Info.
   for (ComparisonCategoryResult CCR :
        ComparisonCategories::getPossibleResultsForType(Kind)) {
+    StringRef MemName = ComparisonCategories::getResultString(CCR);
     ComparisonCategoryInfo::ValueInfo *ValInfo = Info->lookupValueInfo(CCR);
 
-    if (!ValInfo) {
-      Diag(Loc, diag::err_std_compare_type_missing_member)
-          << TyForDiags << ComparisonCategories::getResultString(CCR);
-      return QualType();
-    }
+    if (!ValInfo)
+      return UnsupportedSTLError(USS_MissingMember, MemName);
+
     VarDecl *VD = ValInfo->VD;
     assert(VD && "should not be null!");
+
+    MarkVariableReferenced(Loc, VD);
 
     // Attempt to diagnose reasons why the STL definition of this type
     // might be foobar, including it failing to be a constant expression.
     // TODO Handle more ways the lookup or result can be invalid.
     if (!VD->isStaticDataMember() || !VD->isConstexpr() || !VD->hasInit() ||
         !VD->checkInitIsICE())
-      return UnsupportedSTLError(
-          USS_InvalidMember, ComparisonCategories::getResultString(CCR), VD);
-
-    MarkVariableReferenced(Loc, VD);
+      return UnsupportedSTLError(USS_InvalidMember, MemName, VD);
 
     // Attempt to evaluate the var decl as a constant expression and extract
     // the value of its first field as a ICE. If this fails, the STL
     // implementation is not supported.
     if (ValInfo->updateIntValue(Context))
-      return UnsupportedSTLError(USS_Other);
+      return UnsupportedSTLError();
   }
 
   // We've successfully built the required types and expressions. Update

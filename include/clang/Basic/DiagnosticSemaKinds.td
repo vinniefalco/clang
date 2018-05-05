@@ -9423,11 +9423,10 @@ def err_spaceship_argument_narrowing : Error<
   "argument to 'operator<=>' "
   "%select{cannot be narrowed from type %1 to %2|"
   "evaluates to %1, which cannot be narrowed to type %2}0">;
-def err_std_compare_type_missing_member : Error<
-  "%0 is missing a member named '%1'">;
 def err_std_compare_type_not_supported : Error<
   "standard library implementation of %0 is not supported; "
    "%select{member '%2' does not have expected form|"
+   "member '%2' is missing|"
    "the type is not trivially copyable|"
    "the type does not have the expected form}1">;
 } // end of sema component.

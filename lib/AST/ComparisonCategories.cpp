@@ -26,7 +26,6 @@ static CXXRecordDecl *getDefiningDecl(CXXRecordDecl *RD) {
   return RD;
 }
 
-
 bool ComparisonCategoryInfo::ValueInfo::updateIntValue(const ASTContext &Ctx) {
   if (hasValidIntValue())
     return false;
@@ -39,10 +38,6 @@ bool ComparisonCategoryInfo::ValueInfo::updateIntValue(const ASTContext &Ctx) {
   IntValue = Result.Val.getStructField(0).getInt();
   HasValue = true;
   return false;
-}
-
-QualType ComparisonCategoryInfo::getType() const {
-  return QualType(Record->getTypeForDecl(), 0);
 }
 
 ComparisonCategoryInfo::ValueInfo *ComparisonCategoryInfo::lookupValueInfo(
@@ -147,6 +142,11 @@ const ComparisonCategoryInfo &ComparisonCategories::getInfoForType(QualType Ty) 
   const ComparisonCategoryInfo *Info = lookupInfoForType(Ty);
   assert(Info && "info for comparison category not found");
   return *Info;
+}
+
+QualType ComparisonCategoryInfo::getType() const {
+  assert(Record);
+  return QualType(Record->getTypeForDecl(), 0);
 }
 
 StringRef ComparisonCategories::getCategoryString(ComparisonCategoryType Kind) {

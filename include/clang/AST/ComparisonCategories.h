@@ -181,6 +181,7 @@ public:
     return getValueInfo(makeWeakResult(ComparisonCategoryResult::Equal));
   }
   const ValueInfo *getNonequalOrNonequiv() const {
+    assert(isEquality());
     return getValueInfo(makeWeakResult(ComparisonCategoryResult::Nonequal));
   }
   const ValueInfo *getLess() const {

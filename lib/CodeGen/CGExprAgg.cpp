@@ -938,6 +938,8 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
                                       E->getRHS()->getType()));
   const ComparisonCategoryInfo &CmpInfo =
       CGF.getContext().CompCategories.getInfoForType(E->getType());
+  assert(CmpInfo.Record->isTriviallyCopyable() &&
+         "cannot copy non-trivially copyable aggregate");
 
   QualType ArgTy = E->getLHS()->getType();
 
@@ -996,10 +998,10 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
     Select = Builder.CreateSelect(
         EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()), SelectGT, "sel.lt");
   }
-  assert(CmpInfo.Record->isTriviallyCopyable() &&
-         "cannot copy non-trivially copyable aggregate");
-
   // Create the return value in the destination slot.
+  // FIXME(EricWF): When the destination type and its first field have the same
+  // offset we should be able to avoid re-loading the address below. (And they
+  // should have the same offset)
   EnsureDest(E->getType());
   LValue DestLV = CGF.MakeAddrLValue(Dest.getAddress(), E->getType());
 

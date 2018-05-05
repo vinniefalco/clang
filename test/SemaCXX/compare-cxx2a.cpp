@@ -384,3 +384,10 @@ void test_mixed_float_int(float f, double d, long double ld) {
   auto r4 = (0.0 <=> i);
   ASSERT_EXPR_TYPE(r4, std::partial_ordering);
 }
+
+namespace NullptrTest {
+using nullptr_t = decltype(nullptr);
+void foo(nullptr_t x, nullptr_t y) {
+  (void)(x <=> y);
+}
+} // namespace NullptrTest
