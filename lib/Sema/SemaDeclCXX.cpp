@@ -8928,6 +8928,17 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
     return QualType();
   }
 
+  // Check that the STL has implemented the types using a single integer field.
+  // This expectation allows better codegen for builtin operators. We require:
+  //   (1) The class has exactly one field.
+  //   (2) The field is an integral or enumeration type.
+  auto FIt = Info->Record->field_begin(), FEnd = Info->Record->field_end();
+  if (std::distance(FIt, FEnd) != 1 ||
+      !FIt->getType()->isIntegralOrEnumerationType()) {
+    Diag(Loc, diag::err_std_compare_type_not_supported) << TyForDiags << 2;
+    return QualType();
+  }
+
   // Build each of the require values and store them in Info.
   for (ComparisonCategoryResult CCR :
        ComparisonCategories::getPossibleResultsForType(Kind)) {

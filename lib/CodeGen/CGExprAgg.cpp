@@ -968,11 +968,21 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   }
 
   auto EmitCmpRes = [&](const VarDecl *VD) {
-    return CGF.CGM.GetAddrOfGlobalVar(VD);
+    assert(VD->hasInit() && VD->isInitKnownICE());
+
+    Expr::EvalResult Result;
+    if (!VD->getInit()->EvaluateAsRValue(Result, CGF.getContext())) {
+      CGF.ErrorUnsupported(E, "unsupported standard library type");
+      llvm_unreachable("FIXME(EricWF)");
+    }
+    assert(Result.Val.isStruct());
+    llvm::APSInt FieldVal = Result.Val.getStructField(0).getInt();
+    return Builder.getInt(FieldVal);
   };
   auto EmitCmp = [&](CompareKind K) {
     return EmitCompare(Builder, CGF, E, LHS, RHS, K);
   };
+
   Value *Select;
   if (CmpInfo.isEquality()) {
     Select = Builder.CreateSelect(
@@ -995,13 +1005,14 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
     Select = Builder.CreateSelect(
         EmitCmp(CK_Less), EmitCmpRes(CmpInfo.getLess()), SelectGT, "sel.lt");
   }
-
-  // TODO Is it worthwhile to try to generate a select between the comparison
-  // result values rather than their addresses?
   assert(CmpInfo.Record->isTriviallyCopyable() &&
          "cannot copy non-trivially copyable aggregate");
-  return EmitFinalDestCopy(
-      E->getType(), CGF.MakeNaturalAlignAddrLValue(Select, E->getType()));
+  EnsureDest(E->getType());
+  LValue DestLV = CGF.MakeAddrLValue(Dest.getAddress(), E->getType());
+  LValue FieldLV = CGF.EmitLValueForFieldInitialization(
+      DestLV, *CmpInfo.Record->field_begin());
+  return CGF.EmitStoreThroughLValue(RValue::get(Select), FieldLV,
+                                    /*IsInit*/ true);
 }
 
 void AggExprEmitter::VisitBinaryOperator(const BinaryOperator *E) {
