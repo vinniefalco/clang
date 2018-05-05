@@ -122,9 +122,8 @@ ComparisonCategories::lookupInfoForType(QualType Ty) const {
 
     // We've found the comparison category type. Build a new cache entry for
     // it.
-    if (getCategoryString(Kind) == RD->getName()) {
+    if (getCategoryString(Kind) == RD->getName())
       return &Data.try_emplace((char)Kind, Ctx, RD, Kind).first->second;
-    }
   }
 
   // We've found nothing. This isn't a comparison category type.
