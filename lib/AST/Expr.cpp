@@ -3902,8 +3902,7 @@ ParenListExpr::ParenListExpr(const ASTContext& C, SourceLocation lparenloc,
   }
 }
 
-static OpaqueValueExpr *OpaqueValueExpr::Create(const ASTContext &Ctx,
-                                                Expr *E) {
+OpaqueValueExpr *OpaqueValueExpr::Create(const ASTContext &Ctx, Expr *E) {
   return new (Ctx) OpaqueValueExpr(E->getExprLoc(), E->getType(),
                                    E->getValueKind(), E->getObjectKind(), E);
 }

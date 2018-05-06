@@ -11536,13 +11536,14 @@ static Expr *extractOperand(Expr *E, unsigned Idx) {
   }
   llvm_unreachable("unhandled case");
 }
-static std::pair<Expr *, Expr *> extractOperands(Expr *E, bool IsThreeWay,
-                                                 bool IsSynthesized) {
+static std::pair<Expr *, Expr *>
+extractOriginalOperandsFromRewrittenComparison(Expr *E, bool IsThreeWay,
+                                               bool IsSynthesized) {
   if (IsThreeWay)
     return {extractOperand(E, IsSynthesized ? 1 : 0),
-            extractOperand(E, IsSynthesized ? 1 : 0)};
-  return extractOperands(extractOperand(E, IsSynthesized ? 1 : 0), true,
-                         IsSynthesized);
+            extractOperand(E, IsSynthesized ? 0 : 1)};
+  return extractOriginalOperandsFromRewrittenComparison(
+      extractOperand(E, IsSynthesized ? 1 : 0), true, IsSynthesized);
 }
 
 template <typename Derived>
@@ -11557,28 +11558,31 @@ TreeTransform<Derived>::TransformCXXRewrittenExpr(CXXRewrittenExpr *E) {
     return ExprError();
   Expr *Rewritten = RewrittenRes.get();
 
-  if (getDerived().AlwaysRebuild() || Rewritten != E->getRewrittenExpr()) {
-    Expr *Original;
-    switch (E->getRewrittenKind()) {
-    case CXXRewrittenExpr::Comparison: {
-      BinaryOperator *Op = cast<BinaryOperator>(E->getOriginalExpr());
-      std::pair<Expr *, Expr *> OrigArgs =
-          extractOperands(Rewritten, Op->getOpcode() == BO_Cmp,
-                          E->getRewrittenInfo()->CompareBits.IsSynthesized);
-      Original = new (SemaRef.Context) BinaryOperator(
-          OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.first),
-          OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.second),
-          Op->getOpcode(), Rewritten->getType(), Rewritten->getValueKind(),
-          Rewritten->getObjectKind(), Op->getOperatorLoc(),
-          Op->getFPFeatures());
-      break;
-    }
-    }
-    return getDerived().RebuildCXXRewrittenExpr(E->getRewrittenKind(),
-                                                E->getOriginalExpr(), Rewritten,
-                                                *E->getRewrittenInfo());
+  if (Rewritten == E->getRewrittenExpr() && !getDerived().AlwaysRebuild())
+    return E;
+
+  Expr *Original;
+  switch (E->getRewrittenKind()) {
+  case CXXRewrittenExpr::Comparison: {
+    BinaryOperator *Op = cast<BinaryOperator>(E->getOriginalExpr());
+
+    // Extract the already transformed operands from the rewritten expression.
+    std::pair<Expr *, Expr *> OrigArgs =
+        extractOriginalOperandsFromRewrittenComparison(
+            Rewritten, Op->getOpcode() == BO_Cmp,
+            E->getRewrittenInfo()->CompareBits.IsSynthesized);
+
+    // Build a dummy node representing the expression as written.
+    Original = new (SemaRef.Context) BinaryOperator(
+        OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.first),
+        OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.second),
+        Op->getOpcode(), Rewritten->getType(), Rewritten->getValueKind(),
+        Rewritten->getObjectKind(), Op->getOperatorLoc(), Op->getFPFeatures());
+    break;
   }
-  return E;
+  }
+  return getDerived().RebuildCXXRewrittenExpr(
+      E->getRewrittenKind(), Original, Rewritten, *E->getRewrittenInfo());
 }
 
 template<typename Derived>

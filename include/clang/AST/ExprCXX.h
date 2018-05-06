@@ -4225,6 +4225,7 @@ public:
   };
 
 private:
+  friend class ASTReader;
   friend class ASTStmtReader;
   friend class ASTStmtWriter;
 
