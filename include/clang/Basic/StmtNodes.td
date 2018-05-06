@@ -146,7 +146,7 @@ def FunctionParmPackExpr : DStmt<Expr>;
 def MaterializeTemporaryExpr : DStmt<Expr>;
 def LambdaExpr : DStmt<Expr>;
 def CXXFoldExpr : DStmt<Expr>;
-def CXXRewrittenOperator : DStmt<Expr>;
+def CXXRewrittenOperatorExpr : DStmt<Expr>;
 
 // C++ Coroutines TS expressions
 def CoroutineSuspendExpr : DStmt<Expr, 1>;
