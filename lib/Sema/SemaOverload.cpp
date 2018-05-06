@@ -12611,12 +12611,15 @@ ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
   }
   Expr *Rewritten = RewrittenRes.get();
 
+  // Create a dummy expression representing the original expression as written.
   auto CreateOpaqueValue = [&](Expr *E) {
     Expr *Res = new (S.Context)
-        CXXRewrittenExpr(E->getExprLoc(), E->getType(), E->getValueKind(),
-                         E->getObjectKind(), E);
+        OpaqueValueExpr(E->getExprLoc(), E->getType(), E->getValueKind(),
+                        E->getObjectKind(), E);
     return Res;
   };
+  // FIXME(EricWF): This doesn't actually really represent the expression as
+  // written, because it may not result in a to a builtin operator.
   Expr *Original = new (S.Context)
       BinaryOperator(CreateOpaqueValue(Args[0]), CreateOpaqueValue(Args[1]),
                      Opc, Rewritten->getType(), Rewritten->getValueKind(),
