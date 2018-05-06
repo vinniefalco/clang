@@ -1707,7 +1707,6 @@ void ASTStmtReader::VisitCXXFoldExpr(CXXFoldExpr *E) {
 
 void ASTStmtReader::VisitCXXRewrittenExpr(CXXRewrittenExpr *E) {
   VisitExpr(E);
-  E->Kind = (CXXRewrittenExpr::RewrittenOperatorKind)Record.readInt();
   E->SubExprs[0] = Record.readSubExpr();
   E->SubExprs[1] = Record.readSubExpr();
 }
