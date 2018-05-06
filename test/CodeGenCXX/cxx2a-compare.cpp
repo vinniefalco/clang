@@ -190,42 +190,11 @@ struct U {
   int x;
   std::strong_ordering operator<=>(U const &) const;
 };
-struct T : public U {
-  int x, y;
-  auto operator<=>(T const &) const = default;
-};
-
 // FIXME(EricWF): Write this test
-auto test(T t1, T t2) {
+auto test(U t1, U t2) {
   return (t1 < t2);
 }
 
 } // namespace RewrittenTest
 
-namespace DefaultTest {
-struct T {
-  int x, y, z;
-  std::strong_ordering operator<=>(T const &) const;
-};
-struct U {
-  float y;
-  friend std::partial_ordering operator<=>(U const &, U const &);
-};
-struct TU : public T, public U {
-  friend auto operator<=>(TU const &, TU const &) = default;
-};
-
-// CHECK: FIXME(EricWF) Write this test
-void test1(TU x, TU y) {
-  (void)(x <=> y);
-}
-
-struct Empty {
-  auto operator<=>(Empty const &) const = default;
-};
-
-auto test_empty(Empty t1, Empty t2) {
-  return t1 <=> t2;
-}
-} // namespace DefaultTest
 
