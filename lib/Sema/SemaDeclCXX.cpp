@@ -9217,7 +9217,6 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
         << ComparisonCategories::getCategoryString(Kind);
     return QualType();
   }
-  assert(Info->CCDecl && Info->Kind == Kind && "bogus information returned?");
 
   assert(Info->Kind == Kind);
   assert(Info->Record);
