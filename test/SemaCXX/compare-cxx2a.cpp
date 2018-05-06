@@ -3,14 +3,6 @@
 
 // RUN: %clang_cc1 -triple x86_64-apple-darwin -fcxx-exceptions -fsyntax-only -pedantic -verify -Wsign-compare -std=c++2a %s
 
-namespace BeforeStdTest {
-struct T {
-  // expected-error@+1 {{cannot deduce return type of 'operator<=>' because type strong_ordering was not found; include <compare>}}
-  auto operator<=>(T const &) const = default;
-};
-
-} // namespace BeforeStdTest
-
 #include "Inputs/std-compare.h"
 
 #define ASSERT_TYPE(...) static_assert(__is_same(__VA_ARGS__))
@@ -510,3 +502,28 @@ void test() {
 }
 
 } // namespace TestOvlMatchingIgnoresImplicitObject
+
+namespace TestImp {
+struct T {
+  int x;
+};
+auto operator<=>(T const &LHS, T &&RHS) {
+  return LHS.x <=> RHS.x;
+}
+void test() {
+  auto R = T{} < T{};
+}
+} // namespace TestImp
+
+namespace Test2Imp {
+struct Ovl1 {};
+struct Ovl2 {};
+struct T {
+  Ovl1 operator&&(T const &) &&;
+};
+Ovl2 operator&&(T const &, T const &);
+void test() {
+  auto R = T{} && T{};
+  ASSERT_EXPR_TYPE(R, Ovl1);
+}
+} // namespace Test2Imp

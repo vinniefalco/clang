@@ -9100,22 +9100,41 @@ bool clang::isBetterOverloadCandidate(
   if (HasBetterConversion)
     return true;
 
+  bool RewrittenTargetsSameFunction = false;
+  if (Cand1.Function && Cand2.Function &&
+      Cand1.Function->getCanonicalDecl() ==
+          Cand2.Function->getCanonicalDecl() &&
+      (Cand1.getRewrittenKind() || Cand2.getRewrittenKind())) {
+    RewrittenTargetsSameFunction = true;
+  }
   // C++ [over.match.best]p1:
   //   A viable function F1 is defined to be a better function than another
   //   viable function F2 if for all arguments i, ICSi(F1) is not a worse
   //   conversion sequence than ICSi(F2), and then...
   for (unsigned ArgIdx = StartArg; ArgIdx < NumArgs; ++ArgIdx) {
-    switch (CompareImplicitConversionSequences(
-        S, Loc, Cand1.getConversion(ArgIdx), Cand2.getConversion(ArgIdx))) {
+    const ImplicitConversionSequence &ICS1 = Cand1.getConversion(ArgIdx);
+    const ImplicitConversionSequence &ICS2 = Cand2.getConversion(ArgIdx);
+    ImplicitConversionSequence::CompareKind CompareRes =
+        CompareImplicitConversionSequences(S, Loc, ICS1, ICS2);
+
+    if (RewrittenTargetsSameFunction &&
+        CompareRes != ImplicitConversionSequence::Indistinguishable) {
+      if (ICS1.isStandard() && ICS2.isStandard() &&
+          ICS1.Standard.getRank() == ICR_Exact_Match &&
+          ICS2.Standard.getRank() == ICR_Exact_Match)
+        CompareRes = ImplicitConversionSequence::Indistinguishable;
+    }
+
+    switch (CompareRes) {
     case ImplicitConversionSequence::Better:
       // Cand1 has a better conversion sequence.
       HasBetterConversion = true;
       break;
 
-    case ImplicitConversionSequence::Worse:
+    case ImplicitConversionSequence::Worse: {
       // Cand1 can't be better than Cand2.
       return false;
-
+    }
     case ImplicitConversionSequence::Indistinguishable:
       // Do nothing.
       break;
@@ -9226,12 +9245,22 @@ bool clang::isBetterOverloadCandidate(
           C1Roc != C2Roc) {
         auto GetParamTypes = [&](const OverloadCandidate &Ovl) {
           SmallVector<QualType, 2> Types;
+          // If the candidate is a method, compute the implicit object type.
           if (const auto *MD = dyn_cast_or_null<CXXMethodDecl>(Ovl.Function)) {
-            ImplicitConversionSequence const &Conv = Ovl.Conversions[0];
-            assert(Conv.isStandard());
-            QualType Ty = Conv.Standard.getToType(2);
-            Ty.dump();
-            Types.push_back(Ty);
+            assert(Ovl.Conversions[0].isStandard());
+            QualType Ty = Ovl.Conversions[0].Standard.getToType(2);
+            assert(!Ty->isReferenceType());
+            const auto *FTP = MD->getType()->getAs<FunctionProtoType>();
+            switch (FTP->getRefQualifier()) {
+            case RQ_LValue:
+            case RQ_None:
+              Types.push_back(S.Context.getLValueReferenceType(Ty));
+              break;
+            case RQ_RValue:
+              Types.push_back(S.Context.getRValueReferenceType(Ty));
+              break;
+            }
+            Types[0].dump();
           }
           for (unsigned I = 0; I < Ovl.getNumParams(); ++I)
             Types.push_back(Ovl.getParamType(I).getCanonicalType());
