@@ -516,3 +516,23 @@ void test() {
 }
 
 } // namespace TestOvlMatchingIgnoresImplicitObject
+
+namespace TestRewrittenTemplate {
+
+template <class T>
+auto test(T const &LHS, T const &RHS) {
+  // expected-error@+1 {{invalid operands to binary expression ('const TestRewrittenTemplate::None'}}
+  return LHS < RHS;
+}
+struct None {};
+template auto test<None>(None const &, None const &); // expected-note {{requested here}}
+
+struct Relational {};
+bool operator<(Relational, Relational);
+template auto test<Relational>(Relational const &, Relational const &);
+
+struct ThreeWay {};
+std::strong_ordering operator<=>(ThreeWay, ThreeWay);
+template auto test<ThreeWay>(ThreeWay const &, ThreeWay const &);
+
+} // namespace TestRewrittenTemplate
