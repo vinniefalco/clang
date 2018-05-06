@@ -2811,12 +2811,6 @@ public:
   void AddBuiltinOperatorCandidates(OverloadedOperatorKind Op,
                                     SourceLocation OpLoc, ArrayRef<Expr *> Args,
                                     OverloadCandidateSet& CandidateSet);
-  void AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
-                                      SourceLocation OpLoc,
-                                      ArrayRef<Expr *> Args,
-                                      const UnresolvedSetImpl &Fns,
-                                      OverloadCandidateSet &CandidateSet,
-                                      bool PerformADL);
   void AddArgumentDependentLookupCandidates(DeclarationName Name,
                                             SourceLocation Loc,
                                             ArrayRef<Expr *> Args,
