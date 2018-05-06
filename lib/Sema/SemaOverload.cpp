@@ -12593,21 +12593,24 @@ ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
   if (RewrittenRes.isInvalid())
     return ExprError();
 
-  // Now attempt to build the full expression '(LHS <=> RHS) @ 0' using the
-  // evaluated operand and the literal 0.
-  llvm::APInt I =
-      llvm::APInt::getNullValue(S.Context.getIntWidth(S.Context.IntTy));
-  Expr *Zero =
-      IntegerLiteral::Create(S.Context, I, S.Context.IntTy, SourceLocation());
+  ExprResult FinalRes = RewrittenRes;
+  if (Opc != BO_Cmp) {
+    // Now attempt to build the full expression '(LHS <=> RHS) @ 0' using the
+    // evaluated operand and the literal 0.
+    llvm::APInt I =
+        llvm::APInt::getNullValue(S.Context.getIntWidth(S.Context.IntTy));
+    Expr *Zero =
+        IntegerLiteral::Create(S.Context, I, S.Context.IntTy, SourceLocation());
 
-  Expr *NewLHS = RewrittenRes.get();
-  Expr *NewRHS = Zero;
-  if (Ovl.getRewrittenKind() == ROC_Synthesized)
-    std::swap(NewLHS, NewRHS);
+    Expr *NewLHS = RewrittenRes.get();
+    Expr *NewRHS = Zero;
+    if (Ovl.getRewrittenKind() == ROC_Synthesized)
+      std::swap(NewLHS, NewRHS);
 
-  ExprResult FinalRes =
-      S.CreateOverloadedBinOp(OpLoc, Opc, Fns, NewLHS, NewRHS, PerformADL,
-                              /*AllowRewrittenCandidates*/ false);
+    FinalRes =
+        S.CreateOverloadedBinOp(OpLoc, Opc, Fns, NewLHS, NewRHS, PerformADL,
+                                /*AllowRewrittenCandidates*/ false);
+  }
   if (FinalRes.isInvalid())
     return ExprError();
   return new (S.Context) CXXRewrittenOperatorExpr(

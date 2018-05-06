@@ -13025,6 +13025,9 @@ public:
         CompareOperator->getOverloadedOperator());
   }
 
+  BinaryOperatorKind getOpcode() const { return Opc; }
+  bool isThreeWay() const { return Opc == BO_Cmp; }
+
   bool BuildCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB) {
     // Build a call to the comparison function for the specified LHS and RHS
     // expressions.
@@ -13034,6 +13037,20 @@ public:
     if (Cmp.isInvalid())
       return Error();
 
+    if (!isThreeWay()) {
+      assert(!LastCmpResult);
+      ExprResult Res;
+      if (auto *Rewritten = dyn_cast<CXXRewrittenOperatorExpr>(Cmp.get())) {
+        if (Rewritten->getKind() == CXXRewrittenOperatorExpr::ROC_Synthesized)
+          Res = S.BuildBinOp(nullptr, Loc, Opc, BuildZeroLiteral(), Cmp.get());
+      }
+      if (Res.isUnset())
+        Res = S.BuildBinOp(nullptr, Loc, Opc, Cmp.get(), BuildZeroLiteral());
+      if (Res.isInvalid())
+        return Error();
+      Cmp = Res;
+    }
+
     // Stash the result of that comparison in case it's the final comparison,
     // and get the previously stashed comparison if it exists.
     Expr *LastCmp = Cmp.get();
@@ -13041,6 +13058,11 @@ public:
 
     if (!LastCmp)
       return false;
+
+    // Only defaulted three-way comparisons should be building more than one
+    // comparison.
+    assert(isThreeWay() &&
+           "non-three-way comparison should only build one compare");
 
     // If there was a previously stashed comparison, build an expression of the
     // form:
@@ -13060,6 +13082,7 @@ public:
     // comparison operator is empty), build a result representing equality
     // (or inequality when the comparison operator is !=, <, or >)
     if (!LastCmpResult) {
+      assert(isThreeWay());
       ExprResult EqualExpr = BuildReturnValueForEquality();
       if (EqualExpr.isInvalid())
         return Error();
@@ -13094,20 +13117,17 @@ private:
   /// FIXME(EricWF): Document this
   StmtResult BuildCompareEqualOrReturn(Expr *LastResult) {
     assert(LastResult && "should not be null");
+    assert(isThreeWay());
 
     VarDecl *VD = BuildInventedVarDecl(LastResult);
     if (!VD)
       return StmtError();
     Expr *DRE = BuildDeclRef(VD);
 
-    // Now attempt to build the full expression '(LHS <=> RHS) @ 0' using the
-    // evaluated operand and the literal 0, where '@' is != for three-way
-    // comparisons, and the negated comparison operator otherwise.
-    BinaryOperatorKind NegatedOp =
-        Opc == BO_Cmp ? BO_NE : BinaryOperator::negateComparisonOp(Opc);
-
+    // Now attempt to build the full expression '(LHS <=> RHS) != 0' using the
+    // evaluated operand and the literal 0.
     ExprResult CmpRes =
-        S.BuildBinOp(nullptr, Loc, NegatedOp, DRE, BuildZeroLiteral());
+        S.BuildBinOp(nullptr, Loc, BO_NE, DRE, BuildZeroLiteral());
     if (CmpRes.isInvalid())
       return StmtError();
 
@@ -13144,10 +13164,7 @@ private:
   /// Note: This should only be used when the struct being compared is empty.
   /// Otherwise the result of the previous comparison should be returned.
   ExprResult BuildReturnValueForEquality() {
-    if (Opc != BO_Cmp) {
-      bool Val = Opc != BO_NE && Opc != BO_LT && Opc != BO_GT;
-      return new (S.Context) CXXBoolLiteralExpr(Val, S.Context.BoolTy, Loc);
-    }
+    assert(Opc == BO_Cmp);
 
     // FIXME: we need to emit diagnostics here
     QualType RetTy = S.CheckComparisonCategoryType(
@@ -13261,58 +13278,61 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
       CompareOperator->getType()->getAs<FunctionProtoType>()->getTypeQuals();
 
   ComparisonBuilder Builder(*this, CompareOperator);
-
-  // compare base classes
   bool Invalid = false;
-  for (auto &Base : ClassDecl->bases()) {
-    // C++2a [class.spaceship]p1:
-    //   It is unspecified whether virtual base class subobjects are compared
-    // more than once.
+  if (Builder.isThreeWay()) {
+    // compare base classes
+    for (auto &Base : ClassDecl->bases()) {
+      // C++2a [class.spaceship]p1:
+      //   It is unspecified whether virtual base class subobjects are compared
+      // more than once.
 
-    QualType BaseType = Base.getType();
-    if (!BaseType->isRecordType()) {
-      Invalid = true;
-      continue;
+      QualType BaseType = Base.getType();
+      if (!BaseType->isRecordType()) {
+        Invalid = true;
+        continue;
+      }
+
+      CXXCastPath BasePath;
+      BasePath.push_back(&Base);
+
+      // Implicitly cast "this" to the appropriately-qualified base type.
+      CastBuilder LHS(LHSRef, Context.getCVRQualifiedType(BaseType, CallQuals),
+                      VK_LValue, BasePath);
+
+      // Construct the "from" expression, which is an implicit cast to the
+      // appropriately-qualified base type.
+      CastBuilder RHS(RHSRef, BaseType, VK_LValue, BasePath);
+
+      if (Builder.BuildCompare(LHS, RHS))
+        return;
     }
 
-    CXXCastPath BasePath;
-    BasePath.push_back(&Base);
+    // Assign non-static members.
+    for (auto *Field : ClassDecl->fields()) {
+      if (Field->isInvalidDecl()) {
+        Invalid = true;
+        continue;
+      }
 
-    // Implicitly cast "this" to the appropriately-qualified base type.
-    CastBuilder LHS(LHSRef, Context.getCVRQualifiedType(BaseType, CallQuals),
-                    VK_LValue, BasePath);
+      // Suppress assigning zero-width bitfields.
+      if (Field->isZeroLengthBitField(Context))
+        continue;
 
-    // Construct the "from" expression, which is an implicit cast to the
-    // appropriately-qualified base type.
-    CastBuilder RHS(RHSRef, BaseType, VK_LValue, BasePath);
+      // Build references to the field in the object we're copying from and to.
+      LookupResult MemberLookup(*this, Field->getDeclName(), Builder.Loc,
+                                LookupMemberName);
+      MemberLookup.addDecl(Field);
+      MemberLookup.resolveKind();
+      MemberBuilder RHS(RHSRef, RHSRefType, /*IsArrow=*/false, MemberLookup);
+      MemberBuilder LHS(LHSRef, RHSRefType, /*IsArrow=*/false, MemberLookup);
 
-    if (Builder.BuildCompare(LHS, RHS))
-      return;
-  }
-
-  // Assign non-static members.
-  for (auto *Field : ClassDecl->fields()) {
-    if (Field->isInvalidDecl()) {
-      Invalid = true;
-      continue;
+      if (Builder.BuildCompare(LHS, RHS))
+        return;
     }
-
-    // Suppress assigning zero-width bitfields.
-    if (Field->isZeroLengthBitField(Context))
-      continue;
-
-    // Build references to the field in the object we're copying from and to.
-    LookupResult MemberLookup(*this, Field->getDeclName(), Builder.Loc,
-                              LookupMemberName);
-    MemberLookup.addDecl(Field);
-    MemberLookup.resolveKind();
-    MemberBuilder RHS(RHSRef, RHSRefType, /*IsArrow=*/false, MemberLookup);
-    MemberBuilder LHS(LHSRef, RHSRefType, /*IsArrow=*/false, MemberLookup);
-
-    if (Builder.BuildCompare(LHS, RHS))
+  } else {
+    if (Builder.BuildCompare(LHSRef, RHSRef))
       return;
   }
-
   if (Invalid) {
     CompareOperator->setInvalidDecl();
     return;
