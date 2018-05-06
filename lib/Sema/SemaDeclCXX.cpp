@@ -13040,8 +13040,11 @@ public:
     if (!isThreeWay()) {
       assert(!LastCmpResult);
       ExprResult Res;
-      if (auto *Rewritten = dyn_cast<CXXRewrittenOperatorExpr>(Cmp.get())) {
-        if (Rewritten->getKind() == CXXRewrittenOperatorExpr::ROC_Synthesized)
+      if (auto *Rewritten = dyn_cast<CXXRewrittenExpr>(Cmp.get())) {
+        assert(Rewritten->getRewrittenKind() == CXXRewrittenExpr::Comparison);
+        CXXRewrittenExpr::ComparisonBits CompareBits =
+            Rewritten->getRewrittenInfo()->CompareBits;
+        if (CompareBits.IsSynthesized)
           Res = S.BuildBinOp(nullptr, Loc, Opc, BuildZeroLiteral(), Cmp.get());
       }
       if (Res.isUnset())
