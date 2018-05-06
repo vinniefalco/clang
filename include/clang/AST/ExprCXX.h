@@ -4226,7 +4226,7 @@ public:
 public:
   // FIXME(EricWF): Figure out if this will even be built for dependent
   // expressions.
-  CXXRewrittenExpr(RewrittenOperatorKind Kind, Expr *Original, Expr *Rewritten)
+  CXXRewrittenExpr(Expr *Original, Expr *Rewritten)
       : Expr(CXXRewrittenExprClass, Rewritten->getType(),
              Rewritten->getValueKind(), Rewritten->getObjectKind(),
              /*Dependent*/ Rewritten->isTypeDependent(),
