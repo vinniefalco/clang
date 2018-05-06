@@ -507,17 +507,16 @@ namespace TestImplicitConversionAmbiguity {
 struct T {
   int x;
 };
-auto operator<=>(T const &LHS, T &&RHS) {
+auto operator<=>(T const &LHS, T &&RHS) { // expected-note 4 {{candidate}}
   return LHS.x <=> RHS.x;
 }
-auto operator<(T const &, T &&) {
+auto operator<(T const &, T &&) { // expected-note {{candidate}}
   return std::strong_equality::equal;
 }
 void test() {
   {
     // Chooses non-rewritten operator<
-    auto R = T{} < T{};
-    ASSERT_EXPR_TYPE(R, std::strong_equality);
+    (void)(T{} < T{}); // expected-error {{use of overloaded operator '<' is ambiguous}}
   }
   { // Chooses non-rewritten operator<
     T const t{};
@@ -530,8 +529,7 @@ void test() {
     ASSERT_EXPR_TYPE(R, bool);
   }
   { // Chooses non-rewritten <=>
-    auto R = T{} <=> T{};
-    ASSERT_EXPR_TYPE(R, std::strong_ordering);
+    (void)(T{} <=> T{}); // expected-error {{use of overloaded operator '<=>' is ambiguous}}
   }
   { // Chooses non-rewritten operator<=>
     T const t{};
