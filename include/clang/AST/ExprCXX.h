@@ -4210,32 +4210,50 @@ public:
 };
 
 class CXXRewrittenExpr : public Expr {
-  friend class ASTReader;
-  friend class ASTWriter;
+
+public:
+  enum RewrittenKind { Comparison };
+
+  struct ComparisonBits {
+    /// Whether this rewritten comparison expression has reverse-order
+    /// parameters.
+    unsigned IsSynthesized : 1;
+  };
+
+  union ExtraRewrittenBits {
+    ComparisonBits CompareBits;
+  };
+
+private:
   friend class ASTStmtReader;
   friend class ASTStmtWriter;
 
   Stmt *SubExprs[2];
+  ExtraRewrittenBits ExtraBits;
 
   CXXRewrittenExpr(EmptyShell Empty) : Expr(CXXRewrittenExprClass, Empty) {}
 
 public:
-  typedef BinaryOperatorKind Opcode;
-  enum RewrittenOperatorKind { ROC_None, ROC_Rewritten, ROC_Synthesized };
-
-public:
-  // FIXME(EricWF): Figure out if this will even be built for dependent
-  // expressions.
-  CXXRewrittenExpr(Expr *Original, Expr *Rewritten)
+  CXXRewrittenExpr(RewrittenKind Kind, Expr *Original, Expr *Rewritten,
+                   ExtraRewrittenBits ExtraBits)
       : Expr(CXXRewrittenExprClass, Rewritten->getType(),
              Rewritten->getValueKind(), Rewritten->getObjectKind(),
              /*Dependent*/ Rewritten->isTypeDependent(),
              Rewritten->isValueDependent(),
              Original->isInstantiationDependent(),
-             Rewritten->containsUnexpandedParameterPack()) {
+             Rewritten->containsUnexpandedParameterPack()),
+        ExtraBits(ExtraBits) {
     SubExprs[0] = Original;
     SubExprs[1] = Rewritten;
   }
+
+  RewrittenKind getRewrittenKind() const {
+    return static_cast<RewrittenKind>(CXXRewrittenBits.Kind);
+  }
+  void setRewrittenKind(RewrittenKind Kind) { CXXRewrittenBits.Kind = Kind; }
+
+  ExtraRewrittenBits *getRewrittenInfo() { return &ExtraBits; }
+  const ExtraRewrittenBits *getRewrittenInfo() const { return &ExtraBits; }
 
   Expr *getOriginalExpr() const { return static_cast<Expr *>(SubExprs[0]); }
   Expr *getRewrittenExpr() const {

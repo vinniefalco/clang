@@ -3902,6 +3902,12 @@ ParenListExpr::ParenListExpr(const ASTContext& C, SourceLocation lparenloc,
   }
 }
 
+static OpaqueValueExpr *OpaqueValueExpr::Create(const ASTContext &Ctx,
+                                                Expr *E) {
+  return new (Ctx) OpaqueValueExpr(E->getExprLoc(), E->getType(),
+                                   E->getValueKind(), E->getObjectKind(), E);
+}
+
 const OpaqueValueExpr *OpaqueValueExpr::findInCopyConstruct(const Expr *e) {
   if (const ExprWithCleanups *ewc = dyn_cast<ExprWithCleanups>(e))
     e = ewc->getSubExpr();

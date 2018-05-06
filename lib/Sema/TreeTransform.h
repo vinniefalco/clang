@@ -3217,8 +3217,12 @@ public:
     return getSema().BuildEmptyCXXFoldExpr(EllipsisLoc, Operator);
   }
 
-  ExprResult RebuildCXXRewrittenExpr(Expr *Original, Expr *Rewritten) {
-    return new (SemaRef.Context) CXXRewrittenExpr(Original, Rewritten);
+  ExprResult
+  RebuildCXXRewrittenExpr(CXXRewrittenExpr::RewrittenKind Kind, Expr *Original,
+                          Expr *Rewritten,
+                          CXXRewrittenExpr::ExtraRewrittenBits ExtraBits) {
+    return new (SemaRef.Context)
+        CXXRewrittenExpr(Kind, Original, Rewritten, ExtraBits);
   }
 
   /// \brief Build a new atomic operation expression.
@@ -11519,23 +11523,60 @@ TreeTransform<Derived>::TransformMaterializeTemporaryExpr(
   return getDerived().TransformExpr(E->GetTemporaryExpr());
 }
 
+static Expr *extractOperand(Expr *E, unsigned Idx) {
+  assert(Idx < 2);
+  if (auto *BO = dyn_cast<BinaryOperator>(E)) {
+    if (Idx == 0)
+      return BO->getLHS();
+    return BO->getRHS();
+  }
+  if (auto *CE = dyn_cast<CallExpr>(E)) {
+    assert(CE->getNumArgs() == 2);
+    return CE->getArg(Idx);
+  }
+  llvm_unreachable("unhandled case");
+}
+static std::pair<Expr *, Expr *> extractOperands(Expr *E, bool IsThreeWay,
+                                                 bool IsSynthesized) {
+  if (IsThreeWay)
+    return {extractOperand(E, IsSynthesized ? 1 : 0),
+            extractOperand(E, IsSynthesized ? 1 : 0)};
+  return extractOperands(extractOperand(E, IsSynthesized ? 1 : 0), true,
+                         IsSynthesized);
+}
+
 template <typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformCXXRewrittenExpr(CXXRewrittenExpr *E) {
-  // FIXME(EricWF): Figure out if we should rebuild the original expression,
-  // and if so, how to do that.
 
   // FIXME(EricWF): Is there a case where the underlying expression has been
   // transformed in such a way that we need to re-compute the rewritten
   // expression? (and not just re-build it).
-  ExprResult Rewritten = getDerived().TransformExpr(E->getRewrittenExpr());
-  if (Rewritten.isInvalid())
+  ExprResult RewrittenRes = getDerived().TransformExpr(E->getRewrittenExpr());
+  if (RewrittenRes.isInvalid())
     return ExprError();
+  Expr *Rewritten = RewrittenRes.get();
 
-  if (getDerived().AlwaysRebuild() ||
-      Rewritten.get() != E->getRewrittenExpr()) {
-    return getDerived().RebuildCXXRewrittenExpr(E->getOriginalExpr(),
-                                                Rewritten.get());
+  if (getDerived().AlwaysRebuild() || Rewritten != E->getRewrittenExpr()) {
+    Expr *Original;
+    switch (E->getRewrittenKind()) {
+    case CXXRewrittenExpr::Comparison: {
+      BinaryOperator *Op = cast<BinaryOperator>(E->getOriginalExpr());
+      std::pair<Expr *, Expr *> OrigArgs =
+          extractOperands(Rewritten, Op->getOpcode() == BO_Cmp,
+                          E->getRewrittenInfo()->CompareBits.IsSynthesized);
+      Original = new (SemaRef.Context) BinaryOperator(
+          OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.first),
+          OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.second),
+          Op->getOpcode(), Rewritten->getType(), Rewritten->getValueKind(),
+          Rewritten->getObjectKind(), Op->getOperatorLoc(),
+          Op->getFPFeatures());
+      break;
+    }
+    }
+    return getDerived().RebuildCXXRewrittenExpr(E->getRewrittenKind(),
+                                                E->getOriginalExpr(), Rewritten,
+                                                *E->getRewrittenInfo());
   }
   return E;
 }

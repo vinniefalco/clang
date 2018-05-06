@@ -1707,8 +1707,17 @@ void ASTStmtReader::VisitCXXFoldExpr(CXXFoldExpr *E) {
 
 void ASTStmtReader::VisitCXXRewrittenExpr(CXXRewrittenExpr *E) {
   VisitExpr(E);
+  E->setRewrittenKind(
+      static_cast<CXXRewrittenExpr::RewrittenKind>(Record.readInt()));
   E->SubExprs[0] = Record.readSubExpr();
   E->SubExprs[1] = Record.readSubExpr();
+  switch (E->getRewrittenKind()) {
+  case CXXRewrittenExpr::Comparison: {
+    CXXRewrittenExpr::ComparisonBits &Bits = E->ExtraBits.CompareBits;
+    Bits.IsSynthesized = Record.readInt();
+    break;
+  }
+  }
 }
 
 void ASTStmtReader::VisitOpaqueValueExpr(OpaqueValueExpr *E) {

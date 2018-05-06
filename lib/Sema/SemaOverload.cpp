@@ -12612,20 +12612,18 @@ ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
   Expr *Rewritten = RewrittenRes.get();
 
   // Create a dummy expression representing the original expression as written.
-  auto CreateOpaqueValue = [&](Expr *E) {
-    Expr *Res = new (S.Context)
-        OpaqueValueExpr(E->getExprLoc(), E->getType(), E->getValueKind(),
-                        E->getObjectKind(), E);
-    return Res;
-  };
   // FIXME(EricWF): This doesn't actually really represent the expression as
   // written, because it may not result in a to a builtin operator.
   Expr *Original = new (S.Context)
-      BinaryOperator(CreateOpaqueValue(Args[0]), CreateOpaqueValue(Args[1]),
-                     Opc, Rewritten->getType(), Rewritten->getValueKind(),
+      BinaryOperator(OpaqueValueExpr::Create(S.Context, Args[0]),
+                     OpaqueValueExpr::Create(S.Context, Args[1]), Opc,
+                     Rewritten->getType(), Rewritten->getValueKind(),
                      Rewritten->getObjectKind(), OpLoc, S.FPFeatures);
 
-  return new (S.Context) CXXRewrittenExpr(Original, Rewritten);
+  CXXRewrittenExpr::ExtraRewrittenBits ExtraBits;
+  ExtraBits.CompareBits.IsSynthesized = IsSynthesized;
+  return new (S.Context) CXXRewrittenExpr(CXXRewrittenExpr::Comparison,
+                                          Original, Rewritten, ExtraBits);
 }
 
 /// Rewritten candidates have been added but not checked for validity. They
