@@ -12550,8 +12550,8 @@ ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
                               /*AllowRewrittenCandidates*/ false);
   if (FinalRes.isInvalid())
     return ExprError();
-  return new (S.Context) CXXRewrittenOperator(
-      (CXXRewrittenOperator::RewrittenOperatorKind)Ovl.getRewrittenKind(),
+  return new (S.Context) CXXRewrittenOperatorExpr(
+      (CXXRewrittenOperatorExpr::RewrittenOperatorKind)Ovl.getRewrittenKind(),
       RewrittenRes.get(), FinalRes.get());
 }
 

@@ -3559,9 +3559,10 @@ recurse:
     mangleExpression(cast<CXXStdInitializerListExpr>(E)->getSubExpr(), Arity);
     break;
 
-  case Expr::CXXRewrittenOperatorClass:
+  case Expr::CXXRewrittenOperatorExprClass:
     // FIXME(EricWF): Is this correct?
-    mangleExpression(cast<CXXRewrittenOperator>(E)->getRewrittenExpr(), Arity);
+    mangleExpression(cast<CXXRewrittenOperatorExpr>(E)->getRewrittenExpr(),
+                     Arity);
     break;
 
   case Expr::SubstNonTypeTemplateParmExprClass:

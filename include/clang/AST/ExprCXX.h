@@ -4209,7 +4209,7 @@ public:
   child_range children() { return child_range(SubExprs, SubExprs + 2); }
 };
 
-class CXXRewrittenOperator : public Expr {
+class CXXRewrittenOperatorExpr : public Expr {
   friend class ASTReader;
   friend class ASTWriter;
   friend class ASTStmtReader;
@@ -4219,8 +4219,8 @@ class CXXRewrittenOperator : public Expr {
 
   unsigned Kind : 2;
 
-  CXXRewrittenOperator(EmptyShell Empty)
-      : Expr(CXXRewrittenOperatorClass, Empty) {}
+  CXXRewrittenOperatorExpr(EmptyShell Empty)
+      : Expr(CXXRewrittenOperatorExprClass, Empty) {}
 
 public:
   typedef BinaryOperatorKind Opcode;
@@ -4229,9 +4229,9 @@ public:
 public:
   // FIXME(EricWF): Figure out if this will even be built for dependent
   // expressions.
-  CXXRewrittenOperator(RewrittenOperatorKind Kind, Expr *Underlying,
-                       Expr *Rewritten)
-      : Expr(CXXRewrittenOperatorClass, Rewritten->getType(),
+  CXXRewrittenOperatorExpr(RewrittenOperatorKind Kind, Expr *Underlying,
+                           Expr *Rewritten)
+      : Expr(CXXRewrittenOperatorExprClass, Rewritten->getType(),
              Rewritten->getValueKind(), Rewritten->getObjectKind(),
              /*Dependent*/ false, false, false, false),
         Kind(Kind) {
@@ -4337,7 +4337,7 @@ public:
   child_range children() { return child_range(SubExprs, SubExprs + 2); }
 
   static bool classof(const Stmt *T) {
-    return T->getStmtClass() == CXXRewrittenOperatorClass;
+    return T->getStmtClass() == CXXRewrittenOperatorExprClass;
   }
 };
 

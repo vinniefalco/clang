@@ -1174,8 +1174,8 @@ CanThrowResult Sema::canThrow(const Expr *E) {
   case Expr::VAArgExprClass:
     return canSubExprsThrow(*this, E);
 
-  case Expr::CXXRewrittenOperatorClass:
-    return canThrow(cast<CXXRewrittenOperator>(E)->getRewrittenExpr());
+  case Expr::CXXRewrittenOperatorExprClass:
+    return canThrow(cast<CXXRewrittenOperatorExpr>(E)->getRewrittenExpr());
 
     // Some might be dependent for other reasons.
   case Expr::ArraySubscriptExprClass:
