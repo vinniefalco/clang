@@ -3218,11 +3218,36 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
   }
 
   if (getLangOpts().CPlusPlus) {
+    // Diagnose definitions of explicitly defaulted special members. We do this
+    // before comparing the exception specifications, since doing so first
+    // creates confusing diagnostics. For example:
+    //    struct T { T() = default; };
+    //    T::T() = default;
+    // If the exception spec is checked first the expression is diagnosed as
+    // {{'T' is missing exception specification 'noexcept'}} but we want to
+    // produce the diagnostic {{definition of explicitly defaulted default
+    // constructor}}
+    Sema::CXXSpecialMember SM = getSpecialMember(Old);
+    bool IsFriend = New->getFriendObjectKind();
+    if (Old->isImplicit() && IsFriend) {
+      New->setImplicit();
+    } else if (Old->isImplicit() && !IsFriend) {
+      Diag(New->getLocation(),
+           diag::err_definition_of_implicitly_declared_member)
+          << New << SM;
+      return true;
+    } else if (Old->getFirstDecl()->isExplicitlyDefaulted() && !IsFriend) {
+      Diag(New->getLocation(),
+           diag::err_definition_of_explicitly_defaulted_member)
+          << SM;
+      return true;
+    }
+
     // C++1z [over.load]p2
     //   Certain function declarations cannot be overloaded:
     //     -- Function declarations that differ only in the return type,
     //        the exception specification, or both cannot be overloaded.
-
+    //
     // Check the exception specifications match. This may recompute the type of
     // both Old and New if it resolved exception specifications, so grab the
     // types again after this. Because this updates the type, we do this before
@@ -3339,20 +3364,6 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
       //
       // As an exception, it's okay to befriend such methods in order
       // to permit the implicit constructor/destructor/operator calls.
-      } else if (OldMethod->isImplicit()) {
-        if (isFriend) {
-          NewMethod->setImplicit();
-        } else {
-          Diag(NewMethod->getLocation(),
-               diag::err_definition_of_implicitly_declared_member)
-              << New << getSpecialMember(OldMethod);
-          return true;
-        }
-      } else if (OldMethod->getFirstDecl()->isExplicitlyDefaulted() && !isFriend) {
-        Diag(NewMethod->getLocation(),
-             diag::err_definition_of_explicitly_defaulted_member)
-            << getSpecialMember(OldMethod);
-        return true;
       }
     }
 

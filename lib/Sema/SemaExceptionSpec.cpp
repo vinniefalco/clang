@@ -419,10 +419,10 @@ bool Sema::CheckEquivalentExceptionSpec(FunctionDecl *Old, FunctionDecl *New) {
         FixItLoc = getLocForEndOfToken(FTLoc.getLocalRangeEnd());
   }
 
-  if (FixItLoc.isInvalid())
+  if (FixItLoc.isInvalid()) {
     Diag(New->getLocation(), DiagID)
       << New << OS.str();
-  else {
+  } else {
     Diag(New->getLocation(), DiagID)
       << New << OS.str()
       << FixItHint::CreateInsertion(FixItLoc, " " + OS.str().str());
