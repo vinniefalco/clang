@@ -5060,7 +5060,7 @@ public:
     VisitIgnoredValue(E);
   }
 
-  bool VisitCXXRewrittenOperatorExpr(const CXXRewrittenOperatorExpr *E) {
+  bool VisitCXXRewrittenExpr(const CXXRewrittenExpr *E) {
     return StmtVisitorTy::Visit(E->getRewrittenExpr());
   }
 };
@@ -10862,8 +10862,8 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::ChooseExprClass: {
     return CheckICE(cast<ChooseExpr>(E)->getChosenSubExpr(), Ctx);
   }
-  case Expr::CXXRewrittenOperatorExprClass:
-    return CheckICE(cast<CXXRewrittenOperatorExpr>(E)->getRewrittenExpr(), Ctx);
+  case Expr::CXXRewrittenExprClass:
+    return CheckICE(cast<CXXRewrittenExpr>(E)->getRewrittenExpr(), Ctx);
   }
 
   llvm_unreachable("Invalid StmtClass!");

@@ -246,6 +246,13 @@ protected:
     /// bit is set to true.
     unsigned IsUnique : 1;
   };
+  class CXXRewrittenExprBitfields {
+    friend class CXXRewrittenExpr;
+
+    unsigned : NumExprBits;
+
+    unsigned Kind : 1;
+  };
 
   class ObjCIndirectCopyRestoreExprBitfields {
     friend class ObjCIndirectCopyRestoreExpr;
@@ -309,6 +316,7 @@ protected:
     InitListExprBitfields InitListExprBits;
     TypeTraitExprBitfields TypeTraitExprBits;
     CoawaitExprBitfields CoawaitBits;
+    CXXRewrittenExprBitfields CXXRewrittenBits;
   };
 
 public:

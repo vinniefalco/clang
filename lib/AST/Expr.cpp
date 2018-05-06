@@ -3187,8 +3187,8 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
     return false;
   }
 
-  case CXXRewrittenOperatorExprClass: {
-    const auto *RO = cast<CXXRewrittenOperatorExpr>(this);
+  case CXXRewrittenExprClass: {
+    const auto *RO = cast<CXXRewrittenExpr>(this);
     return RO->getRewrittenExpr()->HasSideEffects(Ctx, IncludePossibleEffects);
   }
 
@@ -3900,6 +3900,11 @@ ParenListExpr::ParenListExpr(const ASTContext& C, SourceLocation lparenloc,
 
     Exprs[i] = exprs[i];
   }
+}
+
+OpaqueValueExpr *OpaqueValueExpr::Create(const ASTContext &Ctx, Expr *E) {
+  return new (Ctx) OpaqueValueExpr(E->getExprLoc(), E->getType(),
+                                   E->getValueKind(), E->getObjectKind(), E);
 }
 
 const OpaqueValueExpr *OpaqueValueExpr::findInCopyConstruct(const Expr *e) {

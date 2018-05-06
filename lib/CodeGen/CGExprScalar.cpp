@@ -541,7 +541,7 @@ public:
     return EmitScalarPrePostIncDec(E, LV, true, true);
   }
 
-  Value *VisitCXXRewrittenOperatorExpr(const CXXRewrittenOperatorExpr *E) {
+  Value *VisitCXXRewrittenExpr(const CXXRewrittenExpr *E) {
     return Visit(E->getRewrittenExpr());
   }
 

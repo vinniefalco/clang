@@ -2549,8 +2549,8 @@ DEF_TRAVERSE_STMT(MaterializeTemporaryExpr, {})
 DEF_TRAVERSE_STMT(CXXFoldExpr, {})
 DEF_TRAVERSE_STMT(AtomicExpr, {})
 
-DEF_TRAVERSE_STMT(CXXRewrittenOperatorExpr, {
-  TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getUnderlyingExpr());
+DEF_TRAVERSE_STMT(CXXRewrittenExpr, {
+  TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getOriginalExpr());
   if (!getDerived().shouldVisitImplicitCode()) {
     TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(S->getRewrittenExpr());
   }

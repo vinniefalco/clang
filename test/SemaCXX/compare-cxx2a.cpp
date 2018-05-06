@@ -496,52 +496,43 @@ struct U {
   std::strong_ordering operator<=>(T const &RHS) const;
 };
 
+struct V {
+  int x;
+};
+auto operator<=>(V const &LHS, V &&RHS) { // expected-note 4 {{candidate}}
+  return LHS.x <=> RHS.x;
+}
+auto operator<(V const &, V &&) { // expected-note {{candidate}}
+  return std::strong_equality::equal;
+}
+
 void test() {
   // expected-error@+1 {{use of overloaded operator '<' is ambiguous}}
   (void)(T{} < U{});
+  // expected-error@+1 {{use of overloaded operator '<' is ambiguous}}
+  (void)(V{} < V{});
+  // expected-error@+1 {{use of overloaded operator '<=>' is ambiguous}}
+  (void)(V{} <=> V{});
 }
 
 } // namespace TestOvlMatchingIgnoresImplicitObject
 
-namespace TestImplicitConversionAmbiguity {
-struct T {
-  int x;
-};
-auto operator<=>(T const &LHS, T &&RHS) {
-  return LHS.x <=> RHS.x;
+namespace TestRewrittenTemplate {
+
+template <class T>
+auto test(T const &LHS, T const &RHS) {
+  // expected-error@+1 {{invalid operands to binary expression ('const TestRewrittenTemplate::None'}}
+  return LHS < RHS;
 }
-auto operator<(T const &, T &&) {
-  return std::strong_equality::equal;
-}
-void test() {
-  {
-    // Chooses non-rewritten operator<
-    auto R = T{} < T{};
-    ASSERT_EXPR_TYPE(R, std::strong_equality);
-  }
-  { // Chooses non-rewritten operator<
-    T const t{};
-    auto R = t < T{};
-    ASSERT_EXPR_TYPE(R, std::strong_equality);
-  }
-  { // Chooses synthesized <=>
-    T const t{};
-    auto R = T{} < t;
-    ASSERT_EXPR_TYPE(R, bool);
-  }
-  { // Chooses non-rewritten <=>
-    auto R = T{} <=> T{};
-    ASSERT_EXPR_TYPE(R, std::strong_ordering);
-  }
-  { // Chooses non-rewritten operator<=>
-    T const t{};
-    auto R = t <=> T{};
-    ASSERT_EXPR_TYPE(R, std::strong_ordering);
-  }
-  { // Chooses synthesized <=>
-    T const t{};
-    auto R = T{} <=> t;
-    ASSERT_EXPR_TYPE(R, std::strong_ordering);
-  }
-}
-} // namespace TestImplicitConversionAmbiguity
+struct None {};
+template auto test<None>(None const &, None const &); // expected-note {{requested here}}
+
+struct Relational {};
+bool operator<(Relational, Relational);
+template auto test<Relational>(Relational const &, Relational const &);
+
+struct ThreeWay {};
+std::strong_ordering operator<=>(ThreeWay, ThreeWay);
+template auto test<ThreeWay>(ThreeWay const &, ThreeWay const &);
+
+} // namespace TestRewrittenTemplate

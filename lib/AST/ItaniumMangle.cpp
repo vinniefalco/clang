@@ -3516,9 +3516,13 @@ recurse:
   }
 
   // These are used for internal purposes and cannot be meaningfully mangled.
-  case Expr::OpaqueValueExprClass:
-    llvm_unreachable("cannot mangle opaque value; mangling wrong thing?");
-
+  case Expr::OpaqueValueExprClass: {
+    const OpaqueValueExpr *OVE = cast<OpaqueValueExpr>(E);
+    assert(OVE->getSourceExpr() && "cannot mangle opaque value without a "
+                                   "source expression; mangling wrong thing?");
+    mangleExpression(OVE->getSourceExpr());
+    break;
+  }
   case Expr::InitListExprClass: {
     Out << "il";
     mangleInitListElements(cast<InitListExpr>(E));
@@ -3559,9 +3563,8 @@ recurse:
     mangleExpression(cast<CXXStdInitializerListExpr>(E)->getSubExpr(), Arity);
     break;
 
-  case Expr::CXXRewrittenOperatorExprClass:
-    mangleExpression(cast<CXXRewrittenOperatorExpr>(E)->getUnderlyingExpr(),
-                     Arity);
+  case Expr::CXXRewrittenExprClass:
+    mangleExpression(cast<CXXRewrittenExpr>(E)->getOriginalExpr(), Arity);
     break;
 
   case Expr::SubstNonTypeTemplateParmExprClass:
