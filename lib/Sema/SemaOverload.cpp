@@ -12617,11 +12617,10 @@ ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
                          E->getObjectKind(), E);
     return Res;
   };
-  Expr *OrigLHS = CreateOpaqueValue(Args[0]);
-  Expr *OrigRHS = CreateOpaqueValue(Args[1]);
-  Expr *Original = new (S.Context) BinaryOperator(
-      OrigLHS, OrigRHS, Rewritten->getType(), Rewritten->getValueKind(),
-      Rewritten->getObjectKind(), OpLoc, S.FPFeatures);
+  Expr *Original = new (S.Context)
+      BinaryOperator(CreateOpaqueValue(Args[0]), CreateOpaqueValue(Args[1]),
+                     Rewritten->getType(), Rewritten->getValueKind(),
+                     Rewritten->getObjectKind(), OpLoc, S.FPFeatures);
 
   return new (S.Context) CXXRewrittenExpr(Original, Rewritten);
 }
