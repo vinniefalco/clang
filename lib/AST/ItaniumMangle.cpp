@@ -3560,7 +3560,7 @@ recurse:
     break;
 
   case Expr::CXXRewrittenExprClass:
-    mangleExpression(cast<CXXRewrittenExpr>(E)->getUnderlyingExpr(), Arity);
+    mangleExpression(cast<CXXRewrittenExpr>(E)->getOriginalExpr(), Arity);
     break;
 
   case Expr::SubstNonTypeTemplateParmExprClass:
