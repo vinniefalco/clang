@@ -2784,7 +2784,12 @@ public:
                                 TemplateArgumentListInfo *ExplicitTemplateArgs,
                                             OverloadCandidateSet& CandidateSet,
                                             bool PartialOverloading = false);
-
+  void AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
+                                      SourceLocation OpLoc,
+                                      ArrayRef<Expr *> InputArgs,
+                                      const UnresolvedSetImpl &Fns,
+                                      OverloadCandidateSet &CandidateSet,
+                                      bool PerformADL);
   // Emit as a 'note' the specific overload candidate
   void NoteOverloadCandidate(NamedDecl *Found, FunctionDecl *Fn,
                              QualType DestType = QualType(),
@@ -2928,6 +2933,12 @@ public:
   ExprResult CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
                                                 SourceLocation RLoc,
                                                 Expr *Base,Expr *Idx);
+
+  ExprResult BuildBinaryOperatorCandidate(SourceLocation OpLoc,
+                                          BinaryOperatorKind Opc,
+                                          const OverloadCandidate &Ovl,
+                                          Expr *LHS, Expr *RHS,
+                                          bool HadMultipleCandidates);
 
   ExprResult
   BuildCallToMemberFunction(Scope *S, Expr *MemExpr,

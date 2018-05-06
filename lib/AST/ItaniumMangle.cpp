@@ -3560,8 +3560,7 @@ recurse:
     break;
 
   case Expr::CXXRewrittenOperatorExprClass:
-    // FIXME(EricWF): Is this correct?
-    mangleExpression(cast<CXXRewrittenOperatorExpr>(E)->getRewrittenExpr(),
+    mangleExpression(cast<CXXRewrittenOperatorExpr>(E)->getUnderlyingExpr(),
                      Arity);
     break;
 
