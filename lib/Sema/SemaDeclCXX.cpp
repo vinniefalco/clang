@@ -43,6 +43,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include <map>
 #include <set>
+#include <utility>
 
 using namespace clang;
 
