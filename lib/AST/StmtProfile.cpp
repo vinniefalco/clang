@@ -1816,6 +1816,11 @@ void StmtProfiler::VisitCXXFoldExpr(const CXXFoldExpr *S) {
   ID.AddInteger(S->getOperator());
 }
 
+void StmtProfiler::VisitCXXRewrittenOperator(const CXXRewrittenOperator *S) {
+  VisitExpr(S);
+  ID.AddInteger(S->getKind());
+}
+
 void StmtProfiler::VisitCoroutineBodyStmt(const CoroutineBodyStmt *S) {
   VisitStmt(S);
 }

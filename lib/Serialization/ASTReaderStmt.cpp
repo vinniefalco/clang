@@ -1705,6 +1705,13 @@ void ASTStmtReader::VisitCXXFoldExpr(CXXFoldExpr *E) {
   E->Opcode = (BinaryOperatorKind)Record.readInt();
 }
 
+void ASTStmtReader::VisitCXXRewrittenOperator(CXXRewrittenOperator *E) {
+  VisitExpr(E);
+  E->Kind = (CXXRewrittenOperator::RewrittenOperatorKind)Record.readInt();
+  E->SubExprs[0] = Record.readSubExpr();
+  E->SubExprs[1] = Record.readSubExpr();
+}
+
 void ASTStmtReader::VisitOpaqueValueExpr(OpaqueValueExpr *E) {
   VisitExpr(E);
   E->SourceExpr = Record.readSubExpr();
@@ -4073,6 +4080,9 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
     case EXPR_CXX_FOLD:
       S = new (Context) CXXFoldExpr(Empty);
       break;
+
+    case EXPR_CXX_REWRITTEN_OPERATOR:
+      S = new (Context) CXXRewrittenOperator(Empty);
 
     case EXPR_OPAQUE_VALUE:
       S = new (Context) OpaqueValueExpr(Empty);

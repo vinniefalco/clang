@@ -541,6 +541,10 @@ public:
     return EmitScalarPrePostIncDec(E, LV, true, true);
   }
 
+  Value *VisitCXXRewrittenOperator(const CXXRewrittenOperator *E) {
+    return Visit(E->getRewrittenExpr());
+  }
+
   llvm::Value *EmitIncDecConsiderOverflowBehavior(const UnaryOperator *E,
                                                   llvm::Value *InVal,
                                                   bool IsInc);

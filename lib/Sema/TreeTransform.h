@@ -3217,6 +3217,13 @@ public:
     return getSema().BuildEmptyCXXFoldExpr(EllipsisLoc, Operator);
   }
 
+  ExprResult
+  RebuildCXXRewrittenOperator(CXXRewrittenOperator::RewrittenOperatorKind Kind,
+                              Expr *Underlying, Expr *Rewritten) {
+    return new (SemaRef.Context)
+        CXXRewrittenOperator(Kind, Underlying, Rewritten);
+  }
+
   /// \brief Build a new atomic operation expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -11513,6 +11520,28 @@ ExprResult
 TreeTransform<Derived>::TransformMaterializeTemporaryExpr(
                                                   MaterializeTemporaryExpr *E) {
   return getDerived().TransformExpr(E->GetTemporaryExpr());
+}
+
+template <typename Derived>
+ExprResult
+TreeTransform<Derived>::TransformCXXRewrittenOperator(CXXRewrittenOperator *E) {
+  ExprResult Orig = getDerived().TransformExpr(E->getUnderlyingExpr());
+  if (Orig.isInvalid())
+    return ExprError();
+
+  // FIXME(EricWF): Is there a case where the underlying expression has been
+  // transformed in such a way that we need to re-compute the rewritten
+  // expression? (and not just re-build it).
+  ExprResult Rewritten = getDerived().TransformExpr(E->getRewrittenExpr());
+  if (Rewritten.isInvalid())
+    return ExprError();
+
+  if (getDerived().AlwaysRebuild() || Orig.get() != E->getUnderlyingExpr() ||
+      Rewritten.get() != E->getRewrittenExpr()) {
+    return getDerived().RebuildCXXRewrittenOperator(E->getKind(), Orig.get(),
+                                                    Rewritten.get());
+  }
+  return E;
 }
 
 template<typename Derived>

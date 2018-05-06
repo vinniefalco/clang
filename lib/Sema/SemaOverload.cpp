@@ -831,6 +831,19 @@ llvm::Optional<unsigned> DeductionFailureInfo::getCallArgIndex() {
   }
 }
 
+const ImplicitConversionSequence &
+OverloadCandidate::getConversion(unsigned ArgIdx) const {
+  return Conversions[getConversionIndexForArgIndex(ArgIdx)];
+}
+
+unsigned OverloadCandidate::getConversionIndexForArgIndex(unsigned Idx) const {
+  if (getRewrittenKind() != ROC_Synthesized)
+    return Idx;
+  // FIXME(EricWF): Handle these cases.
+  assert(Idx < 2);
+  return Idx == 0 ? 1 : 0;
+}
+
 void OverloadCandidateSet::destroyCandidates() {
   for (iterator i = begin(), e = end(); i != e; ++i) {
     for (auto &C : i->Conversions)
@@ -5942,13 +5955,15 @@ Sema::AddOverloadCandidate(FunctionDecl *Function,
   //   (possibly cv-qualified) T2", when T2 is an enumeration type, are
   //   candidate functions.
   if (CandidateSet.getKind() == OverloadCandidateSet::CSK_Operator &&
-      !IsAcceptableNonMemberOperatorCandidate(Context, Function, Args))
+      !IsAcceptableNonMemberOperatorCandidate(Context, Function, Args)) {
     return;
+  }
 
   // C++11 [class.copy]p11: [DR1402]
   //   A defaulted move constructor that is defined as deleted is ignored by
   //   overload resolution.
   CXXConstructorDecl *Constructor = dyn_cast<CXXConstructorDecl>(Function);
+
   if (Constructor && Constructor->isDefaulted() && Constructor->isDeleted() &&
       Constructor->isMoveConstructor())
     return;
@@ -5964,6 +5979,7 @@ Sema::AddOverloadCandidate(FunctionDecl *Function,
   Candidate.Function = Function;
   Candidate.Viable = true;
   Candidate.IsSurrogate = false;
+  Candidate.RewrittenOpKind = ROC_None;
   Candidate.IgnoreObjectArgument = false;
   Candidate.ExplicitCallArguments = Args.size();
 
@@ -6654,6 +6670,7 @@ Sema::AddMethodTemplateCandidate(FunctionTemplateDecl *MethodTmpl,
     Candidate.Function = MethodTmpl->getTemplatedDecl();
     Candidate.Viable = false;
     Candidate.IsSurrogate = false;
+    Candidate.RewrittenOpKind = ROC_None;
     Candidate.IgnoreObjectArgument =
         cast<CXXMethodDecl>(Candidate.Function)->isStatic() ||
         ObjectType.isNull();
@@ -6718,6 +6735,7 @@ Sema::AddTemplateOverloadCandidate(FunctionTemplateDecl *FunctionTemplate,
     Candidate.Function = FunctionTemplate->getTemplatedDecl();
     Candidate.Viable = false;
     Candidate.IsSurrogate = false;
+    Candidate.RewrittenOpKind = ROC_None;
     // Ignore the object argument if there is one, since we don't have an object
     // type.
     Candidate.IgnoreObjectArgument =
@@ -6889,6 +6907,7 @@ Sema::AddConversionCandidate(CXXConversionDecl *Conversion,
   Candidate.FoundDecl = FoundDecl;
   Candidate.Function = Conversion;
   Candidate.IsSurrogate = false;
+  Candidate.RewrittenOpKind = ROC_None;
   Candidate.IgnoreObjectArgument = false;
   Candidate.FinalConversion.setAsIdentityConversion();
   Candidate.FinalConversion.setFromType(ConvType);
@@ -7050,6 +7069,7 @@ Sema::AddTemplateConversionCandidate(FunctionTemplateDecl *FunctionTemplate,
     Candidate.Viable = false;
     Candidate.FailureKind = ovl_fail_bad_deduction;
     Candidate.IsSurrogate = false;
+    Candidate.RewrittenOpKind = ROC_None;
     Candidate.IgnoreObjectArgument = false;
     Candidate.ExplicitCallArguments = 1;
     Candidate.DeductionFailure = MakeDeductionFailureInfo(Context, Result,
@@ -7090,6 +7110,7 @@ void Sema::AddSurrogateCandidate(CXXConversionDecl *Conversion,
   Candidate.Surrogate = Conversion;
   Candidate.Viable = true;
   Candidate.IsSurrogate = true;
+  Candidate.RewrittenOpKind = ROC_None;
   Candidate.IgnoreObjectArgument = false;
   Candidate.ExplicitCallArguments = Args.size();
 
@@ -7186,7 +7207,7 @@ void Sema::AddSurrogateCandidate(CXXConversionDecl *Conversion,
 void Sema::AddMemberOperatorCandidates(OverloadedOperatorKind Op,
                                        SourceLocation OpLoc,
                                        ArrayRef<Expr *> Args,
-                                       OverloadCandidateSet& CandidateSet,
+                                       OverloadCandidateSet &CandidateSet,
                                        SourceRange OpRange) {
   DeclarationName OpName = Context.DeclarationNames.getCXXOperatorName(Op);
 
@@ -7247,6 +7268,7 @@ void Sema::AddBuiltinCandidate(QualType *ParamTys, ArrayRef<Expr *> Args,
   Candidate.FoundDecl = DeclAccessPair::make(nullptr, AS_none);
   Candidate.Function = nullptr;
   Candidate.IsSurrogate = false;
+  Candidate.RewrittenOpKind = ROC_None;
   Candidate.IgnoreObjectArgument = false;
   std::copy(ParamTys, ParamTys + Args.size(), Candidate.BuiltinParamTypes);
 
@@ -8862,6 +8884,67 @@ void Sema::AddBuiltinOperatorCandidates(OverloadedOperatorKind Op,
   }
 }
 
+/// Add the rewritten and synthesized candidates for binary comparison
+///  operators. No additional semantic checking is done to see if the candidate
+///    is well formed.
+void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
+                                          SourceLocation OpLoc,
+                                          ArrayRef<Expr *> InputArgs,
+                                          const UnresolvedSetImpl &Fns,
+                                          OverloadCandidateSet &CandidateSet,
+                                          bool PerformADL) {
+  auto Opc = BinaryOperator::getOverloadedOpcode(Op);
+
+  bool IsRelationalOrEquality =
+      BinaryOperator::isRelationalOp(Opc) || BinaryOperator::isEqualityOp(Opc);
+  if (!IsRelationalOrEquality && Opc != BO_Cmp)
+    return;
+  assert(InputArgs.size() == 2);
+
+  OverloadedOperatorKind CmpOp = OO_Spaceship;
+  DeclarationName OpName = Context.DeclarationNames.getCXXOperatorName(CmpOp);
+
+  // AddCandidates - Add operator<=> candidates for the specified set of args,
+  // and mark all newly generated candidates as having the specified
+  // 'RewrittenOverloadCandidateKind'.
+  auto AddCandidates = [&](ArrayRef<Expr *> Args,
+                           RewrittenOverloadCandidateKind Kind) {
+    OverloadCandidateSet::RewrittenCandidateContextGuard Guard(CandidateSet);
+
+    unsigned InitialSize = CandidateSet.size();
+    AddFunctionCandidates(Fns, Args, CandidateSet);
+    AddMemberOperatorCandidates(CmpOp, OpLoc, Args, CandidateSet);
+    if (PerformADL)
+      AddArgumentDependentLookupCandidates(OpName, OpLoc, Args,
+                                           /*ExplicitTemplateArgs*/ nullptr,
+                                           CandidateSet);
+    AddBuiltinOperatorCandidates(CmpOp, OpLoc, Args, CandidateSet);
+
+    for (auto It = std::next(CandidateSet.begin(), InitialSize);
+         It != CandidateSet.end(); ++It) {
+      OverloadCandidate &Ovl = *It;
+      Ovl.RewrittenOpKind = Kind;
+    }
+  };
+
+  // If we have a relational or equality operation, add the rewritten candidates
+  // of the form: (LHS <=> RHS) @ 0
+  if (IsRelationalOrEquality)
+   AddCandidates(InputArgs, ROC_Rewritten);
+
+  // TODO: We should be able to avoid adding synthesized candidates when LHS and
+  // RHS have the same type, value category, and other relevent properties.
+  // In that case synthesized candidates for <=> should be the same as the
+  // rewritten ones. Note: It's still possible for the result of operator<=> to
+  // be usable only on the left or right side of the expression (0 @ <result>)
+  // or (<result> @ 0).
+
+  // For relational, equality, and three-way comparisons, add the rewritten and
+  // synthesized candidates of the form: 0 @ (RHS <=> LHS)
+  SmallVector<Expr *, 2> ReverseArgs(InputArgs.rbegin(), InputArgs.rend());
+  AddCandidates(ReverseArgs, ROC_Synthesized);
+}
+
 /// \brief Add function candidates found via argument-dependent lookup
 /// to the set of overloading candidates.
 ///
@@ -8869,13 +8952,10 @@ void Sema::AddBuiltinOperatorCandidates(OverloadedOperatorKind Op,
 /// given function name (which may also be an operator name) and adds
 /// all of the overload candidates found by ADL to the overload
 /// candidate set (C++ [basic.lookup.argdep]).
-void
-Sema::AddArgumentDependentLookupCandidates(DeclarationName Name,
-                                           SourceLocation Loc,
-                                           ArrayRef<Expr *> Args,
-                                 TemplateArgumentListInfo *ExplicitTemplateArgs,
-                                           OverloadCandidateSet& CandidateSet,
-                                           bool PartialOverloading) {
+void Sema::AddArgumentDependentLookupCandidates(
+    DeclarationName Name, SourceLocation Loc, ArrayRef<Expr *> Args,
+    TemplateArgumentListInfo *ExplicitTemplateArgs,
+    OverloadCandidateSet &CandidateSet, bool PartialOverloading) {
   ADLResult Fns;
 
   // FIXME: This approach for uniquing ADL results (and removing
@@ -9008,8 +9088,8 @@ bool clang::isBetterOverloadCandidate(
   assert(Cand2.Conversions.size() == NumArgs && "Overload candidate mismatch");
   bool HasBetterConversion = false;
   for (unsigned ArgIdx = StartArg; ArgIdx < NumArgs; ++ArgIdx) {
-    bool Cand1Bad = IsIllFormedConversion(Cand1.Conversions[ArgIdx]);
-    bool Cand2Bad = IsIllFormedConversion(Cand2.Conversions[ArgIdx]);
+    bool Cand1Bad = IsIllFormedConversion(Cand1.getConversion(ArgIdx));
+    bool Cand2Bad = IsIllFormedConversion(Cand2.getConversion(ArgIdx));
     if (Cand1Bad != Cand2Bad) {
       if (Cand1Bad)
         return false;
@@ -9025,9 +9105,8 @@ bool clang::isBetterOverloadCandidate(
   //   viable function F2 if for all arguments i, ICSi(F1) is not a worse
   //   conversion sequence than ICSi(F2), and then...
   for (unsigned ArgIdx = StartArg; ArgIdx < NumArgs; ++ArgIdx) {
-    switch (CompareImplicitConversionSequences(S, Loc,
-                                               Cand1.Conversions[ArgIdx],
-                                               Cand2.Conversions[ArgIdx])) {
+    switch (CompareImplicitConversionSequences(
+        S, Loc, Cand1.getConversion(ArgIdx), Cand2.getConversion(ArgIdx))) {
     case ImplicitConversionSequence::Better:
       // Cand1 has a better conversion sequence.
       HasBetterConversion = true;
@@ -9131,6 +9210,32 @@ bool clang::isBetterOverloadCandidate(
     if (Cand2Class->isDerivedFrom(Cand1Class))
       return false;
     // Inherited from sibling base classes: still ambiguous.
+  }
+
+  // Check C++2a tie-breakers for rewritten candidates
+  {
+    // --- F2 is a rewritten candidate ([over.match.oper]) and F1 is not.
+    RewrittenOverloadCandidateKind C1Roc = Cand1.getRewrittenKind();
+    RewrittenOverloadCandidateKind C2Roc = Cand2.getRewrittenKind();
+    if (C1Roc || C2Roc) {
+      if (!C1Roc || !C2Roc)
+        return !C1Roc;
+      // --- F1 and F2 are rewritten candidates, and F2 is a synthesized
+      // candidate with reversed order of parameters and F1 is not.
+      if ((C1Roc == ROC_Synthesized || C2Roc == ROC_Synthesized) &&
+          C1Roc != C2Roc) {
+        auto GetParamTypes = [&](const OverloadCandidate &Ovl) {
+          SmallVector<QualType, 2> Types;
+          for (unsigned I = 0; I < Ovl.getNumParams(); ++I)
+            Types.push_back(Ovl.getParamType(I).getCanonicalType());
+          if (Ovl.getRewrittenKind() == ROC_Synthesized)
+            llvm::reverse(Types);
+          return Types;
+        };
+        if (GetParamTypes(Cand1) == GetParamTypes(Cand2))
+          return C2Roc == ROC_Synthesized;
+      }
+    }
   }
 
   // Check C++17 tie-breakers for deduction guides.
@@ -9245,9 +9350,9 @@ void Sema::diagnoseEquivalentInternalLinkageDeclarations(
 /// function, \p Best points to the candidate function found.
 ///
 /// \returns The result of overload resolution.
-OverloadingResult
-OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
-                                         iterator &Best) {
+OverloadingResult OverloadCandidateSet::BestViableFunction(
+    Sema &S, SourceLocation Loc, iterator &Best,
+    SmallVectorImpl<OverloadCandidate *> *EquivalentCands) {
   llvm::SmallVector<OverloadCandidate *, 16> Candidates;
   std::transform(begin(), end(), std::back_inserter(Candidates),
                  [](OverloadCandidate &Cand) { return &Cand; });
@@ -9289,22 +9394,31 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
   if (Best == end())
     return OR_No_Viable_Function;
 
-  llvm::SmallVector<const NamedDecl *, 4> EquivalentCands;
-
+  llvm::SmallVector<const NamedDecl *, 4> EquivalentFunctionCands;
+  if (EquivalentCands)
+    EquivalentCands->push_back(&(*Best));
   // Make sure that this function is better than every other viable
   // function. If not, we have an ambiguity.
   for (auto *Cand : Candidates) {
     if (Cand->Viable && Cand != Best &&
         !isBetterOverloadCandidate(S, *Best, *Cand, Loc, Kind)) {
+      if (EquivalentCands)
+        EquivalentCands->push_back(Cand);
       if (S.isEquivalentInternalLinkageDeclaration(Best->Function,
                                                    Cand->Function)) {
-        EquivalentCands.push_back(Cand->Function);
+        EquivalentFunctionCands.push_back(Cand->Function);
         continue;
       }
+      if (EquivalentCands)
+        continue;
 
       Best = end();
       return OR_Ambiguous;
     }
+  }
+  if (EquivalentCands && EquivalentCands->size() > 1) {
+    Best = end();
+    return OR_Ambiguous;
   }
 
   // Best is the best viable function.
@@ -9313,9 +9427,9 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
        S.isFunctionConsideredUnavailable(Best->Function)))
     return OR_Deleted;
 
-  if (!EquivalentCands.empty())
+  if (!EquivalentFunctionCands.empty())
     S.diagnoseEquivalentInternalLinkageDeclarations(Loc, Best->Function,
-                                                    EquivalentCands);
+                                                    EquivalentFunctionCands);
 
   return OR_Success;
 }
@@ -12228,6 +12342,313 @@ Sema::CreateOverloadedUnaryOp(SourceLocation OpLoc, UnaryOperatorKind Opc,
   return CreateBuiltinUnaryOp(OpLoc, Opc, Input);
 }
 
+static ExprResult buildBinaryOperatorCandidate(Sema &S, SourceLocation OpLoc,
+                                               BinaryOperatorKind Opc,
+                                               const OverloadCandidate &Ovl,
+                                               Expr *LHSE, Expr *RHSE,
+                                               bool HadMultipleCandidates) {
+  Expr *Args[2] = {LHSE, RHSE};
+  OverloadedOperatorKind Op = BinaryOperator::getOverloadedOperator(Opc);
+  // We found a built-in operator or an overloaded operator.
+  FunctionDecl *FnDecl = Ovl.Function;
+
+  if (FnDecl) {
+    Expr *Base = nullptr;
+    // We matched an overloaded operator. Build a call to that
+    // operator.
+
+    // Convert the arguments.
+    if (CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(FnDecl)) {
+      // Ovl.Access is only meaningful for class members.
+      S.CheckMemberOperatorAccess(OpLoc, Args[0], Args[1], Ovl.FoundDecl);
+
+      ExprResult Arg1 =
+          S.PerformCopyInitialization(InitializedEntity::InitializeParameter(
+                                          S.Context, FnDecl->getParamDecl(0)),
+                                      SourceLocation(), Args[1]);
+      if (Arg1.isInvalid())
+        return ExprError();
+
+      ExprResult Arg0 = S.PerformObjectArgumentInitialization(
+          Args[0], /*Qualifier=*/nullptr, Ovl.FoundDecl, Method);
+      if (Arg0.isInvalid())
+        return ExprError();
+      Base = Args[0] = Arg0.getAs<Expr>();
+      Args[1] = Arg1.getAs<Expr>();
+    } else {
+      // Convert the arguments.
+      ExprResult Arg0 =
+          S.PerformCopyInitialization(InitializedEntity::InitializeParameter(
+                                          S.Context, FnDecl->getParamDecl(0)),
+                                      SourceLocation(), Args[0]);
+      if (Arg0.isInvalid())
+        return ExprError();
+
+      ExprResult Arg1 =
+          S.PerformCopyInitialization(InitializedEntity::InitializeParameter(
+                                          S.Context, FnDecl->getParamDecl(1)),
+                                      SourceLocation(), Args[1]);
+      if (Arg1.isInvalid())
+        return ExprError();
+      Args[0] = Arg0.getAs<Expr>();
+      Args[1] = Arg1.getAs<Expr>();
+    }
+
+    // Build the actual expression node.
+    ExprResult FnExpr = CreateFunctionRefExpr(S, FnDecl, Ovl.FoundDecl, Base,
+                                              HadMultipleCandidates, OpLoc);
+    if (FnExpr.isInvalid())
+      return ExprError();
+
+    // Determine the result type.
+    QualType ResultTy = FnDecl->getReturnType();
+    ExprValueKind VK = Expr::getValueKindForType(ResultTy);
+    ResultTy = ResultTy.getNonLValueExprType(S.Context);
+
+    CXXOperatorCallExpr *TheCall = new (S.Context) CXXOperatorCallExpr(
+        S.Context, Op, FnExpr.get(), Args, ResultTy, VK, OpLoc, S.FPFeatures);
+
+    if (S.CheckCallReturnType(FnDecl->getReturnType(), OpLoc, TheCall, FnDecl))
+      return ExprError();
+
+    ArrayRef<const Expr *> ArgsArray(Args, 2);
+    const Expr *ImplicitThis = nullptr;
+    // Cut off the implicit 'this'.
+    if (isa<CXXMethodDecl>(FnDecl)) {
+      ImplicitThis = ArgsArray[0];
+      ArgsArray = ArgsArray.slice(1);
+    }
+
+    // Check for a self move.
+    if (Op == OO_Equal)
+      S.DiagnoseSelfMove(Args[0], Args[1], OpLoc);
+
+    S.checkCall(FnDecl, nullptr, ImplicitThis, ArgsArray,
+                isa<CXXMethodDecl>(FnDecl), OpLoc, TheCall->getSourceRange(),
+                Sema::VariadicDoesNotApply);
+
+    return S.MaybeBindToTemporary(TheCall);
+
+  } else {
+    // We matched a built-in operator. Convert the arguments, then
+    // break out so that we will build the appropriate built-in
+    // operator node.
+    ExprResult ArgsRes0 =
+        S.PerformImplicitConversion(Args[0], Ovl.BuiltinParamTypes[0],
+                                    Ovl.Conversions[0], Sema::AA_Passing);
+    if (ArgsRes0.isInvalid())
+      return ExprError();
+    Args[0] = ArgsRes0.get();
+
+    ExprResult ArgsRes1 =
+        S.PerformImplicitConversion(Args[1], Ovl.BuiltinParamTypes[1],
+                                    Ovl.Conversions[1], Sema::AA_Passing);
+    if (ArgsRes1.isInvalid())
+      return ExprError();
+    Args[1] = ArgsRes1.get();
+  }
+  // We matched a built-in operator; build it.
+  return S.CreateBuiltinBinOp(OpLoc, Opc, Args[0], Args[1]);
+}
+
+namespace {
+
+/// \brief RewrittenOverloadResolver - This class handles initial
+/// overload resolution for candidate sets which include rewritten candidates.
+///
+/// Rewritten candidates haven't been fully checked for validity. They may still
+/// be invalid if:
+///    (A) The rewritten candidate is a builtin, but semantic checking of the
+///        builtin would fail.
+///    (B) The result of the "partially rewritten expression"
+///        (ie the (LHS <=> RHS) part) is ill-formed when used as an operand to
+///        (<result> @ 0) or (0 @ <result>).
+///
+/// TODO: Separate out the bits of semantic checking for builtin spaceship
+/// operators which determine validity and the return type, and use that instead
+/// of building the full expression to check validity.
+class RewrittenOverloadResolver {
+  enum CheckOverloadResult { Done, Continue };
+
+public:
+  RewrittenOverloadResolver(Sema &S, SourceLocation OpLoc,
+                            BinaryOperatorKind Opc, ArrayRef<Expr *> Args,
+                            const UnresolvedSetImpl &Fns, bool PerformADL,
+                            OverloadCandidateSet &CS)
+      : S(S), OpLoc(OpLoc), Opc(Opc), Args(Args), Fns(Fns),
+        PerformADL(PerformADL), CandidateSet(CS) {}
+
+  ExprResult ResolveRewrittenCandidates() {
+    ExprResult FinalResult = ExprError();
+    OverloadCandidateSet::iterator Best;
+    OverloadingResult OvlRes;
+    llvm::SmallVector<OverloadCandidate *, 4> EquivCands;
+    do {
+      EquivCands.clear();
+      OvlRes = CandidateSet.BestViableFunction(S, OpLoc, Best, &EquivCands);
+    } while (Continue == RemoveNonViableRewrittenCandidates(
+                             OvlRes, Best, EquivCands, FinalResult));
+    return FinalResult;
+  }
+private:
+  CheckOverloadResult RemoveNonViableRewrittenCandidates(
+      OverloadingResult OvlRes, OverloadCandidateSet::iterator Best,
+      ArrayRef<OverloadCandidate *> EquivCands, ExprResult &FinalResult);
+  ExprResult BuildRewrittenCandidate(const OverloadCandidate &Ovl);
+
+  RewrittenOverloadResolver(RewrittenOverloadResolver const &) = delete;
+  RewrittenOverloadResolver &
+  operator=(RewrittenOverloadResolver const &) = delete;
+
+private:
+  Sema &S;
+  SourceLocation OpLoc;
+  BinaryOperatorKind Opc;
+  ArrayRef<Expr *> Args;
+  const UnresolvedSetImpl &Fns;
+  bool PerformADL;
+  OverloadCandidateSet &CandidateSet;
+};
+} // end namespace
+
+ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
+    const OverloadCandidate &Ovl) {
+  Expr *RewrittenArgs[2] = {Args[0], Args[1]};
+  assert(Ovl.getRewrittenKind());
+  bool IsSynthesized = Ovl.getRewrittenKind() == ROC_Synthesized;
+  if (IsSynthesized)
+    std::swap(RewrittenArgs[0], RewrittenArgs[1]);
+
+  ExprResult RewrittenRes = ExprError();
+
+  // Supress diagnostics when building the expressions for the specified
+  // candidate. If evaluation fails the candidate will be marked non-viable
+  // and the best viable candidate re-computed.
+  Sema::TentativeAnalysisScope DiagnosticScopeGuard(S);
+
+  // Build the '(LHS <=> RHS)' operand to the full expression.
+  RewrittenRes = buildBinaryOperatorCandidate(
+      S, OpLoc, BO_Cmp, Ovl, RewrittenArgs[0], RewrittenArgs[1],
+      /*HadMultipleCandidates*/ false);
+  if (RewrittenRes.isInvalid())
+    return ExprError();
+
+  // Now attempt to build the full expression '(LHS <=> RHS) @ 0' using the
+  // evaluated operand and the literal 0.
+  llvm::APInt I =
+      llvm::APInt::getNullValue(S.Context.getIntWidth(S.Context.IntTy));
+  Expr *Zero =
+      IntegerLiteral::Create(S.Context, I, S.Context.IntTy, SourceLocation());
+
+  Expr *NewLHS = RewrittenRes.get();
+  Expr *NewRHS = Zero;
+  if (Ovl.getRewrittenKind() == ROC_Synthesized)
+    std::swap(NewLHS, NewRHS);
+
+  ExprResult FinalRes =
+      S.CreateOverloadedBinOp(OpLoc, Opc, Fns, NewLHS, NewRHS, PerformADL,
+                              /*AllowRewrittenCandidates*/ false);
+  if (FinalRes.isInvalid())
+    return ExprError();
+  return new (S.Context) CXXRewrittenOperator(
+      (CXXRewrittenOperator::RewrittenOperatorKind)Ovl.getRewrittenKind(),
+      RewrittenRes.get(), FinalRes.get());
+}
+
+/// Rewritten candidates have been added but not checked for validity. They
+/// could still be non-viable if:
+///  (A) The rewritten call (x <=> y) is a builtin, but it will be ill-formed
+///      when built (for example it has narrowing conversions).
+///  (B) The expression (x <=> y) @ 0 is ill-formed for the result of (x <=> y).
+///
+/// If either is the case, this function should be considered non-viable and
+/// another best viable function needs to be computed.
+///
+/// Therefore, we do the following:
+///  (1) If we have no viable candidate, or a deleted candidate, stop.
+///      Otherwise, if we have a best viable candidate or a set of ambiguous
+///      candidates and none of them are rewritten, stop.
+///
+///  (2) If the best viable candidate is a rewritten candidate, build and
+///      check the full expression for that candidate. If it succeeds return
+///      the result. Otherwise, mark the candidate as non-viable, re-compute
+///      the best viable function, and continue.
+///
+///  (3) If we have ambiguity attempt to resolve it by evaluating each rewritten
+///      candidate causing ambiguity:
+///
+///        (3.1) build the full expression for the specified candidate.
+///        (3.2) If the result is invalid, mark the candidate as non-viable.
+///
+///      If only one viable candidate remains, stop. If the viable candidate is
+///      rewritten, return the previously computed full expression. Otherwise,
+///      if we have more than one viable candidate, stop. If no viable candidates
+///      remain from the initial set of equally ranked candidates, recompute the
+///      new best viable overload and continue.
+RewrittenOverloadResolver::CheckOverloadResult
+RewrittenOverloadResolver::RemoveNonViableRewrittenCandidates(
+    OverloadingResult OvlRes, OverloadCandidateSet::iterator Best,
+    ArrayRef<OverloadCandidate *> EquivCands, ExprResult &FinalResult) {
+  auto Success = [&](ExprResult Res) {
+    FinalResult = Res;
+    return Done;
+  };
+  switch (OvlRes) {
+  case OR_Deleted:
+    // FIXME(EricWF): If we've found a deleted rewritten operator, it's
+    // possible we should have never considered it a viable candidate.
+  case OR_No_Viable_Function:
+    return Done;
+
+  case OR_Success: {
+    OverloadCandidate &Ovl = *Best;
+    if (!Ovl.getRewrittenKind())
+      return Done;
+    // Build the full expression for the rewritten candidate, and return it if
+    // it's valid. Otherwise mark this candidate as non-viable and continue.
+    ExprResult Res = BuildRewrittenCandidate(Ovl);
+    if (Res.isInvalid()) {
+      Ovl.Viable = false;
+      return Continue;
+    }
+    return Success(Res);
+  }
+  case OR_Ambiguous: {
+    assert(EquivCands.size() > 1);
+    // If none of the viable candidates are rewritten, stop.
+    if (llvm::none_of(EquivCands, [](const OverloadCandidate *Cand) {
+          return (bool)Cand->getRewrittenKind();
+        }))
+      return Done;
+    int NumViableCandidates = 0;
+    ExprResult ViableRewritten = ExprError();
+    for (auto *Cand : EquivCands) {
+      OverloadCandidate &Ovl = *Cand;
+      if (Ovl.getRewrittenKind()) {
+        ExprResult Res = BuildRewrittenCandidate(Ovl);
+        if (Res.isInvalid()) {
+          Ovl.Viable = false;
+          continue;
+        }
+        ViableRewritten = Res;
+      }
+      ++NumViableCandidates;
+    }
+    // If only one of the candidates turns out to be viable, and it's a
+    // rewritten candidate, return that candidate as the result.
+    if (NumViableCandidates == 1 && !ViableRewritten.isInvalid())
+      return Success(ViableRewritten);
+    // If we still have ambiguity, return and let the caller diagnose it.
+    if (NumViableCandidates > 1)
+      return Done;
+    // All of the equally ranked candidates are invalid. Loop and try overload
+    // resolution again.
+    return Continue;
+  }
+  }
+  llvm_unreachable("unhandled case");
+}
+
 /// \brief Create a binary operation that may resolve to an overloaded
 /// operator.
 ///
@@ -12244,11 +12665,11 @@ Sema::CreateOverloadedUnaryOp(SourceLocation OpLoc, UnaryOperatorKind Opc,
 ///
 /// \param LHS Left-hand argument.
 /// \param RHS Right-hand argument.
-ExprResult
-Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
-                            BinaryOperatorKind Opc,
-                            const UnresolvedSetImpl &Fns,
-                            Expr *LHS, Expr *RHS, bool PerformADL) {
+ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
+                                       BinaryOperatorKind Opc,
+                                       const UnresolvedSetImpl &Fns, Expr *LHS,
+                                       Expr *RHS, bool PerformADL,
+                                       bool AllowRewrittenCandidates) {
   Expr *Args[2] = { LHS, RHS };
   LHS=RHS=nullptr; // Please use only Args instead of LHS/RHS couple
 
@@ -12310,11 +12731,27 @@ Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
   if (Opc == BO_PtrMemD)
     return CreateBuiltinBinOp(OpLoc, Opc, Args[0], Args[1]);
 
+  UnresolvedSet<6> OrigFuncs;
+  UnresolvedSet<6> ThreeWayFuncs;
+  for (NamedDecl *D : Fns) {
+    FunctionDecl *FD = D->getAsFunction();
+    if (FD) {
+      assert(FD->isOverloadedOperator());
+      if (FD->getOverloadedOperator() == OO_Spaceship) {
+        ThreeWayFuncs.addDecl(D);
+        if (Op == OO_Spaceship)
+          OrigFuncs.addDecl(D);
+      } else
+        OrigFuncs.addDecl(D);
+    } else
+      OrigFuncs.addDecl(D);
+  }
+
   // Build an empty overload set.
   OverloadCandidateSet CandidateSet(OpLoc, OverloadCandidateSet::CSK_Operator);
 
   // Add the candidates from the given function set.
-  AddFunctionCandidates(Fns, Args, CandidateSet);
+  AddFunctionCandidates(OrigFuncs, Args, CandidateSet);
 
   // Add operator candidates that are member functions.
   AddMemberOperatorCandidates(Op, OpLoc, Args, CandidateSet);
@@ -12330,191 +12767,113 @@ Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
   // Add builtin operator candidates.
   AddBuiltinOperatorCandidates(Op, OpLoc, Args, CandidateSet);
 
-  bool HadMultipleCandidates = (CandidateSet.size() > 1);
+  // C++2a Add rewritten and synthesized operator candidates.
+  bool HasRewrittenCandidates = false;
+  if (getLangOpts().CPlusPlus2a && AllowRewrittenCandidates &&
+      BinaryOperator::isComparisonOp(Opc)) {
+    unsigned BeforeRewrittenSize = CandidateSet.size();
+    AddRewrittenOperatorCandidates(Op, OpLoc, Args, ThreeWayFuncs, CandidateSet,
+                                   PerformADL);
+    HasRewrittenCandidates = BeforeRewrittenSize != CandidateSet.size();
+  }
 
-  // Perform overload resolution.
+  if (HasRewrittenCandidates) {
+    RewrittenOverloadResolver RewrittenOvlResolver(*this, OpLoc, Opc, Args, Fns,
+                                                   PerformADL, CandidateSet);
+
+    // Perform initial overload resolution that includes partially checked
+    // rewritten candidates, removing rewritten candidates which turn out to be
+    // invalid as needed.
+    ExprResult RewrittenResult =
+        RewrittenOvlResolver.ResolveRewrittenCandidates();
+
+    // If overload resolution was successful and the result was a re-written
+    // overload candidate, then that candidate was evaluated and we can return
+    // the result directly.
+    if (!RewrittenResult.isInvalid())
+      return RewrittenResult;
+  }
+
+  // Perform final overload resolution.
+  bool HadMultipleCandidates = (CandidateSet.size() > 1);
   OverloadCandidateSet::iterator Best;
   switch (CandidateSet.BestViableFunction(*this, OpLoc, Best)) {
-    case OR_Success: {
-      // We found a built-in operator or an overloaded operator.
-      FunctionDecl *FnDecl = Best->Function;
+  case OR_Success:
+    assert(
+        !Best->getRewrittenKind() &&
+        "rewritten candidates should have already been resolved and evaluated");
+    return buildBinaryOperatorCandidate(*this, OpLoc, Opc, *Best, Args[0],
+                                        Args[1], HadMultipleCandidates);
+  case OR_No_Viable_Function: {
+    // C++ [over.match.oper]p9:
+    //   If the operator is the operator , [...] and there are no
+    //   viable functions, then the operator is assumed to be the
+    //   built-in operator and interpreted according to clause 5.
+    if (Opc == BO_Comma)
+      break;
 
-      if (FnDecl) {
-        Expr *Base = nullptr;
-        // We matched an overloaded operator. Build a call to that
-        // operator.
-
-        // Convert the arguments.
-        if (CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(FnDecl)) {
-          // Best->Access is only meaningful for class members.
-          CheckMemberOperatorAccess(OpLoc, Args[0], Args[1], Best->FoundDecl);
-
-          ExprResult Arg1 =
-            PerformCopyInitialization(
-              InitializedEntity::InitializeParameter(Context,
-                                                     FnDecl->getParamDecl(0)),
-              SourceLocation(), Args[1]);
-          if (Arg1.isInvalid())
-            return ExprError();
-
-          ExprResult Arg0 =
-            PerformObjectArgumentInitialization(Args[0], /*Qualifier=*/nullptr,
-                                                Best->FoundDecl, Method);
-          if (Arg0.isInvalid())
-            return ExprError();
-          Base = Args[0] = Arg0.getAs<Expr>();
-          Args[1] = RHS = Arg1.getAs<Expr>();
-        } else {
-          // Convert the arguments.
-          ExprResult Arg0 = PerformCopyInitialization(
-            InitializedEntity::InitializeParameter(Context,
-                                                   FnDecl->getParamDecl(0)),
-            SourceLocation(), Args[0]);
-          if (Arg0.isInvalid())
-            return ExprError();
-
-          ExprResult Arg1 =
-            PerformCopyInitialization(
-              InitializedEntity::InitializeParameter(Context,
-                                                     FnDecl->getParamDecl(1)),
-              SourceLocation(), Args[1]);
-          if (Arg1.isInvalid())
-            return ExprError();
-          Args[0] = LHS = Arg0.getAs<Expr>();
-          Args[1] = RHS = Arg1.getAs<Expr>();
-        }
-
-        // Build the actual expression node.
-        ExprResult FnExpr = CreateFunctionRefExpr(*this, FnDecl,
-                                                  Best->FoundDecl, Base,
-                                                  HadMultipleCandidates, OpLoc);
-        if (FnExpr.isInvalid())
-          return ExprError();
-
-        // Determine the result type.
-        QualType ResultTy = FnDecl->getReturnType();
-        ExprValueKind VK = Expr::getValueKindForType(ResultTy);
-        ResultTy = ResultTy.getNonLValueExprType(Context);
-
-        CXXOperatorCallExpr *TheCall =
-          new (Context) CXXOperatorCallExpr(Context, Op, FnExpr.get(),
-                                            Args, ResultTy, VK, OpLoc,
-                                            FPFeatures);
-
-        if (CheckCallReturnType(FnDecl->getReturnType(), OpLoc, TheCall,
-                                FnDecl))
-          return ExprError();
-
-        ArrayRef<const Expr *> ArgsArray(Args, 2);
-        const Expr *ImplicitThis = nullptr;
-        // Cut off the implicit 'this'.
-        if (isa<CXXMethodDecl>(FnDecl)) {
-          ImplicitThis = ArgsArray[0];
-          ArgsArray = ArgsArray.slice(1);
-        }
-
-        // Check for a self move.
-        if (Op == OO_Equal)
-          DiagnoseSelfMove(Args[0], Args[1], OpLoc);
-
-        checkCall(FnDecl, nullptr, ImplicitThis, ArgsArray,
-                  isa<CXXMethodDecl>(FnDecl), OpLoc, TheCall->getSourceRange(),
-                  VariadicDoesNotApply);
-
-        return MaybeBindToTemporary(TheCall);
-      } else {
-        // We matched a built-in operator. Convert the arguments, then
-        // break out so that we will build the appropriate built-in
-        // operator node.
-        ExprResult ArgsRes0 =
-            PerformImplicitConversion(Args[0], Best->BuiltinParamTypes[0],
-                                      Best->Conversions[0], AA_Passing);
-        if (ArgsRes0.isInvalid())
-          return ExprError();
-        Args[0] = ArgsRes0.get();
-
-        ExprResult ArgsRes1 =
-            PerformImplicitConversion(Args[1], Best->BuiltinParamTypes[1],
-                                      Best->Conversions[1], AA_Passing);
-        if (ArgsRes1.isInvalid())
-          return ExprError();
-        Args[1] = ArgsRes1.get();
-        break;
+    // For class as left operand for assignment or compound assignment
+    // operator do not fall through to handling in built-in, but report that
+    // no overloaded assignment operator found
+    ExprResult Result = ExprError();
+    if (Args[0]->getType()->isRecordType() && Opc >= BO_Assign &&
+        Opc <= BO_OrAssign) {
+      Diag(OpLoc, diag::err_ovl_no_viable_oper)
+          << BinaryOperator::getOpcodeStr(Opc) << Args[0]->getSourceRange()
+          << Args[1]->getSourceRange();
+      if (Args[0]->getType()->isIncompleteType()) {
+        Diag(OpLoc, diag::note_assign_lhs_incomplete)
+            << Args[0]->getType() << Args[0]->getSourceRange()
+            << Args[1]->getSourceRange();
       }
+    } else {
+      // This is an erroneous use of an operator which can be overloaded by
+      // a non-member function. Check for non-member operators which were
+      // defined too late to be candidates.
+      if (DiagnoseTwoPhaseOperatorLookup(*this, Op, OpLoc, Args))
+        // FIXME: Recover by calling the found function.
+        return ExprError();
+
+      // No viable function; try to create a built-in operation, which will
+      // produce an error. Then, show the non-viable candidates.
+      Result = CreateBuiltinBinOp(OpLoc, Opc, Args[0], Args[1]);
     }
-
-    case OR_No_Viable_Function: {
-      // C++ [over.match.oper]p9:
-      //   If the operator is the operator , [...] and there are no
-      //   viable functions, then the operator is assumed to be the
-      //   built-in operator and interpreted according to clause 5.
-      if (Opc == BO_Comma)
-        break;
-
-      // For class as left operand for assignment or compound assignment
-      // operator do not fall through to handling in built-in, but report that
-      // no overloaded assignment operator found
-      ExprResult Result = ExprError();
-      if (Args[0]->getType()->isRecordType() &&
-          Opc >= BO_Assign && Opc <= BO_OrAssign) {
-        Diag(OpLoc,  diag::err_ovl_no_viable_oper)
-             << BinaryOperator::getOpcodeStr(Opc)
-             << Args[0]->getSourceRange() << Args[1]->getSourceRange();
-        if (Args[0]->getType()->isIncompleteType()) {
-          Diag(OpLoc, diag::note_assign_lhs_incomplete)
-            << Args[0]->getType()
-            << Args[0]->getSourceRange() << Args[1]->getSourceRange();
-        }
-      } else {
-        // This is an erroneous use of an operator which can be overloaded by
-        // a non-member function. Check for non-member operators which were
-        // defined too late to be candidates.
-        if (DiagnoseTwoPhaseOperatorLookup(*this, Op, OpLoc, Args))
-          // FIXME: Recover by calling the found function.
-          return ExprError();
-
-        // No viable function; try to create a built-in operation, which will
-        // produce an error. Then, show the non-viable candidates.
-        Result = CreateBuiltinBinOp(OpLoc, Opc, Args[0], Args[1]);
-      }
-      assert(Result.isInvalid() &&
-             "C++ binary operator overloading is missing candidates!");
-      if (Result.isInvalid())
-        CandidateSet.NoteCandidates(*this, OCD_AllCandidates, Args,
-                                    BinaryOperator::getOpcodeStr(Opc), OpLoc);
-      return Result;
-    }
-
-    case OR_Ambiguous:
-      Diag(OpLoc,  diag::err_ovl_ambiguous_oper_binary)
-          << BinaryOperator::getOpcodeStr(Opc)
-          << Args[0]->getType() << Args[1]->getType()
-          << Args[0]->getSourceRange() << Args[1]->getSourceRange();
-      CandidateSet.NoteCandidates(*this, OCD_ViableCandidates, Args,
+    assert(Result.isInvalid() &&
+           "C++ binary operator overloading is missing candidates!");
+    if (Result.isInvalid())
+      CandidateSet.NoteCandidates(*this, OCD_AllCandidates, Args,
                                   BinaryOperator::getOpcodeStr(Opc), OpLoc);
-      return ExprError();
+    return Result;
+  }
+  case OR_Ambiguous:
+    Diag(OpLoc, diag::err_ovl_ambiguous_oper_binary)
+        << BinaryOperator::getOpcodeStr(Opc) << Args[0]->getType()
+        << Args[1]->getType() << Args[0]->getSourceRange()
+        << Args[1]->getSourceRange();
+    CandidateSet.NoteCandidates(*this, OCD_ViableCandidates, Args,
+                                BinaryOperator::getOpcodeStr(Opc), OpLoc);
+    return ExprError();
 
-    case OR_Deleted:
-      if (isImplicitlyDeleted(Best->Function)) {
-        CXXMethodDecl *Method = cast<CXXMethodDecl>(Best->Function);
-        Diag(OpLoc, diag::err_ovl_deleted_special_oper)
+  case OR_Deleted:
+    if (isImplicitlyDeleted(Best->Function)) {
+      CXXMethodDecl *Method = cast<CXXMethodDecl>(Best->Function);
+      Diag(OpLoc, diag::err_ovl_deleted_special_oper)
           << Context.getRecordType(Method->getParent())
           << getSpecialMember(Method);
 
-        // The user probably meant to call this special member. Just
-        // explain why it's deleted.
-        NoteDeletedFunction(Method);
-        return ExprError();
-      } else {
-        Diag(OpLoc, diag::err_ovl_deleted_oper)
-          << Best->Function->isDeleted()
-          << BinaryOperator::getOpcodeStr(Opc)
+      // The user probably meant to call this special member. Just
+      // explain why it's deleted.
+      NoteDeletedFunction(Method);
+      return ExprError();
+    } else {
+      Diag(OpLoc, diag::err_ovl_deleted_oper)
+          << Best->Function->isDeleted() << BinaryOperator::getOpcodeStr(Opc)
           << getDeletedOrUnavailableSuffix(Best->Function)
           << Args[0]->getSourceRange() << Args[1]->getSourceRange();
-      }
-      CandidateSet.NoteCandidates(*this, OCD_AllCandidates, Args,
-                                  BinaryOperator::getOpcodeStr(Opc), OpLoc);
-      return ExprError();
+    }
+    CandidateSet.NoteCandidates(*this, OCD_AllCandidates, Args,
+                                BinaryOperator::getOpcodeStr(Opc), OpLoc);
+    return ExprError();
   }
 
   // We matched a built-in operator; build it.

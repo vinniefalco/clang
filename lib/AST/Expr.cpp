@@ -3187,6 +3187,11 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
     return false;
   }
 
+  case CXXRewrittenOperatorClass: {
+    const auto *RO = cast<CXXRewrittenOperator>(this);
+    return RO->getRewrittenExpr()->HasSideEffects(Ctx, IncludePossibleEffects);
+  }
+
   case PseudoObjectExprClass: {
     // Only look for side-effects in the semantic form, and look past
     // OpaqueValueExpr bindings in that form.

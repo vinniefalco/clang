@@ -12372,7 +12372,12 @@ static ExprResult BuildOverloadedBinOp(Sema &S, Scope *Sc, SourceLocation OpLoc,
   if (Sc && OverOp != OO_None && OverOp != OO_Equal)
     S.LookupOverloadedOperatorName(OverOp, Sc, LHS->getType(),
                                    RHS->getType(), Functions);
-
+  if (S.getLangOpts().CPlusPlus2a) {
+    if (Sc && Opc != BO_Cmp && BinaryOperator::isRelationalOp(Opc)) {
+      S.LookupOverloadedOperatorName(OO_Spaceship, Sc, LHS->getType(),
+                                     RHS->getType(), Functions);
+    }
+  }
   // Build the (potentially-overloaded, potentially-dependent)
   // binary operation.
   return S.CreateOverloadedBinOp(OpLoc, Opc, Functions, LHS, RHS);

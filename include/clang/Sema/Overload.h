@@ -62,7 +62,7 @@ class Sema;
     /// Succeeded, but refers to a deleted function.
     OR_Deleted
   };
-  
+
   enum OverloadCandidateDisplayKind {
     /// Requests that all candidates be shown.  Viable candidates will
     /// be printed first.
@@ -70,6 +70,17 @@ class Sema;
 
     /// Requests that only viable candidates be shown.
     OCD_ViableCandidates
+  };
+
+  /// OperatorOverloadCandidateKind - The kind of the operator candidate in
+  /// accordance with [over.match.oper].
+  enum RewrittenOverloadCandidateKind : unsigned char {
+    /// Not a rewritten candidate.
+    ROC_None,
+    /// Rewritten but not synthesized.
+    ROC_Rewritten,
+    /// Both rewritten and synthesized.
+    ROC_Synthesized
   };
 
   /// ImplicitConversionKind - The kind of implicit conversion used to
@@ -107,7 +118,7 @@ class Sema;
     /// Integral conversions (C++ [conv.integral])
     ICK_Integral_Conversion,
 
-    /// Floating point conversions (C++ [conv.double] 
+    /// Floating point conversions (C++ [conv.double]
     ICK_Floating_Conversion,
 
     /// Complex conversions (C99 6.3.1.6)
@@ -252,7 +263,7 @@ class Sema;
     /// \brief Whether the qualification conversion involves a change in the
     /// Objective-C lifetime (for automatic reference counting).
     unsigned QualificationIncludesObjCLifetime : 1;
-    
+
     /// IncompatibleObjC - Whether this is an Objective-C conversion
     /// that we should warn about (if we actually use it).
     unsigned IncompatibleObjC : 1;
@@ -268,21 +279,21 @@ class Sema;
     /// \brief Whether this is an lvalue reference binding (otherwise, it's
     /// an rvalue reference binding).
     unsigned IsLvalueReference : 1;
-    
+
     /// \brief Whether we're binding to a function lvalue.
     unsigned BindsToFunctionLvalue : 1;
-    
+
     /// \brief Whether we're binding to an rvalue.
     unsigned BindsToRvalue : 1;
-    
-    /// \brief Whether this binds an implicit object argument to a 
+
+    /// \brief Whether this binds an implicit object argument to a
     /// non-static member function without a ref-qualifier.
     unsigned BindsImplicitObjectArgumentWithoutRefQualifier : 1;
-    
+
     /// \brief Whether this binds a reference to an object with a different
     /// Objective-C lifetime qualifier.
     unsigned ObjCLifetimeConversionBinding : 1;
-    
+
     /// FromType - The type that this conversion is converting
     /// from. This is an opaque pointer that can be translated into a
     /// QualType.
@@ -303,13 +314,13 @@ class Sema;
 
     void setFromType(QualType T) { FromTypePtr = T.getAsOpaquePtr(); }
 
-    void setToType(unsigned Idx, QualType T) { 
+    void setToType(unsigned Idx, QualType T) {
       assert(Idx < 3 && "To type index is out of range");
-      ToTypePtrs[Idx] = T.getAsOpaquePtr(); 
+      ToTypePtrs[Idx] = T.getAsOpaquePtr();
     }
 
     void setAllToTypes(QualType T) {
-      ToTypePtrs[0] = T.getAsOpaquePtr(); 
+      ToTypePtrs[0] = T.getAsOpaquePtr();
       ToTypePtrs[1] = ToTypePtrs[0];
       ToTypePtrs[2] = ToTypePtrs[0];
     }
@@ -324,11 +335,11 @@ class Sema;
     }
 
     void setAsIdentityConversion();
-    
+
     bool isIdentityConversion() const {
       return Second == ICK_Identity && Third == ICK_Identity;
     }
-    
+
     ImplicitConversionRank getRank() const;
     NarrowingKind
     getNarrowingKind(ASTContext &Context, const Expr *Converted,
@@ -562,7 +573,7 @@ class Sema;
       new (this) ImplicitConversionSequence(Other);
       return *this;
     }
-    
+
     ~ImplicitConversionSequence() {
       destruct();
     }
@@ -571,7 +582,7 @@ class Sema;
       assert(isInitialized() && "querying uninitialized conversion");
       return Kind(ConversionKind);
     }
-    
+
     /// \brief Return a ranking of the implicit conversion sequence
     /// kind, where smaller ranks represent better conversion
     /// sequences.
@@ -581,11 +592,11 @@ class Sema;
     /// per C++ [over.best.ics]p10.
     unsigned getKindRank() const {
       switch (getKind()) {
-      case StandardConversion: 
+      case StandardConversion:
         return 0;
 
       case UserDefinedConversion:
-      case AmbiguousConversion: 
+      case AmbiguousConversion:
         return 1;
 
       case EllipsisConversion:
@@ -755,12 +766,12 @@ class Sema;
     ConversionFixItGenerator Fix;
 
     /// Viable - True to indicate that this overload candidate is viable.
-    bool Viable;
+    bool Viable : 1;
 
     /// IsSurrogate - True to indicate that this candidate is a
     /// surrogate for a conversion to a function pointer or reference
     /// (C++ [over.call.object]).
-    bool IsSurrogate;
+    bool IsSurrogate : 1;
 
     /// IgnoreObjectArgument - True to indicate that the first
     /// argument's conversion, which for this function represents the
@@ -769,7 +780,11 @@ class Sema;
     /// implicit object argument is just a placeholder) or a
     /// non-static member function when the call doesn't have an
     /// object argument.
-    bool IgnoreObjectArgument;
+    bool IgnoreObjectArgument : 1;
+
+    /// RewrittenKind - For rewritten operator candidates, the kind of rewritten
+    /// candidate it is: rewritten or synthesized.
+    unsigned char RewrittenOpKind : 2;
 
     /// FailureKind - The reason why this candidate is not viable.
     /// Actually an OverloadFailureKind.
@@ -781,7 +796,7 @@ class Sema;
 
     union {
       DeductionFailureInfo DeductionFailure;
-      
+
       /// FinalConversion - For a conversion function (where Function is
       /// a CXXConversionDecl), the standard conversion that occurs
       /// after the call to the overload candidate to convert the result
@@ -812,6 +827,24 @@ class Sema;
       return CanFix;
     }
 
+    /// \brief Return the index of the conversion corresponding to the specified
+    /// argument index. If this is not a synthesized candidate, 'Idx' is
+    /// returned. Otherwise the index corresponding to the reversed parameter
+    /// is returned.
+    unsigned getConversionIndexForArgIndex(unsigned Idx) const;
+
+    /// \brief Return the conversion sequence for the specified argument index.
+    /// If this is a synthesized candidate, the argument index is reversed.
+    const ImplicitConversionSequence &getConversion(unsigned ArgIdx) const;
+
+    /// \brief Returns the parameter type corresponding to the specified index.
+    /// (The index is not reversed for synthesized candidates).
+    QualType getParamType(unsigned Idx) const {
+      if (Function)
+        return Function->getParamDecl(Idx)->getType();
+      return BuiltinParamTypes[Idx];
+    }
+
     unsigned getNumParams() const {
       if (IsSurrogate) {
         auto STy = Surrogate->getConversionType();
@@ -822,6 +855,10 @@ class Sema;
       if (Function)
         return Function->getNumParams();
       return ExplicitCallArguments;
+    }
+
+    RewrittenOverloadCandidateKind getRewrittenKind() const {
+      return static_cast<RewrittenOverloadCandidateKind>(RewrittenOpKind);
     }
   };
 
@@ -853,8 +890,10 @@ class Sema;
 
   private:
     SmallVector<OverloadCandidate, 16> Candidates;
-    llvm::SmallPtrSet<Decl *, 16> Functions;
+    using DeclSet = llvm::SmallPtrSet<Decl *, 16>;
+    DeclSet Functions;
 
+  private:
     // Allocator for ConversionSequenceLists. We store the first few of these
     // inline to avoid allocation for small sets.
     llvm::BumpPtrAllocator SlabAllocator;
@@ -894,6 +933,31 @@ class Sema;
     }
 
     void destroyCandidates();
+
+  public:
+    /// \brief RewrittenCandidateContextGuard - Enter a context suitable for
+    /// adding rewritten overload candidates. Rewritten candidates can
+    /// re-consider previously seen functions, so save and clear the list of
+    /// considered functions, and restore it when the rewritten context is
+    /// exited.
+    struct RewrittenCandidateContextGuard {
+      RewrittenCandidateContextGuard(OverloadCandidateSet &CS)
+          : CandidateSet(CS) {
+        assert(CS.Kind == CSK_Operator &&
+               "rewritten expressions can only occur for operators");
+        OldFunctions = std::move(CandidateSet.Functions);
+      }
+
+      ~RewrittenCandidateContextGuard() {
+        CandidateSet.Functions.insert(OldFunctions.begin(), OldFunctions.end());
+      }
+
+    private:
+      OverloadCandidateSet &CandidateSet;
+      DeclSet OldFunctions;
+    };
+
+    friend struct RewrittenCandidateContextGuard;
 
   public:
     OverloadCandidateSet(SourceLocation Loc, CandidateSetKind CSK)
@@ -952,8 +1016,9 @@ class Sema;
     }
 
     /// Find the best viable function on this overload set, if it exists.
-    OverloadingResult BestViableFunction(Sema &S, SourceLocation Loc,
-                                         OverloadCandidateSet::iterator& Best);
+    OverloadingResult BestViableFunction(
+        Sema &S, SourceLocation Loc, OverloadCandidateSet::iterator &Best,
+        SmallVectorImpl<OverloadCandidate *> *EquivalentCands = nullptr);
 
     void NoteCandidates(Sema &S,
                         OverloadCandidateDisplayKind OCD,

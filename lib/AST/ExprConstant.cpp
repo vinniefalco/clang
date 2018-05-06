@@ -5059,6 +5059,10 @@ public:
       return;
     VisitIgnoredValue(E);
   }
+
+  bool VisitCXXRewrittenOperator(const CXXRewrittenOperator *E) {
+    return StmtVisitorTy::Visit(E->getRewrittenExpr());
+  }
 };
 
 } // namespace
@@ -10858,6 +10862,8 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::ChooseExprClass: {
     return CheckICE(cast<ChooseExpr>(E)->getChosenSubExpr(), Ctx);
   }
+  case Expr::CXXRewrittenOperatorClass:
+    return CheckICE(cast<CXXRewrittenOperator>(E)->getRewrittenExpr(), Ctx);
   }
 
   llvm_unreachable("Invalid StmtClass!");
