@@ -9177,11 +9177,14 @@ bool clang::isBetterOverloadCandidate(
     if (RewrittenCandidateTieBreaker && ICS1.isStandard() &&
         ICS2.isStandard() && ICS1.Standard.getRank() == ICR_Exact_Match &&
         ICS2.Standard.getRank() == ICR_Exact_Match) {
+      bool IsBetterRewritten = RewrittenCandidateTieBreaker.getValue();
       // If the lvalue or qualified conversions were worse but the candidate
       // is better according to the type-breakers for C++2a rewritten
       // expressions, then we ignore the differences in conversion sequences.
-      if (CompareRes == ImplicitConversionSequence::Worse &&
-          RewrittenCandidateTieBreaker.getValue())
+      if ((CompareRes == ImplicitConversionSequence::Worse &&
+           IsBetterRewritten) ||
+          (CompareRes == ImplicitConversionSequence::Better &&
+           !IsBetterRewritten))
         CompareRes = ImplicitConversionSequence::Indistinguishable;
     }
     switch (CompareRes) {
