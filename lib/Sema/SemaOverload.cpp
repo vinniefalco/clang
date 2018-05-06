@@ -9187,6 +9187,7 @@ bool clang::isBetterOverloadCandidate(
            !IsBetterRewritten))
         CompareRes = ImplicitConversionSequence::Indistinguishable;
     }
+
     switch (CompareRes) {
     case ImplicitConversionSequence::Better:
       // Cand1 has a better conversion sequence.

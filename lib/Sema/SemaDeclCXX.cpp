@@ -9313,9 +9313,7 @@ QualType Sema::ComputeCommonComparisonType(ArrayRef<QualType> Types,
   if (!Info)
     return Context.VoidTy;
   // Success!
-  return QualType(Info->CCDecl->getTypeForDecl(), 0);
-=======
->>>>>>> spaceship-operator
+  return Info->getType();
 }
 
 /// \brief Retrieve the special "std" namespace, which may require us to
