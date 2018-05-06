@@ -12578,40 +12578,52 @@ ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
   if (IsSynthesized)
     std::swap(RewrittenArgs[0], RewrittenArgs[1]);
 
-  ExprResult RewrittenRes = ExprError();
-
   // Supress diagnostics when building the expressions for the specified
   // candidate. If evaluation fails the candidate will be marked non-viable
   // and the best viable candidate re-computed.
   Sema::TentativeAnalysisScope DiagnosticScopeGuard(S);
 
   // Build the '(LHS <=> RHS)' operand to the full expression.
-  RewrittenRes = S.BuildBinaryOperatorCandidate(
+  ExprResult RewrittenRes = S.BuildBinaryOperatorCandidate(
       OpLoc, BO_Cmp, Ovl, RewrittenArgs[0], RewrittenArgs[1],
       /*HadMultipleCandidates*/ false);
   if (RewrittenRes.isInvalid())
     return ExprError();
 
-  // Now attempt to build the full expression '(LHS <=> RHS) @ 0' using the
-  // evaluated operand and the literal 0.
-  llvm::APInt I =
-      llvm::APInt::getNullValue(S.Context.getIntWidth(S.Context.IntTy));
-  Expr *Zero =
-      IntegerLiteral::Create(S.Context, I, S.Context.IntTy, SourceLocation());
+  if (Opc != BO_Cmp) {
+    // Now attempt to build the full expression '(LHS <=> RHS) @ 0' using the
+    // evaluated operand and the literal 0.
+    llvm::APInt I =
+        llvm::APInt::getNullValue(S.Context.getIntWidth(S.Context.IntTy));
+    Expr *Zero =
+        IntegerLiteral::Create(S.Context, I, S.Context.IntTy, SourceLocation());
 
-  Expr *NewLHS = RewrittenRes.get();
-  Expr *NewRHS = Zero;
-  if (Ovl.getRewrittenKind() == ROC_Synthesized)
-    std::swap(NewLHS, NewRHS);
+    Expr *NewLHS = RewrittenRes.get();
+    Expr *NewRHS = Zero;
+    if (Ovl.getRewrittenKind() == ROC_Synthesized)
+      std::swap(NewLHS, NewRHS);
 
-  ExprResult FinalRes =
-      S.CreateOverloadedBinOp(OpLoc, Opc, Fns, NewLHS, NewRHS, PerformADL,
-                              /*AllowRewrittenCandidates*/ false);
-  if (FinalRes.isInvalid())
-    return ExprError();
-  return new (S.Context) CXXRewrittenOperatorExpr(
-      (CXXRewrittenOperatorExpr::RewrittenOperatorKind)Ovl.getRewrittenKind(),
-      RewrittenRes.get(), FinalRes.get());
+    RewrittenRes =
+        S.CreateOverloadedBinOp(OpLoc, Opc, Fns, NewLHS, NewRHS, PerformADL,
+                                /*AllowRewrittenCandidates*/ false);
+    if (RewrittenRes.isInvalid())
+      return ExprError();
+  }
+  Expr *Rewritten = RewrittenRes.get();
+
+  auto CreateOpaqueValue = [&](Expr *E) {
+    Expr *Res = new (S.Context)
+        CXXRewrittenExpr(E->getExprLoc(), E->getType(), E->getValueKind(),
+                         E->getObjectKind(), E);
+    return Res;
+  };
+  Expr *OrigLHS = CreateOpaqueValue(Args[0]);
+  Expr *OrigRHS = CreateOpaqueValue(Args[1]);
+  Expr *Original = new (S.Context) BinaryOperator(
+      OrigLHS, OrigRHS, Rewritten->getType(), Rewritten->getValueKind(),
+      Rewritten->getObjectKind(), OpLoc, S.FPFeatures);
+
+  return new (S.Context) CXXRewrittenExpr(Original, Rewritten);
 }
 
 /// Rewritten candidates have been added but not checked for validity. They

@@ -3217,11 +3217,10 @@ public:
     return getSema().BuildEmptyCXXFoldExpr(EllipsisLoc, Operator);
   }
 
-  ExprResult RebuildCXXRewrittenOperatorExpr(
-      CXXRewrittenOperatorExpr::RewrittenOperatorKind Kind, Expr *Underlying,
-      Expr *Rewritten) {
-    return new (SemaRef.Context)
-        CXXRewrittenOperatorExpr(Kind, Underlying, Rewritten);
+  ExprResult
+  RebuildCXXRewrittenExpr(CXXRewrittenExpr::RewrittenOperatorKind Kind,
+                          Expr *Underlying, Expr *Rewritten) {
+    return new (SemaRef.Context) CXXRewrittenExpr(Kind, Underlying, Rewritten);
   }
 
   /// \brief Build a new atomic operation expression.
@@ -11523,8 +11522,8 @@ TreeTransform<Derived>::TransformMaterializeTemporaryExpr(
 }
 
 template <typename Derived>
-ExprResult TreeTransform<Derived>::TransformCXXRewrittenOperatorExpr(
-    CXXRewrittenOperatorExpr *E) {
+ExprResult
+TreeTransform<Derived>::TransformCXXRewrittenExpr(CXXRewrittenExpr *E) {
   ExprResult Orig = getDerived().TransformExpr(E->getUnderlyingExpr());
   if (Orig.isInvalid())
     return ExprError();
@@ -11538,8 +11537,8 @@ ExprResult TreeTransform<Derived>::TransformCXXRewrittenOperatorExpr(
 
   if (getDerived().AlwaysRebuild() || Orig.get() != E->getUnderlyingExpr() ||
       Rewritten.get() != E->getRewrittenExpr()) {
-    return getDerived().RebuildCXXRewrittenOperatorExpr(
-        E->getKind(), Orig.get(), Rewritten.get());
+    return getDerived().RebuildCXXRewrittenExpr(E->getKind(), Orig.get(),
+                                                Rewritten.get());
   }
   return E;
 }

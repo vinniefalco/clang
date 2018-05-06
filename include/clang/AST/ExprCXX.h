@@ -4209,7 +4209,7 @@ public:
   child_range children() { return child_range(SubExprs, SubExprs + 2); }
 };
 
-class CXXRewrittenOperatorExpr : public Expr {
+class CXXRewrittenExpr : public Expr {
   friend class ASTReader;
   friend class ASTWriter;
   friend class ASTStmtReader;
@@ -4217,10 +4217,7 @@ class CXXRewrittenOperatorExpr : public Expr {
 
   Stmt *SubExprs[2];
 
-  unsigned Kind : 2;
-
-  CXXRewrittenOperatorExpr(EmptyShell Empty)
-      : Expr(CXXRewrittenOperatorExprClass, Empty) {}
+  CXXRewrittenExpr(EmptyShell Empty) : Expr(CXXRewrittenExprClass, Empty) {}
 
 public:
   typedef BinaryOperatorKind Opcode;
@@ -4229,115 +4226,32 @@ public:
 public:
   // FIXME(EricWF): Figure out if this will even be built for dependent
   // expressions.
-  CXXRewrittenOperatorExpr(RewrittenOperatorKind Kind, Expr *Underlying,
-                           Expr *Rewritten)
-      : Expr(CXXRewrittenOperatorExprClass, Rewritten->getType(),
+  CXXRewrittenExpr(RewrittenOperatorKind Kind, Expr *Original, Expr *Rewritten)
+      : Expr(CXXRewrittenExprClass, Rewritten->getType(),
              Rewritten->getValueKind(), Rewritten->getObjectKind(),
-             /*Dependent*/ false, false, false, false),
-        Kind(Kind) {
-    SubExprs[0] = Underlying;
+             /*Dependent*/ Rewritten->isTypeDependent(),
+             Rewritten->isValueDependent(),
+             Original->isInstantiationDependent(),
+             Rewritten->containsUnexpandedParameterPack()) {
+    SubExprs[0] = Original;
     SubExprs[1] = Rewritten;
   }
 
-  Expr *getUnderlyingExpr() const {
-    return static_cast<Expr *>(SubExprs[0]);
-  }
+  Expr *getOriginalExpr() const { return static_cast<Expr *>(SubExprs[0]); }
   Expr *getRewrittenExpr() const {
     return static_cast<Expr *>(SubExprs[1]);
   }
 
-  void setKind(RewrittenOperatorKind xKind) { Kind = xKind; }
-  RewrittenOperatorKind getKind() const {
-    return static_cast<RewrittenOperatorKind>(Kind);
-  }
-  bool isReverseOrder() const LLVM_READONLY {
-    return getKind() == ROC_Synthesized;
-  }
-
-  static Expr *getLHSExpr(Expr *E) {
-    if (auto *UE = dyn_cast<BinaryOperator>(E))
-      return UE->getLHS();
-    else
-      return cast<CXXOperatorCallExpr>(E)->getArg(0);
-  }
-  static Expr *getRHSExpr(Expr *E) {
-    if (auto *UE = dyn_cast<BinaryOperator>(E))
-      return UE->getRHS();
-    else
-      return cast<CXXOperatorCallExpr>(E)->getArg(1);
-  }
-
-  Expr *getOrigLHS() const {
-    if (!isReverseOrder())
-      return getLHSExpr(getLHSExpr(getRewrittenExpr()));
-    else
-      return getRHSExpr(getRHSExpr(getRewrittenExpr()));
-  }
-
-  Expr *getOrigRHS() const {
-    if (!isReverseOrder())
-      return getRHSExpr(getLHSExpr(getRewrittenExpr()));
-    else
-      return getLHSExpr(getRHSExpr(getRewrittenExpr()));
-  }
-
-  static Opcode getOpcodeFromExpr(Expr *E) {
-    if (auto *UE = dyn_cast<BinaryOperator>(E))
-      return UE->getOpcode();
-    else
-      return BinaryOperator::getOverloadedOpcode(
-          cast<CXXOperatorCallExpr>(E)->getOperator());
-  }
-
-  Opcode getOrigOpcode() const;
-
-  Expr *getLHS() const { return getLHSExpr(getRewrittenExpr()); }
-  Expr *getRHS() const { return getRHSExpr(getRewrittenExpr()); }
-  Opcode getOpcode() const { return getOpcodeFromExpr(getRewrittenExpr()); }
-
-  // Forwarders to the getUnderlyingExpr() expression
-
   SourceLocation getLocStart() const {
-    Expr *Underlying = getUnderlyingExpr();
-    if (auto *UE = dyn_cast<BinaryOperator>(Underlying)) {
-      return UE->getLocStart();
-    } else {
-      assert(isa<CXXOperatorCallExpr>(Underlying));
-      return cast<CXXOperatorCallExpr>(Underlying)->getLocStart();
-    }
+    return getOriginalExpr()->getLocStart();
   }
-  SourceLocation getLocEnd() const {
-    Expr *Underlying = getUnderlyingExpr();
-    if (auto *UE = dyn_cast<BinaryOperator>(Underlying)) {
-      return UE->getLocEnd();
-    } else {
-      assert(isa<CXXOperatorCallExpr>(Underlying));
-      return cast<CXXOperatorCallExpr>(Underlying)->getLocEnd();
-    }
-  }
-  SourceLocation getExprLoc() const {
-    Expr *Underlying = getUnderlyingExpr();
-    if (auto *UE = dyn_cast<BinaryOperator>(Underlying)) {
-      return UE->getExprLoc();
-    } else {
-      assert(isa<CXXOperatorCallExpr>(Underlying));
-      return cast<CXXOperatorCallExpr>(Underlying)->getExprLoc();
-    }
-  }
-  SourceLocation getOperatorLoc() const {
-    Expr *Underlying = getUnderlyingExpr();
-    if (auto *UE = dyn_cast<BinaryOperator>(Underlying)) {
-      return UE->getOperatorLoc();
-    } else {
-      assert(isa<CXXOperatorCallExpr>(Underlying));
-      return cast<CXXOperatorCallExpr>(Underlying)->getOperatorLoc();
-    }
-  }
+  SourceLocation getLocEnd() const { return getOriginalExpr()->getLocEnd(); }
+  SourceLocation getExprLoc() const { return getOriginalExpr()->getExprLoc(); }
 
   child_range children() { return child_range(SubExprs, SubExprs + 2); }
 
   static bool classof(const Stmt *T) {
-    return T->getStmtClass() == CXXRewrittenOperatorExprClass;
+    return T->getStmtClass() == CXXRewrittenExprClass;
   }
 };
 

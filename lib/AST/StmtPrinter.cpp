@@ -2588,13 +2588,11 @@ void StmtPrinter::VisitCXXFoldExpr(CXXFoldExpr *E) {
   OS << ")";
 }
 
-void StmtPrinter::VisitCXXRewrittenOperatorExpr(CXXRewrittenOperatorExpr *E) {
+void StmtPrinter::VisitCXXRewrittenExpr(CXXRewrittenExpr *E) {
   // FIXME(EricWF): Are there ever cases where we want to display the rewritten
   // code? For example when producing diagnostics on implicitly generated
   // expressions?
-  Visit(E->getOrigLHS());
-  OS << " " << BinaryOperator::getOpcodeStr(E->getOpcode()) << " ";
-  Visit(E->getOrigRHS());
+  Visit(E->getOriginalExpr());
 }
 
 // C++ Coroutines TS

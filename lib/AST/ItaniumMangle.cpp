@@ -3559,9 +3559,8 @@ recurse:
     mangleExpression(cast<CXXStdInitializerListExpr>(E)->getSubExpr(), Arity);
     break;
 
-  case Expr::CXXRewrittenOperatorExprClass:
-    mangleExpression(cast<CXXRewrittenOperatorExpr>(E)->getUnderlyingExpr(),
-                     Arity);
+  case Expr::CXXRewrittenExprClass:
+    mangleExpression(cast<CXXRewrittenExpr>(E)->getUnderlyingExpr(), Arity);
     break;
 
   case Expr::SubstNonTypeTemplateParmExprClass:

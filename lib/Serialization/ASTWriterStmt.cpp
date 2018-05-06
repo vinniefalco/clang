@@ -1695,7 +1695,7 @@ void ASTStmtWriter::VisitCXXFoldExpr(CXXFoldExpr *E) {
   Code = serialization::EXPR_CXX_FOLD;
 }
 
-void ASTStmtWriter::VisitCXXRewrittenOperatorExpr(CXXRewrittenOperatorExpr *E) {
+void ASTStmtWriter::VisitCXXRewrittenExpr(CXXRewrittenExpr *E) {
   VisitExpr(E);
   Record.push_back(E->Kind);
   Record.AddStmt(E->SubExprs[0]);

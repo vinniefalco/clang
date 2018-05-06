@@ -287,9 +287,8 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
     if (cast<GenericSelectionExpr>(E)->isResultDependent())
       return Cl::CL_PRValue;
     return ClassifyInternal(Ctx,cast<GenericSelectionExpr>(E)->getResultExpr());
-  case Expr::CXXRewrittenOperatorExprClass:
-    return ClassifyInternal(
-        Ctx, cast<CXXRewrittenOperatorExpr>(E)->getRewrittenExpr());
+  case Expr::CXXRewrittenExprClass:
+    return ClassifyInternal(Ctx, cast<CXXRewrittenExpr>(E)->getRewrittenExpr());
   case Expr::BinaryOperatorClass:
   case Expr::CompoundAssignOperatorClass:
     // C doesn't have any binary expressions that are lvalues.
