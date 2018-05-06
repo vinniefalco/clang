@@ -609,15 +609,16 @@ public:
   SmallVector<std::pair<const CXXMethodDecl*, const CXXMethodDecl*>, 2>
     DelayedExceptionSpecChecks;
 
-  /// \brief All the members seen during a class definition which were both
-  /// explicitly defaulted and had explicitly-specified exception
-  /// specifications, along with the function type containing their
-  /// user-specified exception specification. Those exception specifications
-  /// were overridden with the default specifications, but we still need to
-  /// check whether they are compatible with the default specification, and
-  /// we can't do that until the nesting set of class definitions is complete.
-  SmallVector<std::pair<CXXMethodDecl*, const FunctionProtoType*>, 2>
-    DelayedDefaultedMemberExceptionSpecs;
+  /// \brief All the members or comparison friend functions seen during a
+  /// class definition which were both explicitly defaulted and had
+  /// explicitly-specified exception specifications, along with the function
+  /// type containing their user-specified exception specification. Those
+  /// exception specifications were overridden with the default specifications,
+  /// but we still need to check whether they are compatible with the default
+  /// specification, and we can't do that until the nesting set of class
+  /// definitions is complete.
+  SmallVector<std::pair<FunctionDecl *, const FunctionProtoType *>, 2>
+      DelayedDefaultedMemberExceptionSpecs;
 
   typedef llvm::MapVector<const FunctionDecl *,
                           std::unique_ptr<LateParsedTemplate>>
@@ -1031,18 +1032,47 @@ public:
     };
 
   private:
-    llvm::PointerIntPair<CXXMethodDecl*, 2> Pair;
+    union {
+      FunctionDecl *Function;
+      void *BuiltinArgType;
+    };
+    unsigned char LookupKind : 2;
+    unsigned char IsBuiltin : 1;
 
   public:
-    SpecialMemberOverloadResult() : Pair() {}
-    SpecialMemberOverloadResult(CXXMethodDecl *MD)
-        : Pair(MD, MD->isDeleted() ? NoMemberOrDeleted : Success) {}
+    SpecialMemberOverloadResult()
+        : Function(nullptr), LookupKind(0), IsBuiltin(false) {}
+    SpecialMemberOverloadResult(FunctionDecl *FD)
+        : Function(FD),
+          LookupKind(FD->isDeleted() ? NoMemberOrDeleted : Success),
+          IsBuiltin(false) {}
+    SpecialMemberOverloadResult(QualType Ty)
+        : BuiltinArgType(Ty.getAsOpaquePtr()), LookupKind(Success),
+          IsBuiltin(true) {}
 
-    CXXMethodDecl *getMethod() const { return Pair.getPointer(); }
-    void setMethod(CXXMethodDecl *MD) { Pair.setPointer(MD); }
+    FunctionDecl *getFunction() const {
+      if (IsBuiltin)
+        return nullptr;
+      return Function;
+    }
+    void setFunction(FunctionDecl *FD) {
+      Function = FD;
+      IsBuiltin = false;
+    }
+    QualType getBuiltinArgType() const {
+      if (!IsBuiltin)
+        return QualType();
+      return QualType::getFromOpaquePtr(BuiltinArgType);
+    }
+    void setBuiltinArgType(QualType Ty) {
+      BuiltinArgType = Ty.getAsOpaquePtr();
+      IsBuiltin = true;
+    }
+    bool hasBuiltin() const { return IsBuiltin; }
+    bool hasFunction() const { return !IsBuiltin && Function; }
 
-    Kind getKind() const { return static_cast<Kind>(Pair.getInt()); }
-    void setKind(Kind K) { Pair.setInt(K); }
+    Kind getKind() const { return static_cast<Kind>(LookupKind); }
+    void setKind(Kind K) { LookupKind = K; }
   };
 
   class SpecialMemberOverloadResultEntry
@@ -1125,7 +1155,8 @@ public:
   /// of -Wselector.
   llvm::MapVector<Selector, SourceLocation> ReferencedSelectors;
 
-  /// Kinds of C++ special members.
+  /// Kind of C++ members which can be defaulted. Including special members and
+  /// explicitly defaulted comparison operators.
   enum CXXSpecialMember {
     CXXDefaultConstructor,
     CXXCopyConstructor,
@@ -1133,6 +1164,7 @@ public:
     CXXCopyAssignment,
     CXXMoveAssignment,
     CXXDestructor,
+    CXXComparisonOperator,
     CXXInvalid
   };
 
@@ -2233,10 +2265,11 @@ public:
     TAH_ConsiderTrivialABI
   };
 
-  bool SpecialMemberIsTrivial(CXXMethodDecl *MD, CXXSpecialMember CSM,
+  bool SpecialMemberIsTrivial(FunctionDecl *FD, CXXSpecialMember CSM,
                               TrivialABIHandling TAH = TAH_IgnoreTrivialABI,
                               bool Diagnose = false);
-  CXXSpecialMember getSpecialMember(const CXXMethodDecl *MD);
+  CXXSpecialMember getSpecialMember(const FunctionDecl *FD,
+                                    bool IsExplicitlyDefault = false);
   void ActOnLastBitfield(SourceLocation DeclStart,
                          SmallVectorImpl<Decl *> &AllIvarDecls);
   Decl *ActOnIvar(Scope *S, SourceLocation DeclStart,
@@ -2778,6 +2811,12 @@ public:
   void AddBuiltinOperatorCandidates(OverloadedOperatorKind Op,
                                     SourceLocation OpLoc, ArrayRef<Expr *> Args,
                                     OverloadCandidateSet& CandidateSet);
+  void AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
+                                      SourceLocation OpLoc,
+                                      ArrayRef<Expr *> Args,
+                                      const UnresolvedSetImpl &Fns,
+                                      OverloadCandidateSet &CandidateSet,
+                                      bool PerformADL);
   void AddArgumentDependentLookupCandidates(DeclarationName Name,
                                             SourceLocation Loc,
                                             ArrayRef<Expr *> Args,
@@ -3182,6 +3221,14 @@ public:
                                         bool RValueThis, unsigned ThisQuals);
   CXXDestructorDecl *LookupDestructor(CXXRecordDecl *Class);
 
+  /// \brief Lookup the three-way comparison operator for the specified ArgTy.
+  /// The comparison is homogenious as required for explicitly-defaulted
+  /// comparison operators. ArgTy is transformed into a const lvalue before
+  /// lookup is performed.
+  SpecialMemberOverloadResult LookupThreeWayComparison(CXXRecordDecl *RD,
+                                                       QualType ArgTy,
+                                                       SourceLocation Loc);
+
   bool checkLiteralOperatorId(const CXXScopeSpec &SS, const UnqualifiedId &Id);
   LiteralOperatorLookupResult LookupLiteralOperator(Scope *S, LookupResult &R,
                                                     ArrayRef<QualType> ArgTys,
@@ -3189,6 +3236,7 @@ public:
                                                     bool AllowTemplate,
                                                     bool AllowStringTemplate,
                                                     bool DiagnoseMissing);
+
   bool isKnownName(StringRef name);
 
   void ArgumentDependentLookup(DeclarationName Name, SourceLocation Loc,
@@ -4562,6 +4610,15 @@ public:
   QualType CheckComparisonCategoryType(ComparisonCategoryType Kind,
                                        SourceLocation Loc);
 
+  /// \brief Compute the 'common comparison type' (C++2a [class.spaceship]) for
+  /// the specified list of types. If any of the required comparison category
+  /// types or declarations are not found, a diagnostic is emitted.
+  ///
+  /// \return The common comparison type, if no error occurs. Otherwise a null
+  /// type.
+  QualType ComputeCommonComparisonType(ArrayRef<QualType> Types,
+                                       SourceLocation Loc);
+
   /// \brief Tests whether Ty is an instance of std::initializer_list and, if
   /// it is and Element is not NULL, assigns the element type to Element.
   bool isStdInitializerList(QualType Ty, QualType *Element);
@@ -4745,7 +4802,7 @@ public:
     const QualType *data() const { return Exceptions.data(); }
 
     /// \brief Integrate another called method into the collected data.
-    void CalledDecl(SourceLocation CallLoc, const CXXMethodDecl *Method);
+    void CalledDecl(SourceLocation CallLoc, const FunctionDecl *FD);
 
     /// \brief Integrate an invoked expression into the collected data.
     void CalledExpr(Expr *E);
@@ -4810,7 +4867,7 @@ public:
 
   /// \brief Evaluate the implicit exception specification for a defaulted
   /// special member function.
-  void EvaluateImplicitExceptionSpec(SourceLocation Loc, CXXMethodDecl *MD);
+  void EvaluateImplicitExceptionSpec(SourceLocation Loc, FunctionDecl *FD);
 
   /// Check the given noexcept-specifier, convert its expression, and compute
   /// the appropriate ExceptionSpecificationType.
@@ -4843,9 +4900,9 @@ public:
 
   class InheritedConstructorInfo;
 
-  /// \brief Determine if a special member function should have a deleted
-  /// definition when it is defaulted.
-  bool ShouldDeleteSpecialMember(CXXMethodDecl *MD, CXXSpecialMember CSM,
+  /// \brief Determine if a special member function or defaulted comparison
+  /// operator, should have a deleted definition when it is defaulted.
+  bool ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
                                  InheritedConstructorInfo *ICI = nullptr,
                                  bool Diagnose = false);
 
@@ -4970,6 +5027,17 @@ public:
   /// a non-trivial destructor, this will return CXXBindTemporaryExpr. Otherwise
   /// it simply returns the passed in expression.
   ExprResult MaybeBindToTemporary(Expr *E);
+
+  /// \brief Check whether the specified explicitly-defaulted comparison
+  /// declaration is ollowed.
+  ///
+  /// \return true if an error occurred
+  bool checkDefaultedComparisonOperatorDecl(SourceLocation DefaultLoc,
+                                            Decl *Dcl);
+
+  /// \brief Defines a explicitly-defaulted comparison operator.
+  void DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
+                                         FunctionDecl *FD);
 
   bool CompleteConstructorCall(CXXConstructorDecl *Constructor,
                                MultiExprArg ArgsPtr,
@@ -5900,8 +5968,8 @@ public:
                                      StorageClass &SC);
   void CheckDeductionGuideTemplate(FunctionTemplateDecl *TD);
 
-  void CheckExplicitlyDefaultedSpecialMember(CXXMethodDecl *MD);
-  void CheckExplicitlyDefaultedMemberExceptionSpec(CXXMethodDecl *MD,
+  void CheckExplicitlyDefaultedMember(FunctionDecl *FD);
+  void CheckExplicitlyDefaultedMemberExceptionSpec(FunctionDecl *FD,
                                                    const FunctionProtoType *T);
   void CheckDelayedMemberExceptionSpecs();
 
@@ -10361,11 +10429,13 @@ private:
                             const FunctionProtoType *Proto,
                             SourceLocation Loc);
 
+public:
   void checkCall(NamedDecl *FDecl, const FunctionProtoType *Proto,
                  const Expr *ThisArg, ArrayRef<const Expr *> Args,
                  bool IsMemberFunction, SourceLocation Loc, SourceRange Range,
                  VariadicCallType CallType);
 
+private:
   bool CheckObjCString(Expr *Arg);
   ExprResult CheckOSLogFormatStringArg(Expr *Arg);
 

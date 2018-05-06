@@ -1377,6 +1377,9 @@ def note_pure_virtual_function : Note<
 def note_pure_qualified_call_kext : Note<
   "qualified call to %0::%1 is treated as a virtual call to %1 due to -fapple-kext">;
 
+def err_defaulted_decl_not_first : Error<
+  "defaulted definition must be first declaration">;
+
 def err_deleted_decl_not_first : Error<
   "deleted definition must be first declaration">;
 
@@ -1660,8 +1663,8 @@ def note_user_declared_ctor : Note<
   "implicit default constructor suppressed by user-declared constructor">;
 def note_nontrivial_no_copy : Note<
   "because no %select{<<ERROR>>|constructor|constructor|assignment operator|"
-  "assignment operator|<<ERROR>>}2 can be used to "
-  "%select{<<ERROR>>|copy|move|copy|move|<<ERROR>>}2 "
+  "assignment operator|<<ERROR>>|<<ERROR>>}2 can be used to "
+  "%select{<<ERROR>>|copy|move|copy|move|<<ERROR>>|<<ERROR>>}2 "
   "%select{base class|field|an object}0 of type %3">;
 def note_nontrivial_user_provided : Note<
   "because %select{base class of |field of |}0type %1 has a user-provided "
@@ -3878,9 +3881,9 @@ def err_ovl_deleted_oper : Error<
   "overload resolution selected %select{unavailable|deleted}0 operator '%1'%2">;
 def err_ovl_deleted_special_oper : Error<
   "object of type %0 cannot be %select{constructed|copied|moved|assigned|"
-  "assigned|destroyed}1 because its %select{default constructor|"
+  "assigned|destroyed|compared}1 because its %select{default constructor|"
   "copy constructor|move constructor|copy assignment operator|"
-  "move assignment operator|destructor}1 is implicitly deleted">;
+  "move assignment operator|destructor|comparison operator}1 is implicitly deleted">;
 def err_ovl_no_viable_subscript :
     Error<"no viable overloaded operator[] for type %0">;
 def err_ovl_no_oper :
@@ -4662,11 +4665,11 @@ def err_alias_is_definition :
 def err_definition_of_implicitly_declared_member : Error<
   "definition of implicitly declared %select{default constructor|copy "
   "constructor|move constructor|copy assignment operator|move assignment "
-  "operator|destructor|function}1">;
+  "operator|destructor|comparison operator|function}1">;
 def err_definition_of_explicitly_defaulted_member : Error<
   "definition of explicitly defaulted %select{default constructor|copy "
   "constructor|move constructor|copy assignment operator|move assignment "
-  "operator|destructor|function}0">;
+  "operator|destructor|comparison operator|function}0">;
 def err_redefinition_extern_inline : Error<
   "redefinition of a 'extern inline' function %0 is not supported in "
   "%select{C99 mode|C++}1">;
@@ -4685,12 +4688,12 @@ def note_deleted_dtor_no_operator_delete : Note<
 def note_deleted_special_member_class_subobject : Note<
   "%select{default constructor of|copy constructor of|move constructor of|"
   "copy assignment operator of|move assignment operator of|destructor of|"
-  "constructor inherited by}0 "
+  "comparison operator of|constructor inherited by}0 "
   "%1 is implicitly deleted because "
   "%select{base class %3|%select{||||variant }4field %3}2 has "
   "%select{no|a deleted|multiple|an inaccessible|a non-trivial}4 "
   "%select{%select{default constructor|copy constructor|move constructor|copy "
-  "assignment operator|move assignment operator|destructor|"
+  "assignment operator|move assignment operator|destructor|comparison operator|"
   "%select{default|corresponding|default|default|default}4 constructor}0|"
   "destructor}5"
   "%select{||s||}4">;
@@ -6453,6 +6456,8 @@ def note_member_declared_here : Note<
   "member %0 declared here">;
 def note_member_first_declared_here : Note<
   "member %0 first declared here">;
+def note_first_declared_here : Note<
+  "%0 first declared here">;
 def err_decrement_bool : Error<"cannot decrement expression of type bool">;
 def warn_increment_bool : Warning<
   "incrementing expression of type bool is deprecated and "
@@ -7743,13 +7748,16 @@ def warn_cxx98_compat_explicit_conversion_functions : Warning<
 
 // C++11 defaulted functions
 def err_defaulted_special_member_params : Error<
-  "an explicitly-defaulted %select{|copy |move }0constructor cannot "
+  "an explicitly-defaulted %select{default constructor|copy constructor|"
+  "move constructor|<<ERROR>>|<<ERROR>>|<<ERROR>>|comparison operator}0 cannot "
   "have default arguments">;
 def err_defaulted_special_member_variadic : Error<
-  "an explicitly-defaulted %select{|copy |move }0constructor cannot "
+  "an explicitly-defaulted %select{default constructor|copy constructor|"
+  "move constructor|<<ERROR>>|<<ERROR>>|<<ERROR>>|comparison operator}0 cannot "
   "be variadic">;
 def err_defaulted_special_member_return_type : Error<
-  "explicitly-defaulted %select{copy|move}0 assignment operator must "
+  "explicitly-defaulted %select{<<ERROR>>|<<ERROR>>|<<ERROR>>|copy assignment|"
+  "move assignment|<<ERROR>>|comparison}0 operator must "
   "return %1">;
 def err_defaulted_special_member_quals : Error<
   "an explicitly-defaulted %select{copy|move}0 assignment operator may not "
@@ -7757,7 +7765,7 @@ def err_defaulted_special_member_quals : Error<
 def err_defaulted_special_member_volatile_param : Error<
   "the parameter for an explicitly-defaulted %select{<<ERROR>>|"
   "copy constructor|move constructor|copy assignment operator|"
-  "move assignment operator|<<ERROR>>}0 may not be volatile">;
+  "move assignment operator|<<ERROR>>|comparison operator}0 may not be volatile">;
 def err_defaulted_special_member_move_const_param : Error<
   "the parameter for an explicitly-defaulted move "
   "%select{constructor|assignment operator}0 may not be const">;
@@ -7771,11 +7779,12 @@ def err_defaulted_copy_assign_not_ref : Error<
 def err_incorrect_defaulted_exception_spec : Error<
   "exception specification of explicitly defaulted %select{default constructor|"
   "copy constructor|move constructor|copy assignment operator|move assignment "
-  "operator|destructor}0 does not match the "
+  "operator|destructor|comparison operator}0 does not match the "
   "calculated one">;
 def err_incorrect_defaulted_constexpr : Error<
   "defaulted definition of %select{default constructor|copy constructor|"
-  "move constructor|copy assignment operator|move assignment operator}0 "
+  "move constructor|copy assignment operator|move assignment operator|"
+  "destructor|comparison operator}0 "
   "is not constexpr">;
 def err_out_of_line_default_deletes : Error<
   "defaulting this %select{default constructor|copy constructor|move "
@@ -7792,6 +7801,17 @@ def ext_implicit_exception_spec_mismatch : ExtWarn<
   "function previously declared with an %select{explicit|implicit}0 exception "
   "specification redeclared with an %select{implicit|explicit}0 exception "
   "specification">, InGroup<DiagGroup<"implicit-exception-spec-mismatch">>;
+
+// C++2a defaulted comparison operators
+def err_defaulted_comparison_operator_template : Error<
+  "an explicitly-defaulted comparison operator cannot be a template">;
+def err_defaulted_comparison_operator_decl_scope : Error<
+  "an explicitly-defaulted comparison operator not declared at class scope">;
+def err_defaulted_comparison_operator_param_type : Error<
+  "the parameter for this explicitly-defaulted comparison operator must have "
+  "type %0, but parameter has type %1">;
+def err_defaulted_comparison_operator_member_non_const : Error<
+  "explicitly-defaulted comparison operator is not const qualified">;
 
 def warn_ptr_arith_precedes_bounds : Warning<
   "the pointer decremented by %0 refers before the beginning of the array">,

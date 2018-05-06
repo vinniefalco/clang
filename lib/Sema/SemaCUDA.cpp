@@ -304,10 +304,11 @@ bool Sema::inferCUDATargetForImplicitSpecialMember(CXXRecordDecl *ClassDecl,
                             /* ConstThis */ false,
                             /* VolatileThis */ false);
 
-    if (!SMOR.getMethod())
+    if (!SMOR.getFunction())
       continue;
 
-    CUDAFunctionTarget BaseMethodTarget = IdentifyCUDATarget(SMOR.getMethod());
+    CUDAFunctionTarget BaseMethodTarget =
+        IdentifyCUDATarget(SMOR.getFunction());
     if (!InferredTarget.hasValue()) {
       InferredTarget = BaseMethodTarget;
     } else {
@@ -347,11 +348,11 @@ bool Sema::inferCUDATargetForImplicitSpecialMember(CXXRecordDecl *ClassDecl,
                             /* ConstThis */ false,
                             /* VolatileThis */ false);
 
-    if (!SMOR.getMethod())
+    if (!SMOR.getFunction())
       continue;
 
     CUDAFunctionTarget FieldMethodTarget =
-        IdentifyCUDATarget(SMOR.getMethod());
+        IdentifyCUDATarget(SMOR.getFunction());
     if (!InferredTarget.hasValue()) {
       InferredTarget = FieldMethodTarget;
     } else {

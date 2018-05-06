@@ -202,6 +202,13 @@ public:
   static StringRef getCategoryString(ComparisonCategoryType Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
 
+  /// \brief Return the comparison category information for the
+  /// "common comparison type" for a specified list of types. If there is no
+  /// such common comparison type, or if any of the specified types are not
+  /// comparison category types, null is returned.
+  const ComparisonCategoryInfo *
+  computeCommonComparisonType(ArrayRef<QualType> Types) const;
+
   /// \brief Return the list of results which are valid for the specified
   ///   comparison category type.
   static std::vector<ComparisonCategoryResult>

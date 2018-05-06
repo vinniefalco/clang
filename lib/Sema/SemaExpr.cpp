@@ -103,7 +103,8 @@ void Sema::NoteDeletedFunction(FunctionDecl *Decl) {
     // Try to diagnose why this special member function was implicitly
     // deleted. This might fail, if that reason no longer applies.
     CXXSpecialMember CSM = getSpecialMember(Method);
-    if (CSM != CXXInvalid)
+    // FIXME(EricWF): Handle CXXComparisonOperator
+    if (CSM != CXXInvalid && CSM != CXXComparisonOperator)
       ShouldDeleteSpecialMember(Method, CSM, nullptr, /*Diagnose=*/true);
 
     return;
@@ -14197,7 +14198,8 @@ static bool isOdrUseContext(Sema &SemaRef, bool SkipDependentUses = true) {
 static bool isImplicitlyDefinableConstexprFunction(FunctionDecl *Func) {
   CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(Func);
   return Func->isConstexpr() &&
-         (Func->isImplicitlyInstantiable() || (MD && !MD->isUserProvided()));
+         (Func->isImplicitlyInstantiable() || (MD && !MD->isUserProvided()) ||
+          Func->isDefaultComparisonOperator());
 }
 
 /// \brief Mark a function referenced, and check whether it is odr-used
@@ -14287,13 +14289,16 @@ void Sema::MarkFunctionReferenced(SourceLocation Loc, FunctionDecl *Func,
       MarkVTableUsed(Loc, Destructor->getParent());
   } else if (CXXMethodDecl *MethodDecl = dyn_cast<CXXMethodDecl>(Func)) {
     if (MethodDecl->isOverloadedOperator() &&
-        MethodDecl->getOverloadedOperator() == OO_Equal) {
+        (MethodDecl->getOverloadedOperator() == OO_Equal ||
+         MethodDecl->isDefaultComparisonOperator())) {
       MethodDecl = cast<CXXMethodDecl>(MethodDecl->getFirstDecl());
       if (MethodDecl->isDefaulted() && !MethodDecl->isDeleted()) {
         if (MethodDecl->isCopyAssignmentOperator())
           DefineImplicitCopyAssignment(Loc, MethodDecl);
         else if (MethodDecl->isMoveAssignmentOperator())
           DefineImplicitMoveAssignment(Loc, MethodDecl);
+        else if (MethodDecl->isDefaultComparisonOperator())
+          DefineDefaultedComparisonOperator(Loc, MethodDecl);
       }
     } else if (isa<CXXConversionDecl>(MethodDecl) &&
                MethodDecl->getParent()->isLambda()) {
@@ -14305,7 +14310,8 @@ void Sema::MarkFunctionReferenced(SourceLocation Loc, FunctionDecl *Func,
         DefineImplicitLambdaToFunctionPointerConversion(Loc, Conversion);
     } else if (MethodDecl->isVirtual() && getLangOpts().AppleKext)
       MarkVTableUsed(Loc, MethodDecl->getParent());
-  }
+  } else if (Func->isDefaultComparisonOperator())
+    DefineDefaultedComparisonOperator(Loc, Func);
 
   // Recursive functions should be marked when used from another function.
   // FIXME: Is this really right?

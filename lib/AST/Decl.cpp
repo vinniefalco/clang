@@ -2809,6 +2809,21 @@ bool FunctionDecl::isDestroyingOperatorDelete() const {
          RD->getIdentifier()->isStr("destroying_delete_t");
 }
 
+bool FunctionDecl::isDefaultComparisonOperator(bool IsExplicitlyDefault) const {
+  // C++2a [class.campare.default] A defaulted comparison operator function
+  // ([expr.spaceship], [expr.rel], [expr.eq]) for some class C shall be a
+  // non-template function declared in the member-specification of C that is
+  // (1.1) a non-static member of C having one parameter of type const C&, or
+  if ((!isDefaulted() && !IsExplicitlyDefault) || !isOverloadedOperator())
+    return false;
+  if (!isa<CXXMethodDecl>(this) && !isa<CXXRecordDecl>(getLexicalParent()))
+    return false;
+  auto Opc = BinaryOperator::getOverloadedOpcode(getOverloadedOperator());
+  if (BinaryOperator::isComparisonOp(Opc))
+    return true;
+  return false;
+}
+
 LanguageLinkage FunctionDecl::getLanguageLinkage() const {
   return getDeclLanguageLinkage(*this);
 }

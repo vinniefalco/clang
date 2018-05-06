@@ -2796,24 +2796,25 @@ struct GNUCompatibleParamWarning {
 } // end anonymous namespace
 
 /// getSpecialMember - get the special member enum for a method.
-Sema::CXXSpecialMember Sema::getSpecialMember(const CXXMethodDecl *MD) {
-  if (const CXXConstructorDecl *Ctor = dyn_cast<CXXConstructorDecl>(MD)) {
-    if (Ctor->isDefaultConstructor())
-      return Sema::CXXDefaultConstructor;
-
-    if (Ctor->isCopyConstructor())
-      return Sema::CXXCopyConstructor;
-
-    if (Ctor->isMoveConstructor())
-      return Sema::CXXMoveConstructor;
-  } else if (isa<CXXDestructorDecl>(MD)) {
-    return Sema::CXXDestructor;
-  } else if (MD->isCopyAssignmentOperator()) {
-    return Sema::CXXCopyAssignment;
-  } else if (MD->isMoveAssignmentOperator()) {
-    return Sema::CXXMoveAssignment;
+Sema::CXXSpecialMember Sema::getSpecialMember(const FunctionDecl *FD,
+                                              bool IsExplicitlyDefault) {
+  if (FD->isDefaultComparisonOperator(IsExplicitlyDefault))
+    return Sema::CXXComparisonOperator;
+  if (const auto *MD = dyn_cast<CXXMethodDecl>(FD)) {
+    if (const CXXConstructorDecl *Ctor = dyn_cast<CXXConstructorDecl>(MD)) {
+      if (Ctor->isDefaultConstructor())
+        return Sema::CXXDefaultConstructor;
+      if (Ctor->isCopyConstructor())
+        return Sema::CXXCopyConstructor;
+      if (Ctor->isMoveConstructor())
+        return Sema::CXXMoveConstructor;
+    } else if (isa<CXXDestructorDecl>(MD))
+      return Sema::CXXDestructor;
+    else if (MD->isCopyAssignmentOperator())
+      return Sema::CXXCopyAssignment;
+    else if (MD->isMoveAssignmentOperator())
+      return Sema::CXXMoveAssignment;
   }
-
   return Sema::CXXInvalid;
 }
 
@@ -3344,13 +3345,13 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
         } else {
           Diag(NewMethod->getLocation(),
                diag::err_definition_of_implicitly_declared_member)
-            << New << getSpecialMember(OldMethod);
+              << New << getSpecialMember(OldMethod);
           return true;
         }
       } else if (OldMethod->getFirstDecl()->isExplicitlyDefaulted() && !isFriend) {
         Diag(NewMethod->getLocation(),
              diag::err_definition_of_explicitly_defaulted_member)
-          << getSpecialMember(OldMethod);
+            << getSpecialMember(OldMethod);
         return true;
       }
     }

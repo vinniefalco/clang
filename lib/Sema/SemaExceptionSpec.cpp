@@ -205,7 +205,7 @@ Sema::ResolveExceptionSpec(SourceLocation Loc, const FunctionProtoType *FPT) {
 
   // Compute or instantiate the exception specification now.
   if (SourceFPT->getExceptionSpecType() == EST_Unevaluated)
-    EvaluateImplicitExceptionSpec(Loc, cast<CXXMethodDecl>(SourceDecl));
+    EvaluateImplicitExceptionSpec(Loc, cast<FunctionDecl>(SourceDecl));
   else
     InstantiateExceptionSpec(Loc, SourceDecl);
 
@@ -1176,7 +1176,6 @@ CanThrowResult Sema::canThrow(const Expr *E) {
 
   case Expr::CXXRewrittenOperatorClass:
     return canThrow(cast<CXXRewrittenOperator>(E)->getRewrittenExpr());
-
     // Some might be dependent for other reasons.
   case Expr::ArraySubscriptExprClass:
   case Expr::OMPArraySectionExprClass:

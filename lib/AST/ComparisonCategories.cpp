@@ -218,3 +218,49 @@ ComparisonCategories::getPossibleResultsForType(ComparisonCategoryType Type) {
     Values.push_back(CCR::Unordered);
   return Values;
 }
+
+/// C++2a [class.spaceship]p4 - compute the common category type.
+const ComparisonCategoryInfo *ComparisonCategories::computeCommonComparisonType(
+    ArrayRef<QualType> Types) const {
+  using CCT = ComparisonCategoryType;
+  std::array<unsigned, static_cast<unsigned>(CCT::Last) + 1> Seen = {};
+  auto Count = [&](CCT T) { return Seen[static_cast<unsigned>(T)]; };
+
+  // Count the number of times each comparison category type occurs in the
+  // specified type list. If any type is not a comparison category, return
+  // nullptr.
+  for (auto Ty : Types) {
+    const ComparisonCategoryInfo *Info = lookupInfoForType(Ty);
+    // --- If any T is not a comparison category type, U is void.
+    if (!Info)
+      return nullptr;
+    Seen[static_cast<unsigned>(Info->Kind)]++;
+  }
+  // --- Otherwise, if at least one Ti is std::weak_equality, or at least one
+  // Ti is std::strong_equality and at least one Tj is
+  // std::partial_ordering or std::weak_ordering, U is
+  // std::weak_equality.
+  if (Count(CCT::WeakEquality) ||
+      (Count(CCT::StrongEquality) &&
+       (Count(CCT::PartialOrdering) || Count(CCT::WeakOrdering))))
+    return lookupInfo(CCT::WeakEquality);
+
+  // --- Otherwise, if at least one Ti is std::strong_equality, U is
+  // std::strong_equality
+  if (Count(CCT::StrongEquality))
+    return lookupInfo(CCT::StrongEquality);
+
+  // --- Otherwise, if at least one Ti is std::partial_ordering, U is
+  // std::partial_ordering.
+  if (Count(CCT::PartialOrdering))
+    return lookupInfo(CCT::PartialOrdering);
+
+  // --- Otherwise, if at least one Ti is std::weak_ordering, U is
+  // std::weak_ordering.
+  if (Count(CCT::WeakOrdering))
+    return lookupInfo(CCT::WeakOrdering);
+
+  // FIXME(EricWF): What if we don't find std::strong_ordering
+  // --- Otherwise, U is std::strong_ordering.
+  return lookupInfo(CCT::StrongOrdering);
+}

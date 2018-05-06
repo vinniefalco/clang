@@ -2857,6 +2857,8 @@ Sema::SpecialMemberOverloadResult Sema::LookupSpecialMember(CXXRecordDecl *RD,
                                                            bool RValueThis,
                                                            bool ConstThis,
                                                            bool VolatileThis) {
+  assert(SM != CXXComparisonOperator &&
+         "lookups for comparisons should be handled elsewhere");
   assert(CanDeclareSpecialMemberFunction(RD) &&
          "doing special member lookup into record that isn't fully complete");
   RD = RD->getDefinition();
@@ -2896,7 +2898,7 @@ Sema::SpecialMemberOverloadResult Sema::LookupSpecialMember(CXXRecordDecl *RD,
       DeclareImplicitDestructor(RD);
     CXXDestructorDecl *DD = RD->getDestructor();
     assert(DD && "record without a destructor");
-    Result->setMethod(DD);
+    Result->setFunction(DD);
     Result->setKind(DD->isDeleted() ?
                     SpecialMemberOverloadResult::NoMemberOrDeleted :
                     SpecialMemberOverloadResult::Success);
@@ -2981,7 +2983,7 @@ Sema::SpecialMemberOverloadResult Sema::LookupSpecialMember(CXXRecordDecl *RD,
     // destructor.
     assert(SM == CXXDefaultConstructor &&
            "lookup for a constructor or assignment operator was empty");
-    Result->setMethod(nullptr);
+    Result->setFunction(nullptr);
     Result->setKind(SpecialMemberOverloadResult::NoMemberOrDeleted);
     return *Result;
   }
@@ -3028,22 +3030,22 @@ Sema::SpecialMemberOverloadResult Sema::LookupSpecialMember(CXXRecordDecl *RD,
   OverloadCandidateSet::iterator Best;
   switch (OCS.BestViableFunction(*this, LookupLoc, Best)) {
     case OR_Success:
-      Result->setMethod(cast<CXXMethodDecl>(Best->Function));
+      Result->setFunction(Best->Function);
       Result->setKind(SpecialMemberOverloadResult::Success);
       break;
 
     case OR_Deleted:
-      Result->setMethod(cast<CXXMethodDecl>(Best->Function));
+      Result->setFunction(Best->Function);
       Result->setKind(SpecialMemberOverloadResult::NoMemberOrDeleted);
       break;
 
     case OR_Ambiguous:
-      Result->setMethod(nullptr);
+      Result->setFunction(nullptr);
       Result->setKind(SpecialMemberOverloadResult::Ambiguous);
       break;
 
     case OR_No_Viable_Function:
-      Result->setMethod(nullptr);
+      Result->setFunction(nullptr);
       Result->setKind(SpecialMemberOverloadResult::NoMemberOrDeleted);
       break;
   }
@@ -3057,7 +3059,7 @@ CXXConstructorDecl *Sema::LookupDefaultConstructor(CXXRecordDecl *Class) {
     LookupSpecialMember(Class, CXXDefaultConstructor, false, false, false,
                         false, false);
 
-  return cast_or_null<CXXConstructorDecl>(Result.getMethod());
+  return cast_or_null<CXXConstructorDecl>(Result.getFunction());
 }
 
 /// \brief Look up the copying constructor for the given class.
@@ -3069,7 +3071,7 @@ CXXConstructorDecl *Sema::LookupCopyingConstructor(CXXRecordDecl *Class,
     LookupSpecialMember(Class, CXXCopyConstructor, Quals & Qualifiers::Const,
                         Quals & Qualifiers::Volatile, false, false, false);
 
-  return cast_or_null<CXXConstructorDecl>(Result.getMethod());
+  return cast_or_null<CXXConstructorDecl>(Result.getFunction());
 }
 
 /// \brief Look up the moving constructor for the given class.
@@ -3079,7 +3081,7 @@ CXXConstructorDecl *Sema::LookupMovingConstructor(CXXRecordDecl *Class,
     LookupSpecialMember(Class, CXXMoveConstructor, Quals & Qualifiers::Const,
                         Quals & Qualifiers::Volatile, false, false, false);
 
-  return cast_or_null<CXXConstructorDecl>(Result.getMethod());
+  return cast_or_null<CXXConstructorDecl>(Result.getFunction());
 }
 
 /// \brief Look up the constructors for the given class.
@@ -3113,7 +3115,7 @@ CXXMethodDecl *Sema::LookupCopyingAssignment(CXXRecordDecl *Class,
                         ThisQuals & Qualifiers::Const,
                         ThisQuals & Qualifiers::Volatile);
 
-  return Result.getMethod();
+  return cast_or_null<CXXMethodDecl>(Result.getFunction());
 }
 
 /// \brief Look up the moving assignment operator for the given class.
@@ -3129,7 +3131,7 @@ CXXMethodDecl *Sema::LookupMovingAssignment(CXXRecordDecl *Class,
                         ThisQuals & Qualifiers::Const,
                         ThisQuals & Qualifiers::Volatile);
 
-  return Result.getMethod();
+  return cast_or_null<CXXMethodDecl>(Result.getFunction());
 }
 
 /// \brief Look for the destructor of the given class.
@@ -3140,8 +3142,100 @@ CXXMethodDecl *Sema::LookupMovingAssignment(CXXRecordDecl *Class,
 /// \returns The destructor for this class.
 CXXDestructorDecl *Sema::LookupDestructor(CXXRecordDecl *Class) {
   return cast<CXXDestructorDecl>(LookupSpecialMember(Class, CXXDestructor,
-                                                     false, false, false,
-                                                     false, false).getMethod());
+                                                     false, false, false, false,
+                                                     false)
+                                     .getFunction());
+}
+
+Sema::SpecialMemberOverloadResult
+Sema::LookupThreeWayComparison(CXXRecordDecl *RD, QualType ArgType,
+                               SourceLocation Loc) {
+  using ResultKind = SpecialMemberOverloadResultEntry::Kind;
+  assert(!ArgType->isReferenceType() &&
+         "expression cannot have reference types");
+
+  // Add a const qualifier before constructing the node ID to prevent
+  // unnecessary duplicates.
+  ArgType.addConst();
+
+  // FIXME(EricWF): Before we do expensive lookup, check if we have
+  // non-overloadable types (ie arithmetic, pointer, member pointer, ect)
+  // In these cases we can deduce the builtin type without performing
+  // overload resolution.
+
+  // FIXME(EricWF): It's not clear if we should even be caching lookups for
+  // defaulted comparison operators, since unlike special members, the lookup
+  // results can change. For now we add the record decl doing the lookup to
+  // avoid this.
+  llvm::FoldingSetNodeID ID;
+  ID.AddPointer(RD);
+  // FIXME(EricWF): Should we remove the quals before canonicalizing the type?
+  ID.AddPointer(ArgType.getAsOpaquePtr());
+  ID.AddInteger(CXXComparisonOperator);
+
+  void *InsertPoint;
+  SpecialMemberOverloadResultEntry *Result =
+      SpecialMemberCache.FindNodeOrInsertPos(ID, InsertPoint);
+
+  // This was already cached
+  if (Result)
+    return *Result;
+
+  Result = BumpAlloc.Allocate<SpecialMemberOverloadResultEntry>();
+  Result = new (Result) SpecialMemberOverloadResultEntry(ID);
+  SpecialMemberCache.InsertNode(Result, InsertPoint);
+
+  DeclarationName Name =
+      Context.DeclarationNames.getCXXOperatorName(OO_Spaceship);
+
+  OpaqueValueExpr FakeArg(Loc, ArgType, VK_LValue);
+  Expr *Args[2] = {&FakeArg, &FakeArg};
+
+  // FIXME(EricWF): Do this earlier, and pass in the result.
+  UnresolvedSet<16> Functions;
+  LookupOverloadedOperatorName(OO_Spaceship, getCurScope(), ArgType, ArgType,
+                               Functions);
+
+  OverloadCandidateSet CandidateSet(Loc, OverloadCandidateSet::CSK_Operator);
+  // Add the candidates from the given function set.
+  AddFunctionCandidates(Functions, Args, CandidateSet);
+
+  // Add operator candidates that are member functions.
+  AddMemberOperatorCandidates(OO_Spaceship, Loc, Args, CandidateSet);
+
+  // FIXME(EricWF): Should we be performing ADL here? Seems likely.
+  AddArgumentDependentLookupCandidates(Name, Loc, Args,
+                                       /*ExplicitTemplateArgs*/ nullptr,
+                                       CandidateSet);
+  // Add builtin operator candidates.
+  AddBuiltinOperatorCandidates(OO_Spaceship, Loc, Args, CandidateSet);
+
+  // FIXME(EricWF): Ignore rewritten candidates for now.
+
+  OverloadCandidateSet::iterator Best;
+  switch (CandidateSet.BestViableFunction(*this, Loc, Best)) {
+  case OR_Success: {
+    OverloadCandidate &Ovl = *Best;
+    Result->setKind(ResultKind::Success);
+    if (Ovl.Function)
+      Result->setFunction(Ovl.Function);
+    else {
+      assert(Ovl.getNumParams() == 2 &&
+             Context.hasSameType(Ovl.BuiltinParamTypes[0],
+                                 Ovl.BuiltinParamTypes[1]));
+      Result->setBuiltinArgType(Ovl.BuiltinParamTypes[0]);
+    }
+    break;
+  }
+  case OR_Ambiguous:
+    Result->setKind(ResultKind::Ambiguous);
+    break;
+  case OR_Deleted:
+  case OR_No_Viable_Function:
+    Result->setKind(ResultKind::NoMemberOrDeleted);
+    break;
+  }
+  return *Result;
 }
 
 /// LookupLiteralOperator - Determine which literal operator should be used for

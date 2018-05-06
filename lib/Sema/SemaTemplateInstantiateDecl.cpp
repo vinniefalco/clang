@@ -1853,7 +1853,11 @@ Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D,
       PrincipalDecl->isInIdentifierNamespace(Decl::IDNS_Ordinary))
     PrincipalDecl->setNonMemberOperator();
 
-  assert(!D->isDefaulted() && "only methods should be defaulted");
+  if (D->isExplicitlyDefaulted()) {
+    assert(D->isDefaultComparisonOperator() &&
+           "Only default comparison operators may be defaulted");
+    SemaRef.SetDeclDefaulted(Function, Function->getLocation());
+  }
   return Function;
 }
 
