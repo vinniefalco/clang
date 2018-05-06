@@ -13155,10 +13155,9 @@ private:
     if (RetTy.isNull())
       return ExprError();
 
-    const VarDecl *VDC =
-        S.Context.CompCategories.getInfoForType(RetTy).lookupResultDecl(
-            ComparisonCategoryResult::Equal);
-    VarDecl *VD = const_cast<VarDecl *>(VDC);
+    VarDecl *VD =
+        S.Context.CompCategories.getInfoForType(RetTy).getValueInfo(
+            ComparisonCategoryResult::Equal)->VD;
     return S.BuildDeclRefExpr(VD, RetTy, VK_LValue, Loc);
   }
 
