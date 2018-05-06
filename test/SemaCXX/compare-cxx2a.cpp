@@ -496,50 +496,23 @@ struct U {
   std::strong_ordering operator<=>(T const &RHS) const;
 };
 
+struct V {
+  int x;
+};
+auto operator<=>(V const &LHS, V &&RHS) { // expected-note 4 {{candidate}}
+  return LHS.x <=> RHS.x;
+}
+auto operator<(V const &, V &&) { // expected-note {{candidate}}
+  return std::strong_equality::equal;
+}
+
 void test() {
   // expected-error@+1 {{use of overloaded operator '<' is ambiguous}}
   (void)(T{} < U{});
+  // expected-error@+1 {{use of overloaded operator '<' is ambiguous}}
+  (void)(V{} < V{});
+  // expected-error@+1 {{use of overloaded operator '<=>' is ambiguous}}
+  (void)(V{} <=> V{});
 }
 
 } // namespace TestOvlMatchingIgnoresImplicitObject
-
-namespace TestImplicitConversionAmbiguity {
-struct T {
-  int x;
-};
-auto operator<=>(T const &LHS, T &&RHS) { // expected-note 4 {{candidate}}
-  return LHS.x <=> RHS.x;
-}
-auto operator<(T const &, T &&) { // expected-note {{candidate}}
-  return std::strong_equality::equal;
-}
-void test() {
-  {
-    // Chooses non-rewritten operator<
-    (void)(T{} < T{}); // expected-error {{use of overloaded operator '<' is ambiguous}}
-  }
-  { // Chooses non-rewritten operator<
-    T const t{};
-    auto R = t < T{};
-    ASSERT_EXPR_TYPE(R, std::strong_equality);
-  }
-  { // Chooses synthesized <=>
-    T const t{};
-    auto R = T{} < t;
-    ASSERT_EXPR_TYPE(R, bool);
-  }
-  { // Chooses non-rewritten <=>
-    (void)(T{} <=> T{}); // expected-error {{use of overloaded operator '<=>' is ambiguous}}
-  }
-  { // Chooses non-rewritten operator<=>
-    T const t{};
-    auto R = t <=> T{};
-    ASSERT_EXPR_TYPE(R, std::strong_ordering);
-  }
-  { // Chooses synthesized <=>
-    T const t{};
-    auto R = T{} <=> t;
-    ASSERT_EXPR_TYPE(R, std::strong_ordering);
-  }
-}
-} // namespace TestImplicitConversionAmbiguity
