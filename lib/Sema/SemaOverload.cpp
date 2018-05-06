@@ -12619,7 +12619,7 @@ ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
   };
   Expr *Original = new (S.Context)
       BinaryOperator(CreateOpaqueValue(Args[0]), CreateOpaqueValue(Args[1]),
-                     Rewritten->getType(), Rewritten->getValueKind(),
+                     Opc, Rewritten->getType(), Rewritten->getValueKind(),
                      Rewritten->getObjectKind(), OpLoc, S.FPFeatures);
 
   return new (S.Context) CXXRewrittenExpr(Original, Rewritten);
