@@ -11522,9 +11522,8 @@ TreeTransform<Derived>::TransformMaterializeTemporaryExpr(
 template <typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformCXXRewrittenExpr(CXXRewrittenExpr *E) {
-  ExprResult Orig = getDerived().TransformExpr(E->getOriginalExpr());
-  if (Orig.isInvalid())
-    return ExprError();
+  // FIXME(EricWF): Figure out if we should rebuild the original expression,
+  // and if so, how to do that.
 
   // FIXME(EricWF): Is there a case where the underlying expression has been
   // transformed in such a way that we need to re-compute the rewritten
@@ -11533,9 +11532,10 @@ TreeTransform<Derived>::TransformCXXRewrittenExpr(CXXRewrittenExpr *E) {
   if (Rewritten.isInvalid())
     return ExprError();
 
-  if (getDerived().AlwaysRebuild() || Orig.get() != E->getOriginalExpr() ||
+  if (getDerived().AlwaysRebuild() ||
       Rewritten.get() != E->getRewrittenExpr()) {
-    return getDerived().RebuildCXXRewrittenExpr(Orig.get(), Rewritten.get());
+    return getDerived().RebuildCXXRewrittenExpr(E->getOriginalExpr(),
+                                                Rewritten.get());
   }
   return E;
 }
