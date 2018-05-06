@@ -503,27 +503,45 @@ void test() {
 
 } // namespace TestOvlMatchingIgnoresImplicitObject
 
-namespace TestImp {
+namespace TestImplicitConversionAmbiguity {
 struct T {
   int x;
 };
 auto operator<=>(T const &LHS, T &&RHS) {
   return LHS.x <=> RHS.x;
 }
-void test() {
-  auto R = T{} < T{};
+auto operator<(T const &, T &&) {
+  return std::strong_equality::equal;
 }
-} // namespace TestImp
-
-namespace Test2Imp {
-struct Ovl1 {};
-struct Ovl2 {};
-struct T {
-  Ovl1 operator&&(T const &) &&;
-};
-Ovl2 operator&&(T const &, T const &);
 void test() {
-  auto R = T{} && T{};
-  ASSERT_EXPR_TYPE(R, Ovl1);
+  {
+    // Chooses non-rewritten operator<
+    auto R = T{} < T{};
+    ASSERT_EXPR_TYPE(R, std::strong_equality);
+  }
+  { // Chooses non-rewritten operator<
+    T const t{};
+    auto R = t < T{};
+    ASSERT_EXPR_TYPE(R, std::strong_equality);
+  }
+  { // Chooses synthesized <=>
+    T const t{};
+    auto R = T{} < t;
+    ASSERT_EXPR_TYPE(R, bool);
+  }
+  { // Chooses non-rewritten <=>
+    auto R = T{} <=> T{};
+    ASSERT_EXPR_TYPE(R, std::strong_ordering);
+  }
+  { // Chooses non-rewritten operator<=>
+    T const t{};
+    auto R = t <=> T{};
+    ASSERT_EXPR_TYPE(R, std::strong_ordering);
+  }
+  { // Chooses synthesized <=>
+    T const t{};
+    auto R = T{} <=> t;
+    ASSERT_EXPR_TYPE(R, std::strong_ordering);
+  }
 }
-} // namespace Test2Imp
+} // namespace TestImplicitConversionAmbiguity

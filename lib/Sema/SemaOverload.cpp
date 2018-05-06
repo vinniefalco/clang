@@ -9048,6 +9048,52 @@ static Comparison compareEnableIfAttrs(const Sema &S, const FunctionDecl *Cand1,
   return Cand1I == Cand1Attrs.end() ? Comparison::Equal : Comparison::Better;
 }
 
+static Optional<bool>
+isBetterRewrittenCandidate(Sema &S, const OverloadCandidate &Cand1,
+                           const OverloadCandidate &Cand2) {
+  // --- F2 is a rewritten candidate ([over.match.oper]) and F1 is not.
+  RewrittenOverloadCandidateKind C1Roc = Cand1.getRewrittenKind();
+  RewrittenOverloadCandidateKind C2Roc = Cand2.getRewrittenKind();
+  if (!C1Roc && !C2Roc)
+    return None;
+
+  if (!C1Roc || !C2Roc)
+    return !C1Roc;
+  // --- F1 and F2 are rewritten candidates, and F2 is a synthesized
+  // candidate with reversed order of parameters and F1 is not.
+  if ((C1Roc == ROC_Synthesized || C2Roc == ROC_Synthesized) &&
+      C1Roc != C2Roc) {
+    auto GetParamTypes = [&](const OverloadCandidate &Ovl) {
+      SmallVector<QualType, 2> Types;
+      // If the candidate is a method, compute the implicit object type.
+      if (const auto *MD = dyn_cast_or_null<CXXMethodDecl>(Ovl.Function)) {
+        assert(Ovl.Conversions[0].isStandard());
+        QualType Ty = Ovl.Conversions[0].Standard.getToType(2);
+        assert(!Ty->isReferenceType());
+        const auto *FTP = MD->getType()->getAs<FunctionProtoType>();
+        switch (FTP->getRefQualifier()) {
+        case RQ_LValue:
+        case RQ_None:
+          Types.push_back(S.Context.getLValueReferenceType(Ty));
+          break;
+        case RQ_RValue:
+          Types.push_back(S.Context.getRValueReferenceType(Ty));
+          break;
+        }
+      }
+      for (unsigned I = 0; I < Ovl.getNumParams(); ++I)
+        Types.push_back(Ovl.getParamType(I).getCanonicalType());
+      if (Ovl.getRewrittenKind() == ROC_Synthesized)
+        llvm::reverse(Types);
+      return Types;
+    };
+    if (GetParamTypes(Cand1) == GetParamTypes(Cand2))
+      return C2Roc == ROC_Synthesized;
+  }
+
+  return None;
+}
+
 /// isBetterOverloadCandidate - Determines whether the first overload
 /// candidate is a better candidate than the second (C++ 13.3.3p1).
 bool clang::isBetterOverloadCandidate(
@@ -9100,13 +9146,12 @@ bool clang::isBetterOverloadCandidate(
   if (HasBetterConversion)
     return true;
 
-  bool RewrittenTargetsSameFunction = false;
-  if (Cand1.Function && Cand2.Function &&
-      Cand1.Function->getCanonicalDecl() ==
-          Cand2.Function->getCanonicalDecl() &&
-      (Cand1.getRewrittenKind() || Cand2.getRewrittenKind())) {
-    RewrittenTargetsSameFunction = true;
-  }
+  // Evaluate the C++2a tie-breakers for rewritten expressions early. The result
+  // is needed when comparing conversion sequences if either candidate is
+  // rewritten.
+  Optional<bool> RewrittenCandidateTieBreaker =
+      isBetterRewrittenCandidate(S, Cand1, Cand2);
+
   // C++ [over.match.best]p1:
   //   A viable function F1 is defined to be a better function than another
   //   viable function F2 if for all arguments i, ICSi(F1) is not a worse
@@ -9117,14 +9162,28 @@ bool clang::isBetterOverloadCandidate(
     ImplicitConversionSequence::CompareKind CompareRes =
         CompareImplicitConversionSequences(S, Loc, ICS1, ICS2);
 
-    if (RewrittenTargetsSameFunction &&
-        CompareRes != ImplicitConversionSequence::Indistinguishable) {
-      if (ICS1.isStandard() && ICS2.isStandard() &&
-          ICS1.Standard.getRank() == ICR_Exact_Match &&
-          ICS2.Standard.getRank() == ICR_Exact_Match)
+    // FIXME(EricWF): This is a workaround for a bug in the current
+    // specification which often causes rewritten or sythesized candidates to be
+    // ambiguuous. For example:
+    //   auto operator<=>(T const&, T&&);
+    //   T{} <=> T{};
+    //   auto operator<(T const&, T&&);
+    //   T{} < T{};
+    //
+    // The current workaround is to ignore worse implicit conversions
+    // sequences which rank as an exact match when the first candidate is better
+    // than the second according to the rewritten candidate tie-breakers
+    // specified in C++2a [over.match.oper]p1.10.
+    if (RewrittenCandidateTieBreaker && ICS1.isStandard() &&
+        ICS2.isStandard() && ICS1.Standard.getRank() == ICR_Exact_Match &&
+        ICS2.Standard.getRank() == ICR_Exact_Match) {
+      // If the lvalue or qualified conversions were worse but the candidate
+      // is better according to the type-breakers for C++2a rewritten
+      // expressions, then we ignore the differences in conversion sequences.
+      if (CompareRes == ImplicitConversionSequence::Worse &&
+          RewrittenCandidateTieBreaker.getValue())
         CompareRes = ImplicitConversionSequence::Indistinguishable;
     }
-
     switch (CompareRes) {
     case ImplicitConversionSequence::Better:
       // Cand1 has a better conversion sequence.
@@ -9232,47 +9291,8 @@ bool clang::isBetterOverloadCandidate(
   }
 
   // Check C++2a tie-breakers for rewritten candidates
-  {
-    // --- F2 is a rewritten candidate ([over.match.oper]) and F1 is not.
-    RewrittenOverloadCandidateKind C1Roc = Cand1.getRewrittenKind();
-    RewrittenOverloadCandidateKind C2Roc = Cand2.getRewrittenKind();
-    if (C1Roc || C2Roc) {
-      if (!C1Roc || !C2Roc)
-        return !C1Roc;
-      // --- F1 and F2 are rewritten candidates, and F2 is a synthesized
-      // candidate with reversed order of parameters and F1 is not.
-      if ((C1Roc == ROC_Synthesized || C2Roc == ROC_Synthesized) &&
-          C1Roc != C2Roc) {
-        auto GetParamTypes = [&](const OverloadCandidate &Ovl) {
-          SmallVector<QualType, 2> Types;
-          // If the candidate is a method, compute the implicit object type.
-          if (const auto *MD = dyn_cast_or_null<CXXMethodDecl>(Ovl.Function)) {
-            assert(Ovl.Conversions[0].isStandard());
-            QualType Ty = Ovl.Conversions[0].Standard.getToType(2);
-            assert(!Ty->isReferenceType());
-            const auto *FTP = MD->getType()->getAs<FunctionProtoType>();
-            switch (FTP->getRefQualifier()) {
-            case RQ_LValue:
-            case RQ_None:
-              Types.push_back(S.Context.getLValueReferenceType(Ty));
-              break;
-            case RQ_RValue:
-              Types.push_back(S.Context.getRValueReferenceType(Ty));
-              break;
-            }
-            Types[0].dump();
-          }
-          for (unsigned I = 0; I < Ovl.getNumParams(); ++I)
-            Types.push_back(Ovl.getParamType(I).getCanonicalType());
-          if (Ovl.getRewrittenKind() == ROC_Synthesized)
-            llvm::reverse(Types);
-          return Types;
-        };
-        if (GetParamTypes(Cand1) == GetParamTypes(Cand2))
-          return C2Roc == ROC_Synthesized;
-      }
-    }
-  }
+  if (RewrittenCandidateTieBreaker)
+    return *RewrittenCandidateTieBreaker;
 
   // Check C++17 tie-breakers for deduction guides.
   {
