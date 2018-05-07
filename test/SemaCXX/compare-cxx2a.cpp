@@ -652,9 +652,9 @@ private:
   operator int() const;
 };
 struct T10 : T9 {
-  bool operator<(T10 const &) const = default;
+  bool operator<(T10 const &) const = default; // expected-note {{deleted here}}
 };
-auto R7 = &T10::operator<;
+auto R7 = &T10::operator<; // expected-error {{attempt to use a deleted function}}
 
 } // namespace IllFormedSpecialMemberTest
 
@@ -926,9 +926,17 @@ struct T0 {
   operator int() const { return x; }
 };
 struct T1 : T0 {
+  // expected-error@+1 {{defaulted definition of comparison operator is not constexpr}}
   friend constexpr auto operator<=>(T1 const &, T1 const &) = default;
 };
-constexpr T1 t1{42}, t2{101};
-static_assert((t1 <=> t2) < 0);
-
 } // namespace ConstexprDeductionTest
+
+namespace NoexceptDeductionTest {
+struct T0 {
+  operator int() const;
+};
+struct T1 : T0 {
+  // expected-error@+1 {{exception specification of explicitly defaulted comparison operator does not match the calculated one}}
+  friend auto operator<=>(T1 const &, T1 const &) noexcept = default;
+};
+} // namespace NoexceptDeductionTest

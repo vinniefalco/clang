@@ -6237,6 +6237,12 @@ specialMemberIsConstexpr(Sema &S, CXXRecordDecl *EvaluatingClass,
 
   Sema::SpecialMemberOverloadResult SMOR = lookupCallFromSpecialMember(
       S, EvaluatingClass, ClassDecl, CSM, Quals, ConstRHS);
+  if (CSM == Sema::CXXComparisonOperator && SMOR.hasBuiltin()) {
+    DeclAccessPair ConvDecl = SMOR.getBuiltinConversionDecl();
+    if (auto *ConvFD = cast_or_null<FunctionDecl>(ConvDecl.getDecl()))
+      return ConvFD->isConstexpr();
+    return true;
+  }
   if (!SMOR.getFunction())
     // A constructor we wouldn't select can't be "involved in initializing"
     // anything.
@@ -6442,7 +6448,10 @@ static bool defaultedSpecialMemberIsConstexpr(
     // Otherwise, we have a call to a builtin. It's possible we're using a
     // user-defined conversion to the arg type of the builtin. We need to
     // determine if that's a valid constant expression
-    return true;
+    DeclAccessPair ConvDecl = SML.getBuiltinConversionDecl();
+    auto *ConvFD = dyn_cast_or_null<FunctionDecl>(ConvDecl.getDecl());
+    assert(ConvFD && "we should have a conversion decl");
+    return ConvFD->isConstexpr();
   }
 
   //   -- every constructor involved in initializing [...] base class
@@ -7446,6 +7455,13 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
         return true;
       Info = Context.CompCategories.lookupInfo(CompKind.getValue());
       if (!Info)
+        return true;
+
+      DeclAccessPair ConvDecl = SML.getBuiltinConversionDecl();
+      CXXMethodDecl *ConvFD = cast_or_null<CXXMethodDecl>(ConvDecl.getDecl());
+      if (ConvFD &&
+          !isSpecialMemberAccessibleForDeletion(ConvFD, ConvDecl.getAccess(),
+                                                Context.getTypeDeclType(RD)))
         return true;
     }
     if (!Info)
@@ -10968,6 +10984,9 @@ struct SpecialMemberExceptionSpecInfo
 
   void visitSubobjectCall(Subobject Subobj,
                           Sema::SpecialMemberOverloadResult SMOR);
+
+  void visitLookupResult(SourceLocation Loc,
+                         Sema::SpecialMemberOverloadResult SMOR);
 };
 }
 
@@ -11017,10 +11036,21 @@ void SpecialMemberExceptionSpecInfo::visitClassSubobject(CXXRecordDecl *Class,
 
 void SpecialMemberExceptionSpecInfo::visitSubobjectCall(
     Subobject Subobj, Sema::SpecialMemberOverloadResult SMOR) {
+  visitLookupResult(getSubobjectLoc(Subobj), SMOR);
+}
+
+void SpecialMemberExceptionSpecInfo::visitLookupResult(
+    SourceLocation CallLoc, Sema::SpecialMemberOverloadResult SMOR) {
   // Note, if lookup fails, it doesn't matter what exception specification we
   // choose because the special member will be deleted.
   if (FunctionDecl *FD = SMOR.getFunction())
-    ExceptSpec.CalledDecl(getSubobjectLoc(Subobj), FD);
+    ExceptSpec.CalledDecl(CallLoc, FD);
+  if (SMOR.hasBuiltin()) {
+    assert(CSM == Sema::CXXComparisonOperator);
+    DeclAccessPair ConvDecl = SMOR.getBuiltinConversionDecl();
+    if (auto *FD = cast_or_null<FunctionDecl>(ConvDecl.getDecl()))
+      ExceptSpec.CalledDecl(CallLoc, FD);
+  }
 }
 
 static Sema::ImplicitExceptionSpecification
@@ -11034,6 +11064,15 @@ ComputeDefaultedSpecialMemberExceptionSpec(
   SpecialMemberExceptionSpecInfo Info(S, FD, CSM, ICI, Loc);
   if (Info.Record->isInvalidDecl())
     return Info.ExceptSpec;
+
+  if (CSM == Sema::CXXComparisonOperator &&
+      FD->getOverloadedOperator() != OO_Spaceship) {
+    QualType ArgTy(Info.Record->getTypeForDecl(), Qualifiers::Const);
+    Sema::SpecialMemberOverloadResult SMOR =
+        S.LookupThreeWayComparison(Info.Record, ArgTy, Loc);
+    Info.visitLookupResult(Loc, SMOR);
+    return Info.ExceptSpec;
+  }
 
   // C++1z [except.spec]p7:
   //   [Look for exceptions thrown by] a constructor selected [...] to
