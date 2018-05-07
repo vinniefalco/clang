@@ -912,8 +912,7 @@ private:
 };
 
 struct D
-  :
-  P // expected-note {{comparison operator of 'D' is implicitly deleted because base class 'AccessTest::P' has an inaccessible comparison operator}}
+    : P // expected-note {{comparison operator of 'D' is implicitly deleted because base class 'AccessTest::P' has an inaccessible comparison operator}}
 {
   // expected-note@+1 {{explicitly defaulted function was implicitly deleted here}}
   auto operator<=>(D const &) const = default;

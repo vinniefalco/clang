@@ -94,7 +94,7 @@ void Sema::NoteDeletedFunction(FunctionDecl *Decl) {
   assert(Decl->isDeleted());
 
   if ((isa<CXXMethodDecl>(Decl) || Decl->isDefaultComparisonOperator()) &&
-          Decl->isDeleted() && Decl->isDefaulted()) {
+      Decl->isDeleted() && Decl->isDefaulted()) {
     // If the method was explicitly defaulted, point at that declaration.
     if (!Decl->isImplicit())
       Diag(Decl->getLocation(), diag::note_implicitly_deleted);

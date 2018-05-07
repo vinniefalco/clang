@@ -6258,14 +6258,10 @@ static bool specialMemberIsConstexpr(
                                   InheritedCtor, Inherited);
 }
 
-static QualType deduceBuiltinComparisonReturnType(Sema &S, QualType ArgType,
-                                              SourceLocation Loc) {
-
-}
-
-static QualType
-deduceCommonComparisonType(Sema &S, FunctionDecl *CompareOperator,
-                           CXXRecordDecl *ClassDecl, SourceLocation Loc) {
+static QualType deduceCommonComparisonType(Sema &S,
+                                           FunctionDecl *CompareOperator,
+                                           CXXRecordDecl *ClassDecl,
+                                           SourceLocation Loc) {
   using OvlResult = Sema::SpecialMemberOverloadResult;
   using ResultKind = OvlResult::Kind;
   SmallVector<QualType, 8> ReturnTypes;
@@ -6277,26 +6273,27 @@ deduceCommonComparisonType(Sema &S, FunctionDecl *CompareOperator,
     case ResultKind::Success: {
       if (Res.hasBuiltin()) {
         Optional<ComparisonCategoryType> ReturnKind =
-          ComparisonCategories::computeComparisonTypeForBuiltin(Res.getBuiltinArgType());
+            ComparisonCategories::computeComparisonTypeForBuiltin(
+                Res.getBuiltinArgType());
         if (!ReturnKind)
-          return true; // ???
+          return true;
 
-  // Require that the <compare> header has already been included and that
-  // computed comparison category declaration has been found.
+        // Require that the <compare> header has already been included and that
+        // computed comparison category declaration has been found.
         QualType QT = S.CheckComparisonCategoryType(ReturnKind.getValue(), Loc);
 
-    return true;
-
-        QualType QT = deduceBuiltinComparisonReturnType(S, , Loc);
-        if (QT.isNull());
+        if (QT.isNull())
           return true;
+
+        ReturnTypes.push_back(QT);
+        return false;
       } else {
         FunctionDecl *FD = Res.getFunction();
         if (FD->getReturnType()->isUndeducedType()) {
           // FIXME(EricWF): Do this correctly?
           // And should we be complaining during the initial pass?
           if (S.DeduceReturnType(FD, Loc, /*Complain*/ true))
-            return false;
+            return true;
         }
         ReturnTypes.push_back(FD->getReturnType());
       }
@@ -6312,11 +6309,10 @@ deduceCommonComparisonType(Sema &S, FunctionDecl *CompareOperator,
     const RecordType *BaseType = B.getType()->getAs<RecordType>();
     if (!BaseType)
       continue;
-
     CXXRecordDecl *BaseClassDecl = cast<CXXRecordDecl>(BaseType->getDecl());
     QualType ArgTy(BaseClassDecl->getTypeForDecl(), 0);
     if (CheckOverload(ArgTy))
-      return Info;
+      return QualType();
   }
 
   for (const auto *F : ClassDecl->fields()) {
@@ -6327,7 +6323,7 @@ deduceCommonComparisonType(Sema &S, FunctionDecl *CompareOperator,
     // reference types.
     BaseType = BaseType.getNonReferenceType();
     if (CheckOverload(BaseType))
-      return Info;
+      return QualType();
   }
 
   // OK, we have a potentially OK comparison operator. Compute the common
@@ -6413,7 +6409,6 @@ static bool defaultedSpecialMemberIsConstexpr(
 
   if (CSM == Sema::CXXComparisonOperator &&
       FD->getOverloadedOperator() != OO_Spaceship) {
-
     QualType ArgTy(ClassDecl->getTypeForDecl(), Qualifiers::Const);
     Sema::SpecialMemberOverloadResult SML =
         S.LookupThreeWayComparison(ClassDecl, ArgTy, FD->getLocation());
@@ -6622,10 +6617,8 @@ void Sema::CheckExplicitlyDefaultedMember(FunctionDecl *FD) {
   QualType ArgType = ExpectedParams ? Type->getParamType(0) : QualType();
   bool HasConstParam = false;
   // FIXME(EricWF): Integrate this better
-  DefaultedComparisonInfo CompareInfo;
-  if (CSM == CXXComparisonOperator) {
-    CompareInfo = getDefaultedComparisonInfo(*this, FD, RD, FD->getLocation());
 
+  if (CSM == CXXComparisonOperator) {
     auto Opc = BinaryOperator::getOverloadedOpcode(FD->getOverloadedOperator());
     bool IsEqualityOrRelational = BinaryOperator::isEqualityOp(Opc) ||
                                   BinaryOperator::isRelationalOp(Opc);
@@ -6637,18 +6630,7 @@ void Sema::CheckExplicitlyDefaultedMember(FunctionDecl *FD) {
             << CSM << ExpectTy;
         HadError = true;
       }
-    } else {
-      if (auto *AutoTy = FD->getReturnType()->getAs<AutoType>()) {
-        if (!CompareInfo.CommonCategoryType.isNull())
-          ReturnType = CompareInfo.CommonCategoryType;
-        else
-          ReturnType = Context.VoidTy;
-      }
-      if (!FD->isInvalidDecl() &&
-          Context.hasSameType(ReturnType, Context.VoidTy))
-        CompareInfo.ShouldDelete = true;
     }
-
     // FIXME(EricWF): This isn't currently required by the standard, however,
     // not requiring it leads to issues.
     if (IsMethod && !Type->isConst()) {
@@ -6742,7 +6724,7 @@ void Sema::CheckExplicitlyDefaultedMember(FunctionDecl *FD) {
       CheckExplicitlyDefaultedMemberExceptionSpec(FD, Type);
     }
   }
-  bool ShouldDeleteForDeducedCompareType = false;
+
   //   If a function is explicitly defaulted on its first declaration,
   if (First) {
     //  -- it is implicitly considered to be constexpr if the implicit
@@ -6753,17 +6735,24 @@ void Sema::CheckExplicitlyDefaultedMember(FunctionDecl *FD) {
     //  -- it is implicitly considered to have the same exception-specification
     //     as if it had been implicitly declared,
     FunctionProtoType::ExtProtoInfo EPI = Type->getExtProtoInfo();
-    // FIXME(EricWF)
     EPI.ExceptionSpec.Type = EST_Unevaluated;
     EPI.ExceptionSpec.SourceDecl = FD;
-
     FD->setType(Context.getFunctionType(ReturnType, Args, EPI));
   }
 
-  bool ShouldDelete =
-      (CSM == CXXComparisonOperator &&
-       Context.hasSameType(Context.VoidTy, FD->getReturnType()));
-  if (ShouldDelete || ShouldDeleteSpecialMember(FD, CSM)) {
+  if (CSM == CXXComparisonOperator) {
+    if (auto *AutoTy = FD->getReturnType()->getAs<AutoType>()) {
+      assert(First);
+      QualType RetTy =
+          deduceCommonComparisonType(*this, FD, RD, FD->getLocation());
+      if (!RetTy.isNull())
+        Context.adjustDeducedFunctionResultType(FD, RetTy);
+      else
+        HadError = true;
+    }
+  }
+
+  if (ShouldDeleteSpecialMember(FD, CSM)) {
     if (First) {
       SetDeclDeleted(FD, FD->getLocation());
     } else {
@@ -6994,7 +6983,6 @@ struct SpecialMemberDeletionInfo
 };
 }
 
-
 /// Is the given special member inaccessible when used on the given
 /// sub-object.
 bool SpecialMemberDeletionInfo::isAccessible(Subobject Subobj,
@@ -7021,7 +7009,7 @@ bool SpecialMemberDeletionInfo::isAccessible(Subobject Subobj,
 }
 
 static bool shouldDeleteForBuiltin(Sema &S, CXXRecordDecl *RD,
-                                       Sema::SpecialMemberOverloadResult SMOR,
+                                   Sema::SpecialMemberOverloadResult SMOR,
                                    SourceLocation Loc) {
   if (!SMOR.hasBuiltin())
     return false;
@@ -7030,12 +7018,14 @@ static bool shouldDeleteForBuiltin(Sema &S, CXXRecordDecl *RD,
       return true;
 
     if (auto *MD = dyn_cast<CXXMethodDecl>(ConvFD))
-      if (!S.isSpecialMemberAccessibleForDeletion(MD, SMOR.getBuiltinConversionDecl().getAccess(),
-                                                  S.Context.getTypeDeclType(RD)))
-          return true;
+      if (!S.isSpecialMemberAccessibleForDeletion(
+              MD, SMOR.getBuiltinConversionDecl().getAccess(),
+              S.Context.getTypeDeclType(RD)))
+        return true;
   }
   Optional<ComparisonCategoryType> CompType =
-      ComparisonCategories::computeComparisonTypeForBuiltin(SMOR.getBuiltinArgType());
+      ComparisonCategories::computeComparisonTypeForBuiltin(
+          SMOR.getBuiltinArgType());
   if (!CompType)
     return true;
   // Require that the <compare> header has already been included and that
@@ -7375,15 +7365,6 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
       return true;
     }
   }
-  if (CSM == CXXComparisonOperator &&
-      Context.hasSameUnqualifiedType(FD->getReturnType(), Context.VoidTy)) {
-    if (Diagnose) {
-      Diag(FD->getReturnTypeSourceRange().getBegin(),
-           diag::note_deleted_comparison_void_return_type)
-              << FD->getReturnTypeSourceRange();
-    }
-    return true;
-  }
 
   // Do access control from the special member function
   ContextRAII MethodContext(*this, FD);
@@ -7478,8 +7459,6 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
     return false;
   }
 
-
-
   // Per DR1611, do not consider virtual bases of constructors of abstract
   // classes, since we are not going to construct them.
   // Per DR1658, do not consider virtual bases of destructors of abstract
@@ -7502,6 +7481,18 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
     // failed.
     return inferCUDATargetForImplicitSpecialMember(RD, CSM, MD, SMI.ConstArg,
                                                    Diagnose);
+  }
+
+  // FIXME(EricWF): This incorrectly handles function explicitly declared
+  // void as well as function deduced to void.
+  if (CSM == CXXComparisonOperator &&
+      Context.hasSameUnqualifiedType(FD->getReturnType(), Context.VoidTy)) {
+    if (Diagnose) {
+      Diag(FD->getReturnTypeSourceRange().getBegin(),
+           diag::note_deleted_comparison_void_return_type)
+          << FD->getReturnTypeSourceRange();
+    }
+    return true;
   }
 
   return false;
