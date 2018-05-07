@@ -8939,9 +8939,9 @@ QualType Sema::CheckComparisonCategoryType(ComparisonCategoryType Kind,
   // If lookup failed
   if (!Info) {
     auto NameForDiags =
-        std::string("std::") + ComparisonCategories::getCategoryString(Kind);
+        llvm::Twine("std::") + ComparisonCategories::getCategoryString(Kind);
     Diag(Loc, diag::err_implied_comparison_category_type_not_found)
-        << NameForDiags;
+        << NameForDiags.str();
     return QualType();
   }
 
