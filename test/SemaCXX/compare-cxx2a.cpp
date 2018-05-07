@@ -644,6 +644,9 @@ public:
 };
 auto R6 = &T8::operator<; // OK
 
+// FIXME(EricWF): Should T10's defaulted comparison operator be deleted here?
+// We use the user defined conversion to 'int', but it's not accessible. This
+// results in diagnostics when synthesizing the definition.
 struct T9 {
 private:
   operator int() const;
@@ -652,37 +655,8 @@ struct T10 : T9 {
   bool operator<(T10 const &) const = default;
 };
 auto R7 = &T10::operator<;
+
 } // namespace IllFormedSpecialMemberTest
-
-namespace SpecialMemberTest {
-
-struct T {
-  int x;
-  auto operator<=>(T const &) const = default;
-};
-
-struct U {
-  int x;
-  friend auto operator<=>(U const &, U const &) = default;
-};
-
-} // namespace SpecialMemberTest
-
-namespace ConstexprDefaultTest {
-struct T {
-  int x, y, z;
-  constexpr std::strong_ordering operator<=>(T const &other) const = default;
-};
-
-constexpr T t1{0, 0, 0};
-constexpr T t2{1, 1, 1};
-static_assert(t1 < t2);
-static_assert(t1 != t2);
-
-// expected-error@+1 {{static_assert failed due to requirement 't1 != (const ConstexprDefaultTest::T &)t1'}}
-static_assert(t1 != (T const &)t1);
-
-} // namespace ConstexprDefaultTest
 
 namespace TestCommonCategoryType {
 using SO = std::strong_ordering;

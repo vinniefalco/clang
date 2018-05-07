@@ -202,5 +202,21 @@ static_assert(complex_test(makeComplex<_Complex int>(0, 0),
 static_assert(complex_test(makeComplex<_Complex int>(0, 0),
                            makeComplex<_Complex int>(1, 0),
                            std::strong_equality::nonequal));
-// TODO: defaulted operator <=>
 } // namespace ThreeWayComparison
+
+namespace DefaultTest {
+struct T {
+  int x, y, z;
+  constexpr std::strong_ordering operator<=>(T const &other) const = default;
+};
+
+constexpr T t1{0, 0, 0};
+constexpr T t2{1, 1, 1};
+static_assert(t1 < t2);
+static_assert(t1 != t2);
+static_assert((t1 <=> t2) < 0);
+
+// expected-error@+1 {{static_assert failed due to requirement 't1 != (const DefaultTest::T &)t1'}}
+static_assert(t1 != (T const &)t1);
+
+} // namespace DefaultTest
