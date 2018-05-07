@@ -923,9 +923,12 @@ auto r2 = V{} <=> V{};
 namespace ConstexprDeductionTest {
 struct T0 {
   int x;
-  constexpr operator int() const { return x; }
+  operator int() const { return x; }
 };
 struct T1 : T0 {
   friend constexpr auto operator<=>(T1 const &, T1 const &) = default;
 };
+constexpr T1 t1{42}, t2{101};
+static_assert((t1 <=> t2) < 0);
+
 } // namespace ConstexprDeductionTest

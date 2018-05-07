@@ -3223,7 +3223,13 @@ Sema::LookupThreeWayComparison(CXXRecordDecl *RD, QualType ArgType,
       assert(Ovl.getNumParams() == 2 &&
              Context.hasSameType(Ovl.BuiltinParamTypes[0],
                                  Ovl.BuiltinParamTypes[1]));
-      Result->setBuiltinArgType(Ovl.BuiltinParamTypes[0]);
+      DeclAccessPair ConvDecl;
+      ConvDecl.set(nullptr, AS_none);
+
+      ImplicitConversionSequence ICS = Ovl.Conversions[0];
+      if (ICS.isUserDefined())
+        ConvDecl = ICS.UserDefined.FoundConversionFunction;
+      Result->setBuiltinInfo(Ovl.BuiltinParamTypes[0], ConvDecl);
     }
     break;
   }

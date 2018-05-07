@@ -1033,43 +1033,52 @@ public:
 
   private:
     union {
-      FunctionDecl *Function;
-      void *BuiltinArgType;
+      struct {
+        FunctionDecl *Function;
+      } FunctionInfo;
+      struct {
+        void *ArgType;
+        DeclAccessPair ConversionDecl;
+      } BuiltinInfo;
     };
+
     unsigned char LookupKind : 2;
     unsigned char IsBuiltin : 1;
 
   public:
     SpecialMemberOverloadResult()
-        : Function(nullptr), LookupKind(0), IsBuiltin(false) {}
+        : FunctionInfo{nullptr}, LookupKind(0), IsBuiltin(false) {}
     SpecialMemberOverloadResult(FunctionDecl *FD)
-        : Function(FD),
+        : FunctionInfo{FD},
           LookupKind(FD->isDeleted() ? NoMemberOrDeleted : Success),
           IsBuiltin(false) {}
-    SpecialMemberOverloadResult(QualType Ty)
-        : BuiltinArgType(Ty.getAsOpaquePtr()), LookupKind(Success),
-          IsBuiltin(true) {}
 
     FunctionDecl *getFunction() const {
       if (IsBuiltin)
         return nullptr;
-      return Function;
+      return FunctionInfo.Function;
     }
     void setFunction(FunctionDecl *FD) {
-      Function = FD;
+      FunctionInfo.Function = FD;
       IsBuiltin = false;
+    }
+
+    DeclAccessPair getBuiltinConversionDecl() const {
+      assert(IsBuiltin);
+      return BuiltinInfo.ConversionDecl;
     }
     QualType getBuiltinArgType() const {
       if (!IsBuiltin)
         return QualType();
-      return QualType::getFromOpaquePtr(BuiltinArgType);
+      return QualType::getFromOpaquePtr(BuiltinInfo.ArgType);
     }
-    void setBuiltinArgType(QualType Ty) {
-      BuiltinArgType = Ty.getAsOpaquePtr();
+    void setBuiltinInfo(QualType Ty, DeclAccessPair ConvDecl) {
+      BuiltinInfo.ArgType = Ty.getAsOpaquePtr();
+      BuiltinInfo.ConversionDecl = ConvDecl;
       IsBuiltin = true;
     }
     bool hasBuiltin() const { return IsBuiltin; }
-    bool hasFunction() const { return !IsBuiltin && Function; }
+    bool hasFunction() const { return !IsBuiltin && FunctionInfo.Function; }
 
     Kind getKind() const { return static_cast<Kind>(LookupKind); }
     void setKind(Kind K) { LookupKind = K; }
