@@ -929,14 +929,69 @@ struct T1 : T0 {
   // expected-error@+1 {{defaulted definition of comparison operator is not constexpr}}
   friend constexpr auto operator<=>(T1 const &, T1 const &) = default;
 };
+struct T2 {
+  operator int() const;
+  // expected-error@+1 {{defaulted definition of comparison operator is not constexpr}}
+  constexpr bool operator<(T2 const &) const = default;
+};
+struct T3 {
+  constexpr operator int() const;
+  constexpr bool operator<(T3 const &) const = default; // OK
+};
+struct T4 {
+  constexpr std::strong_ordering operator<=>(T4 const &) const { return std::strong_ordering::equal; }
+};
+struct T5 : T4 {
+  auto operator<=>(T5 const &) const = default;
+};
+static_assert(T5{} == T5{});
+
+struct T6 {
+  std::strong_ordering operator<=>(T6 const &) const { return std::strong_ordering::equal; }
+};
+struct T7 : T6 {
+  // expected-note@+1 {{declared here}}
+  auto operator<=>(T7 const &) const = default;
+};
+// expected-error@+2 {{static_assert expression is not an integral constant expression}}
+// expected-note@+1 {{non-constexpr function 'operator<=>' cannot be used in a constant expression}}
+static_assert(T7{} == T7{});
 } // namespace ConstexprDeductionTest
 
 namespace NoexceptDeductionTest {
+template <bool IsNoexcept = false>
 struct T0 {
-  operator int() const;
+  operator int() const noexcept(IsNoexcept);
 };
-struct T1 : T0 {
+struct T1 : T0<> {
   // expected-error@+1 {{exception specification of explicitly defaulted comparison operator does not match the calculated one}}
   friend auto operator<=>(T1 const &, T1 const &) noexcept = default;
 };
+struct T2 : T0<> {
+  // expected-error@+1 {{exception specification of explicitly defaulted comparison operator does not match the calculated one}}
+  bool operator<(T2 const &) const noexcept = default;
+};
+struct T3 {
+  operator int() const noexcept;
+  bool operator<(T3 const &) const noexcept = default; // OK
+};
+template <bool IsNoexcept>
+struct T4 : T0<IsNoexcept> {
+  auto operator<=>(T4 const &) const = default;
+};
+static_assert(!noexcept(T4<false>{} <=> T4<false>{}));
+static_assert(noexcept(T4<true>{} <=> T4<true>{}));
+
+template <bool IsNoexcept>
+struct T5 {
+  friend std::strong_ordering operator<=>(T5 const &, T5 const &) noexcept(IsNoexcept);
+};
+template <bool IsNoexcept>
+struct T6 {
+  T5<IsNoexcept> val;
+  auto operator<=>(T6 const &) const = default;
+};
+static_assert(!noexcept(T6<false>{} <=> T6<false>{}));
+static_assert(noexcept(T6<true>{} <=> T6<true>{}));
+
 } // namespace NoexceptDeductionTest
