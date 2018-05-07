@@ -210,12 +210,14 @@ using MemFnTyB = void (ClassB::*)() const;
 using MemFnTy2 = void (Class::*)();
 using MemFnTy3 = void (Class2::*)() const;
 using MemDataTy = long(Class::*);
-
+template <class>
+struct Printer;
 void test_nullptr(int *x, FnTy *fp, MemFnTy memp, MemDataTy memdp) {
   auto r1 = (nullptr <=> nullptr);
   ASSERT_EXPR_TYPE(r1, std::strong_equality);
 
   auto r2 = (nullptr <=> x);
+
   ASSERT_EXPR_TYPE(r2, std::strong_equality);
 
   auto r3 = (fp <=> nullptr);
@@ -612,11 +614,11 @@ using FriendFn = bool (*)(T4 const &, T4 const &);
 auto R1 = &T4::operator<; // expected-error {{attempt to use a deleted function}}
 
 struct T5 {
-  bool operator<(T5 const &) const = default;
+  bool operator<(T5 const &) const = default; // expected-note {{deleted here}}
   bool operator==(T5 const &) const = default;
   friend std::strong_equality operator<=>(T5 const &, T5 const &) = default;
 };
-auto R3 = &T5::operator<;
+auto R3 = &T5::operator<;  // expected-error {{attempt to use a deleted function}}
 auto R4 = &T5::operator==; // OK
 
 // expected-error@+1 {{definition of explicitly defaulted comparison operator}}

@@ -6262,24 +6262,16 @@ struct DefaultedComparisonInfo {
 static bool deduceBuiltinComparisonReturnType(Sema &S, QualType ArgType,
                                               SourceLocation Loc,
                                               DefaultedComparisonInfo &Info) {
-  using CCT = ComparisonCategoryType;
-  ComparisonCategoryType ReturnKind;
-  if (ArgType->hasFloatingRepresentation()) {
-    ReturnKind = CCT::PartialOrdering;
-  } else if (ArgType->isIntegralOrEnumerationType()) {
-    ReturnKind = CCT::StrongOrdering;
-  } else if (ArgType->isMemberPointerType()) {
-    ReturnKind = CCT::StrongEquality;
-  } else if (ArgType->isPointerType()) {
-    ReturnKind = CCT::StrongOrdering;
-  } else {
+  Optional<ComparisonCategoryType> ReturnKind =
+      ComparisonCategories::computeComparisonTypeForBuiltin(ArgType);
+  if (!ReturnKind) {
     // Not a type supported for builtin comparisons. (likely an array type)
     Info.ShouldDelete = true;
     return true;
   }
   // Require that the <compare> header has already been included and that
   // computed comparison category declaration has been found.
-  QualType CompType = S.CheckComparisonCategoryType(ReturnKind, Loc);
+  QualType CompType = S.CheckComparisonCategoryType(ReturnKind.getValue(), Loc);
   if (CompType.isNull()) {
     Info.ShouldDelete = true;
     return true;
@@ -7392,6 +7384,10 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
 
   if (CSM == CXXComparisonOperator &&
       FD->getOverloadedOperator() != OO_Spaceship) {
+    BinaryOperatorKind Opc =
+        BinaryOperator::getOverloadedOpcode(FD->getOverloadedOperator());
+    bool IsRelational = BinaryOperator::isRelationalOp(Opc);
+
     QualType ArgTy(RD->getTypeForDecl(), Qualifiers::Const);
     SpecialMemberOverloadResult SML =
         LookupThreeWayComparison(RD, ArgTy, FD->getLocation());
@@ -7402,7 +7398,7 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
     case SpecialMemberOverloadResult::Success:
       break;
     }
-    QualType RetTy;
+    const ComparisonCategoryInfo *Info;
     if (auto *FoundFD = SML.getFunction()) {
       if (FoundFD->getReturnType()->isUndeducedType()) {
         // FIXME(EricWF): Do this correctly?
@@ -7410,8 +7406,31 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
         if (DeduceReturnType(FoundFD, FD->getLocation(), /*Complain*/ true))
           return true;
       }
-      RetTy = FoundFD->getReturnType();
+      Info = Context.CompCategories.computeCommonComparisonType(
+          FoundFD->getReturnType());
     } else {
+      // FIXME(EricWF): We've somehow selected a builtin candidate for a class
+      // type (probably via a conversion operator). What should we do here?
+      Optional<ComparisonCategoryType> CompKind =
+          ComparisonCategories::computeComparisonTypeForBuiltin(
+              SML.getBuiltinArgType());
+
+      if (!CompKind)
+        return true;
+      Info = Context.CompCategories.lookupInfo(CompKind.getValue());
+    }
+    if (!Info)
+      return true;
+    switch (Info->Kind) {
+    case ComparisonCategoryType::StrongOrdering:
+    case ComparisonCategoryType::WeakOrdering:
+    case ComparisonCategoryType::PartialOrdering:
+      break;
+    case ComparisonCategoryType::StrongEquality:
+    case ComparisonCategoryType::WeakEquality:
+      if (IsRelational)
+        return true;
+      break;
     }
     // FIXME(EricWF): Check access. Handle rewritten expressions?
     return false;

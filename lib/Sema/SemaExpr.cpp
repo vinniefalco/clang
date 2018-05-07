@@ -9800,8 +9800,6 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
                                                          ExprResult &LHS,
                                                          ExprResult &RHS,
                                                          SourceLocation Loc) {
-  using CCT = ComparisonCategoryType;
-
   QualType LHSType = LHS.get()->getType();
   QualType RHSType = RHS.get()->getType();
   // Dig out the original argument type and expression before implicit casts
@@ -9964,18 +9962,15 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     assert(getLangOpts().CPlusPlus);
     assert(Context.hasSameType(LHS.get()->getType(), RHS.get()->getType()));
 
-    QualType CompositeTy = LHS.get()->getType();
-
     Optional<ComparisonCategoryType> CompType =
         ComparisonCategories::computeComparisonTypeForBuiltin(
-            CompositeTy, LHSIsNull != RHSIsNull);
+            LHS.get()->getType(), LHSIsNull != RHSIsNull);
     // C++2a [expr.spaceship]p9: Otherwise, the program is ill-formed.
     // TODO: Extend support for operator<=> to ObjC types.
     if (!CompType)
       return InvalidOperands(Loc, LHS, RHS);
     return CheckComparisonCategoryType(CompType.getValue(), Loc);
   };
-
 
   if (!IsRelational && LHSIsNull != RHSIsNull) {
     bool IsEquality = Opc == BO_EQ;

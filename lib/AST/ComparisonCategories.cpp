@@ -247,7 +247,7 @@ ComparisonCategories::computeComparisonTypeForBuiltin(QualType Ty,
     // P0946R0: Comparisons between a null pointer constant and an object
     // pointer result in std::strong_equality
     if (IsMixedNullCompare)
-      ComparisonCategoryType::StrongEquality;
+      return ComparisonCategoryType::StrongEquality;
     return CCT::StrongOrdering;
   }
   return None;
