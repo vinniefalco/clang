@@ -592,7 +592,7 @@ struct T3 {
 };
 
 struct T4 {
-  bool operator<(T4 const &) const = default; // OK
+  bool operator<(T4 const &) const = default; // expected-note {{explicitly defaulted function was implicitly deleted here}}
   bool operator>(T4 const &) const = default;
   bool operator==(T4 const &) const = default;
   bool operator!=(T4 const &) const = default;
@@ -607,11 +607,17 @@ struct T4 {
   // expected-error@+1 {{explicitly-defaulted comparison operator must return 'bool'}}
   friend void operator<=(T4 const &, T4 const &) = default;
 };
+using FriendFn = bool (*)(T4 const &, T4 const &);
+
+auto R1 = &T4::operator<; // expected-error {{attempt to use a deleted function}}
 
 struct T5 {
   bool operator<(T5 const &) const = default;
-  friend auto operator<=>(T5 const &, T5 const &) = default;
+  bool operator==(T5 const &) const = default;
+  friend std::strong_equality operator<=>(T5 const &, T5 const &) = default;
 };
+auto R3 = &T5::operator<;
+auto R4 = &T5::operator==; // OK
 
 // expected-error@+1 {{definition of explicitly defaulted comparison operator}}
 bool T5::operator<(T5 const &) const {

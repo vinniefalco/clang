@@ -7390,6 +7390,33 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
     }
   }
 
+  if (CSM == CXXComparisonOperator &&
+      FD->getOverloadedOperator() != OO_Spaceship) {
+    QualType ArgTy(RD->getTypeForDecl(), Qualifiers::Const);
+    SpecialMemberOverloadResult SML =
+        LookupThreeWayComparison(RD, ArgTy, FD->getLocation());
+    switch (SML.getKind()) {
+    case SpecialMemberOverloadResult::NoMemberOrDeleted:
+    case SpecialMemberOverloadResult::Ambiguous:
+      return true;
+    case SpecialMemberOverloadResult::Success:
+      break;
+    }
+    QualType RetTy;
+    if (auto *FoundFD = SML.getFunction()) {
+      if (FoundFD->getReturnType()->isUndeducedType()) {
+        // FIXME(EricWF): Do this correctly?
+        // And should we be complaining during the initial pass?
+        if (DeduceReturnType(FoundFD, FD->getLocation(), /*Complain*/ true))
+          return true;
+      }
+      RetTy = FoundFD->getReturnType();
+    } else {
+    }
+    // FIXME(EricWF): Check access. Handle rewritten expressions?
+    return false;
+  }
+
   SpecialMemberDeletionInfo SMI(*this, FD, CSM, ICI, Diagnose);
 
   // Per DR1611, do not consider virtual bases of constructors of abstract
@@ -15217,7 +15244,7 @@ void Sema::SetDeclDefaulted(Decl *Dcl, SourceLocation DefaultLoc) {
 
       CheckExplicitlyDefaultedMember(FD);
 
-      if (!FD->isInvalidDecl())
+      if (!FD->isInvalidDecl() && !FD->isDeleted())
         DefineImplicitSpecialMember(*this, FD, DefaultLoc);
     } else {
       Diag(DefaultLoc, diag::err_default_special_members);

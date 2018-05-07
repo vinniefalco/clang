@@ -202,6 +202,16 @@ public:
   static StringRef getCategoryString(ComparisonCategoryType Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
 
+  /// \brief Return the comparison category type which would be returned
+  /// for a builtin comparison operator taking the specified type, or None if no
+  /// such type exists.
+  ///
+  /// \param Ty The composite comparison type
+  /// \param IsMixedNullCompare True if exactly one of the operands is a null
+  /// pointer constant.
+  static Optional<ComparisonCategoryType>
+  computeComparisonTypeForBuiltin(QualType Ty, bool IsMixedNullCompare = false);
+
   /// \brief Return the comparison category information for the
   /// "common comparison type" for a specified list of types. If there is no
   /// such common comparison type, or if any of the specified types are not
