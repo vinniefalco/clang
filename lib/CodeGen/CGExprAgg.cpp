@@ -921,7 +921,7 @@ static llvm::Value *EmitCompare(CGBuilderTy &Builder, CodeGenFunction &CGF,
       return {"cmp.eq", FI::FCMP_OEQ, II::ICMP_EQ, II::ICMP_EQ};
     }
   }();
-  ArgTy->isAnyComplexType();
+
   if (ArgTy->hasFloatingRepresentation())
     return Builder.CreateFCmp(InstInfo.FCmp, LHS, RHS,
                               llvm::Twine(InstInfo.Name) + NameSuffix);
@@ -960,45 +960,37 @@ void AggExprEmitter::VisitBinCmp(const BinaryOperator *E) {
   }
   bool IsComplex = ArgTy->isAnyComplexType();
 
-  Value *LHS, *RHS, *LHSImag, *RHSImag;
-  switch (CGF.getEvaluationKind(ArgTy)) {
-  case TEK_Scalar:
-    LHS = CGF.EmitScalarExpr(E->getLHS());
-    RHS = CGF.EmitScalarExpr(E->getRHS());
-    break;
-  case TEK_Aggregate:
-    LHS = CGF.EmitAnyExpr(E->getLHS()).getAggregatePointer();
-    RHS = CGF.EmitAnyExpr(E->getRHS()).getAggregatePointer();
-    break;
-  case TEK_Complex:
-    assert(ArgTy->isAnyComplexType());
-    CodeGenFunction::ComplexPairTy ComplexVal =
-        CGF.EmitComplexExpr(E->getLHS());
-    LHS = ComplexVal.first;
-    LHSImag = ComplexVal.second;
-    ComplexVal = CGF.EmitComplexExpr(E->getRHS());
-    RHS = ComplexVal.first;
-    RHSImag = ComplexVal.second;
-  }
-
-  auto EmitCmpRes = [&](const ComparisonCategoryInfo::ValueInfo *VInfo) {
-    return Builder.getInt(VInfo->getIntValue());
+  // Evaluate the operands to the expression and extract their values.
+  auto EmitOperand = [&](Expr *E) -> std::pair<Value *, Value *> {
+    RValue RV = CGF.EmitAnyExpr(E);
+    if (RV.isScalar())
+      return {RV.getScalarVal(), nullptr};
+    if (RV.isAggregate())
+      return {RV.getAggregatePointer(), nullptr};
+    assert(RV.isComplex());
+    return RV.getComplexVal();
   };
+  auto LHSValues = EmitOperand(E->getLHS()),
+       RHSValues = EmitOperand(E->getRHS());
+
   auto EmitCmp = [&](CompareKind K) {
-    Value *Cmp =
-        EmitCompare(Builder, CGF, E, LHS, RHS, K, IsComplex ? ".r" : "");
+    Value *Cmp = EmitCompare(Builder, CGF, E, LHSValues.first, RHSValues.first,
+                             K, IsComplex ? ".r" : "");
     if (!IsComplex)
       return Cmp;
     assert(K == CompareKind::CK_Equal);
-    Value *CmpImag = EmitCompare(Builder, CGF, E, LHSImag, RHSImag, K, ".i");
+    Value *CmpImag = EmitCompare(Builder, CGF, E, LHSValues.second,
+                                 RHSValues.second, K, ".i");
     return Builder.CreateAnd(Cmp, CmpImag, "and.eq");
+  };
+  auto EmitCmpRes = [&](const ComparisonCategoryInfo::ValueInfo *VInfo) {
+    return Builder.getInt(VInfo->getIntValue());
   };
 
   Value *Select;
   if (ArgTy->isNullPtrType()) {
     Select = EmitCmpRes(CmpInfo.getEqualOrEquiv());
-  }
-  else if (CmpInfo.isEquality()) {
+  } else if (CmpInfo.isEquality()) {
     Select = Builder.CreateSelect(
         EmitCmp(CK_Equal), EmitCmpRes(CmpInfo.getEqualOrEquiv()),
         EmitCmpRes(CmpInfo.getNonequalOrNonequiv()), "sel.eq");
