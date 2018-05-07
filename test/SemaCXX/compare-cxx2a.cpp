@@ -591,72 +591,79 @@ auto operator<=>(T3 const &, T3 const &);
 struct T3 {
   // expected-error@+1 {{defaulted definition must be first declaration}}
   friend auto operator<=>(T3 const &, T3 const &) = default;
+  
+  // expected-error@+1 {{explicitly-defaulted comparison operator must return 'bool'}}
+  int operator<=(T3 const &) const = default;
+  // expected-error@+1 {{explicitly-defaulted comparison operator must return 'bool'}}
+  bool &operator>=(T3 const &) const = default;
+  // expected-error@+1 {{explicitly-defaulted comparison operator must return 'bool'}}
+  friend void operator<=(T3 const &, T3 const &) = default;
 };
 
-struct T4 {
-  bool operator<(T4 const &) const = default; // expected-note {{explicitly defaulted function was implicitly deleted here}}
-  bool operator>(T4 const &) const = default;
-  bool operator==(T4 const &) const = default;
-  bool operator!=(T4 const &) const = default;
+} // namespace IllFormedSpecialMemberTest
 
-  friend bool operator<(T4 const &, T4 const &) = default;
-  friend bool operator!=(T4 const &, T4 const &) = default;
+namespace DeletedMemberTest {
+struct T1 {
+  bool operator<(T1 const &) const = default; // expected-note {{explicitly defaulted function was implicitly deleted here}}
+  bool operator>(T1 const &) const = default;
+  bool operator==(T1 const &) const = default;
+  bool operator!=(T1 const &) const = default;
 
-  // expected-error@+1 {{explicitly-defaulted comparison operator must return 'bool'}}
-  int operator<=(T4 const &) const = default;
-  // expected-error@+1 {{explicitly-defaulted comparison operator must return 'bool'}}
-  bool &operator>=(T4 const &) const = default;
-  // expected-error@+1 {{explicitly-defaulted comparison operator must return 'bool'}}
-  friend void operator<=(T4 const &, T4 const &) = default;
+  friend bool operator<(T1 const &, T1 const &) = default;
+  friend bool operator!=(T1 const &, T1 const &) = default;
 };
-using FriendFn = bool (*)(T4 const &, T4 const &);
+auto R1 = &T1::operator<; // expected-error {{attempt to use a deleted function}}
 
-auto R1 = &T4::operator<; // expected-error {{attempt to use a deleted function}}
-
-struct T5 {
-  bool operator<(T5 const &) const = default; // expected-note {{deleted here}}
-  bool operator==(T5 const &) const = default;
-  friend std::strong_equality operator<=>(T5 const &, T5 const &) = default;
+struct T2 {
+  bool operator<(T2 const &) const = default; // expected-note {{deleted here}}
+  bool operator==(T2 const &) const = default;
+  friend std::strong_equality operator<=>(T2 const &, T2 const &) = default;
 };
-auto R3 = &T5::operator<;  // expected-error {{attempt to use a deleted function}}
-auto R4 = &T5::operator==; // OK
+auto R3 = &T2::operator<;  // expected-error {{attempt to use a deleted function}}
+auto R4 = &T2::operator==; // OK
 
 // expected-error@+1 {{definition of explicitly defaulted comparison operator}}
-bool T5::operator<(T5 const &) const {
+bool T2::operator<(T2 const &) const {
   return false;
 }
 
-struct T6 {
+struct T3 {
 private:
-  auto operator<=>(T6 const &) const = default;
+  auto operator<=>(T3 const &) const = default;
+};
+struct T4 : T3 {
+  bool operator<(T4 const &) const = default; // expected-note {{deleted here}}
+};
+auto R5 = &T4::operator<; // expected-error {{attempt to use a deleted function}}
+
+struct T5 {
+private:
+  auto operator<=>(T5 const &) const = default;
+
+public:
+  bool operator<(T5 const &) const = default;
+};
+auto R6 = &T5::operator<; // OK
+
+// FIXME(EricWF): Should T7's defaulted comparison operator be deleted here?
+// We use the user defined conversion to 'int', but it's not accessible. This
+// results in diagnostics when synthesizing the definition.
+struct T6 {
+  friend struct T8;
+private:
+  operator int() const;
 };
 struct T7 : T6 {
   bool operator<(T7 const &) const = default; // expected-note {{deleted here}}
 };
-auto R5 = &T7::operator<; // expected-error {{attempt to use a deleted function}}
 
-struct T8 {
-private:
-  auto operator<=>(T8 const &) const = default;
-
-public:
+auto R7 = &T7::operator<; // expected-error {{attempt to use a deleted function}}
+struct T8 : T6 {
   bool operator<(T8 const &) const = default;
 };
-auto R6 = &T8::operator<; // OK
+auto R8 = &T8::operator<; // OK
 
-// FIXME(EricWF): Should T10's defaulted comparison operator be deleted here?
-// We use the user defined conversion to 'int', but it's not accessible. This
-// results in diagnostics when synthesizing the definition.
-struct T9 {
-private:
-  operator int() const;
-};
-struct T10 : T9 {
-  bool operator<(T10 const &) const = default; // expected-note {{deleted here}}
-};
-auto R7 = &T10::operator<; // expected-error {{attempt to use a deleted function}}
-
-} // namespace IllFormedSpecialMemberTest
+} // namespace DeletedMemberTest
 
 namespace TestCommonCategoryType {
 using SO = std::strong_ordering;
@@ -712,23 +719,82 @@ void test() {
 
 } // namespace TestCommonCategoryType
 
-namespace DefaultTest {
-struct T {
+namespace ConstexprDeductionTest {
+struct T0 {
   int x;
-  std::strong_ordering operator<=>(T const &) const { return std::strong_ordering::equal; }
+  operator int() const { return x; }
 };
-struct U {
-  float y;
-  friend std::partial_ordering operator<=>(U const &, U const &) = default;
+struct T1 : T0 {
+  // expected-error@+1 {{defaulted definition of comparison operator is not constexpr}}
+  friend constexpr auto operator<=>(T1 const &, T1 const &) = default;
 };
-struct TU : public T, public U {
-  friend auto operator<=>(TU const &, TU const &) = default;
+struct T2 {
+  operator int() const;
+  // expected-error@+1 {{defaulted definition of comparison operator is not constexpr}}
+  constexpr bool operator<(T2 const &) const = default;
 };
+struct T3 {
+  constexpr operator int() const;
+  constexpr bool operator<(T3 const &) const = default; // OK
+};
+struct T4 {
+  constexpr std::strong_ordering operator<=>(T4 const &) const { return std::strong_ordering::equal; }
+};
+struct T5 : T4 {
+  auto operator<=>(T5 const &) const = default;
+};
+static_assert(T5{} == T5{});
 
-void test1(T x, T y) {
-  (void)(x <=> y);
-}
-} // namespace DefaultTest
+struct T6 {
+  std::strong_ordering operator<=>(T6 const &) const { return std::strong_ordering::equal; }
+};
+struct T7 : T6 {
+  // expected-note@+1 {{declared here}}
+  auto operator<=>(T7 const &) const = default;
+};
+// expected-error@+2 {{static_assert expression is not an integral constant expression}}
+// expected-note@+1 {{non-constexpr function 'operator<=>' cannot be used in a constant expression}}
+static_assert(T7{} == T7{});
+} // namespace ConstexprDeductionTest
+
+namespace NoexceptDeductionTest {
+template <bool IsNoexcept = false>
+struct T0 {
+  operator int() const noexcept(IsNoexcept);
+};
+struct T1 : T0<> {
+  // expected-error@+1 {{exception specification of explicitly defaulted comparison operator does not match the calculated one}}
+  friend auto operator<=>(T1 const &, T1 const &) noexcept = default;
+};
+struct T2 : T0<> {
+  // expected-error@+1 {{exception specification of explicitly defaulted comparison operator does not match the calculated one}}
+  bool operator<(T2 const &) const noexcept = default;
+};
+struct T3 {
+  operator int() const noexcept;
+  bool operator<(T3 const &) const noexcept = default; // OK
+};
+template <bool IsNoexcept>
+struct T4 : T0<IsNoexcept> {
+  auto operator<=>(T4 const &) const = default;
+};
+static_assert(!noexcept(T4<false>{} <=> T4<false>{}));
+static_assert(noexcept(T4<true>{} <=> T4<true>{}));
+
+template <bool IsNoexcept>
+struct T5 {
+  friend std::strong_ordering operator<=>(T5 const &, T5 const &) noexcept(IsNoexcept);
+};
+template <bool IsNoexcept>
+struct T6 {
+  T5<IsNoexcept> val;
+  auto operator<=>(T6 const &) const = default;
+};
+static_assert(!noexcept(T6<false>{} <=> T6<false>{}));
+static_assert(noexcept(T6<true>{} <=> T6<true>{}));
+
+} // namespace NoexceptDeductionTest
+
 
 namespace TestRecursion {
 
@@ -797,29 +863,6 @@ void test(T &t1, T &t2) {
   using R = decltype(t1 <=> t2);
 }
 } // namespace RecursionTest3
-
-namespace ConstexprDeclTest {
-struct T {
-  // non-constexpr
-  std::strong_ordering operator<=>(T const &) const { return std::strong_ordering::equal; }
-};
-
-struct U {
-  T t;
-  // expected-error@+1 {{defaulted definition of comparison operator is not constexpr}}
-  constexpr auto operator<=>(U const &) const = default;
-};
-
-struct V {
-  T t;
-  // expected-note@+1 {{declared here}}
-  friend auto operator<=>(V const &, V const &) = default;
-};
-// expected-error@+2 {{must be initialized by a constant expression}}
-// expected-note@+1 {{non-constexpr function 'operator<=>' cannot be used in a constant expression}}
-constexpr auto R1 = (V{} <=> V{});
-
-} // namespace ConstexprDeclTest
 
 namespace AccessTest {
 struct T {
@@ -919,79 +962,3 @@ struct V {
 };
 auto r2 = V{} <=> V{};
 } // namespace CachedLookupTest
-
-namespace ConstexprDeductionTest {
-struct T0 {
-  int x;
-  operator int() const { return x; }
-};
-struct T1 : T0 {
-  // expected-error@+1 {{defaulted definition of comparison operator is not constexpr}}
-  friend constexpr auto operator<=>(T1 const &, T1 const &) = default;
-};
-struct T2 {
-  operator int() const;
-  // expected-error@+1 {{defaulted definition of comparison operator is not constexpr}}
-  constexpr bool operator<(T2 const &) const = default;
-};
-struct T3 {
-  constexpr operator int() const;
-  constexpr bool operator<(T3 const &) const = default; // OK
-};
-struct T4 {
-  constexpr std::strong_ordering operator<=>(T4 const &) const { return std::strong_ordering::equal; }
-};
-struct T5 : T4 {
-  auto operator<=>(T5 const &) const = default;
-};
-static_assert(T5{} == T5{});
-
-struct T6 {
-  std::strong_ordering operator<=>(T6 const &) const { return std::strong_ordering::equal; }
-};
-struct T7 : T6 {
-  // expected-note@+1 {{declared here}}
-  auto operator<=>(T7 const &) const = default;
-};
-// expected-error@+2 {{static_assert expression is not an integral constant expression}}
-// expected-note@+1 {{non-constexpr function 'operator<=>' cannot be used in a constant expression}}
-static_assert(T7{} == T7{});
-} // namespace ConstexprDeductionTest
-
-namespace NoexceptDeductionTest {
-template <bool IsNoexcept = false>
-struct T0 {
-  operator int() const noexcept(IsNoexcept);
-};
-struct T1 : T0<> {
-  // expected-error@+1 {{exception specification of explicitly defaulted comparison operator does not match the calculated one}}
-  friend auto operator<=>(T1 const &, T1 const &) noexcept = default;
-};
-struct T2 : T0<> {
-  // expected-error@+1 {{exception specification of explicitly defaulted comparison operator does not match the calculated one}}
-  bool operator<(T2 const &) const noexcept = default;
-};
-struct T3 {
-  operator int() const noexcept;
-  bool operator<(T3 const &) const noexcept = default; // OK
-};
-template <bool IsNoexcept>
-struct T4 : T0<IsNoexcept> {
-  auto operator<=>(T4 const &) const = default;
-};
-static_assert(!noexcept(T4<false>{} <=> T4<false>{}));
-static_assert(noexcept(T4<true>{} <=> T4<true>{}));
-
-template <bool IsNoexcept>
-struct T5 {
-  friend std::strong_ordering operator<=>(T5 const &, T5 const &) noexcept(IsNoexcept);
-};
-template <bool IsNoexcept>
-struct T6 {
-  T5<IsNoexcept> val;
-  auto operator<=>(T6 const &) const = default;
-};
-static_assert(!noexcept(T6<false>{} <=> T6<false>{}));
-static_assert(noexcept(T6<true>{} <=> T6<true>{}));
-
-} // namespace NoexceptDeductionTest
