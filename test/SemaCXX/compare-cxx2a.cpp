@@ -919,3 +919,13 @@ struct V {
 };
 auto r2 = V{} <=> V{};
 } // namespace CachedLookupTest
+
+namespace ConstexprDeductionTest {
+struct T0 {
+  int x;
+  constexpr operator int() const { return x; }
+};
+struct T1 : T0 {
+  friend constexpr auto operator<=>(T1 const &, T1 const &) = default;
+};
+} // namespace ConstexprDeductionTest

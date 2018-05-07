@@ -6360,7 +6360,8 @@ getDefaultedComparisonInfo(Sema &S, FunctionDecl *CompareOperator,
 static bool defaultedSpecialMemberIsConstexpr(
     Sema &S, CXXRecordDecl *ClassDecl, Sema::CXXSpecialMember CSM,
     bool ConstArg, CXXConstructorDecl *InheritedCtor = nullptr,
-    Sema::InheritedConstructorInfo *Inherited = nullptr) {
+    Sema::InheritedConstructorInfo *Inherited = nullptr,
+    FunctionDecl *FD = nullptr) {
   if (!S.getLangOpts().CPlusPlus11)
     return false;
 
@@ -6391,8 +6392,11 @@ static bool defaultedSpecialMemberIsConstexpr(
     // In C++1y, we need to perform overload resolution.
     Ctor = false;
     break;
-  case Sema::CXXComparisonOperator:
+  case Sema::CXXComparisonOperator: {
+    assert(FD != nullptr &&
+           "we require a function declaration when checking comparisons");
     break;
+  }
   case Sema::CXXDestructor:
   case Sema::CXXInvalid:
     return false;
@@ -6419,6 +6423,27 @@ static bool defaultedSpecialMemberIsConstexpr(
   //   -- [the class] is a literal type, and
   if (!Ctor && !ClassDecl->isLiteral())
     return false;
+
+  if (CSM == Sema::CXXComparisonOperator &&
+      FD->getOverloadedOperator() != OO_Spaceship) {
+
+    QualType ArgTy(ClassDecl->getTypeForDecl(), Qualifiers::Const);
+    Sema::SpecialMemberOverloadResult SML =
+        S.LookupThreeWayComparison(ClassDecl, ArgTy, FD->getLocation());
+    switch (SML.getKind()) {
+    case Sema::SpecialMemberOverloadResult::NoMemberOrDeleted:
+    case Sema::SpecialMemberOverloadResult::Ambiguous:
+      return false;
+    case Sema::SpecialMemberOverloadResult::Success:
+      break;
+    }
+    if (auto *FoundFD = SML.getFunction())
+      return FoundFD->isConstexpr();
+    // Otherwise, we have a call to a builtin. It's possible we're using a
+    // user-defined conversion to the arg type of the builtin. We need to
+    // determine if that's a valid constant expression
+    return true;
+  }
 
   //   -- every constructor involved in initializing [...] base class
   //      sub-objects shall be a constexpr constructor;
@@ -6698,8 +6723,8 @@ void Sema::CheckExplicitlyDefaultedMember(FunctionDecl *FD) {
   // makes such functions always instantiate to constexpr functions. For
   // functions which cannot be constexpr (for non-constructors in C++11 and for
   // destructors in C++1y), this is checked elsewhere.
-  bool Constexpr =
-      defaultedSpecialMemberIsConstexpr(*this, RD, CSM, HasConstParam);
+  bool Constexpr = defaultedSpecialMemberIsConstexpr(
+      *this, RD, CSM, HasConstParam, nullptr, nullptr, FD);
   if ((getLangOpts().CPlusPlus14 ? !isa<CXXDestructorDecl>(FD)
                                  : isa<CXXConstructorDecl>(FD)) &&
       FD->isConstexpr() && !Constexpr &&
@@ -7372,6 +7397,9 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
     }
   }
 
+  // Handle defaulted relational and equality comparisons. These comparisons
+  // are simply rewritten in terms of operator<=>, so we don't need to visit
+  // each member to determine if it's valid.
   if (CSM == CXXComparisonOperator &&
       FD->getOverloadedOperator() != OO_Spaceship) {
     BinaryOperatorKind Opc =
@@ -7407,7 +7435,9 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
       // FIXME(EricWF): We've somehow selected a builtin candidate for a class
       // type (probably via a conversion operator). We need to check the access
       // control for whatever conversion function was selected.
-      QualType ArgTy = SML.getBuiltinArgType();
+      //
+      // Similarly we'll need to check if the conversion is constexpr, and
+      // determine the exception specification for it.
       Optional<ComparisonCategoryType> CompKind =
           ComparisonCategories::computeComparisonTypeForBuiltin(
               SML.getBuiltinArgType());
