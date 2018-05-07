@@ -626,6 +626,32 @@ bool T5::operator<(T5 const &) const {
   return false;
 }
 
+struct T6 {
+private:
+  auto operator<=>(T6 const &) const = default;
+};
+struct T7 : T6 {
+  bool operator<(T7 const &) const = default; // expected-note {{deleted here}}
+};
+auto R5 = &T7::operator<; // expected-error {{attempt to use a deleted function}}
+
+struct T8 {
+private:
+  auto operator<=>(T8 const &) const = default;
+
+public:
+  bool operator<(T8 const &) const = default;
+};
+auto R6 = &T8::operator<; // OK
+
+struct T9 {
+private:
+  operator int() const;
+};
+struct T10 : T9 {
+  bool operator<(T10 const &) const = default;
+};
+auto R7 = &T10::operator<;
 } // namespace IllFormedSpecialMemberTest
 
 namespace SpecialMemberTest {

@@ -7010,23 +7010,13 @@ bool SpecialMemberDeletionInfo::isAccessible(Subobject Subobj,
 
 static bool shouldDeleteForBuiltin(Sema &S, QualType ArgType,
                                    SourceLocation Loc) {
-  using CCT = ComparisonCategoryType;
-  ComparisonCategoryType ReturnKind;
-  if (ArgType->hasFloatingRepresentation()) {
-    ReturnKind = CCT::PartialOrdering;
-  } else if (ArgType->isIntegralOrEnumerationType()) {
-    ReturnKind = CCT::StrongOrdering;
-  } else if (ArgType->isMemberPointerType()) {
-    ReturnKind = CCT::StrongEquality;
-  } else if (ArgType->isPointerType()) {
-    ReturnKind = CCT::StrongOrdering;
-  } else {
-    // Not a type supported for builtin comparisons. (likely an array type)
+  Optional<ComparisonCategoryType> CompType =
+      ComparisonCategories::computeComparisonTypeForBuiltin(ArgType);
+  if (!CompType)
     return true;
-  }
   // Require that the <compare> header has already been included and that
   // computed comparison category declaration has been found.
-  return S.CheckComparisonCategoryType(ReturnKind, Loc).isNull();
+  return S.CheckComparisonCategoryType(*CompType, Loc).isNull();
 }
 
 /// Check whether we should delete a special member due to the implicit
@@ -7406,11 +7396,18 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
         if (DeduceReturnType(FoundFD, FD->getLocation(), /*Complain*/ true))
           return true;
       }
+      if (auto *MD = dyn_cast<CXXMethodDecl>(FoundFD)) {
+        if (!isSpecialMemberAccessibleForDeletion(MD, MD->getAccess(),
+                                                  Context.getTypeDeclType(RD)))
+          return true;
+      }
       Info = Context.CompCategories.computeCommonComparisonType(
           FoundFD->getReturnType());
     } else {
       // FIXME(EricWF): We've somehow selected a builtin candidate for a class
-      // type (probably via a conversion operator). What should we do here?
+      // type (probably via a conversion operator). We need to check the access
+      // control for whatever conversion function was selected.
+      QualType ArgTy = SML.getBuiltinArgType();
       Optional<ComparisonCategoryType> CompKind =
           ComparisonCategories::computeComparisonTypeForBuiltin(
               SML.getBuiltinArgType());
@@ -7418,6 +7415,8 @@ bool Sema::ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
       if (!CompKind)
         return true;
       Info = Context.CompCategories.lookupInfo(CompKind.getValue());
+      if (!Info)
+        return true;
     }
     if (!Info)
       return true;
@@ -13187,9 +13186,6 @@ private:
       return false;
 
     Expr *ReturnExpr = DRE;
-    if (Opc != BO_Cmp)
-      ReturnExpr =
-          new (S.Context) CXXBoolLiteralExpr(false, S.Context.BoolTy, Loc);
 
     // If the last comparison returned not equal, we'll return it's value.
     StmtResult Return = S.BuildReturnStmt(Loc, ReturnExpr);

@@ -1631,7 +1631,7 @@ def note_bitfield_decl : Note<"bit-field is declared here">;
 def note_implicit_param_decl : Note<"%0 is an implicit parameter">;
 def note_member_synthesized_at : Note<
   "in implicit %select{default constructor|copy constructor|move constructor|"
-  "copy assignment operator|move assignment operator|destructor}0 for %1 "
+  "copy assignment operator|move assignment operator|destructor|comparison operator}0 for %1 "
   "first required here">;
 def err_missing_default_ctor : Error<
   "%select{constructor for %1 must explicitly initialize the|"
@@ -7788,8 +7788,8 @@ def err_incorrect_defaulted_constexpr : Error<
   "is not constexpr">;
 def err_out_of_line_default_deletes : Error<
   "defaulting this %select{default constructor|copy constructor|move "
-  "constructor|copy assignment operator|move assignment operator|destructor}0 "
-  "would delete it after its first declaration">;
+  "constructor|copy assignment operator|move assignment operator|destructor|"
+  "comparison operator}0 would delete it after its first declaration">;
 def warn_vbase_moved_multiple_times : Warning<
   "defaulted move assignment operator of %0 will move assign virtual base "
   "class %1 multiple times">, InGroup<DiagGroup<"multiple-move-vbase">>;

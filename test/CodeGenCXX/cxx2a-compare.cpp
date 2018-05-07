@@ -196,5 +196,3 @@ auto test(U t1, U t2) {
 }
 
 } // namespace RewrittenTest
-
-
