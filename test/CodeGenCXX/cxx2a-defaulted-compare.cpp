@@ -68,15 +68,29 @@ template void use_cmp<T1>(T1 const &, T1 const &);
 struct Empty {
   // CHECK-LABEL: define linkonce_odr i8 @_ZNK5EmptyssERKS_
   auto operator<=>(Empty const&) const = default;
-  
+  // CHECK: %1 = bitcast %[[SO]]* %retval to i8*
+  // CHECK-NEXT: call void @llvm.memcpy
+  // CHECK-SAME: %1
+  // CHECK-SAME: @_ZNSt3__115strong_ordering5equalE
+  // CHECK: %[[TMP:.*]] = getelementptr inbounds %[[SO]], %[[SO]]* %retval
+  // CHECK-NEXT: %2 = load i8, i8* %[[TMP]]
+  // CHECK-NEXT: ret i8 %2
+
   // CHECK-LABEL: define linkonce_odr zeroext i1 @_ZNK5EmptyltERKS_
   bool operator<(Empty const&) const = default;
+  // CHECK: call i8 @_ZNK5EmptyssERKS_(
+  // CHECK: %[[RES:.*]] = call zeroext i1 @[[SO_LT]]
+  // CHECK-NEXT: ret i1 %[[RES]]
 };
 template void use_cmp<Empty>(Empty const&, Empty const&);
 
 struct OneMem {
   OpaqueMem first;
+
+  // CHECK-LABEL: define linkonce_odr i8 @_ZssRK6OneMemS1_(
   friend auto operator<=>(OneMem const&, OneMem const&) = default;
+
+  // CHECK-LABEL: define linkonce_odr zeroext i1 @_ZltRK6OneMemS1_(
   friend bool operator<(OneMem const&, OneMem const&) = default;
 };
 template void use_cmp<OneMem>(OneMem const&, OneMem const&);
