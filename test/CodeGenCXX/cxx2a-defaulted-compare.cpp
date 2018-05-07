@@ -89,8 +89,10 @@ struct OneMem {
 
   // CHECK-LABEL: define linkonce_odr i8 @_ZssRK6OneMemS1_(
   friend auto operator<=>(OneMem const&, OneMem const&) = default;
-
-  // CHECK-LABEL: define linkonce_odr zeroext i1 @_ZltRK6OneMemS1_(
-  friend bool operator<(OneMem const&, OneMem const&) = default;
+  // CHECK: %call = call i8 @[[OpaqueMemSS]]
+  // CHECK-NEXT: %[[TMP:.*]] = getelementptr inbounds %[[SO]], %[[SO]]* %retval
+  // CHECK-NEXT: store i8 %call, i8* %[[TMP]]
+  // CHECK-NOT: br
+  // CHECK: ret
 };
 template void use_cmp<OneMem>(OneMem const&, OneMem const&);
