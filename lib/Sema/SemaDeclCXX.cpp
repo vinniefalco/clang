@@ -13345,6 +13345,15 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
   if (CompareOperator->isInvalidDecl())
     return;
 
+  // FIXME(EricWF): We're already instantiating this candidate. Diagnose it.
+  if (CompareOperator->willHaveBody()) {
+    Diag(CurrentLocation, diag::err_defaulted_comparison_recursive_evaluation)
+        << CompareOperator;
+    return;
+  }
+  if (CompareOperator->willHaveBody() || CompareOperator->isInvalidDecl())
+    return;
+
   const bool IsMethod = isa<CXXMethodDecl>(CompareOperator);
 
   CXXRecordDecl *ClassDecl =
@@ -15280,7 +15289,7 @@ void Sema::SetDeclDefaulted(Decl *Dcl, SourceLocation DefaultLoc) {
     // Unset that we will have a body for this function. We might not,
     // if it turns out to be trivial, and we don't need this marking now
     // that we've marked it as defaulted.
-    MD->setWillHaveBody(Member == CXXComparisonOperator);
+    MD->setWillHaveBody(false);
 
     // If this definition appears within the record, do the checking when
     // the record is complete.
@@ -15312,7 +15321,7 @@ void Sema::SetDeclDefaulted(Decl *Dcl, SourceLocation DefaultLoc) {
       }
       FD->setDefaulted();
       FD->setExplicitlyDefaulted();
-      FD->setWillHaveBody(true);
+      FD->setWillHaveBody(false);
 
       CheckExplicitlyDefaultedMember(FD);
 

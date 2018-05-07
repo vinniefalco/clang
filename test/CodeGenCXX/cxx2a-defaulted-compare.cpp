@@ -91,8 +91,27 @@ struct OneMem {
   friend auto operator<=>(OneMem const&, OneMem const&) = default;
   // CHECK: %call = call i8 @[[OpaqueMemSS]]
   // CHECK-NEXT: %[[TMP:.*]] = getelementptr inbounds %[[SO]], %[[SO]]* %retval
-  // CHECK-NEXT: store i8 %call, i8* %[[TMP]]
+  // CHECK-NEXT: store i8 %caall, i8* %[[TMP]]
   // CHECK-NOT: br
   // CHECK: ret
 };
 template void use_cmp<OneMem>(OneMem const&, OneMem const&);
+
+namespace TestRecursion {
+
+template <class Tp>
+struct Base {
+  Tp &t;
+  auto operator<=>(Base const &) const = default;
+};
+
+template <class Arg>
+struct Derived {
+  Base<Derived> u;
+  Arg v;
+  auto operator<=>(Derived const &) const = default;
+};
+void use(Derived<int> const &LHS, Derived<int> const &RHS) {
+  (void)(LHS <=> RHS);
+}
+} // namespace TestRecursion

@@ -1741,6 +1741,7 @@ def note_in_declaration_of_implicit_special_member : Note<
   "copy assignment operator|move assignment operator|destructor}1"
   " for %0">;
 
+
 // C++ constructors
 def err_constructor_cannot_be : Error<"constructor cannot be declared '%0'">;
 def err_invalid_qualified_constructor : Error<
@@ -7814,6 +7815,9 @@ def err_defaulted_comparison_operator_param_type : Error<
   "type %0, but parameter has type %1">;
 def err_defaulted_comparison_operator_member_non_const : Error<
   "explicitly-defaulted comparison operator is not const qualified">;
+def err_defaulted_comparison_recursive_evaluation : Error<
+  "trying to recursively use %0 in definition of explicitly-defaulted "
+  "comparison operator">;
 
 def warn_ptr_arith_precedes_bounds : Warning<
   "the pointer decremented by %0 refers before the beginning of the array">,

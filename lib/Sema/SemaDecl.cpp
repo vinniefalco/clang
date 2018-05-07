@@ -3218,6 +3218,15 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
   }
 
   if (getLangOpts().CPlusPlus) {
+    // MSVC allows explicit template specialization at class scope:
+    // 2 CXXMethodDecls referring to the same function will be injected.
+    // We don't want a redeclaration error.
+    bool IsClassScopeExplicitSpecialization =
+        Old->isFunctionTemplateSpecialization() &&
+        New->isFunctionTemplateSpecialization();
+    bool isFriend = New->getFriendObjectKind();
+    bool NewDeclaredInRecord = New->getLexicalDeclContext()->isRecord();
+
     // Diagnose definitions of explicitly defaulted special members. We do this
     // before comparing the exception specifications, since doing so first
     // creates confusing diagnostics. For example:
@@ -3227,22 +3236,17 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
     // {{'T' is missing exception specification 'noexcept'}} but we want to
     // produce the diagnostic {{definition of explicitly defaulted default
     // constructor}}
-#if 0
-  // FIXME(EricWF)
-    Sema::CXXSpecialMember SM = getSpecialMember(Old);
-    bool IsFriend = New->getFriendObjectKind();
-    if (Old->isImplicit() && IsFriend) {
-      New->setImplicit();
-    } else if (Old->isImplicit() && !IsFriend) {
-      Diag(New->getLocation(),
-           diag::err_definition_of_implicitly_declared_member)
-          << New << SM;
-      return true;
-    } else if (Old->getFirstDecl()->isExplicitlyDefaulted() && !IsFriend) {
-      Diag(New->getLocation(),
-           diag::err_definition_of_explicitly_defaulted_member)
-          << SM;
-      return true;
+#if 1
+    // FIXME(EricWF): Clean this up to be less repetitive.
+    Sema::CXXSpecialMember CSM = getSpecialMember(Old);
+    if (CSM != CXXInvalid) {
+      if (Old->getFirstDecl()->isExplicitlyDefaulted() && !isFriend &&
+          !IsClassScopeExplicitSpecialization && !NewDeclaredInRecord) {
+        Diag(New->getLocation(),
+             diag::err_definition_of_explicitly_defaulted_member)
+            << CSM;
+        return true;
+      }
     }
 #endif
 
@@ -3320,15 +3324,7 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
       // Preserve triviality.
       NewMethod->setTrivial(OldMethod->isTrivial());
 
-      // MSVC allows explicit template specialization at class scope:
-      // 2 CXXMethodDecls referring to the same function will be injected.
-      // We don't want a redeclaration error.
-      bool IsClassScopeExplicitSpecialization =
-                              OldMethod->isFunctionTemplateSpecialization() &&
-                              NewMethod->isFunctionTemplateSpecialization();
-      bool isFriend = NewMethod->getFriendObjectKind();
-
-      if (!isFriend && NewMethod->getLexicalDeclContext()->isRecord() &&
+      if (!isFriend && NewDeclaredInRecord &&
           !IsClassScopeExplicitSpecialization) {
         //    -- Member function declarations with the same name and the
         //       same parameter types cannot be overloaded if any of them
