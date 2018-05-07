@@ -811,6 +811,7 @@ struct T {
 
 void test(T &t1, T &t2) {
   using R = decltype(t1 <=> t2);
+  ASSERT_TYPE(R, std::strong_ordering);
 }
 
 } // namespace TestRecursion
