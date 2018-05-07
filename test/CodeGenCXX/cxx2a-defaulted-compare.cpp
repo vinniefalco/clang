@@ -63,3 +63,20 @@ struct T1 : OpaqueBase {
   // CHECK-NEXT: ret i1 %[[RES]]
 };
 template void use_cmp<T1>(T1 const &, T1 const &);
+
+
+struct Empty {
+  // CHECK-LABEL: define linkonce_odr i8 @_ZNK5EmptyssERKS_
+  auto operator<=>(Empty const&) const = default;
+  
+  // CHECK-LABEL: define linkonce_odr zeroext i1 @_ZNK5EmptyltERKS_
+  bool operator<(Empty const&) const = default;
+};
+template void use_cmp<Empty>(Empty const&, Empty const&);
+
+struct OneMem {
+  OpaqueMem first;
+  friend auto operator<=>(OneMem const&, OneMem const&) = default;
+  friend bool operator<(OneMem const&, OneMem const&) = default;
+};
+template void use_cmp<OneMem>(OneMem const&, OneMem const&);
