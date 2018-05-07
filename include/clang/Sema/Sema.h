@@ -1077,9 +1077,17 @@ public:
       BuiltinInfo.ConversionDecl = ConvDecl;
       IsBuiltin = true;
     }
+    FunctionDecl *getConversionFunctionForBuiltin() const {
+      if (!hasBuiltinWithConversion())
+        return nullptr;
+      return cast_or_null<FunctionDecl>(BuiltinInfo.ConversionDecl.getDecl());
+    }
+
     bool hasBuiltin() const { return IsBuiltin; }
     bool hasFunction() const { return !IsBuiltin && FunctionInfo.Function; }
-
+    bool hasBuiltinWithConversion() const {
+      return IsBuiltin && BuiltinInfo.ConversionDecl.getDecl();
+    }
     Kind getKind() const { return static_cast<Kind>(LookupKind); }
     void setKind(Kind K) { LookupKind = K; }
   };

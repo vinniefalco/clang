@@ -4715,7 +4715,9 @@ def note_deleted_copy_user_declared_move : Note<
 def note_deleted_assign_field : Note<
   "%select{copy|move}0 assignment operator of %1 is implicitly deleted "
   "because field %2 is of %select{reference|const-qualified}4 type %3">;
-
+def note_deleted_comparison_void_return_type : Note<
+  "comparison operator is implicitly deleted because function returns void "
+  "type">;
 // These should be errors.
 def warn_undefined_internal : Warning<
   "%select{function|variable}0 %q1 has internal linkage but is not defined">,

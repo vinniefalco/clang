@@ -3227,6 +3227,8 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
     // {{'T' is missing exception specification 'noexcept'}} but we want to
     // produce the diagnostic {{definition of explicitly defaulted default
     // constructor}}
+#if 0
+  // FIXME(EricWF)
     Sema::CXXSpecialMember SM = getSpecialMember(Old);
     bool IsFriend = New->getFriendObjectKind();
     if (Old->isImplicit() && IsFriend) {
@@ -3242,6 +3244,7 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
           << SM;
       return true;
     }
+#endif
 
     // C++1z [over.load]p2
     //   Certain function declarations cannot be overloaded:
@@ -3364,6 +3367,20 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
       //
       // As an exception, it's okay to befriend such methods in order
       // to permit the implicit constructor/destructor/operator calls.
+      } else if (OldMethod->isImplicit()) {
+        if (isFriend) {
+          NewMethod->setImplicit();
+        } else {
+          Diag(NewMethod->getLocation(),
+               diag::err_definition_of_implicitly_declared_member)
+            << New << getSpecialMember(OldMethod);
+          return true;
+        }
+      } else if (OldMethod->getFirstDecl()->isExplicitlyDefaulted() && !isFriend) {
+        Diag(NewMethod->getLocation(),
+             diag::err_definition_of_explicitly_defaulted_member)
+          << getSpecialMember(OldMethod);
+        return true;
       }
     }
 

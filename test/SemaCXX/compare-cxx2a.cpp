@@ -805,7 +805,7 @@ struct U {
 };
 
 struct T {
-  U<T> u;
+  U<T> u; // expected-note {{comparison operator of 'T' is implicitly deleted because field 'u' has no comparison operator}}
   // FIXME(EricWF): Is this diagnostic helpful?
   // expected-note@+1 {{explicitly defaulted function was implicitly deleted here}}
   auto operator<=>(T const &) const = default;
@@ -911,7 +911,10 @@ private:
   auto operator<=>(P const &) const = default;
 };
 
-struct D : P {
+struct D
+  :
+  P // expected-note {{comparison operator of 'D' is implicitly deleted because base class 'AccessTest::P' has an inaccessible comparison operator}}
+{
   // expected-note@+1 {{explicitly defaulted function was implicitly deleted here}}
   auto operator<=>(D const &) const = default;
 };
@@ -928,7 +931,7 @@ namespace CachedLookupTest {
 struct T {};
 
 struct U {
-  T t;
+  T t; // expected-note {{comparison operator of 'U' is implicitly deleted because field 't' has no comparison operator}}
   // expected-note@+1 {{implicitly deleted here}}
   auto operator<=>(U const &) const = default;
 };

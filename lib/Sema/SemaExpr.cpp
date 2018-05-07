@@ -93,19 +93,17 @@ static void DiagnoseUnusedOfDecl(Sema &S, NamedDecl *D, SourceLocation Loc) {
 void Sema::NoteDeletedFunction(FunctionDecl *Decl) {
   assert(Decl->isDeleted());
 
-  CXXMethodDecl *Method = dyn_cast<CXXMethodDecl>(Decl);
-
-  if (Method && Method->isDeleted() && Method->isDefaulted()) {
+  if ((isa<CXXMethodDecl>(Decl) || Decl->isDefaultComparisonOperator()) &&
+          Decl->isDeleted() && Decl->isDefaulted()) {
     // If the method was explicitly defaulted, point at that declaration.
-    if (!Method->isImplicit())
+    if (!Decl->isImplicit())
       Diag(Decl->getLocation(), diag::note_implicitly_deleted);
 
     // Try to diagnose why this special member function was implicitly
     // deleted. This might fail, if that reason no longer applies.
-    CXXSpecialMember CSM = getSpecialMember(Method);
-    // FIXME(EricWF): Handle CXXComparisonOperator
-    if (CSM != CXXInvalid && CSM != CXXComparisonOperator)
-      ShouldDeleteSpecialMember(Method, CSM, nullptr, /*Diagnose=*/true);
+    CXXSpecialMember CSM = getSpecialMember(Decl);
+    if (CSM != CXXInvalid)
+      ShouldDeleteSpecialMember(Decl, CSM, nullptr, /*Diagnose=*/true);
 
     return;
   }
