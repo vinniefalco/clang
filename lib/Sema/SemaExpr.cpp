@@ -9761,7 +9761,11 @@ static bool checkThreeWayNarrowingConversion(Sema &S, QualType ToType, Expr *E,
   SCS.setToType(1, ToType);
   if (const auto *ICE = dyn_cast<ImplicitCastExpr>(E)) {
     auto CastK = ICE->getCastKind();
+    if (CastK == CK_LValueToRValue) {
+      // ICE->dumpColor();
+    }
     SCS.Second = castKindToImplicitConversionKind(CastK);
+    // llvm::errs() << "TYPE = " << CastExpr::getCastKindName(CastK) << "\n";
   }
   APValue PreNarrowingValue;
   QualType PreNarrowingType;

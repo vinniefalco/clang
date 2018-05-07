@@ -404,6 +404,10 @@ NarrowingKind StandardConversionSequence::getNarrowingKind(
   //    value when converted back to the original type.
   case ICK_Integral_Conversion:
   IntegralConversion: {
+    if (IgnoreFloatToIntegralConversion) {
+      // FromType->dump();
+      // ToType->dump();
+    }
     assert(FromType->isIntegralOrUnscopedEnumerationType());
     assert(ToType->isIntegralOrUnscopedEnumerationType());
     const bool FromSigned = FromType->isSignedIntegerOrEnumerationType();

@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++2a -emit-llvm %s -o - -triple %itanium_abi_triple | \
+// RUN: %clang_cc1 -std=c++2a -emit-llvm %s -o - -triple i386-unknown-linux-gnu | \
 // RUN:    FileCheck %s \
 // RUN:          '-DWE="class.std::__1::weak_equality"' \
 // RUN:          '-DSO="class.std::__1::strong_ordering"' \
@@ -76,11 +76,11 @@ using MemDataT = int(MemPtr::*);
 // CHECK-LABEL: @_Z12mem_ptr_testM6MemPtrFvvES1_
 auto mem_ptr_test(MemPtrT x, MemPtrT y) {
   // CHECK: %retval = alloca %[[SE]]
-  // CHECK: %cmp.ptr = icmp eq i64 %lhs.memptr.ptr, %rhs.memptr.ptr
-  // CHECK: %cmp.ptr.null = icmp eq i64 %lhs.memptr.ptr, 0
-  // CHECK: %cmp.adj = icmp eq i64 %lhs.memptr.adj, %rhs.memptr.adj
-  // CHECK: %6 = or i1 %cmp.ptr.null, %cmp.adj
-  // CHECK: %memptr.eq = and i1 %cmp.ptr, %6
+  // CHECK: %cmp.ptr = icmp eq [[TY:i[0-9]+]] %lhs.memptr.ptr, %rhs.memptr.ptr
+  // CHECK: %cmp.ptr.null = icmp eq [[TY]] %lhs.memptr.ptr, 0
+  // CHECK: %cmp.adj = icmp eq [[TY]] %lhs.memptr.adj, %rhs.memptr.adj
+  // CHECK: %[[OR:.*]] = or i1 %cmp.ptr.null, %cmp.adj
+  // CHECK: %memptr.eq = and i1 %cmp.ptr, %[[OR]]
   // CHECK: %sel.eq = select i1 %memptr.eq, i8 [[EQ]], i8 [[NE]]
   // CHECK: %retval
   // CHECK: %sel.eq
@@ -91,7 +91,7 @@ auto mem_ptr_test(MemPtrT x, MemPtrT y) {
 // CHECK-LABEL: @_Z13mem_data_testM6MemPtriS0_
 auto mem_data_test(MemDataT x, MemDataT y) {
   // CHECK: %retval = alloca %[[SE]]
-  // CHECK: %[[CMP:.*]] = icmp eq i64 %0, %1
+  // CHECK: %[[CMP:.*]] = icmp eq i{{[0-9]+}} %0, %1
   // CHECK: %sel.eq = select i1 %[[CMP]], i8 [[EQ]], i8 [[NE]]
   // CHECK: %retval
   // CHECK: %sel.eq
@@ -122,8 +122,8 @@ auto test_nullptr_obj(int* x, decltype(nullptr) y) {
   return x <=> y;
 }
 
-// CHECK-LABEL: @_Z18unscoped_enum_testijlm
-void unscoped_enum_test(int i, unsigned u, long l, unsigned long ul) {
+// CHECK-LABEL: @_Z18unscoped_enum_testijxy
+void unscoped_enum_test(int i, unsigned u, long long l, unsigned long long ul) {
   enum EnumA : int { A };
   enum EnumB : unsigned { B };
   // CHECK: %[[I:.*]] = load {{.*}} %i.addr
