@@ -923,25 +923,6 @@ void test2() {
 
 } // namespace AccessTest
 
-namespace FieldTests {
-struct X {
-  X() { x = 0, y = 0; }
-  int x : 2;
-  int y : 3;
-  auto operator<=>(X const &) const = default;
-};
-void test() {
-  X x1, x2;
-  auto r = x1 <=> x2;
-}
-
-struct Vol {
-  std::strong_ordering operator<=>(Vol const &) const volatile;
-};
-struct Vol2 : Vol {
-  auto operator<=>(Vol2 const &) const = default;
-};
-} // namespace FieldTests
 
 namespace CachedLookupTest {
 struct T {};
