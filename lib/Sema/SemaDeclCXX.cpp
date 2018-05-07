@@ -6300,8 +6300,9 @@ static QualType deduceCommonComparisonType(Sema &S,
       return false;
     }
     case ResultKind::Ambiguous:
+      return true; // FIXME(EricWF): complain?
     case ResultKind::NoMemberOrDeleted: {
-      return true;
+      return false;
     }
     }
   };
@@ -6312,7 +6313,7 @@ static QualType deduceCommonComparisonType(Sema &S,
     CXXRecordDecl *BaseClassDecl = cast<CXXRecordDecl>(BaseType->getDecl());
     QualType ArgTy(BaseClassDecl->getTypeForDecl(), 0);
     if (CheckOverload(ArgTy))
-      return QualType();
+      ;//return QualType();
   }
 
   for (const auto *F : ClassDecl->fields()) {
@@ -6323,18 +6324,14 @@ static QualType deduceCommonComparisonType(Sema &S,
     // reference types.
     BaseType = BaseType.getNonReferenceType();
     if (CheckOverload(BaseType))
-      return QualType();
+      ;//return QualType();
   }
 
   // OK, we have a potentially OK comparison operator. Compute the common
   // comparison type, diagnosing errors relating to the lookup of STL
   // declarations.
   QualType CommonType = S.ComputeCommonComparisonType(ReturnTypes, Loc);
-  // An error occured.
-  if (CommonType.isNull()) {
-    // FIXME: Should we mark this decl as invalid?
-    CompareOperator->setInvalidDecl();
-  }
+
   return CommonType;
 }
 
@@ -6740,19 +6737,22 @@ void Sema::CheckExplicitlyDefaultedMember(FunctionDecl *FD) {
     FD->setType(Context.getFunctionType(ReturnType, Args, EPI));
   }
 
+  bool ShouldDelete = false;
   if (CSM == CXXComparisonOperator) {
     if (auto *AutoTy = FD->getReturnType()->getAs<AutoType>()) {
       assert(First);
       QualType RetTy =
           deduceCommonComparisonType(*this, FD, RD, FD->getLocation());
-      if (!RetTy.isNull())
+      if (!RetTy.isNull()) {
         Context.adjustDeducedFunctionResultType(FD, RetTy);
+        ShouldDelete = Context.hasSameType(RetTy, Context.VoidTy);
+      }
       else
         HadError = true;
     }
   }
 
-  if (ShouldDeleteSpecialMember(FD, CSM)) {
+  if (ShouldDelete || ShouldDeleteSpecialMember(FD, CSM)) {
     if (First) {
       SetDeclDeleted(FD, FD->getLocation());
     } else {

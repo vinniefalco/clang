@@ -805,14 +805,11 @@ struct U {
 };
 
 struct T {
-  U<T> u; // expected-note {{comparison operator of 'T' is implicitly deleted because field 'u' has no comparison operator}}
-  // FIXME(EricWF): Is this diagnostic helpful?
-  // expected-note@+1 {{explicitly defaulted function was implicitly deleted here}}
+  U<T> u;
   auto operator<=>(T const &) const = default;
 };
 
 void test(T &t1, T &t2) {
-  // expected-error@+1 {{object of type 'TestRecursion::T' cannot be compared because its comparison operator is implicitly deleted}}
   using R = decltype(t1 <=> t2);
 }
 
