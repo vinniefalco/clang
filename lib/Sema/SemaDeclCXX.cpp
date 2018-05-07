@@ -7012,7 +7012,7 @@ struct SpecialMemberDeletionInfo
 /// sub-object.
 bool SpecialMemberDeletionInfo::isAccessible(Subobject Subobj,
                                              FunctionDecl *FnTarget) {
-  auto *target = dyn_cast<CXXMethodDecl>(FnTarget);
+  auto *target = dyn_cast_or_null<CXXMethodDecl>(FnTarget);
   // we're handling a friend  declaration for an explicitly-defaulted
   // comparison operator
   if (!target)
