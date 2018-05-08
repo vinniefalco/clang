@@ -13164,6 +13164,9 @@ public:
         Res = S.BuildBinOp(nullptr, Loc, Opc, Cmp.get(), BuildZeroLiteral());
       if (Res.isInvalid())
         return Error();
+
+      LastCmpResult = Res.get();
+      return false;
   }
 
   bool BuildCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
@@ -13183,9 +13186,7 @@ public:
 
     // Build a call to the comparison function for the specified LHS and RHS
     // expressions.
-    Expr *LHS = LHSB.build(S, Loc);
-    Expr *RHS = RHSB.build(S, Loc);
-    ExprResult Cmp = BuildCmpOp(LHS, RHS);
+    ExprResult Cmp = BuildCmpOp(LHSB, RHSB);
     if (Cmp.isInvalid() || ProcessPendingCompare(Cmp.get()))
       return Error();
     return false;
@@ -13228,8 +13229,9 @@ private:
     return true;
   }
 
-  ExprResult BuildCmpOp(Expr *LHS, Expr *RHS) {
-    return S.BuildBinOp(nullptr, Loc, BO_Cmp, LHS, RHS);
+  ExprResult BuildCmpOp(const ExprBuilder &LHSB, const ExprBuilder &RHSB) {
+    return S.BuildBinOp(nullptr, Loc, BO_Cmp, LHSB.build(S, Loc),
+                        RHSB.build(S, Loc));
   }
 
   bool ProcessPendingCompare(Expr *LastCmp = nullptr) {
@@ -13265,9 +13267,7 @@ private:
       ArrayScopeGuard ArrayDepthGuard(ArrayDepth);
       return BuildArrayCompare(LHSB, RHSB, ArrayTy);
     }
-    Expr *LHS = LHSB.build(S, Loc);
-    Expr *RHS = RHSB.build(S, Loc);
-    ExprResult BinCmp = BuildCmpOp(LHS, RHS);
+    ExprResult BinCmp = BuildCmpOp(LHSB, RHSB);
     if (BinCmp.isInvalid())
       return StmtError();
     return BuildCompareEqualOrReturn(BinCmp.get());
@@ -13443,7 +13443,9 @@ private:
     return DRE.get();
   }
 
-  Expr *BuildZeroLiteral(QualType IntTy = S.Context.IntTy) {
+  Expr *BuildZeroLiteral(QualType IntTy = QualType()) {
+    if (IntTy.isNull())
+      IntTy = S.Context.IntTy;
     llvm::APInt Zero(S.Context.getTypeSize(IntTy), 0);
     return IntegerLiteral::Create(S.Context, Zero, IntTy, SourceLocation());
   }

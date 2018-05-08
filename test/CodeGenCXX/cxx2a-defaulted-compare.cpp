@@ -97,21 +97,21 @@ struct OneMem {
 };
 template void use_cmp<OneMem>(OneMem const&, OneMem const&);
 
-namespace TestRecursion {
-
-template <class Tp>
-struct Base {
-  Tp &t;
-  auto operator<=>(Base const &) const = default;
+struct SingleArray {
+  OpaqueMem Arr[2];
+  friend auto operator<=>(SingleArray const &, SingleArray const &) = default;
 };
+template void use_cmp<SingleArray>(SingleArray const &, SingleArray const &);
 
-template <class Arg>
-struct Derived {
-  Base<Derived> u;
-  Arg v;
-  auto operator<=>(Derived const &) const = default;
+struct MultiArray {
+  OpaqueMem Arr[2][3];
+  friend auto operator<=>(MultiArray const &, MultiArray const &) = default;
 };
-void use(Derived<int> const &LHS, Derived<int> const &RHS) {
-  (void)(LHS <=> RHS);
-}
-} // namespace TestRecursion
+template void use_cmp<MultiArray>(MultiArray const &, MultiArray const &);
+
+struct BeforeAfterArray : OpaqueBase /* Before */ {
+  OpaqueMem Arr[2];
+  OpaqueFn After;
+  friend auto operator<=>(BeforeAfterArray const &, BeforeAfterArray const &) = default;
+};
+template void use_cmp<BeforeAfterArray>(BeforeAfterArray const &, BeforeAfterArray const &);
