@@ -800,16 +800,18 @@ namespace TestRecursion {
 template <class Tp>
 struct U {
   Tp &t;
+  // FIXME(EricWF): This diagnostic is horrible. We should point to t
+  // expected-error@+1 {{recursive call to 'operator<=>' in definition of explicitly-defaulted comparison operator for type 'T'}}
   auto operator<=>(U const &) const = default;
 };
 
 struct T {
-  U<T> u;
+  U<T> u; // expected-note {{in implicit comparison operator for 'TestRecursion::U<TestRecursion::T>' first required here}}
   auto operator<=>(T const &) const = default;
 };
 
 void test(T &t1, T &t2) {
-  auto r = t1 <=> t2;
+  auto r = t1 <=> t2; // expected-note {{in implicit comparison operator for 'TestRecursion::T' first required here}}
   ASSERT_EXPR_TYPE(r, std::strong_ordering);
 }
 

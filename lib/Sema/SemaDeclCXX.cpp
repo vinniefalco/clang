@@ -13128,14 +13128,15 @@ class ComparisonBuilder {
   };
 
 public:
-  SourceLocation Loc;
+  SourceLocation DeclLoc;
+  SourceLocation CurrentLoc;
 
   ComparisonBuilder(Sema &S, FunctionDecl *CompareOperator)
       : S(S), CompareOperator(CompareOperator) {
     // Our location for everything implicitly-generated.
-    Loc = CompareOperator->getLocEnd().isValid()
-              ? CompareOperator->getLocEnd()
-              : CompareOperator->getLocation();
+    DeclLoc = CompareOperator->getLocEnd().isValid()
+                  ? CompareOperator->getLocEnd()
+                  : CompareOperator->getLocation();
     Opc = BinaryOperator::getOverloadedOpcode(
         CompareOperator->getOverloadedOperator());
   }
@@ -13158,10 +13159,12 @@ public:
         CXXRewrittenExpr::ComparisonBits CompareBits =
             Rewritten->getRewrittenInfo()->CompareBits;
         if (CompareBits.IsSynthesized)
-          Res = S.BuildBinOp(nullptr, Loc, Opc, BuildZeroLiteral(), Cmp.get());
+          Res = S.BuildBinOp(nullptr, DeclLoc, Opc, BuildZeroLiteral(),
+                             Cmp.get());
       }
       if (Res.isUnset())
-        Res = S.BuildBinOp(nullptr, Loc, Opc, Cmp.get(), BuildZeroLiteral());
+        Res =
+            S.BuildBinOp(nullptr, DeclLoc, Opc, Cmp.get(), BuildZeroLiteral());
       if (Res.isInvalid())
         return Error();
 
@@ -13170,7 +13173,8 @@ public:
   }
 
   bool BuildCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
-                    QualType T) {
+                    QualType T, SourceLocation CLoc) {
+    CurrentLoc = CLoc;
     assert(isThreeWay());
     if (const ConstantArrayType *ArrayTy =
             S.Context.getAsConstantArrayType(T)) {
@@ -13206,7 +13210,7 @@ public:
 
     // Add a final return statement which returns the result of the last
     // comparison or the newly generated result if there was none.
-    StmtResult Return = S.BuildReturnStmt(Loc, LastCmpResult);
+    StmtResult Return = S.BuildReturnStmt(DeclLoc, LastCmpResult);
     if (Return.isInvalid())
       return Error();
     Statements.push_back(Return.getAs<Stmt>());
@@ -13214,7 +13218,7 @@ public:
     StmtResult Body;
     {
       Sema::CompoundScopeRAII CompoundScope(S);
-      Body = S.ActOnCompoundStmt(Loc, Loc, Statements,
+      Body = S.ActOnCompoundStmt(DeclLoc, DeclLoc, Statements,
                                  /*isStmtExpr=*/false);
       assert(!Body.isInvalid() && "Compound statement creation cannot fail");
     }
@@ -13230,8 +13234,8 @@ private:
   }
 
   ExprResult BuildCmpOp(const ExprBuilder &LHSB, const ExprBuilder &RHSB) {
-    return S.BuildBinOp(nullptr, Loc, BO_Cmp, LHSB.build(S, Loc),
-                        RHSB.build(S, Loc));
+    return S.BuildBinOp(nullptr, DeclLoc, BO_Cmp, LHSB.build(S, DeclLoc),
+                        RHSB.build(S, DeclLoc));
   }
 
   bool ProcessPendingCompare(Expr *LastCmp = nullptr) {
@@ -13291,8 +13295,8 @@ private:
       IterationVarName = &S.Context.Idents.get(OS.str());
     }
     VarDecl *IterationVar = VarDecl::Create(
-        S.Context, S.CurContext, Loc, Loc, IterationVarName, SizeType,
-        S.Context.getTrivialTypeSourceInfo(SizeType, Loc), SC_None);
+        S.Context, S.CurContext, DeclLoc, DeclLoc, IterationVarName, SizeType,
+        S.Context.getTrivialTypeSourceInfo(SizeType, DeclLoc), SC_None);
 
     // Initialize the iteration variable to zero.
     IterationVar->setInit(BuildZeroLiteral(SizeType));
@@ -13303,7 +13307,7 @@ private:
 
     // Create the DeclStmt that holds the iteration variable.
     Stmt *InitStmt =
-        new (S.Context) DeclStmt(DeclGroupRef(IterationVar), Loc, Loc);
+        new (S.Context) DeclStmt(DeclGroupRef(IterationVar), DeclLoc, DeclLoc);
 
     // Subscript the "from" and "to" expressions with the iteration variable.
     SubscriptBuilder LHSIndex(LHSB, IterationVarRefRVal);
@@ -13319,22 +13323,22 @@ private:
     llvm::APInt Upper =
         ArrayTy->getSize().zextOrTrunc(S.Context.getTypeSize(SizeType));
     Expr *Comparison = new (S.Context) BinaryOperator(
-        IterationVarRefRVal.build(S, Loc),
-        IntegerLiteral::Create(S.Context, Upper, SizeType, Loc), BO_NE,
-        S.Context.BoolTy, VK_RValue, OK_Ordinary, Loc, FPOptions());
+        IterationVarRefRVal.build(S, DeclLoc),
+        IntegerLiteral::Create(S.Context, Upper, SizeType, DeclLoc), BO_NE,
+        S.Context.BoolTy, VK_RValue, OK_Ordinary, DeclLoc, FPOptions());
 
     // Create the pre-increment of the iteration variable. We can determine
     // whether the increment will overflow based on the value of the array
     // bound.
     Expr *Increment = new (S.Context)
-        UnaryOperator(IterationVarRef.build(S, Loc), UO_PreInc, SizeType,
-                      VK_LValue, OK_Ordinary, Loc, Upper.isMaxValue());
+        UnaryOperator(IterationVarRef.build(S, DeclLoc), UO_PreInc, SizeType,
+                      VK_LValue, OK_Ordinary, DeclLoc, Upper.isMaxValue());
 
     // Construct the loop that copies all elements of this array.
-    return S.ActOnForStmt(Loc, Loc, InitStmt,
-                          S.ActOnCondition(nullptr, Loc, Comparison,
+    return S.ActOnForStmt(DeclLoc, DeclLoc, InitStmt,
+                          S.ActOnCondition(nullptr, DeclLoc, Comparison,
                                            Sema::ConditionKind::Boolean),
-                          S.MakeFullDiscardedValueExpr(Increment), Loc,
+                          S.MakeFullDiscardedValueExpr(Increment), DeclLoc,
                           RecCmp.get());
   }
 
@@ -13351,27 +13355,27 @@ private:
     // Now attempt to build the full expression '(LHS <=> RHS) != 0' using the
     // evaluated operand and the literal 0.
     ExprResult CmpRes =
-        S.BuildBinOp(nullptr, Loc, BO_NE, DRE, BuildZeroLiteral());
+        S.BuildBinOp(nullptr, DeclLoc, BO_NE, DRE, BuildZeroLiteral());
     if (CmpRes.isInvalid())
       return StmtError();
 
     StmtResult VDDeclStmt =
-        S.ActOnDeclStmt(S.ConvertDeclToDeclGroup(VD), Loc, Loc);
+        S.ActOnDeclStmt(S.ConvertDeclToDeclGroup(VD), DeclLoc, DeclLoc);
     if (VDDeclStmt.isInvalid())
       return false;
 
     Expr *ReturnExpr = DRE;
 
     // If the last comparison returned not equal, we'll return it's value.
-    StmtResult Return = S.BuildReturnStmt(Loc, ReturnExpr);
+    StmtResult Return = S.BuildReturnStmt(DeclLoc, ReturnExpr);
     if (Return.isInvalid())
       return StmtError();
 
     if (cast<clang::ReturnStmt>(Return.get())->getNRVOCandidate() == VD)
       VD->setNRVOVariable(true);
 
-    return S.ActOnIfStmt(Loc, false, VDDeclStmt.getAs<Stmt>(),
-                         S.ActOnCondition(nullptr, Loc, CmpRes.get(),
+    return S.ActOnIfStmt(DeclLoc, false, VDDeclStmt.getAs<Stmt>(),
+                         S.ActOnCondition(nullptr, DeclLoc, CmpRes.get(),
                                           Sema::ConditionKind::Boolean),
                          Return.get(), SourceLocation(), nullptr);
   }
@@ -13389,14 +13393,14 @@ private:
 
     // FIXME: we need to emit diagnostics here
     QualType RetTy = S.CheckComparisonCategoryType(
-        ComparisonCategoryType::StrongOrdering, Loc);
+        ComparisonCategoryType::StrongOrdering, DeclLoc);
     if (RetTy.isNull())
       return ExprError();
 
     VarDecl *VD =
         S.Context.CompCategories.getInfoForType(RetTy).getValueInfo(
             ComparisonCategoryResult::Equal)->VD;
-    return S.BuildDeclRefExpr(VD, RetTy, VK_LValue, Loc);
+    return S.BuildDeclRefExpr(VD, RetTy, VK_LValue, DeclLoc);
   }
 
   /// Build a variable declaration to store the result of a comparison
@@ -13406,9 +13410,9 @@ private:
   VarDecl *BuildInventedVarDecl(Expr *Init) {
     // Build a dummy variable to hold the result of our last comparison.
     auto *VD = VarDecl::Create(
-        S.Context, CompareOperator, Loc, Loc,
+        S.Context, CompareOperator, DeclLoc, DeclLoc,
         &S.PP.getIdentifierTable().get("__cmp_res"), Init->getType(),
-        S.Context.getTrivialTypeSourceInfo(Init->getType(), Loc), SC_Auto);
+        S.Context.getTrivialTypeSourceInfo(Init->getType(), DeclLoc), SC_Auto);
     S.CheckVariableDeclarationType(VD);
     if (VD->isInvalidDecl())
       return nullptr;
@@ -13417,7 +13421,7 @@ private:
     // the initializer.
     InitializedEntity Entity = InitializedEntity::InitializeVariable(VD);
     InitializationKind Kind = InitializationKind::CreateForInit(
-        VD->getLocation(), /*DirectInit=*/true, Init);
+        VD->getDeclLocation(), /*DirectInit=*/true, Init);
     InitializationSequence InitSeq(S, Entity, Kind, Init,
                                    /*TopLevelOfInitList=*/false,
                                    /*TreatUnavailableAsInvalid=*/false);
@@ -13437,8 +13441,8 @@ private:
   }
 
   Expr *BuildDeclRef(VarDecl *VD) {
-    ExprResult DRE =
-        S.BuildDeclRefExpr(VD, VD->getType(), ExprValueKind::VK_LValue, Loc);
+    ExprResult DRE = S.BuildDeclRefExpr(VD, VD->getType(),
+                                        ExprValueKind::VK_LValue, DeclLoc);
     assert(!DRE.isInvalid());
     return DRE.get();
   }
@@ -13540,12 +13544,12 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
       // appropriately-qualified base type.
       CastBuilder RHS(RHSRef, BaseType, VK_LValue, BasePath);
 
-      if (Builder.BuildCompare(LHS, RHS, BaseType))
+      if (Builder.BuildCompare(LHS, RHS, BaseType, Base.getBaseTypeLoc()))
         return;
     }
 
     // Assign non-static members.
-    for (auto *Field : ClassDecl->fields()) {
+    for (FieldDecl *Field : ClassDecl->fields()) {
       if (Field->isInvalidDecl()) {
         Invalid = true;
         continue;
@@ -13564,14 +13568,14 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
       }
 
       // Build references to the field in the object we're copying from and to.
-      LookupResult MemberLookup(*this, Field->getDeclName(), Builder.Loc,
+      LookupResult MemberLookup(*this, Field->getDeclName(), Builder.DeclLoc,
                                 LookupMemberName);
       MemberLookup.addDecl(Field);
       MemberLookup.resolveKind();
       MemberBuilder RHS(RHSRef, RHSRefType, /*IsArrow=*/false, MemberLookup);
       MemberBuilder LHS(LHSRef, RHSRefType, /*IsArrow=*/false, MemberLookup);
 
-      if (Builder.BuildCompare(LHS, RHS, FieldType))
+      if (Builder.BuildCompare(LHS, RHS, FieldType, Field->getLocation()))
         return;
     }
   } else {
