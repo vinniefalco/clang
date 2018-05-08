@@ -806,7 +806,7 @@ struct U {
 };
 
 struct T {
-  U<T> u; // expected-note {{in implicit comparison operator for 'TestRecursion::U<TestRecursion::T>' first required here}}
+  U<T> u; // expected-note@+1 {{in implicit comparison operator for 'TestRecursion::U<TestRecursion::T>' first required here}}
   auto operator<=>(T const &) const = default;
 };
 

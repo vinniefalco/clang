@@ -13116,7 +13116,7 @@ class ComparisonBuilder {
   BinaryOperatorKind Opc;
   unsigned ArrayDepth = 0;
 
-  Expr *LastCmpResult = nullptr;
+  std::pair<Expr *, SourceLocation> LastCmpResult;
 
   struct ArrayScopeGuard {
     explicit ArrayScopeGuard(unsigned &D) : DepthVal(D) { ++DepthVal; }
@@ -13129,7 +13129,6 @@ class ComparisonBuilder {
 
 public:
   SourceLocation DeclLoc;
-  SourceLocation CurrentLoc;
 
   ComparisonBuilder(Sema &S, FunctionDecl *CompareOperator)
       : S(S), CompareOperator(CompareOperator) {
@@ -13147,9 +13146,9 @@ public:
   bool BuildRelationalOrEqualityCompare(const ExprBuilder &LHSB,
                                         const ExprBuilder &RHSB) {
     assert(!isThreeWay());
-    assert(!LastCmpResult);
+    assert(!LastCmpResult.first);
 
-    ExprResult Cmp = BuildCmpOp(LHSB, RHSB);
+    ExprResult Cmp = BuildCmpOp(LHSB, RHSB, DeclLoc);
     if (Cmp.isInvalid())
       return Error();
 
@@ -13168,20 +13167,19 @@ public:
       if (Res.isInvalid())
         return Error();
 
-      LastCmpResult = Res.get();
+      LastCmpResult = std::make_pair(Res.get(), DeclLoc);
       return false;
   }
 
   bool BuildCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
-                    QualType T, SourceLocation CLoc) {
-    CurrentLoc = CLoc;
+                    QualType T, SourceLocation Loc) {
+
     assert(isThreeWay());
     if (const ConstantArrayType *ArrayTy =
             S.Context.getAsConstantArrayType(T)) {
-      // ArrayScopeGuard DepthGuard(ArrayDepth);
       if (ProcessPendingCompare())
         return Error();
-      StmtResult Res = BuildArrayCompare(LHSB, RHSB, ArrayTy);
+      StmtResult Res = BuildArrayCompare(LHSB, RHSB, ArrayTy, Loc);
       if (Res.isInvalid())
         return Error();
       Statements.push_back(Res.getAs<Stmt>());
@@ -13190,27 +13188,28 @@ public:
 
     // Build a call to the comparison function for the specified LHS and RHS
     // expressions.
-    ExprResult Cmp = BuildCmpOp(LHSB, RHSB);
-    if (Cmp.isInvalid() || ProcessPendingCompare(Cmp.get()))
+    ExprResult Cmp = BuildCmpOp(LHSB, RHSB, Loc);
+    if (Cmp.isInvalid() || ProcessPendingCompare(Cmp.get(), Loc))
       return Error();
     return false;
   }
 
   bool Finalize() {
+    Expr *LastCmp = LastCmpResult.first;
     // If we don't have a previously stashed comparison (ie the class for this
     // comparison operator is empty), build a result representing equality
     // (or inequality when the comparison operator is !=, <, or >)
-    if (!LastCmpResult) {
+    if (!LastCmp) {
       assert(isThreeWay());
-      ExprResult EqualExpr = BuildReturnValueForEquality();
+      ExprResult EqualExpr = BuildReturnValueForEquality(DeclLoc);
       if (EqualExpr.isInvalid())
         return Error();
-      LastCmpResult = EqualExpr.get();
+      LastCmp = EqualExpr.get();
     }
 
     // Add a final return statement which returns the result of the last
     // comparison or the newly generated result if there was none.
-    StmtResult Return = S.BuildReturnStmt(DeclLoc, LastCmpResult);
+    StmtResult Return = S.BuildReturnStmt(DeclLoc, LastCmp);
     if (Return.isInvalid())
       return Error();
     Statements.push_back(Return.getAs<Stmt>());
@@ -13233,17 +13232,20 @@ private:
     return true;
   }
 
-  ExprResult BuildCmpOp(const ExprBuilder &LHSB, const ExprBuilder &RHSB) {
-    return S.BuildBinOp(nullptr, DeclLoc, BO_Cmp, LHSB.build(S, DeclLoc),
-                        RHSB.build(S, DeclLoc));
+  ExprResult BuildCmpOp(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
+                        SourceLocation Loc) {
+    return S.BuildBinOp(nullptr, Loc, BO_Cmp, LHSB.build(S, Loc),
+                        RHSB.build(S, Loc));
   }
 
-  bool ProcessPendingCompare(Expr *LastCmp = nullptr) {
+  bool ProcessPendingCompare(Expr *LastCmp = nullptr,
+                             SourceLocation NewLoc = SourceLocation()) {
     // Stash the result of that comparison in case it's the final comparison,
     // and get the previously stashed comparison if it exists.
-    std::swap(LastCmp, LastCmpResult);
+    auto LastCmpPair = std::make_pair(LastCmp, NewLoc);
+    std::swap(LastCmpPair, LastCmpResult);
 
-    if (!LastCmp)
+    if (!LastCmpPair.first)
       return false;
 
     // Only defaulted three-way comparisons should be building more than one
@@ -13255,7 +13257,8 @@ private:
     // form:
     //    if (auto result = <last-cmp>; result != 0)
     //      return result;
-    StmtResult BranchOnCmp = BuildCompareEqualOrReturn(LastCmp);
+    StmtResult BranchOnCmp =
+        BuildCompareEqualOrReturn(LastCmpPair.first, LastCmpPair.second);
     if (BranchOnCmp.isInvalid())
       return Error();
 
@@ -13265,20 +13268,22 @@ private:
   }
 
   StmtResult BuildArrayCompareRecursively(const ExprBuilder &LHSB,
-                                          const ExprBuilder &RHSB, QualType T) {
+                                          const ExprBuilder &RHSB, QualType T,
+                                          SourceLocation Loc) {
     if (const ConstantArrayType *ArrayTy =
             S.Context.getAsConstantArrayType(T)) {
       ArrayScopeGuard ArrayDepthGuard(ArrayDepth);
-      return BuildArrayCompare(LHSB, RHSB, ArrayTy);
+      return BuildArrayCompare(LHSB, RHSB, ArrayTy, Loc);
     }
-    ExprResult BinCmp = BuildCmpOp(LHSB, RHSB);
+    ExprResult BinCmp = BuildCmpOp(LHSB, RHSB, Loc);
     if (BinCmp.isInvalid())
       return StmtError();
-    return BuildCompareEqualOrReturn(BinCmp.get());
+    return BuildCompareEqualOrReturn(BinCmp.get(), Loc);
   }
 
   StmtResult BuildArrayCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
-                               const ConstantArrayType *ArrayTy) {
+                               const ConstantArrayType *ArrayTy,
+                               SourceLocation Loc) {
     // Construct a loop over the array bounds, e.g.,
     //
     //   for (__SIZE_TYPE__ i0 = 0; i0 != array-size; ++i0)
@@ -13295,8 +13300,8 @@ private:
       IterationVarName = &S.Context.Idents.get(OS.str());
     }
     VarDecl *IterationVar = VarDecl::Create(
-        S.Context, S.CurContext, DeclLoc, DeclLoc, IterationVarName, SizeType,
-        S.Context.getTrivialTypeSourceInfo(SizeType, DeclLoc), SC_None);
+        S.Context, S.CurContext, Loc, Loc, IterationVarName, SizeType,
+        S.Context.getTrivialTypeSourceInfo(SizeType, Loc), SC_None);
 
     // Initialize the iteration variable to zero.
     IterationVar->setInit(BuildZeroLiteral(SizeType));
@@ -13307,15 +13312,15 @@ private:
 
     // Create the DeclStmt that holds the iteration variable.
     Stmt *InitStmt =
-        new (S.Context) DeclStmt(DeclGroupRef(IterationVar), DeclLoc, DeclLoc);
+        new (S.Context) DeclStmt(DeclGroupRef(IterationVar), Loc, Loc);
 
     // Subscript the "from" and "to" expressions with the iteration variable.
     SubscriptBuilder LHSIndex(LHSB, IterationVarRefRVal);
     SubscriptBuilder RHSIndex(RHSB, IterationVarRefRVal);
 
     // Build the copy/move for an individual element of the array.
-    StmtResult RecCmp = BuildArrayCompareRecursively(LHSIndex, RHSIndex,
-                                                     ArrayTy->getElementType());
+    StmtResult RecCmp = BuildArrayCompareRecursively(
+        LHSIndex, RHSIndex, ArrayTy->getElementType(), Loc);
     if (RecCmp.isInvalid())
       return StmtError();
 
@@ -13323,9 +13328,9 @@ private:
     llvm::APInt Upper =
         ArrayTy->getSize().zextOrTrunc(S.Context.getTypeSize(SizeType));
     Expr *Comparison = new (S.Context) BinaryOperator(
-        IterationVarRefRVal.build(S, DeclLoc),
-        IntegerLiteral::Create(S.Context, Upper, SizeType, DeclLoc), BO_NE,
-        S.Context.BoolTy, VK_RValue, OK_Ordinary, DeclLoc, FPOptions());
+        IterationVarRefRVal.build(S, Loc),
+        IntegerLiteral::Create(S.Context, Upper, SizeType, Loc), BO_NE,
+        S.Context.BoolTy, VK_RValue, OK_Ordinary, Loc, FPOptions());
 
     // Create the pre-increment of the iteration variable. We can determine
     // whether the increment will overflow based on the value of the array
@@ -13343,39 +13348,39 @@ private:
   }
 
   /// FIXME(EricWF): Document this
-  StmtResult BuildCompareEqualOrReturn(Expr *LastResult) {
+  StmtResult BuildCompareEqualOrReturn(Expr *LastResult, SourceLocation Loc) {
     assert(LastResult && "should not be null");
     assert(isThreeWay());
 
-    VarDecl *VD = BuildInventedVarDecl(LastResult);
+    VarDecl *VD = BuildInventedVarDecl(LastResult, Loc);
     if (!VD)
       return StmtError();
-    Expr *DRE = BuildDeclRef(VD);
+    ExprResult DRE = S.BuildDeclRefExpr(VD, VD->getType(), VK_LValue, Loc);
+    if (DRE.isInvalid())
+      return StmtError();
+
+    StmtResult VDDeclStmt =
+        S.ActOnDeclStmt(S.ConvertDeclToDeclGroup(VD), Loc, Loc);
+    if (VDDeclStmt.isInvalid())
+      return false;
 
     // Now attempt to build the full expression '(LHS <=> RHS) != 0' using the
     // evaluated operand and the literal 0.
     ExprResult CmpRes =
-        S.BuildBinOp(nullptr, DeclLoc, BO_NE, DRE, BuildZeroLiteral());
+        S.BuildBinOp(nullptr, Loc, BO_NE, DRE.get(), BuildZeroLiteral());
     if (CmpRes.isInvalid())
       return StmtError();
 
-    StmtResult VDDeclStmt =
-        S.ActOnDeclStmt(S.ConvertDeclToDeclGroup(VD), DeclLoc, DeclLoc);
-    if (VDDeclStmt.isInvalid())
-      return false;
-
-    Expr *ReturnExpr = DRE;
-
     // If the last comparison returned not equal, we'll return it's value.
-    StmtResult Return = S.BuildReturnStmt(DeclLoc, ReturnExpr);
+    StmtResult Return = S.BuildReturnStmt(DeclLoc, DRE.get());
     if (Return.isInvalid())
       return StmtError();
 
     if (cast<clang::ReturnStmt>(Return.get())->getNRVOCandidate() == VD)
       VD->setNRVOVariable(true);
 
-    return S.ActOnIfStmt(DeclLoc, false, VDDeclStmt.getAs<Stmt>(),
-                         S.ActOnCondition(nullptr, DeclLoc, CmpRes.get(),
+    return S.ActOnIfStmt(Loc, false, VDDeclStmt.getAs<Stmt>(),
+                         S.ActOnCondition(nullptr, Loc, CmpRes.get(),
                                           Sema::ConditionKind::Boolean),
                          Return.get(), SourceLocation(), nullptr);
   }
@@ -13388,31 +13393,31 @@ private:
   ///
   /// Note: This should only be used when the struct being compared is empty.
   /// Otherwise the result of the previous comparison should be returned.
-  ExprResult BuildReturnValueForEquality() {
+  ExprResult BuildReturnValueForEquality(SourceLocation Loc) {
     assert(Opc == BO_Cmp);
 
     // FIXME: we need to emit diagnostics here
     QualType RetTy = S.CheckComparisonCategoryType(
-        ComparisonCategoryType::StrongOrdering, DeclLoc);
+        ComparisonCategoryType::StrongOrdering, Loc);
     if (RetTy.isNull())
       return ExprError();
 
     VarDecl *VD =
         S.Context.CompCategories.getInfoForType(RetTy).getValueInfo(
             ComparisonCategoryResult::Equal)->VD;
-    return S.BuildDeclRefExpr(VD, RetTy, VK_LValue, DeclLoc);
+    return S.BuildDeclRefExpr(VD, RetTy, VK_LValue, Loc);
   }
 
   /// Build a variable declaration to store the result of a comparison
   /// expression. This declaration will be inserted into the initializer clause
   /// of an IfStmt so it can be used as both the condition and return statement
   /// inside the IfStmt body.
-  VarDecl *BuildInventedVarDecl(Expr *Init) {
+  VarDecl *BuildInventedVarDecl(Expr *Init, SourceLocation Loc) {
     // Build a dummy variable to hold the result of our last comparison.
     auto *VD = VarDecl::Create(
         S.Context, CompareOperator, DeclLoc, DeclLoc,
         &S.PP.getIdentifierTable().get("__cmp_res"), Init->getType(),
-        S.Context.getTrivialTypeSourceInfo(Init->getType(), DeclLoc), SC_Auto);
+        S.Context.getTrivialTypeSourceInfo(Init->getType(), Loc), SC_Auto);
     S.CheckVariableDeclarationType(VD);
     if (VD->isInvalidDecl())
       return nullptr;
@@ -13438,13 +13443,6 @@ private:
 
     S.CheckCompleteVariableDeclaration(VD);
     return VD;
-  }
-
-  Expr *BuildDeclRef(VarDecl *VD) {
-    ExprResult DRE = S.BuildDeclRefExpr(VD, VD->getType(),
-                                        ExprValueKind::VK_LValue, DeclLoc);
-    assert(!DRE.isInvalid());
-    return DRE.get();
   }
 
   Expr *BuildZeroLiteral(QualType IntTy = QualType()) {
