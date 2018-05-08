@@ -13114,8 +13114,18 @@ class ComparisonBuilder {
   FunctionDecl *CompareOperator;
   SmallVector<Stmt *, 8> Statements;
   BinaryOperatorKind Opc;
+  unsigned ArrayDepth = 0;
 
   Expr *LastCmpResult = nullptr;
+
+  struct ArrayScopeGuard {
+    explicit ArrayScopeGuard(int &D) : DepthVal(D) { ++DepthVal; }
+    ~ArrayScopeGuard() { --DepthVal; }
+
+  private:
+    ArrayScopeGuard(ArrayScopeGuard const &) = delete;
+    int &DepthVal;
+  };
 
 public:
   SourceLocation Loc;
@@ -13133,17 +13143,15 @@ public:
   BinaryOperatorKind getOpcode() const { return Opc; }
   bool isThreeWay() const { return Opc == BO_Cmp; }
 
-  bool BuildCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB) {
-    // Build a call to the comparison function for the specified LHS and RHS
-    // expressions.
-    Expr *LHS = LHSB.build(S, Loc);
-    Expr *RHS = RHSB.build(S, Loc);
-    ExprResult Cmp = S.BuildBinOp(nullptr, Loc, BO_Cmp, LHS, RHS);
+  bool BuildRelationalOrEqualityCompare(const ExprBuilder &LHSB,
+                                        const ExprBuilder &RHSB) {
+    assert(!isThreeWay());
+    assert(!LastCmpResult);
+
+    ExprResult Cmp = BuildCmpOp(LHSB, RHSB);
     if (Cmp.isInvalid())
       return Error();
 
-    if (!isThreeWay()) {
-      assert(!LastCmpResult);
       ExprResult Res;
       if (auto *Rewritten = dyn_cast<CXXRewrittenExpr>(Cmp.get())) {
         assert(Rewritten->getRewrittenKind() == CXXRewrittenExpr::Comparison);
@@ -13156,32 +13164,26 @@ public:
         Res = S.BuildBinOp(nullptr, Loc, Opc, Cmp.get(), BuildZeroLiteral());
       if (Res.isInvalid())
         return Error();
-      Cmp = Res;
+  }
+
+  bool BuildCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
+                    QualType T) {
+    assert(isThreeWay());
+    if (const ConstantArrayType *ArrayTy =
+            S.Context.getAsConstantArrayType(T)) {
+      // ArrayScopeGuard DepthGuard(ArrayDepth);
+      if (ProcessPendingCompare() || BuildArrayCompare(LHSB, RHSB, ArrayTy))
+        return Error();
+      return false;
     }
 
-    // Stash the result of that comparison in case it's the final comparison,
-    // and get the previously stashed comparison if it exists.
-    Expr *LastCmp = Cmp.get();
-    std::swap(LastCmp, LastCmpResult);
-
-    if (!LastCmp)
-      return false;
-
-    // Only defaulted three-way comparisons should be building more than one
-    // comparison.
-    assert(isThreeWay() &&
-           "non-three-way comparison should only build one compare");
-
-    // If there was a previously stashed comparison, build an expression of the
-    // form:
-    //    if (auto result = <last-cmp>; result != 0)
-    //      return result;
-    StmtResult BranchOnCmp = BuildCompareEqualOrReturn(LastCmp);
-    if (BranchOnCmp.isInvalid())
+    // Build a call to the comparison function for the specified LHS and RHS
+    // expressions.
+    Expr *LHS = LHSB.build(S, Loc);
+    Expr *RHS = RHSB.build(S, Loc);
+    ExprResult Cmp = BuildCmpOp(LHS, RHS);
+    if (Cmp.isInvalid() || ProcessPendingCompare(Cmp.get()))
       return Error();
-
-    // Success!
-    Statements.push_back(BranchOnCmp.getAs<Stmt>());
     return false;
   }
 
@@ -13220,6 +13222,110 @@ private:
   bool Error() {
     CompareOperator->setInvalidDecl();
     return true;
+  }
+
+  ExprResult BuildCmpOp(Expr *LHS, Expr *RHS) {
+    return S.BuildBinOp(nullptr, Loc, BO_Cmp, LHS, RHS);
+  }
+
+  bool ProcessPendingCompare(Expr *LastCmp = nullptr) {
+    // Stash the result of that comparison in case it's the final comparison,
+    // and get the previously stashed comparison if it exists.
+    std::swap(LastCmp, LastCmpResult);
+
+    if (!LastCmp)
+      return false;
+
+    // Only defaulted three-way comparisons should be building more than one
+    // comparison.
+    assert(isThreeWay() &&
+           "non-three-way comparison should only build one compare");
+
+    // If there was a previously stashed comparison, build an expression of the
+    // form:
+    //    if (auto result = <last-cmp>; result != 0)
+    //      return result;
+    StmtResult BranchOnCmp = BuildCompareEqualOrReturn(LastCmp);
+    if (BranchOnCmp.isInvalid())
+      return Error();
+
+    // Success!
+    Statements.push_back(BranchOnCmp.getAs<Stmt>());
+    return false;
+  }
+
+  bool BuildArrayCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
+                         const ConstantArrayType *ArrayTy) {
+    // Construct a loop over the array bounds, e.g.,
+    //
+    //   for (__SIZE_TYPE__ i0 = 0; i0 != array-size; ++i0)
+    //
+    // that will copy each of the array elements.
+    QualType SizeType = S.Context.getSizeType();
+
+    // Create the iteration variable.
+    IdentifierInfo *IterationVarName = nullptr;
+    {
+      SmallString<8> Str;
+      llvm::raw_svector_ostream OS(Str);
+      OS << "__i" << ArrayDepth;
+      IterationVarName = &S.Context.Idents.get(OS.str());
+    }
+    VarDecl *IterationVar = VarDecl::Create(
+        S.Context, S.CurContext, Loc, Loc, IterationVarName, SizeType,
+        S.Context.getTrivialTypeSourceInfo(SizeType, Loc), SC_None);
+
+    // Initialize the iteration variable to zero.
+    IterationVar->setInit(BuildZeroLiteral(SizeType));
+
+    // Creates a reference to the iteration variable.
+    RefBuilder IterationVarRef(IterationVar, SizeType);
+    LvalueConvBuilder IterationVarRefRVal(IterationVarRef);
+
+    // Create the DeclStmt that holds the iteration variable.
+    Stmt *InitStmt =
+        new (S.Context) DeclStmt(DeclGroupRef(IterationVar), Loc, Loc);
+
+    // Subscript the "from" and "to" expressions with the iteration variable.
+    SubscriptBuilder FromIndexCopy(From, IterationVarRefRVal);
+    MoveCastBuilder FromIndexMove(FromIndexCopy);
+    const ExprBuilder *FromIndex;
+    if (Copying)
+      FromIndex = &FromIndexCopy;
+    else
+      FromIndex = &FromIndexMove;
+
+    SubscriptBuilder ToIndex(To, IterationVarRefRVal);
+
+    // Build the copy/move for an individual element of the array.
+    StmtResult Copy = buildSingleCopyAssignRecursively(
+        S, Loc, ArrayTy->getElementType(), ToIndex, *FromIndex,
+        CopyingBaseSubobject, Copying, Depth + 1);
+    // Bail out if copying fails or if we determined that we should use memcpy.
+    if (Copy.isInvalid() || !Copy.get())
+      return Copy;
+
+    // Create the comparison against the array bound.
+    llvm::APInt Upper =
+        ArrayTy->getSize().zextOrTrunc(S.Context.getTypeSize(SizeType));
+    Expr *Comparison = new (S.Context) BinaryOperator(
+        IterationVarRefRVal.build(S, Loc),
+        IntegerLiteral::Create(S.Context, Upper, SizeType, Loc), BO_NE,
+        S.Context.BoolTy, VK_RValue, OK_Ordinary, Loc, FPOptions());
+
+    // Create the pre-increment of the iteration variable. We can determine
+    // whether the increment will overflow based on the value of the array
+    // bound.
+    Expr *Increment = new (S.Context)
+        UnaryOperator(IterationVarRef.build(S, Loc), UO_PreInc, SizeType,
+                      VK_LValue, OK_Ordinary, Loc, Upper.isMaxValue());
+
+    // Construct the loop that copies all elements of this array.
+    return S.ActOnForStmt(Loc, Loc, InitStmt,
+                          S.ActOnCondition(nullptr, Loc, Comparison,
+                                           Sema::ConditionKind::Boolean),
+                          S.MakeFullDiscardedValueExpr(Increment), Loc,
+                          Copy.get());
   }
 
   /// FIXME(EricWF): Document this
@@ -13327,11 +13433,9 @@ private:
     return DRE.get();
   }
 
-  Expr *BuildZeroLiteral() {
-    llvm::APInt I =
-        llvm::APInt::getNullValue(S.Context.getIntWidth(S.Context.IntTy));
-    return IntegerLiteral::Create(S.Context, I, S.Context.IntTy,
-                                  SourceLocation());
+  Expr *BuildZeroLiteral(QualType IntTy = S.Context.IntTy) {
+    llvm::APInt Zero(S.Context.getTypeSize(IntTy), 0);
+    return IntegerLiteral::Create(S.Context, Zero, IntTy, SourceLocation());
   }
 };
 }
@@ -13347,19 +13451,26 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
   if (CompareOperator->isInvalidDecl())
     return;
 
-  // FIXME(EricWF): We're already instantiating this candidate. Diagnose it.
+  CXXRecordDecl *ClassDecl =
+      cast<CXXRecordDecl>(CompareOperator->getLexicalParent());
+
+  // If willHaveBody is set it's because we're currently synthesizing this
+  // candidate. Diagnose it.
   if (CompareOperator->willHaveBody()) {
+#ifndef NDEBUG
+    auto It = llvm::find_if(CodeSynthesisContexts,
+                            [&](CodeSynthesisContext const &Other) {
+                              return Other.Entity == CompareOperator;
+                            });
+    assert(It != CodeSynthesisContexts.end());
+#endif
     Diag(CurrentLocation, diag::err_defaulted_comparison_recursive_evaluation)
-        << CompareOperator;
+        << CompareOperator << ClassDecl;
     return;
   }
-  if (CompareOperator->willHaveBody() || CompareOperator->isInvalidDecl())
-    return;
 
   const bool IsMethod = isa<CXXMethodDecl>(CompareOperator);
 
-  CXXRecordDecl *ClassDecl =
-      cast<CXXRecordDecl>(CompareOperator->getLexicalParent());
   SynthesizedFunctionScope Scope(*this, CompareOperator);
   // FIXME(EricWF): What does the spec say about implicit exception specs for
   // defaulted comparison operators?
@@ -13444,7 +13555,7 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
         return;
     }
   } else {
-    if (Builder.BuildCompare(LHSRef, RHSRef))
+    if (Builder.BuildRelationalOrEqualityCompare(LHSRef, RHSRef))
       return;
   }
   if (Invalid) {

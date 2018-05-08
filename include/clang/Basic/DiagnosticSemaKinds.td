@@ -7825,8 +7825,8 @@ def err_defaulted_comparison_operator_param_type : Error<
 def err_defaulted_comparison_operator_member_non_const : Error<
   "explicitly-defaulted comparison operator is not const qualified">;
 def err_defaulted_comparison_recursive_evaluation : Error<
-  "trying to recursively use %0 in definition of explicitly-defaulted "
-  "comparison operator">;
+  "recursive call to %0 in definition of explicitly-defaulted "
+  "comparison operator for type %1">;
 
 def warn_ptr_arith_precedes_bounds : Warning<
   "the pointer decremented by %0 refers before the beginning of the array">,
