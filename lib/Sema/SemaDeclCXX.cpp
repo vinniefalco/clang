@@ -13173,12 +13173,17 @@ public:
 
   bool BuildCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
                     QualType T, SourceLocation Loc) {
-
     assert(isThreeWay());
     if (const ConstantArrayType *ArrayTy =
             S.Context.getAsConstantArrayType(T)) {
+
+      // If we had a pending comparison result to process, flush it. It won't
+      // ever be the final return value.
       if (ProcessPendingCompare())
         return Error();
+
+      // Build a for loop comparing the elements of the array and add it to the
+      // list of statements.
       StmtResult Res = BuildArrayCompare(LHSB, RHSB, ArrayTy, Loc);
       if (Res.isInvalid())
         return Error();
@@ -13197,11 +13202,23 @@ public:
   bool Finalize() {
     Expr *LastCmp = LastCmpResult.first;
     // If we don't have a previously stashed comparison (ie the class for this
-    // comparison operator is empty), build a result representing equality
-    // (or inequality when the comparison operator is !=, <, or >)
+    // comparison operator is empty), build a result referencing the declaration
+    // v'std::strong_ordering::equal'
     if (!LastCmp) {
       assert(isThreeWay());
-      ExprResult EqualExpr = BuildReturnValueForEquality(DeclLoc);
+
+      // FIXME(EricWF): I need to test that this potentially emits a
+      // diagnostics.
+      QualType RetTy = S.CheckComparisonCategoryType(
+          ComparisonCategoryType::StrongOrdering, DeclLoc);
+      if (RetTy.isNull())
+        return Error();
+
+      VarDecl *VD = S.Context.CompCategories.getInfoForType(RetTy)
+                        .getValueInfo(ComparisonCategoryResult::Equal)
+                        ->VD;
+      ExprResult EqualExpr = S.BuildDeclRefExpr(VD, RetTy, VK_LValue, DeclLoc);
+
       if (EqualExpr.isInvalid())
         return Error();
       LastCmp = EqualExpr.get();
@@ -13230,12 +13247,6 @@ private:
   bool Error() {
     CompareOperator->setInvalidDecl();
     return true;
-  }
-
-  ExprResult BuildCmpOp(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
-                        SourceLocation Loc) {
-    return S.BuildBinOp(nullptr, Loc, BO_Cmp, LHSB.build(S, Loc),
-                        RHSB.build(S, Loc));
   }
 
   bool ProcessPendingCompare(Expr *LastCmp = nullptr,
@@ -13314,11 +13325,11 @@ private:
     Stmt *InitStmt =
         new (S.Context) DeclStmt(DeclGroupRef(IterationVar), Loc, Loc);
 
-    // Subscript the "from" and "to" expressions with the iteration variable.
+    // Subscript the "lhs" and "rhs" expressions with the iteration variable.
     SubscriptBuilder LHSIndex(LHSB, IterationVarRefRVal);
     SubscriptBuilder RHSIndex(RHSB, IterationVarRefRVal);
 
-    // Build the copy/move for an individual element of the array.
+    // Build the comparison for an individual element of the array.
     StmtResult RecCmp = BuildArrayCompareRecursively(
         LHSIndex, RHSIndex, ArrayTy->getElementType(), Loc);
     if (RecCmp.isInvalid())
@@ -13336,25 +13347,52 @@ private:
     // whether the increment will overflow based on the value of the array
     // bound.
     Expr *Increment = new (S.Context)
-        UnaryOperator(IterationVarRef.build(S, DeclLoc), UO_PreInc, SizeType,
-                      VK_LValue, OK_Ordinary, DeclLoc, Upper.isMaxValue());
+        UnaryOperator(IterationVarRef.build(S, Loc), UO_PreInc, SizeType,
+                      VK_LValue, OK_Ordinary, Loc, Upper.isMaxValue());
 
     // Construct the loop that copies all elements of this array.
-    return S.ActOnForStmt(DeclLoc, DeclLoc, InitStmt,
-                          S.ActOnCondition(nullptr, DeclLoc, Comparison,
+    return S.ActOnForStmt(Loc, Loc, InitStmt,
+                          S.ActOnCondition(nullptr, Loc, Comparison,
                                            Sema::ConditionKind::Boolean),
-                          S.MakeFullDiscardedValueExpr(Increment), DeclLoc,
+                          S.MakeFullDiscardedValueExpr(Increment), Loc,
                           RecCmp.get());
   }
 
   /// FIXME(EricWF): Document this
-  StmtResult BuildCompareEqualOrReturn(Expr *LastResult, SourceLocation Loc) {
-    assert(LastResult && "should not be null");
+  StmtResult BuildCompareEqualOrReturn(Expr *LastResult,
+                                       SourceLocation Loc) const {
     assert(isThreeWay());
 
-    VarDecl *VD = BuildInventedVarDecl(LastResult, Loc);
-    if (!VD)
+    // Build a dummy variable to hold the result of our last comparison.
+    auto *VD = VarDecl::Create(
+        S.Context, CompareOperator, DeclLoc, DeclLoc,
+        &S.PP.getIdentifierTable().get("__cmp_res"), LastResult->getType(),
+        S.Context.getTrivialTypeSourceInfo(LastResult->getType(), Loc),
+        SC_Auto);
+    S.CheckVariableDeclarationType(VD);
+    if (VD->isInvalidDecl())
       return StmtError();
+
+    // Initialize the dummy variable with the last comparison expression as
+    // the initializer.
+    InitializedEntity Entity = InitializedEntity::InitializeVariable(VD);
+    InitializationKind Kind = InitializationKind::CreateForInit(
+        VD->getLocation(), /*DirectInit=*/true, LastResult);
+    InitializationSequence InitSeq(S, Entity, Kind, LastResult,
+                                   /*TopLevelOfInitList=*/false,
+                                   /*TreatUnavailableAsInvalid=*/false);
+    if (!InitSeq)
+      return StmtError();
+    ExprResult InitResult = InitSeq.Perform(S, Entity, Kind, LastResult);
+    if (InitResult.isInvalid())
+      return StmtError();
+    InitResult = S.ActOnFinishFullExpr(InitResult.get());
+    if (InitResult.isInvalid())
+      return StmtError();
+
+    S.AddInitializerToDecl(VD, InitResult.get(), /*DirectInit=*/false);
+    S.CheckCompleteVariableDeclaration(VD);
+
     ExprResult DRE = S.BuildDeclRefExpr(VD, VD->getType(), VK_LValue, Loc);
     if (DRE.isInvalid())
       return StmtError();
@@ -13366,6 +13404,10 @@ private:
 
     // Now attempt to build the full expression '(LHS <=> RHS) != 0' using the
     // evaluated operand and the literal 0.
+    // FIXME(EricWF): Disable rewritting here? The result type of (LHS <=> RHS)
+    // must be a standard library type, so we should be able to perform simple
+    // lookup, skipping expensive overload resolution, to find the correct
+    // declaration. Maybe we should even cache the declaration?
     ExprResult CmpRes =
         S.BuildBinOp(nullptr, Loc, BO_NE, DRE.get(), BuildZeroLiteral());
     if (CmpRes.isInvalid())
@@ -13385,67 +13427,13 @@ private:
                          Return.get(), SourceLocation(), nullptr);
   }
 
-  /// Build an expression which will be returned for comparisons which
-  /// result in equality. For three-way comparisons this is
-  /// 'std::strong_ordering::equal', otherwise it's a boolean with the value
-  /// 'true' if the specified opcode checks for equality (including <= or >=)
-  /// and false otherwise.
-  ///
-  /// Note: This should only be used when the struct being compared is empty.
-  /// Otherwise the result of the previous comparison should be returned.
-  ExprResult BuildReturnValueForEquality(SourceLocation Loc) {
-    assert(Opc == BO_Cmp);
-
-    // FIXME: we need to emit diagnostics here
-    QualType RetTy = S.CheckComparisonCategoryType(
-        ComparisonCategoryType::StrongOrdering, Loc);
-    if (RetTy.isNull())
-      return ExprError();
-
-    VarDecl *VD =
-        S.Context.CompCategories.getInfoForType(RetTy).getValueInfo(
-            ComparisonCategoryResult::Equal)->VD;
-    return S.BuildDeclRefExpr(VD, RetTy, VK_LValue, Loc);
+  ExprResult BuildCmpOp(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
+                        SourceLocation Loc) {
+    return S.BuildBinOp(nullptr, Loc, BO_Cmp, LHSB.build(S, Loc),
+                        RHSB.build(S, Loc));
   }
 
-  /// Build a variable declaration to store the result of a comparison
-  /// expression. This declaration will be inserted into the initializer clause
-  /// of an IfStmt so it can be used as both the condition and return statement
-  /// inside the IfStmt body.
-  VarDecl *BuildInventedVarDecl(Expr *Init, SourceLocation Loc) {
-    // Build a dummy variable to hold the result of our last comparison.
-    auto *VD = VarDecl::Create(
-        S.Context, CompareOperator, DeclLoc, DeclLoc,
-        &S.PP.getIdentifierTable().get("__cmp_res"), Init->getType(),
-        S.Context.getTrivialTypeSourceInfo(Init->getType(), Loc), SC_Auto);
-    S.CheckVariableDeclarationType(VD);
-    if (VD->isInvalidDecl())
-      return nullptr;
-
-    // Initialize the dummy variable using the last comparison expression as
-    // the initializer.
-    InitializedEntity Entity = InitializedEntity::InitializeVariable(VD);
-    InitializationKind Kind = InitializationKind::CreateForInit(
-        VD->getLocation(), /*DirectInit=*/true, Init);
-    InitializationSequence InitSeq(S, Entity, Kind, Init,
-                                   /*TopLevelOfInitList=*/false,
-                                   /*TreatUnavailableAsInvalid=*/false);
-    if (!InitSeq)
-      return nullptr;
-    ExprResult InitResult = InitSeq.Perform(S, Entity, Kind, Init);
-    if (InitResult.isInvalid())
-      return nullptr;
-    InitResult = S.ActOnFinishFullExpr(InitResult.get());
-    if (InitResult.isInvalid())
-      return nullptr;
-
-    S.AddInitializerToDecl(VD, InitResult.get(), /*DirectInit=*/false);
-
-    S.CheckCompleteVariableDeclaration(VD);
-    return VD;
-  }
-
-  Expr *BuildZeroLiteral(QualType IntTy = QualType()) {
+  Expr *BuildZeroLiteral(QualType IntTy = QualType()) const {
     if (IntTy.isNull())
       IntTy = S.Context.IntTy;
     llvm::APInt Zero(S.Context.getTypeSize(IntTy), 0);
@@ -13486,8 +13474,6 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
   const bool IsMethod = isa<CXXMethodDecl>(CompareOperator);
 
   SynthesizedFunctionScope Scope(*this, CompareOperator);
-  // FIXME(EricWF): What does the spec say about implicit exception specs for
-  // defaulted comparison operators?
 
   // Add a context note for diagnostics produced after this point.
   Scope.addContextNote(CurrentLocation);
