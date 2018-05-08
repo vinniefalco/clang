@@ -13421,7 +13421,7 @@ private:
     // the initializer.
     InitializedEntity Entity = InitializedEntity::InitializeVariable(VD);
     InitializationKind Kind = InitializationKind::CreateForInit(
-        VD->getDeclLocation(), /*DirectInit=*/true, Init);
+        VD->getLocation(), /*DirectInit=*/true, Init);
     InitializationSequence InitSeq(S, Entity, Kind, Init,
                                    /*TopLevelOfInitList=*/false,
                                    /*TreatUnavailableAsInvalid=*/false);
