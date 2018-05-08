@@ -13119,12 +13119,12 @@ class ComparisonBuilder {
   Expr *LastCmpResult = nullptr;
 
   struct ArrayScopeGuard {
-    explicit ArrayScopeGuard(int &D) : DepthVal(D) { ++DepthVal; }
+    explicit ArrayScopeGuard(unsigned &D) : DepthVal(D) { ++DepthVal; }
     ~ArrayScopeGuard() { --DepthVal; }
 
   private:
     ArrayScopeGuard(ArrayScopeGuard const &) = delete;
-    int &DepthVal;
+    unsigned &DepthVal;
   };
 
 public:
@@ -13172,8 +13172,12 @@ public:
     if (const ConstantArrayType *ArrayTy =
             S.Context.getAsConstantArrayType(T)) {
       // ArrayScopeGuard DepthGuard(ArrayDepth);
-      if (ProcessPendingCompare() || BuildArrayCompare(LHSB, RHSB, ArrayTy))
+      if (ProcessPendingCompare())
         return Error();
+      StmtResult Res = BuildArrayCompare(LHSB, RHSB, ArrayTy);
+      if (Res.isInvalid())
+        return Error();
+      Statements.push_back(Res.getAs<Stmt>());
       return false;
     }
 
@@ -13254,8 +13258,23 @@ private:
     return false;
   }
 
-  bool BuildArrayCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
-                         const ConstantArrayType *ArrayTy) {
+  StmtResult BuildArrayCompareRecursively(const ExprBuilder &LHSB,
+                                          const ExprBuilder &RHSB, QualType T) {
+    if (const ConstantArrayType *ArrayTy =
+            S.Context.getAsConstantArrayType(T)) {
+      ArrayScopeGuard ArrayDepthGuard(ArrayDepth);
+      return BuildArrayCompare(LHSB, RHSB, ArrayTy);
+    }
+    Expr *LHS = LHSB.build(S, Loc);
+    Expr *RHS = RHSB.build(S, Loc);
+    ExprResult BinCmp = BuildCmpOp(LHS, RHS);
+    if (BinCmp.isInvalid())
+      return StmtError();
+    return BuildCompareEqualOrReturn(BinCmp.get());
+  }
+
+  StmtResult BuildArrayCompare(const ExprBuilder &LHSB, const ExprBuilder &RHSB,
+                               const ConstantArrayType *ArrayTy) {
     // Construct a loop over the array bounds, e.g.,
     //
     //   for (__SIZE_TYPE__ i0 = 0; i0 != array-size; ++i0)
@@ -13287,23 +13306,14 @@ private:
         new (S.Context) DeclStmt(DeclGroupRef(IterationVar), Loc, Loc);
 
     // Subscript the "from" and "to" expressions with the iteration variable.
-    SubscriptBuilder FromIndexCopy(From, IterationVarRefRVal);
-    MoveCastBuilder FromIndexMove(FromIndexCopy);
-    const ExprBuilder *FromIndex;
-    if (Copying)
-      FromIndex = &FromIndexCopy;
-    else
-      FromIndex = &FromIndexMove;
-
-    SubscriptBuilder ToIndex(To, IterationVarRefRVal);
+    SubscriptBuilder LHSIndex(LHSB, IterationVarRefRVal);
+    SubscriptBuilder RHSIndex(RHSB, IterationVarRefRVal);
 
     // Build the copy/move for an individual element of the array.
-    StmtResult Copy = buildSingleCopyAssignRecursively(
-        S, Loc, ArrayTy->getElementType(), ToIndex, *FromIndex,
-        CopyingBaseSubobject, Copying, Depth + 1);
-    // Bail out if copying fails or if we determined that we should use memcpy.
-    if (Copy.isInvalid() || !Copy.get())
-      return Copy;
+    StmtResult RecCmp = BuildArrayCompareRecursively(LHSIndex, RHSIndex,
+                                                     ArrayTy->getElementType());
+    if (RecCmp.isInvalid())
+      return StmtError();
 
     // Create the comparison against the array bound.
     llvm::APInt Upper =
@@ -13325,7 +13335,7 @@ private:
                           S.ActOnCondition(nullptr, Loc, Comparison,
                                            Sema::ConditionKind::Boolean),
                           S.MakeFullDiscardedValueExpr(Increment), Loc,
-                          Copy.get());
+                          RecCmp.get());
   }
 
   /// FIXME(EricWF): Document this
@@ -13528,7 +13538,7 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
       // appropriately-qualified base type.
       CastBuilder RHS(RHSRef, BaseType, VK_LValue, BasePath);
 
-      if (Builder.BuildCompare(LHS, RHS))
+      if (Builder.BuildCompare(LHS, RHS, BaseType))
         return;
     }
 
@@ -13543,6 +13553,14 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
       if (Field->isZeroLengthBitField(Context))
         continue;
 
+      QualType FieldType = Field->getType().getNonReferenceType();
+      if (FieldType->isIncompleteArrayType()) {
+        // FIXME(EricWF): Do something?
+        assert(ClassDecl->hasFlexibleArrayMember() &&
+               "Incomplete array type is not valid");
+        continue;
+      }
+
       // Build references to the field in the object we're copying from and to.
       LookupResult MemberLookup(*this, Field->getDeclName(), Builder.Loc,
                                 LookupMemberName);
@@ -13551,7 +13569,7 @@ void Sema::DefineDefaultedComparisonOperator(SourceLocation CurrentLocation,
       MemberBuilder RHS(RHSRef, RHSRefType, /*IsArrow=*/false, MemberLookup);
       MemberBuilder LHS(LHSRef, RHSRefType, /*IsArrow=*/false, MemberLookup);
 
-      if (Builder.BuildCompare(LHS, RHS))
+      if (Builder.BuildCompare(LHS, RHS, FieldType))
         return;
     }
   } else {
