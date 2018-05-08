@@ -91,7 +91,7 @@ struct OneMem {
   friend auto operator<=>(OneMem const&, OneMem const&) = default;
   // CHECK: %call = call i8 @[[OpaqueMemSS]]
   // CHECK-NEXT: %[[TMP:.*]] = getelementptr inbounds %[[SO]], %[[SO]]* %retval
-  // CHECK-NEXT: store i8 %caall, i8* %[[TMP]]
+  // CHECK-NEXT: store i8 %call, i8* %[[TMP]]
   // CHECK-NOT: br
   // CHECK: ret
 };
