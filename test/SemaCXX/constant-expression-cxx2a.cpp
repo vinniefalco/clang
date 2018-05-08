@@ -220,3 +220,17 @@ static_assert((t1 <=> t2) < 0);
 static_assert(t1 != (T const &)t1);
 
 } // namespace DefaultTest
+
+namespace DefaultArrayTest {
+template <class Tp>
+struct WithArr {
+  Tp values[3];
+  friend auto operator<=>(WithArr const &, WithArr const &) = default;
+};
+
+using IArr = WithArr<int>;
+static_assert(IArr{1, 2, 3} == IArr{1, 2, 3});
+static_assert(IArr{1, 2, 3} != IArr{1, 2, 3}); // expected-error {{failed}}
+static_assert(IArr{0, 0, 0} < IArr{0, 0, 1});
+static_assert(IArr{1, 0, 0} > IArr{0, 0, 1});
+} // namespace DefaultArrayTest

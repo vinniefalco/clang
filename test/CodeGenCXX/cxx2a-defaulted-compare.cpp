@@ -97,6 +97,7 @@ struct OneMem {
 };
 template void use_cmp<OneMem>(OneMem const&, OneMem const&);
 
+// FIXME(EricWF): Add these tests
 struct SingleArray {
   OpaqueMem Arr[2];
   friend auto operator<=>(SingleArray const &, SingleArray const &) = default;
