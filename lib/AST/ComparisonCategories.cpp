@@ -243,3 +243,13 @@ ComparisonCategories::computeComparisonTypeForBuiltin(QualType Ty,
   }
   return None;
 }
+
+bool ComparisonCategoryInfo::isUsableWithOperator(
+        ComparisonCategoryType CompKind, BinaryOperatorKind Opcode) {
+  assert(BinaryOperator::isComparisonOp(Opcode));
+  if (BinaryOperator::isRelationalOp(Opcode))
+    return isOrdered(CompKind);
+  // We either have an equality or three-way opcode. These are all OK for
+  // any comparison category type.
+  return true;
+}
