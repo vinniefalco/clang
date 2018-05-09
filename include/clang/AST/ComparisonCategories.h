@@ -189,6 +189,16 @@ public:
   static StringRef getCategoryString(ComparisonCategoryType Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
 
+  /// Return the comparison category type which would be returned
+  /// for a builtin comparison operator taking the specified type, or None if no
+  /// such type exists.
+  ///
+  /// \param Ty The composite comparison type
+  /// \param IsMixedNullCompare True if exactly one of the operands is a null
+  /// pointer constant.
+  static Optional<ComparisonCategoryType>
+  computeComparisonTypeForBuiltin(QualType Ty, bool IsMixedNullCompare = false);
+
   /// Return the list of results which are valid for the specified
   /// comparison category type.
   static std::vector<ComparisonCategoryResult>

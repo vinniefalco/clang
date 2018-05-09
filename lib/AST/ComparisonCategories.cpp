@@ -209,3 +209,37 @@ ComparisonCategories::getPossibleResultsForType(ComparisonCategoryType Type) {
     Values.push_back(CCR::Unordered);
   return Values;
 }
+
+Optional<ComparisonCategoryType>
+ComparisonCategories::computeComparisonTypeForBuiltin(QualType Ty,
+                                                      bool IsMixedNullCompare) {
+  using CCT = ComparisonCategoryType;
+  if (const ComplexType *CT = Ty->getAs<ComplexType>()) {
+    if (CT->getElementType()->hasFloatingRepresentation())
+      return CCT::WeakEquality;
+    return CCT::StrongEquality;
+  }
+  if (Ty->isIntegralOrEnumerationType())
+    return CCT::StrongOrdering;
+  if (Ty->hasFloatingRepresentation())
+    return CCT::PartialOrdering;
+  // C++2a [expr.spaceship]p7: If the composite pointer type is a function
+  // pointer type, a pointer-to-member type, or std::nullptr_t, the
+  // result is of type std::strong_equality
+  if (Ty->isFunctionPointerType() || Ty->isMemberPointerType() ||
+      Ty->isNullPtrType())
+    // FIXME: consider making the function pointer case produce
+    // strong_ordering not strong_equality, per P0946R0-Jax18 discussion
+    // and direction polls
+    return CCT::StrongEquality;
+  // C++2a [expr.spaceship]p8: If the composite pointer type is an object
+  // pointer type, p <=> q is of type std::strong_ordering.
+  if (Ty->isPointerType()) {
+    // P0946R0: Comparisons between a null pointer constant and an object
+    // pointer result in std::strong_equality
+    if (IsMixedNullCompare)
+      return ComparisonCategoryType::StrongEquality;
+    return CCT::StrongOrdering;
+  }
+  return None;
+}
