@@ -244,6 +244,17 @@ ComparisonCategories::computeComparisonTypeForBuiltin(QualType Ty,
   return None;
 }
 
+// FIXME(EricWF): The rules to deduce the composite argument type are actually
+// quite complicated. However the rules to compute the comparison type for a
+// single builtin argument type are simple, and so are the rules to compute the
+// common comparison type. So we do that to determine the "likely" comparison
+// category type for the specified set of parameter types for a builtin
+// function.
+//
+// This information is used during overload resolution to determine if the
+// rewritten expression '(LHS <=> RHS) @ 0' (or the reversed candidate) is
+// valid for a given '@'. For example `(MemPtr <=> MemPtr) < 0` is ill-formed
+// because  `std::strong_equality` cannot be used in a relational operator.
 Optional<ComparisonCategoryType>
 ComparisonCategories::computeComparisonTypeForBuiltin(QualType LHSTy,
                                                       QualType RHSTy) {

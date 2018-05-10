@@ -8928,6 +8928,8 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
       if (IsRelationalOrEquality) {
         if (FunctionDecl *FD = Ovl.Function) {
           if (FD->getReturnType()->isUndeducedType()) {
+            // FIXME(EricWF): Must the return type already be deduced?
+            // Attempt to write a test case to hit this, otherwise remove it.
             assert(false);
             if (DeduceReturnType(FD, OpLoc)) {
               Ovl.Viable = false;
@@ -9277,10 +9279,9 @@ bool clang::isBetterOverloadCandidate(
           }
           for (unsigned I = 0; I < Ovl.getNumParams(); ++I)
             Types.push_back(Ovl.getParamType(I).getCanonicalType());
-          if (Ovl.getRewrittenKind() == ROC_Synthesized) {
-            SmallVector<QualType, 2> RevTypes(Types.rbegin(), Types.rend());
-            return RevTypes;
-          }
+          assert(Types.size() == 2);
+          if (Ovl.getRewrittenKind() == ROC_Synthesized)
+            std::swap(Types[0], Types[1]);
           return Types;
         };
         if (GetParamTypes(Cand1) == GetParamTypes(Cand2))
