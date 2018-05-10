@@ -8932,15 +8932,20 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
             // Attempt to write a test case to hit this, otherwise remove it.
             assert(false);
             if (DeduceReturnType(FD, OpLoc)) {
+              // FIXME(EricWF): Does deduction failure actually make this
+              // non-vialble? probably not?
+              assert(false);
               Ovl.Viable = false;
               continue;
             }
           }
           QualType RetTy = FD->getReturnType();
+          assert(!RetTy->isDependentType());
           if (const ComparisonCategoryInfo *Info =
                   Context.CompCategories.lookupInfoForType(RetTy)) {
             if (!Info->isUsableWithOperator(Opc)) {
               Ovl.Viable = false;
+              Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
               continue;
             }
           } else {
@@ -8948,12 +8953,15 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
             // the specified relational operator
           }
         } else {
+          // Attempt to compute the comparison category type for a selecetd
+          // builtin function.
           Optional<ComparisonCategoryType> CompType =
               ComparisonCategories::computeComparisonTypeForBuiltin(
                   Ovl.BuiltinParamTypes[0], Ovl.BuiltinParamTypes[1]);
           if (!CompType ||
               !ComparisonCategoryInfo::isUsableWithOperator(*CompType, Opc)) {
             Ovl.Viable = false;
+            Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
             continue;
           }
         }
@@ -9492,7 +9500,9 @@ enum OverloadCandidateKind {
   oc_implicit_copy_assignment,
   oc_implicit_move_assignment,
   oc_inherited_constructor,
-  oc_inherited_constructor_template
+  oc_inherited_constructor_template,
+  oc_rewritten_comparison_operator,
+  oc_synthesized_comparison_operator
 };
 
 static OverloadCandidateKind
@@ -10321,6 +10331,10 @@ static void DiagnoseBadTarget(Sema &S, OverloadCandidate *Cand) {
   }
 }
 
+static void DiagnoseFailedRewrittenOperand(Sema &S, OverloadCandidate *Cand) {
+  // FIXME(EricWF): Do something here!
+}
+
 static void DiagnoseFailedEnableIfAttr(Sema &S, OverloadCandidate *Cand) {
   FunctionDecl *Callee = Cand->Function;
   EnableIfAttr *Attr = static_cast<EnableIfAttr*>(Cand->DeductionFailure.Data);
@@ -10435,6 +10449,9 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
   }
   case ovl_non_default_multiversion_function:
     // Do nothing, these should simply be ignored.
+    break;
+  case ovl_rewritten_operand_non_valid_for_operator:
+    DiagnoseFailedRewrittenOperand(S, Cand);
     break;
   }
 }

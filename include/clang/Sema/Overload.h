@@ -730,6 +730,10 @@ class Sema;
     /// This candidate was not viable because it is a non-default multiversioned
     /// function.
     ovl_non_default_multiversion_function,
+
+    // Thes candidate was not viable because the return type of the rewritten
+    // expression was not a valid operand to the original binary operator.
+    ovl_rewritten_operand_non_valid_for_operator
   };
 
   /// A list of implicit conversion sequences for the arguments of an
