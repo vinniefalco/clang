@@ -9965,7 +9965,7 @@ QualType Sema::CheckCompareOperands(ExprResult &LHS, ExprResult &RHS,
     Optional<ComparisonCategoryType> TypeKind =
         ComparisonCategories::computeComparisonTypeForBuiltin(
             CompositeTy, LHSIsNull != RHSIsNull);
-    if (TypeKind)
+    if (!TypeKind)
       return InvalidOperands(Loc, LHS, RHS);
     return CheckComparisonCategoryType(TypeKind.getValue(), Loc);
   };
