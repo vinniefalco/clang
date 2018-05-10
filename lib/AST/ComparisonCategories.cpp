@@ -244,6 +244,21 @@ ComparisonCategories::computeComparisonTypeForBuiltin(QualType Ty,
   return None;
 }
 
+Optional<ComparisonCategoryType>
+ComparisonCategories::computeComparisonTypeForBuiltin(QualType LHSTy,
+                                                      QualType RHSTy) {
+  QualType Args[2] = {LHSTy, RHSTy};
+  SmallVector<ComparisonCategoryType, 8> TypeKinds;
+  for (auto QT : Args) {
+    Optional<ComparisonCategoryType> CompType =
+        computeComparisonTypeForBuiltin(QT);
+    if (!CompType)
+      return None;
+    TypeKinds.push_back(*CompType);
+  }
+  return computeCommonComparisonType(TypeKinds);
+}
+
 bool ComparisonCategoryInfo::isUsableWithOperator(
         ComparisonCategoryType CompKind, BinaryOperatorKind Opcode) {
   assert(BinaryOperator::isComparisonOp(Opcode));
@@ -252,4 +267,69 @@ bool ComparisonCategoryInfo::isUsableWithOperator(
   // We either have an equality or three-way opcode. These are all OK for
   // any comparison category type.
   return true;
+}
+
+/// C++2a [class.spaceship]p4 - compute the common category type.
+const ComparisonCategoryInfo *ComparisonCategories::computeCommonComparisonType(
+    ArrayRef<QualType> Types) const {
+  SmallVector<ComparisonCategoryType, 8> Kinds;
+  // Count the number of times each comparison category type occurs in the
+  // specified type list. If any type is not a comparison category, return
+  // nullptr.
+  for (auto Ty : Types) {
+    const ComparisonCategoryInfo *Info = lookupInfoForType(Ty);
+    // --- If any T is not a comparison category type, U is void.
+    if (!Info)
+      return nullptr;
+    Kinds.push_back(Info->Kind);
+  }
+  Optional<ComparisonCategoryType> CommonType =
+      computeCommonComparisonType(Kinds);
+  if (!CommonType)
+    return nullptr;
+  return lookupInfo(*CommonType);
+}
+
+Optional<ComparisonCategoryType>
+ComparisonCategories::computeCommonComparisonType(
+    ArrayRef<ComparisonCategoryType> Types) {
+  using CCT = ComparisonCategoryType;
+  std::array<unsigned, static_cast<unsigned>(CCT::Last) + 1> Seen = {};
+  auto Count = [&](CCT T) { return Seen[static_cast<unsigned>(T)]; };
+
+  // Count the number of times each comparison category type occurs in the
+  // specified type list. If any type is not a comparison category, return
+  // nullptr.
+  for (auto TyKind : Types) {
+    // --- If any T is not a comparison category type, U is void.
+    Seen[static_cast<unsigned>(TyKind)]++;
+  }
+
+  // --- Otherwise, if at least one Ti is std::weak_equality, or at least one
+  // Ti is std::strong_equality and at least one Tj is
+  // std::partial_ordering or std::weak_ordering, U is
+  // std::weak_equality.
+  if (Count(CCT::WeakEquality) ||
+      (Count(CCT::StrongEquality) &&
+       (Count(CCT::PartialOrdering) || Count(CCT::WeakOrdering))))
+    return CCT::WeakEquality;
+
+  // --- Otherwise, if at least one Ti is std::strong_equality, U is
+  // std::strong_equality
+  if (Count(CCT::StrongEquality))
+    return CCT::StrongEquality;
+
+  // --- Otherwise, if at least one Ti is std::partial_ordering, U is
+  // std::partial_ordering.
+  if (Count(CCT::PartialOrdering))
+    return CCT::PartialOrdering;
+
+  // --- Otherwise, if at least one Ti is std::weak_ordering, U is
+  // std::weak_ordering.
+  if (Count(CCT::WeakOrdering))
+    return CCT::WeakOrdering;
+
+  // FIXME(EricWF): What if we don't find std::strong_ordering
+  // --- Otherwise, U is std::strong_ordering.
+  return CCT::StrongOrdering;
 }

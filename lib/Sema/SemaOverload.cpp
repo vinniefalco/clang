@@ -8895,9 +8895,9 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
                                           OverloadCandidateSet &CandidateSet,
                                           bool PerformADL) {
   auto Opc = BinaryOperator::getOverloadedOpcode(Op);
-
-  bool IsRelationalOrEquality =
-      BinaryOperator::isRelationalOp(Opc) || BinaryOperator::isEqualityOp(Opc);
+  bool IsEquality = BinaryOperator::isEqualityOp(Opc);
+  bool IsRelational = BinaryOperator::isRelationalOp(Opc);
+  bool IsRelationalOrEquality = IsEquality || IsRelational;
   if (!IsRelationalOrEquality && Opc != BO_Cmp)
     return;
   assert(InputArgs.size() == 2);
@@ -8925,6 +8925,36 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
          It != CandidateSet.end(); ++It) {
       OverloadCandidate &Ovl = *It;
       Ovl.RewrittenOpKind = Kind;
+      if (IsRelationalOrEquality) {
+        if (FunctionDecl *FD = Ovl.Function) {
+          if (FD->getReturnType()->isUndeducedType()) {
+            if (DeduceReturnType(FD, OpLoc)) {
+              Ovl.Viable = false;
+              continue;
+            }
+          }
+          QualType RetTy = FD->getReturnType();
+          if (const ComparisonCategoryInfo *Info =
+                  Context.CompCategories.lookupInfoForType(RetTy)) {
+            if (!Info->isUsableWithOperator(Opc)) {
+              Ovl.Viable = false;
+              continue;
+            }
+          } else {
+            // FIXME(EricWF): Check that the return type can be used with
+            // the specified relational operator
+          }
+        } else {
+          Optional<ComparisonCategoryType> CompType =
+              ComparisonCategories::computeComparisonTypeForBuiltin(
+                  Ovl.BuiltinParamTypes[0], Ovl.BuiltinParamTypes[1]);
+          if (!CompType ||
+              !ComparisonCategoryInfo::isUsableWithOperator(*CompType, Opc)) {
+            Ovl.Viable = false;
+            continue;
+          }
+        }
+      }
     }
   };
 
