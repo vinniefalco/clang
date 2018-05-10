@@ -486,11 +486,9 @@ void foo() {
 // rewritten candidates if any of them resolve to a member function.
 namespace TestOvlMatchingIgnoresImplicitObject {
 struct U;
-// expected-note@+2 {{candidate}}
 struct T {
   std::strong_ordering operator<=>(U const &RHS) const;
 };
-// expected-note@+2 {{candidate}}
 struct U {
   std::strong_ordering operator<=>(T const &RHS) const;
 };

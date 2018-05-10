@@ -12670,8 +12670,7 @@ RewrittenOverloadResolver::RemoveNonViableRewrittenCandidates(
     // it's valid. Otherwise mark this candidate as non-viable and continue.
     ExprResult Res = BuildRewrittenCandidate(Ovl);
     if (Res.isInvalid()) {
-      Ovl.Viable = false;
-      return Continue;
+      return Done;
     }
     return Success(Res);
   }
