@@ -3225,7 +3225,7 @@ public:
         CXXRewrittenExpr(Kind, Original, Rewritten, ExtraBits);
   }
 
-  /// Build a new atomic operation expression
+  /// Build a new atomic operation expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
   /// Subclasses may override this routine to provide different behavior.
