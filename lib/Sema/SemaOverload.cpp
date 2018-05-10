@@ -12505,7 +12505,7 @@ public:
     llvm::SmallVector<OverloadCandidate *, 4> EquivCands;
     do {
       EquivCands.clear();
-      OvlRes = CandidateSet.BestViableFunction(S, OpLoc, Best);
+      OvlRes = CandidateSet.BestViableFunction(S, OpLoc, Best, &EquivCands);
     } while (Continue == RemoveNonViableRewrittenCandidates(
                              OvlRes, Best, EquivCands, FinalResult));
     return FinalResult;

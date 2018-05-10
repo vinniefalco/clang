@@ -234,6 +234,7 @@ public:
   /// NOTE: Lookup is expected to succeed. Use lookupInfo if failure is
   /// possible.
   const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
+  const ComparisonCategoryInfo *lookupInfoForType(QualType Ty) const;
 
 public:
   /// Return the cached comparison category information for the
@@ -246,9 +247,6 @@ public:
     const auto &This = *this;
     return const_cast<ComparisonCategoryInfo *>(This.lookupInfo(Kind));
   }
-
-private:
-  const ComparisonCategoryInfo *lookupInfoForType(QualType Ty) const;
 
 private:
   friend class ASTContext;
