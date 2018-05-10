@@ -4631,8 +4631,7 @@ public:
   QualType CheckComparisonCategoryType(ComparisonCategoryType Kind,
                                        SourceLocation Loc);
 
-<<<<<<< HEAD
-  /// \brief Compute the 'common comparison type' (C++2a [class.spaceship]) for
+  ///  Compute the 'common comparison type' (C++2a [class.spaceship]) for
   /// the specified list of types. If any of the required comparison category
   /// types or declarations are not found, a diagnostic is emitted.
   ///
@@ -4641,10 +4640,7 @@ public:
   QualType ComputeCommonComparisonType(ArrayRef<QualType> Types,
                                        SourceLocation Loc);
 
-  /// \brief Tests whether Ty is an instance of std::initializer_list and, if
-=======
   /// Tests whether Ty is an instance of std::initializer_list and, if
->>>>>>> spaceship-operator-part2
   /// it is and Element is not NULL, assigns the element type to Element.
   bool isStdInitializerList(QualType Ty, QualType *Element);
 
@@ -4826,13 +4822,8 @@ public:
     /// The set of exceptions in the exception specification.
     const QualType *data() const { return Exceptions.data(); }
 
-<<<<<<< HEAD
-    /// \brief Integrate another called method into the collected data.
-    void CalledDecl(SourceLocation CallLoc, const FunctionDecl *FD);
-=======
     /// Integrate another called method into the collected data.
-    void CalledDecl(SourceLocation CallLoc, const CXXMethodDecl *Method);
->>>>>>> spaceship-operator-part2
+    void CalledDecl(SourceLocation CallLoc, const FunctionDecl *FD);
 
     /// Integrate an invoked expression into the collected data.
     void CalledExpr(Expr *E);
@@ -4930,15 +4921,9 @@ public:
 
   class InheritedConstructorInfo;
 
-<<<<<<< HEAD
-  /// \brief Determine if a special member function or defaulted comparison
+  /// Determine if a special member function or defaulted comparison
   /// operator, should have a deleted definition when it is defaulted.
   bool ShouldDeleteSpecialMember(FunctionDecl *FD, CXXSpecialMember CSM,
-=======
-  /// Determine if a special member function should have a deleted
-  /// definition when it is defaulted.
-  bool ShouldDeleteSpecialMember(CXXMethodDecl *MD, CXXSpecialMember CSM,
->>>>>>> spaceship-operator-part2
                                  InheritedConstructorInfo *ICI = nullptr,
                                  bool Diagnose = false);
 
