@@ -9246,8 +9246,10 @@ bool clang::isBetterOverloadCandidate(
           }
           for (unsigned I = 0; I < Ovl.getNumParams(); ++I)
             Types.push_back(Ovl.getParamType(I).getCanonicalType());
-          if (Ovl.getRewrittenKind() == ROC_Synthesized)
-            llvm::reverse(Types);
+          if (Ovl.getRewrittenKind() == ROC_Synthesized) {
+            SmallVector<QualType, 2> RevTypes(Types.rbegin(), Types.rend());
+            return RevTypes;
+          }
           return Types;
         };
         if (GetParamTypes(Cand1) == GetParamTypes(Cand2))
@@ -12453,14 +12455,14 @@ ExprResult Sema::BuildBinaryOperatorCandidate(SourceLocation OpLoc,
     // operator node.
     ExprResult ArgsRes0 =
         PerformImplicitConversion(Args[0], Ovl.BuiltinParamTypes[0],
-                                  Ovl.Conversions[0], Sema::AA_Passing);
+                                  Ovl.getConversion(0), Sema::AA_Passing);
     if (ArgsRes0.isInvalid())
       return ExprError();
     Args[0] = ArgsRes0.get();
 
     ExprResult ArgsRes1 =
         PerformImplicitConversion(Args[1], Ovl.BuiltinParamTypes[1],
-                                  Ovl.Conversions[1], Sema::AA_Passing);
+                                  Ovl.getConversion(1), Sema::AA_Passing);
     if (ArgsRes1.isInvalid())
       return ExprError();
     Args[1] = ArgsRes1.get();
@@ -12503,7 +12505,7 @@ public:
     llvm::SmallVector<OverloadCandidate *, 4> EquivCands;
     do {
       EquivCands.clear();
-      OvlRes = CandidateSet.BestViableFunction(S, OpLoc, Best, &EquivCands);
+      OvlRes = CandidateSet.BestViableFunction(S, OpLoc, Best);
     } while (Continue == RemoveNonViableRewrittenCandidates(
                              OvlRes, Best, EquivCands, FinalResult));
     return FinalResult;
@@ -12644,36 +12646,7 @@ RewrittenOverloadResolver::RemoveNonViableRewrittenCandidates(
     return Success(Res);
   }
   case OR_Ambiguous: {
-    assert(EquivCands.size() > 1);
-    // If none of the viable candidates are rewritten, stop.
-    if (llvm::none_of(EquivCands, [](const OverloadCandidate *Cand) {
-          return (bool)Cand->getRewrittenKind();
-        }))
-      return Done;
-    int NumViableCandidates = 0;
-    ExprResult ViableRewritten = ExprError();
-    for (auto *Cand : EquivCands) {
-      OverloadCandidate &Ovl = *Cand;
-      if (Ovl.getRewrittenKind()) {
-        ExprResult Res = BuildRewrittenCandidate(Ovl);
-        if (Res.isInvalid()) {
-          Ovl.Viable = false;
-          continue;
-        }
-        ViableRewritten = Res;
-      }
-      ++NumViableCandidates;
-    }
-    // If only one of the candidates turns out to be viable, and it's a
-    // rewritten candidate, return that candidate as the result.
-    if (NumViableCandidates == 1 && !ViableRewritten.isInvalid())
-      return Success(ViableRewritten);
-    // If we still have ambiguity, return and let the caller diagnose it.
-    if (NumViableCandidates > 1)
-      return Done;
-    // All of the equally ranked candidates are invalid. Loop and try overload
-    // resolution again.
-    return Continue;
+    return Done;
   }
   }
   llvm_unreachable("unhandled case");
