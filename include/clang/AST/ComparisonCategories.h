@@ -133,7 +133,7 @@ public:
     return !isOrdered(Kind);
   }
 
-  /// \brief True iff the comparison category is a relational comparison.
+  /// True iff the comparison category is a relational comparison.
   bool isOrdered() const { return isOrdered(Kind); }
   static bool isOrdered(ComparisonCategoryType Kind) {
     using CCK = ComparisonCategoryType;
