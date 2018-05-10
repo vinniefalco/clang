@@ -9502,12 +9502,15 @@ enum OverloadCandidateKind {
   oc_inherited_constructor,
   oc_inherited_constructor_template,
   oc_rewritten_comparison_operator,
-  oc_synthesized_comparison_operator
+  oc_synthesized_comparison_operator,
+  oc_rewritten_comparison_operator_template,
+  oc_synthesized_comparison_operator_template,
 };
 
 static OverloadCandidateKind
 ClassifyOverloadCandidate(Sema &S, NamedDecl *Found, FunctionDecl *Fn,
-                          std::string &Description) {
+                          std::string &Description,
+                          RewrittenOverloadCandidateKind ROC = ROC_None) {
   bool isTemplate = false;
 
   if (FunctionTemplateDecl *FunTmpl = Fn->getPrimaryTemplate()) {
@@ -9551,6 +9554,13 @@ ClassifyOverloadCandidate(Sema &S, NamedDecl *Found, FunctionDecl *Fn,
     assert(isa<CXXConversionDecl>(Meth) && "expected conversion");
     return oc_method;
   }
+
+  if (ROC == ROC_Rewritten)
+    return isTemplate ? oc_rewritten_comparison_operator_template
+                      : oc_rewritten_comparison_operator;
+  if (ROC == ROC_Synthesized)
+    return isTemplate ? oc_synthesized_comparison_operator_template
+                      : oc_synthesized_comparison_operator;
 
   return isTemplate ? oc_function_template : oc_function;
 }
@@ -9637,20 +9647,28 @@ bool Sema::checkAddressOfFunctionIsAvailable(const FunctionDecl *Function,
 
 // Notes the location of an overload candidate.
 void Sema::NoteOverloadCandidate(NamedDecl *Found, FunctionDecl *Fn,
-                                 QualType DestType, bool TakingAddress) {
+                                 QualType DestType, bool TakingAddress,
+                                 RewrittenOverloadCandidateKind ROC) {
   if (TakingAddress && !checkAddressOfCandidateIsAvailable(*this, Fn))
     return;
   if (Fn->isMultiVersion() && !Fn->getAttr<TargetAttr>()->isDefaultVersion())
     return;
 
   std::string FnDesc;
-  OverloadCandidateKind K = ClassifyOverloadCandidate(*this, Found, Fn, FnDesc);
+  OverloadCandidateKind K =
+      ClassifyOverloadCandidate(*this, Found, Fn, FnDesc, ROC);
   PartialDiagnostic PD = PDiag(diag::note_ovl_candidate)
                              << (unsigned) K << Fn << FnDesc;
 
   HandleFunctionTypeMismatch(PD, Fn->getType(), DestType);
   Diag(Fn->getLocation(), PD);
   MaybeEmitInheritedConstructorNote(*this, Found);
+}
+
+void Sema::NoteOverloadCandidate(OverloadCandidate *Cand) {
+  assert(Cand->Function && Cand->FoundDecl);
+  NoteOverloadCandidate(Cand->FoundDecl, Cand->Function, QualType(),
+                        /*TakingAddress*/ false, Cand->getRewrittenKind());
 }
 
 // Notes the location of all overload candidates designated through
@@ -9720,8 +9738,8 @@ static void DiagnoseBadConversion(Sema &S, OverloadCandidate *Cand,
   }
 
   std::string FnDesc;
-  OverloadCandidateKind FnKind =
-      ClassifyOverloadCandidate(S, Cand->FoundDecl, Fn, FnDesc);
+  OverloadCandidateKind FnKind = ClassifyOverloadCandidate(
+      S, Cand->FoundDecl, Fn, FnDesc, Cand->getRewrittenKind());
 
   Expr *FromExpr = Conv.Bad.FromExpr;
   QualType FromTy = Conv.Bad.getFromType();
@@ -10384,7 +10402,7 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
     }
 
     // We don't really have anything else to say about viable candidates.
-    S.NoteOverloadCandidate(Cand->FoundDecl, Fn);
+    S.NoteOverloadCandidate(Cand);
     return;
   }
 
@@ -10407,7 +10425,7 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
   case ovl_fail_trivial_conversion:
   case ovl_fail_bad_final_conversion:
   case ovl_fail_final_conversion_not_exact:
-    return S.NoteOverloadCandidate(Cand->FoundDecl, Fn);
+    return S.NoteOverloadCandidate(Cand);
 
   case ovl_fail_bad_conversion: {
     unsigned I = (Cand->IgnoreObjectArgument ? 1 : 0);
@@ -10418,7 +10436,7 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
     // FIXME: this currently happens when we're called from SemaInit
     // when user-conversion overload fails.  Figure out how to handle
     // those conditions and diagnose them well.
-    return S.NoteOverloadCandidate(Cand->FoundDecl, Fn);
+    return S.NoteOverloadCandidate(Cand);
   }
 
   case ovl_fail_bad_target:

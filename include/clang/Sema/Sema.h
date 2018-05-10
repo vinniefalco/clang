@@ -43,6 +43,7 @@
 #include "clang/Sema/ExternalSemaSource.h"
 #include "clang/Sema/IdentifierResolver.h"
 #include "clang/Sema/ObjCMethodList.h"
+#include "clang/Sema/Overload.h"
 #include "clang/Sema/Ownership.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/TypoCorrection.h"
@@ -2793,7 +2794,9 @@ public:
   // Emit as a 'note' the specific overload candidate
   void NoteOverloadCandidate(NamedDecl *Found, FunctionDecl *Fn,
                              QualType DestType = QualType(),
-                             bool TakingAddress = false);
+                             bool TakingAddress = false,
+                             RewrittenOverloadCandidateKind ROC = ROC_None);
+  void NoteOverloadCandidate(OverloadCandidate *Ovl);
 
   // Emit as a series of 'note's all template and non-templates identified by
   // the expression Expr

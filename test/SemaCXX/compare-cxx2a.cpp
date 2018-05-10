@@ -448,11 +448,11 @@ struct X { int x; };
 struct Y { int x; };
 template <int>
 struct Tag {};
-// expected-note@+1 2 {{candidate}}
+
 Tag<0> operator<=>(X, Y) {
   return {};
 }
-// expected-note@+1 2 {{candidate}}
+
 constexpr auto operator<=>(Y y, X x) {
   return y.x <=> x.x;
 }
