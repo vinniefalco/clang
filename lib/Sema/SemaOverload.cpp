@@ -8928,6 +8928,7 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
       if (IsRelationalOrEquality) {
         if (FunctionDecl *FD = Ovl.Function) {
           if (FD->getReturnType()->isUndeducedType()) {
+            assert(false);
             if (DeduceReturnType(FD, OpLoc)) {
               Ovl.Viable = false;
               continue;

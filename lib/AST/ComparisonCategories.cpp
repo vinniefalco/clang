@@ -273,9 +273,7 @@ bool ComparisonCategoryInfo::isUsableWithOperator(
 const ComparisonCategoryInfo *ComparisonCategories::computeCommonComparisonType(
     ArrayRef<QualType> Types) const {
   SmallVector<ComparisonCategoryType, 8> Kinds;
-  // Count the number of times each comparison category type occurs in the
-  // specified type list. If any type is not a comparison category, return
-  // nullptr.
+  // If any type is not a comparison category, return nullptr.
   for (auto Ty : Types) {
     const ComparisonCategoryInfo *Info = lookupInfoForType(Ty);
     // --- If any T is not a comparison category type, U is void.
@@ -298,12 +296,9 @@ ComparisonCategories::computeCommonComparisonType(
   auto Count = [&](CCT T) { return Seen[static_cast<unsigned>(T)]; };
 
   // Count the number of times each comparison category type occurs in the
-  // specified type list. If any type is not a comparison category, return
-  // nullptr.
-  for (auto TyKind : Types) {
-    // --- If any T is not a comparison category type, U is void.
+  // specified type list.
+  for (auto TyKind : Types)
     Seen[static_cast<unsigned>(TyKind)]++;
-  }
 
   // --- Otherwise, if at least one Ti is std::weak_equality, or at least one
   // Ti is std::strong_equality and at least one Tj is
@@ -329,7 +324,6 @@ ComparisonCategories::computeCommonComparisonType(
   if (Count(CCT::WeakOrdering))
     return CCT::WeakOrdering;
 
-  // FIXME(EricWF): What if we don't find std::strong_ordering
   // --- Otherwise, U is std::strong_ordering.
   return CCT::StrongOrdering;
 }
