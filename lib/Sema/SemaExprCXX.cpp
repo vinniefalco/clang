@@ -3533,7 +3533,7 @@ Sema::ConditionResult Sema::ActOnConditionVariable(Decl *ConditionVar,
 }
 
 /// \brief Check the use of the given variable as a C++ condition in an if,
-/// while, do-while, or switch statement.
+/// while, do-while, switch, or inspect statement.
 ExprResult Sema::CheckConditionVariable(VarDecl *ConditionVar,
                                         SourceLocation StmtLoc,
                                         ConditionKind CK) {
@@ -3568,6 +3568,10 @@ ExprResult Sema::CheckConditionVariable(VarDecl *ConditionVar,
     return CheckBooleanCondition(StmtLoc, Condition.get(), true);
 
   case ConditionKind::Switch:
+    return CheckSwitchCondition(StmtLoc, Condition.get());
+
+  case ConditionKind::Inspect:
+    // FIXME(mpark)
     return CheckSwitchCondition(StmtLoc, Condition.get());
   }
 

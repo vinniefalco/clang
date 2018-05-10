@@ -269,12 +269,12 @@ protected:
     friend class ASTStmtReader;
     friend class ASTStmtWriter;
     friend class TypeTraitExpr;
-    
+
     unsigned : NumExprBits;
-    
+
     /// \brief The kind of type trait, which is a value of a TypeTrait enumerator.
     unsigned Kind : 8;
-    
+
     /// \brief If this expression is not value-dependent, this indicates whether
     /// the trait evaluated true or false.
     unsigned Value : 1;
@@ -1114,6 +1114,93 @@ public:
   }
 };
 
+#if 0  // MPARK
+/// InspectStmt - This represents an 'inspect' stmt.
+class InspectStmt : public Stmt {
+  SourceLocation InspectLoc;
+  enum { INIT, VAR, COND, BODY, END_EXPR };
+  Stmt* SubExprs[END_EXPR];
+
+public:
+  InspectStmt(const ASTContext &C, Stmt *Init, VarDecl *Var, Expr *cond);
+
+  /// \brief Build an empty inspect statement.
+  explicit InspectStmt(EmptyShell Empty) : Stmt(SwitchStmtClass, Empty) {}
+
+  /// \brief Retrieve the variable declared in this "switch" statement, if any.
+  ///
+  /// In the following example, "x" is the condition variable.
+  /// \code
+  /// switch (int x = foo()) {
+  ///   case 0: break;
+  ///   // ...
+  /// }
+  /// \endcode
+  VarDecl *getConditionVariable() const;
+  void setConditionVariable(const ASTContext &C, VarDecl *V);
+
+  /// If this SwitchStmt has a condition variable, return the faux DeclStmt
+  /// associated with the creation of that condition variable.
+  const DeclStmt *getConditionVariableDeclStmt() const {
+    return reinterpret_cast<DeclStmt*>(SubExprs[VAR]);
+  }
+
+  Stmt *getInit() { return SubExprs[INIT]; }
+  const Stmt *getInit() const { return SubExprs[INIT]; }
+  void setInit(Stmt *S) { SubExprs[INIT] = S; }
+  const Expr *getCond() const { return reinterpret_cast<Expr*>(SubExprs[COND]);}
+  const Stmt *getBody() const { return SubExprs[BODY]; }
+  const SwitchCase *getSwitchCaseList() const { return FirstCase.getPointer(); }
+
+  Expr *getCond() { return reinterpret_cast<Expr*>(SubExprs[COND]);}
+  void setCond(Expr *E) { SubExprs[COND] = reinterpret_cast<Stmt *>(E); }
+  Stmt *getBody() { return SubExprs[BODY]; }
+  void setBody(Stmt *S) { SubExprs[BODY] = S; }
+  SwitchCase *getSwitchCaseList() { return FirstCase.getPointer(); }
+
+  /// \brief Set the case list for this switch statement.
+  void setSwitchCaseList(SwitchCase *SC) { FirstCase.setPointer(SC); }
+
+  SourceLocation getSwitchLoc() const { return SwitchLoc; }
+  void setSwitchLoc(SourceLocation L) { SwitchLoc = L; }
+
+  void setBody(Stmt *S, SourceLocation SL) {
+    SubExprs[BODY] = S;
+    SwitchLoc = SL;
+  }
+
+  void addSwitchCase(SwitchCase *SC) {
+    assert(!SC->getNextSwitchCase()
+           && "case/default already added to a switch");
+    SC->setNextSwitchCase(FirstCase.getPointer());
+    FirstCase.setPointer(SC);
+  }
+
+  /// Set a flag in the SwitchStmt indicating that if the 'switch (X)' is a
+  /// switch over an enum value then all cases have been explicitly covered.
+  void setAllEnumCasesCovered() { FirstCase.setInt(true); }
+
+  /// Returns true if the SwitchStmt is a switch of an enum value and all cases
+  /// have been explicitly covered.
+  bool isAllEnumCasesCovered() const { return FirstCase.getInt(); }
+
+  SourceLocation getLocStart() const LLVM_READONLY { return SwitchLoc; }
+
+  SourceLocation getLocEnd() const LLVM_READONLY {
+    return SubExprs[BODY] ? SubExprs[BODY]->getLocEnd() : SubExprs[COND]->getLocEnd();
+  }
+
+  // Iterators
+  child_range children() {
+    return child_range(&SubExprs[0], &SubExprs[0]+END_EXPR);
+  }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == SwitchStmtClass;
+  }
+};
+#endif
+
 /// WhileStmt - This represents a 'while' stmt.
 class WhileStmt : public Stmt {
   SourceLocation WhileLoc;
@@ -1554,7 +1641,7 @@ public:
   /// getInputConstraint - Return the specified input constraint.  Unlike output
   /// constraints, these can be empty.
   StringRef getInputConstraint(unsigned i) const;
-  
+
   const Expr *getInputExpr(unsigned i) const;
 
   //===--- Other ---===//
@@ -2131,7 +2218,7 @@ private:
   /// \brief The number of variable captured, including 'this'.
   unsigned NumCaptures;
 
-  /// \brief The pointer part is the implicit the outlined function and the 
+  /// \brief The pointer part is the implicit the outlined function and the
   /// int part is the captured region kind, 'CR_Default' etc.
   llvm::PointerIntPair<CapturedDecl *, 1, CapturedRegionKind> CapDeclAndKind;
 
