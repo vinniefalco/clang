@@ -9400,9 +9400,9 @@ void Sema::diagnoseEquivalentInternalLinkageDeclarations(
 /// function, \p Best points to the candidate function found.
 ///
 /// \returns The result of overload resolution.
-OverloadingResult OverloadCandidateSet::BestViableFunction(
-    Sema &S, SourceLocation Loc, iterator &Best,
-    SmallVectorImpl<OverloadCandidate *> *EquivalentCands) {
+OverloadingResult
+OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
+                                         iterator &Best) {
   llvm::SmallVector<OverloadCandidate *, 16> Candidates;
   std::transform(begin(), end(), std::back_inserter(Candidates),
                  [](OverloadCandidate &Cand) { return &Cand; });
@@ -9444,31 +9444,22 @@ OverloadingResult OverloadCandidateSet::BestViableFunction(
   if (Best == end())
     return OR_No_Viable_Function;
 
-  llvm::SmallVector<const NamedDecl *, 4> EquivalentFunctionCands;
-  if (EquivalentCands)
-    EquivalentCands->push_back(&(*Best));
+  llvm::SmallVector<const NamedDecl *, 4> EquivalentCands;
+
   // Make sure that this function is better than every other viable
   // function. If not, we have an ambiguity.
   for (auto *Cand : Candidates) {
     if (Cand->Viable && Cand != Best &&
         !isBetterOverloadCandidate(S, *Best, *Cand, Loc, Kind)) {
-      if (EquivalentCands)
-        EquivalentCands->push_back(Cand);
       if (S.isEquivalentInternalLinkageDeclaration(Best->Function,
                                                    Cand->Function)) {
-        EquivalentFunctionCands.push_back(Cand->Function);
+        EquivalentCands.push_back(Cand->Function);
         continue;
       }
-      if (EquivalentCands)
-        continue;
 
       Best = end();
       return OR_Ambiguous;
     }
-  }
-  if (EquivalentCands && EquivalentCands->size() > 1) {
-    Best = end();
-    return OR_Ambiguous;
   }
 
   // Best is the best viable function.
@@ -9477,9 +9468,9 @@ OverloadingResult OverloadCandidateSet::BestViableFunction(
        S.isFunctionConsideredUnavailable(Best->Function)))
     return OR_Deleted;
 
-  if (!EquivalentFunctionCands.empty())
+  if (!EquivalentCands.empty())
     S.diagnoseEquivalentInternalLinkageDeclarations(Loc, Best->Function,
-                                                    EquivalentFunctionCands);
+                                                    EquivalentCands);
 
   return OR_Success;
 }
@@ -12501,68 +12492,12 @@ ExprResult Sema::BuildBinaryOperatorCandidate(SourceLocation OpLoc,
   return CreateBuiltinBinOp(OpLoc, Opc, Args[0], Args[1]);
 }
 
-namespace {
-
-/// \brief RewrittenOverloadResolver - This class handles initial
-/// overload resolution for candidate sets which include rewritten candidates.
-///
-/// Rewritten candidates haven't been fully checked for validity. They may still
-/// be invalid if:
-///    (A) The rewritten candidate is a builtin, but semantic checking of the
-///        builtin would fail.
-///    (B) The result of the "partially rewritten expression"
-///        (ie the (LHS <=> RHS) part) is ill-formed when used as an operand to
-///        (<result> @ 0) or (0 @ <result>).
-///
-/// TODO: Separate out the bits of semantic checking for builtin spaceship
-/// operators which determine validity and the return type, and use that instead
-/// of building the full expression to check validity.
-class RewrittenOverloadResolver {
-  enum CheckOverloadResult { Done, Continue };
-
-public:
-  RewrittenOverloadResolver(Sema &S, SourceLocation OpLoc,
-                            BinaryOperatorKind Opc, ArrayRef<Expr *> Args,
-                            const UnresolvedSetImpl &Fns, bool PerformADL,
-                            OverloadCandidateSet &CS)
-      : S(S), OpLoc(OpLoc), Opc(Opc), Args(Args), Fns(Fns),
-        PerformADL(PerformADL), CandidateSet(CS) {}
-
-  ExprResult ResolveRewrittenCandidates() {
-    ExprResult FinalResult = ExprError();
-    OverloadCandidateSet::iterator Best;
-    OverloadingResult OvlRes;
-    llvm::SmallVector<OverloadCandidate *, 4> EquivCands;
-    do {
-      EquivCands.clear();
-      OvlRes = CandidateSet.BestViableFunction(S, OpLoc, Best, &EquivCands);
-    } while (Continue == RemoveNonViableRewrittenCandidates(
-                             OvlRes, Best, EquivCands, FinalResult));
-    return FinalResult;
-  }
-private:
-  CheckOverloadResult RemoveNonViableRewrittenCandidates(
-      OverloadingResult OvlRes, OverloadCandidateSet::iterator Best,
-      ArrayRef<OverloadCandidate *> EquivCands, ExprResult &FinalResult);
-  ExprResult BuildRewrittenCandidate(const OverloadCandidate &Ovl);
-
-  RewrittenOverloadResolver(RewrittenOverloadResolver const &) = delete;
-  RewrittenOverloadResolver &
-  operator=(RewrittenOverloadResolver const &) = delete;
-
-private:
-  Sema &S;
-  SourceLocation OpLoc;
-  BinaryOperatorKind Opc;
-  ArrayRef<Expr *> Args;
-  const UnresolvedSetImpl &Fns;
-  bool PerformADL;
-  OverloadCandidateSet &CandidateSet;
-};
-} // end namespace
-
-ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
-    const OverloadCandidate &Ovl) {
+static ExprResult BuildRewrittenCandidate(Sema &S, BinaryOperatorKind Opc,
+                                          const OverloadCandidate &Ovl,
+                                          ArrayRef<Expr *> Args,
+                                          const UnresolvedSetImpl &Fns,
+                                          SourceLocation OpLoc,
+                                          bool PerformADL) {
   Expr *RewrittenArgs[2] = {Args[0], Args[1]};
   assert(Ovl.getRewrittenKind());
   bool IsSynthesized = Ovl.getRewrittenKind() == ROC_Synthesized;
@@ -12615,70 +12550,6 @@ ExprResult RewrittenOverloadResolver::BuildRewrittenCandidate(
   ExtraBits.CompareBits.IsSynthesized = IsSynthesized;
   return new (S.Context) CXXRewrittenExpr(CXXRewrittenExpr::Comparison,
                                           Original, Rewritten, ExtraBits);
-}
-
-/// Rewritten candidates have been added but not checked for validity. They
-/// could still be non-viable if:
-///  (A) The rewritten call (x <=> y) is a builtin, but it will be ill-formed
-///      when built (for example it has narrowing conversions).
-///  (B) The expression (x <=> y) @ 0 is ill-formed for the result of (x <=> y).
-///
-/// If either is the case, this function should be considered non-viable and
-/// another best viable function needs to be computed.
-///
-/// Therefore, we do the following:
-///  (1) If we have no viable candidate, or a deleted candidate, stop.
-///      Otherwise, if we have a best viable candidate or a set of ambiguous
-///      candidates and none of them are rewritten, stop.
-///
-///  (2) If the best viable candidate is a rewritten candidate, build and
-///      check the full expression for that candidate. If it succeeds return
-///      the result. Otherwise, mark the candidate as non-viable, re-compute
-///      the best viable function, and continue.
-///
-///  (3) If we have ambiguity attempt to resolve it by evaluating each rewritten
-///      candidate causing ambiguity:
-///
-///        (3.1) build the full expression for the specified candidate.
-///        (3.2) If the result is invalid, mark the candidate as non-viable.
-///
-///      If only one viable candidate remains, stop. If the viable candidate is
-///      rewritten, return the previously computed full expression. Otherwise,
-///      if we have more than one viable candidate, stop. If no viable candidates
-///      remain from the initial set of equally ranked candidates, recompute the
-///      new best viable overload and continue.
-RewrittenOverloadResolver::CheckOverloadResult
-RewrittenOverloadResolver::RemoveNonViableRewrittenCandidates(
-    OverloadingResult OvlRes, OverloadCandidateSet::iterator Best,
-    ArrayRef<OverloadCandidate *> EquivCands, ExprResult &FinalResult) {
-  auto Success = [&](ExprResult Res) {
-    FinalResult = Res;
-    return Done;
-  };
-  switch (OvlRes) {
-  case OR_Deleted:
-    // FIXME(EricWF): If we've found a deleted rewritten operator, it's
-    // possible we should have never considered it a viable candidate.
-  case OR_No_Viable_Function:
-    return Done;
-
-  case OR_Success: {
-    OverloadCandidate &Ovl = *Best;
-    if (!Ovl.getRewrittenKind())
-      return Done;
-    // Build the full expression for the rewritten candidate, and return it if
-    // it's valid. Otherwise mark this candidate as non-viable and continue.
-    ExprResult Res = BuildRewrittenCandidate(Ovl);
-    if (Res.isInvalid()) {
-      return Done;
-    }
-    return Success(Res);
-  }
-  case OR_Ambiguous: {
-    return Done;
-  }
-  }
-  llvm_unreachable("unhandled case");
 }
 
 /// Create a binary operation that may resolve to an overloaded
@@ -12809,31 +12680,16 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
     HasRewrittenCandidates = BeforeRewrittenSize != CandidateSet.size();
   }
 
-  if (HasRewrittenCandidates) {
-    RewrittenOverloadResolver RewrittenOvlResolver(*this, OpLoc, Opc, Args, Fns,
-                                                   PerformADL, CandidateSet);
 
-    // Perform initial overload resolution that includes partially checked
-    // rewritten candidates, removing rewritten candidates which turn out to be
-    // invalid as needed.
-    ExprResult RewrittenResult =
-        RewrittenOvlResolver.ResolveRewrittenCandidates();
-
-    // If overload resolution was successful and the result was a re-written
-    // overload candidate, then that candidate was evaluated and we can return
-    // the result directly.
-    if (!RewrittenResult.isInvalid())
-      return RewrittenResult;
-  }
 
   // Perform final overload resolution.
   bool HadMultipleCandidates = (CandidateSet.size() > 1);
   OverloadCandidateSet::iterator Best;
   switch (CandidateSet.BestViableFunction(*this, OpLoc, Best)) {
   case OR_Success:
-    assert(
-        !Best->getRewrittenKind() &&
-        "rewritten candidates should have already been resolved and evaluated");
+    if (Best->getRewrittenKind())
+      return BuildRewrittenCandidate(*this, Opc, *Best, Args, Fns, OpLoc,
+                                     PerformADL);
     return BuildBinaryOperatorCandidate(OpLoc, Opc, *Best, Args[0], Args[1],
                                         HadMultipleCandidates);
   case OR_No_Viable_Function: {

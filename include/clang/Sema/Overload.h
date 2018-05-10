@@ -1016,9 +1016,8 @@ class Sema;
     }
 
     /// Find the best viable function on this overload set, if it exists.
-    OverloadingResult BestViableFunction(
-        Sema &S, SourceLocation Loc, OverloadCandidateSet::iterator &Best,
-        SmallVectorImpl<OverloadCandidate *> *EquivalentCands = nullptr);
+    OverloadingResult BestViableFunction(Sema &S, SourceLocation Loc,
+                                         OverloadCandidateSet::iterator &Best);
 
     void NoteCandidates(Sema &S,
                         OverloadCandidateDisplayKind OCD,
