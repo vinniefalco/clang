@@ -148,6 +148,16 @@ QualType ComparisonCategoryInfo::getType() const {
   return QualType(Record->getTypeForDecl(), 0);
 }
 
+bool ComparisonCategoryInfo::isUsableWithOperator(
+        ComparisonCategoryType CompKind, BinaryOperatorKind Opcode) {
+  assert(BinaryOperator::isComparisonOp(Opcode));
+  if (BinaryOperator::isRelationalOp(Opcode))
+    return isOrdered(CompKind);
+  // We either have an equality or three-way opcode. These are all OK for
+  // any comparison category type.
+  return true;
+}
+
 StringRef ComparisonCategories::getCategoryString(ComparisonCategoryType Kind) {
   using CCKT = ComparisonCategoryType;
   switch (Kind) {
@@ -288,4 +298,5 @@ const ComparisonCategoryInfo *ComparisonCategories::computeCommonComparisonType(
   // FIXME(EricWF): What if we don't find std::strong_ordering
   // --- Otherwise, U is std::strong_ordering.
   return lookupInfo(CCT::StrongOrdering);
+
 }

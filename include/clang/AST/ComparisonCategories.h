@@ -15,6 +15,7 @@
 #ifndef LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 #define LLVM_CLANG_AST_COMPARISONCATEGORIES_H
 
+#include "clang/AST/OperationKinds.h"
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseMap.h"
@@ -127,10 +128,14 @@ public:
   }
 
   /// True iff the comparison category is an equality comparison.
-  bool isEquality() const { return !isOrdered(); }
+  bool isEquality() const { return isEquality(Kind); }
+  static bool isEquality(ComparisonCategoryType Kind) {
+    return !isOrdered(Kind);
+  }
 
-  /// \brief True iff the comparison category is a relational comparison.
-  bool isOrdered() const {
+  /// True iff the comparison category is a relational comparison.
+  bool isOrdered() const { return isOrdered(Kind); }
+  static bool isOrdered(ComparisonCategoryType Kind) {
     using CCK = ComparisonCategoryType;
     return Kind == CCK::PartialOrdering || Kind == CCK::WeakOrdering ||
            Kind == CCK::StrongOrdering;
@@ -138,15 +143,25 @@ public:
 
   /// True iff the comparison is "strong". i.e. it checks equality and
   /// not equivalence.
-  bool isStrong() const {
+  bool isStrong() const { return isStrong(Kind); }
+  static bool isStrong(ComparisonCategoryType Kind) {
     using CCK = ComparisonCategoryType;
     return Kind == CCK::StrongEquality || Kind == CCK::StrongOrdering;
   }
 
   /// True iff the comparison is not totally ordered.
-  bool isPartial() const {
+  bool isPartial() const { return isPartial(Kind); }
+  static bool isPartial(ComparisonCategoryType Kind) {
     using CCK = ComparisonCategoryType;
     return Kind == CCK::PartialOrdering;
+  }
+
+  /// Return whether the specified comparison category type can be used as
+  /// an operand to the specified relational binary operator.
+  static bool isUsableWithOperator(ComparisonCategoryType CompKind,
+                                   BinaryOperatorKind Opcode);
+  bool isUsableWithOperator(BinaryOperatorKind Opc) const {
+    return isUsableWithOperator(Kind, Opc);
   }
 
   /// Converts the specified result kind into the the correct result kind
