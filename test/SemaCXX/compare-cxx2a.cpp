@@ -490,7 +490,7 @@ struct T {
   std::strong_ordering operator<=>(U const &RHS) const;
 };
 struct U {
-  std::strong_ordering operator<=>(T const &RHS) const;
+  std::strong_ordering operator<=>(T const &RHS) const = delete;
 };
 
 struct V {
@@ -504,7 +504,7 @@ auto operator<(V const &, V &&) { // expected-note {{candidate}}
 }
 
 void test() {
-  // expected-error@+1 {{use of overloaded operator '<' is ambiguous}}
+  // OK. selects T::operator<=>(U)
   (void)(T{} < U{});
   // expected-error@+1 {{use of overloaded operator '<' is ambiguous}}
   (void)(V{} < V{});
