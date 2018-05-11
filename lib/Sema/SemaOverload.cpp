@@ -12701,16 +12701,10 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
   AddBuiltinOperatorCandidates(Op, OpLoc, Args, CandidateSet);
 
   // C++2a Add rewritten and synthesized operator candidates.
-  bool HasRewrittenCandidates = false;
   if (getLangOpts().CPlusPlus2a && AllowRewrittenCandidates &&
-      BinaryOperator::isComparisonOp(Opc)) {
-    unsigned BeforeRewrittenSize = CandidateSet.size();
+      BinaryOperator::isComparisonOp(Opc))
     AddRewrittenOperatorCandidates(Op, OpLoc, Args, ThreeWayFuncs, CandidateSet,
                                    PerformADL);
-    HasRewrittenCandidates = BeforeRewrittenSize != CandidateSet.size();
-  }
-
-
 
   // Perform final overload resolution.
   bool HadMultipleCandidates = (CandidateSet.size() > 1);
