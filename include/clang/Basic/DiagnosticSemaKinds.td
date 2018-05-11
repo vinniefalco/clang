@@ -3597,7 +3597,8 @@ def warn_diagnose_if_succeeded : Warning<"%0">, InGroup<UserDefinedWarnings>,
 def note_ovl_candidate_disabled_by_function_cond_attr : Note<
     "candidate disabled: %0">;
 def note_ovl_rewritten_candidate_invalid_operator : Note<
-    "candidate return type cannot be used as an operand to rewritten "
+    "return type cannot be used as an operand to the "
+    "%select{<<ERROR>|rewritten|reversed rewritten}0 "
     "comparison operator">;
 def note_ovl_candidate_disabled_by_extension : Note<
     "candidate disabled due to OpenCL extension">;
@@ -3887,7 +3888,7 @@ def note_implicit_member_target_infer_collision : Note<
 def note_ambiguous_type_conversion: Note<
     "because of ambiguity in conversion %diff{of $ to $|between types}0,1">;
 def note_ovl_builtin_binary_candidate : Note<
-    "built-in candidate %0">;
+    "%select{|rewritten |reversed rewritten |}1built-in candidate %0">;
 def note_ovl_builtin_unary_candidate : Note<
     "built-in candidate %0">;
 def err_ovl_no_viable_function_in_init : Error<

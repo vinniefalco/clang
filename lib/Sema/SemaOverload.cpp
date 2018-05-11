@@ -10357,11 +10357,13 @@ static void DiagnoseFailedRewrittenOperand(Sema &S, OverloadCandidate *Cand) {
   // FIXME(EricWF): Do something here!
   if (Cand->Function) {
     S.Diag(Cand->Function->getLocation(),
-           diag::note_ovl_rewritten_candidate_invalid_operator);
+           diag::note_ovl_rewritten_candidate_invalid_operator)
+        << Cand->getRewrittenKind();
   } else {
     // FIXME(EricWF);
     S.Diag(SourceLocation(),
-           diag::note_ovl_rewritten_candidate_invalid_operator);
+           diag::note_ovl_rewritten_candidate_invalid_operator)
+        << Cand->getRewrittenKind();
   }
 }
 
@@ -10533,7 +10535,8 @@ static void NoteBuiltinOperatorCandidate(Sema &S, StringRef Opc,
     TypeStr += ", ";
     TypeStr += Cand->BuiltinParamTypes[1].getAsString();
     TypeStr += ")";
-    S.Diag(OpLoc, diag::note_ovl_builtin_binary_candidate) << TypeStr;
+    S.Diag(OpLoc, diag::note_ovl_builtin_binary_candidate)
+        << TypeStr << Cand->getRewrittenKind();
   }
 }
 

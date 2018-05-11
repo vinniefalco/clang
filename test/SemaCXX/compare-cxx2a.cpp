@@ -435,7 +435,8 @@ struct T {
 
 struct U {
   int x;
-  // FIXME(EricWF2
+  // FIXME(EricWF)
+  // expected-note@+1 {{return type cannot be used as an operand to the rewritten comparison operator}}
   constexpr std::strong_equality operator<=>(T y) const {
     if (x == y.x)
       return std::strong_equality::equal;
@@ -540,13 +541,11 @@ template auto test<ThreeWay>(ThreeWay const &, ThreeWay const &);
 namespace BadRewrittenTest {
 
 struct T {};
-// FIXME(EricWF): Diagnose this candidate.
+// expected-note@+1 {{return type cannot be used as an operand to the rewritten comparison operator}}
 std::strong_equality operator<=>(T, T);
-// FIXME(EricWF): Remove this decl and still get overload resolution.
-struct U {};
-void operator<(U, U);
 
 void test(T x, T y) {
+  // expected-error@+1 {{invalid operands to binary expression}}
   (void)(x < y);
 }
 
