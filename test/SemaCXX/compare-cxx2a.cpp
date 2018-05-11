@@ -556,6 +556,9 @@ void test(T x, T y) {
 namespace NullptrOvlTest {
 
 void test(int *p, decltype(nullptr) n) {
+  (void)(p == n); // OK
+  (void)(n == nullptr); // OK
+  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'decltype(nullptr)' (aka 'nullptr_t'))}}
   (void)(p < n);
 }
 
