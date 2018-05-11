@@ -15422,7 +15422,7 @@ namespace {
             const_cast<CXXDestructorDecl*>(E->getTemporary()->getDestructor()));
       Visit(E->getSubExpr());
     }
-    
+
     void VisitCXXNewExpr(CXXNewExpr *E) {
       if (E->getOperatorNew())
         S.MarkFunctionReferenced(E->getLocStart(), E->getOperatorNew());

@@ -1441,8 +1441,8 @@ struct ArgumentExtractor {
   bool IsThreeWay;
 
   ArgumentExtractor(const CXXRewrittenOperatorExpr *E)
-      : Rewritten(E->getRewritten()) {
-    IsReverseOrder = E->getRewrittenKind() = ROC_AsReversedThreeWay;
+      : Rewritten(E->getRewrittenExpr()) {
+    IsReverseOrder = E->getRewrittenKind() == ROC_AsReversedThreeWay;
     IsThreeWay = getOpcode(Rewritten) == BO_Cmp;
   }
 

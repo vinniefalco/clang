@@ -9286,9 +9286,14 @@ bool clang::isBetterOverloadCandidate(
           }
           for (unsigned I = 0; I < Ovl.getNumParams(); ++I)
             Types.push_back(Ovl.getParamType(I).getCanonicalType());
+
+          // Reverse the order of the parameter types if this is the
+          // reverse-ordered overload.
           assert(Types.size() == 2);
           if (Ovl.getRewrittenKind() == ROC_AsReversedThreeWay)
             std::swap(Types[0], Types[1]);
+
+          // Return the final list of types.
           return Types;
         };
         if (GetParamTypes(Cand1) == GetParamTypes(Cand2))
