@@ -10354,13 +10354,13 @@ static void DiagnoseBadTarget(Sema &S, OverloadCandidate *Cand) {
 }
 
 static void DiagnoseFailedRewrittenOperand(Sema &S, OverloadCandidate *Cand) {
-  // FIXME(EricWF): Do something here!
+  // FIXME(EricWF): Get the opcode we for the candidate.
   if (Cand->Function) {
     S.Diag(Cand->Function->getLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
         << Cand->getRewrittenKind();
   } else {
-    // FIXME(EricWF);
+    // FIXME(EricWF): Get a real source location for the builtin.
     S.Diag(SourceLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
         << Cand->getRewrittenKind();
