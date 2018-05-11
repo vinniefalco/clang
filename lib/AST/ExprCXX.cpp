@@ -1510,6 +1510,15 @@ struct ArgumentExtractor {
 };
 } // namespace
 
+SourceLocation CXXRewrittenOperatorExpr::getLocStart() const {
+  return getOriginalLHS()->getLocStart();
+}
+SourceLocation CXXRewrittenOperatorExpr::getLocEnd() const {
+  return getOriginalRHS()->getLocEnd();
+}
+SourceLocation CXXRewrittenOperatorExpr::getExprLoc() const {
+  return getOriginalLHS()->getExprLoc();
+}
 SourceLocation CXXRewrittenOperatorExpr::getOperatorLoc() const {
   return ArgumentExtractor::getOperatorLoc(this->getRewrittenExpr());
 }

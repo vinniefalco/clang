@@ -4253,9 +4253,9 @@ public:
   }
   bool isRewrittenAsThreeWay() const { return getOriginalOpcode() != BO_Cmp; }
 
-  SourceLocation getLocStart() const { return Rewritten->getLocStart(); }
-  SourceLocation getLocEnd() const { return Rewritten->getLocEnd(); }
-  SourceLocation getExprLoc() const { return getRewrittenExpr()->getExprLoc(); }
+  SourceLocation getLocStart() const;
+  SourceLocation getLocEnd() const;
+  SourceLocation getExprLoc() const;
   SourceLocation getOperatorLoc() const;
 
   Opcode getOriginalOpcode() const;

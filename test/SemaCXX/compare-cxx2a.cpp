@@ -435,8 +435,7 @@ struct T {
 
 struct U {
   int x;
-  // FIXME: This diagnostic is wrong-ish.
-  // expected-note@+1 {{candidate function not viable: requires single argument 'y', but 2 arguments were provided}}
+  // FIXME(EricWF2
   constexpr std::strong_equality operator<=>(T y) const {
     if (x == y.x)
       return std::strong_equality::equal;
