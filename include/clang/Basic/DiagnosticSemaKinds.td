@@ -3596,6 +3596,9 @@ def warn_diagnose_if_succeeded : Warning<"%0">, InGroup<UserDefinedWarnings>,
     ShowInSystemHeader;
 def note_ovl_candidate_disabled_by_function_cond_attr : Note<
     "candidate disabled: %0">;
+def note_ovl_rewritten_candidate_invalid_operator : Note<
+    "candidate return type cannot be used as an operand to rewritten "
+    "comparison operator">;
 def note_ovl_candidate_disabled_by_extension : Note<
     "candidate disabled due to OpenCL extension">;
 def err_addrof_function_disabled_by_enable_if_attr : Error<

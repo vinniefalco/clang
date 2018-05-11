@@ -536,3 +536,18 @@ std::strong_ordering operator<=>(ThreeWay, ThreeWay);
 template auto test<ThreeWay>(ThreeWay const &, ThreeWay const &);
 
 } // namespace TestRewrittenTemplate
+
+namespace BadRewrittenTest {
+
+struct T {};
+// FIXME(EricWF): Diagnose this candidate.
+std::strong_equality operator<=>(T, T);
+// FIXME(EricWF): Remove this decl and still get overload resolution.
+struct U {};
+void operator<(U, U);
+
+void test(T x, T y) {
+  (void)(x < y);
+}
+
+} // namespace BadRewrittenTest

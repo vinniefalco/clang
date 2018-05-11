@@ -10355,6 +10355,14 @@ static void DiagnoseBadTarget(Sema &S, OverloadCandidate *Cand) {
 
 static void DiagnoseFailedRewrittenOperand(Sema &S, OverloadCandidate *Cand) {
   // FIXME(EricWF): Do something here!
+  if (Cand->Function) {
+    S.Diag(Cand->Function->getLocation(),
+           diag::note_ovl_rewritten_candidate_invalid_operator);
+  } else {
+    // FIXME(EricWF);
+    S.Diag(SourceLocation(),
+           diag::note_ovl_rewritten_candidate_invalid_operator);
+  }
 }
 
 static void DiagnoseFailedEnableIfAttr(Sema &S, OverloadCandidate *Cand) {
@@ -10807,6 +10815,8 @@ void OverloadCandidateSet::NoteCandidates(
       continue;
     if (Cand->Viable)
       Cands.push_back(Cand);
+    else if (Cand->FailureKind == ovl_rewritten_operand_non_valid_for_operator)
+      Cands.push_back(Cand);
     else if (OCD == OCD_AllCandidates) {
       CompleteNonViableCandidate(S, Cand, Args);
       if (Cand->Function || Cand->IsSurrogate)
@@ -10841,8 +10851,10 @@ void OverloadCandidateSet::NoteCandidates(
     else if (Cand->IsSurrogate)
       NoteSurrogateCandidate(S, Cand);
     else {
-      assert(Cand->Viable &&
-             "Non-viable built-in candidates are not added to Cands.");
+      assert(
+          (Cand->Viable ||
+           Cand->FailureKind == ovl_rewritten_operand_non_valid_for_operator) &&
+          "Non-viable built-in candidates are not added to Cands.");
       // Generally we only see ambiguities including viable builtin
       // operators if overload resolution got screwed up by an
       // ambiguous user-defined conversion.
