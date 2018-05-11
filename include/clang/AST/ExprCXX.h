@@ -4210,6 +4210,7 @@ public:
   child_range children() { return child_range(SubExprs, SubExprs + 2); }
 };
 
+// FIXME(EricWF): Document this
 class CXXRewrittenOperatorExpr : public Expr {
 public:
   using RewrittenOpKind = RewrittenOverloadCandidateKind;
