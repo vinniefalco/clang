@@ -4089,7 +4089,7 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       S = new (Context) CXXFoldExpr(Empty);
       break;
 
-    case EXPR_CXX_REWRITTEN_OPERATOR:
+    case EXPR_CXX_REWRITTEN:
       S = new (Context) CXXRewrittenExpr(Empty);
 
     case EXPR_OPAQUE_VALUE:

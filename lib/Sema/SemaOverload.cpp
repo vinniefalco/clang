@@ -8910,7 +8910,8 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
   // 'RewrittenOverloadCandidateKind'.
   auto AddCandidates = [&](ArrayRef<Expr *> Args,
                            RewrittenOverloadCandidateKind Kind) {
-    OverloadCandidateSet::RewrittenCandidateContextGuard Guard(CandidateSet);
+    OverloadCandidateSet::AddingRewrittenCandidateGuard Guard(CandidateSet,
+                                                              Kind);
 
     unsigned InitialSize = CandidateSet.size();
     AddFunctionCandidates(Fns, Args, CandidateSet);
@@ -8924,7 +8925,7 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
     for (auto It = std::next(CandidateSet.begin(), InitialSize);
          It != CandidateSet.end(); ++It) {
       OverloadCandidate &Ovl = *It;
-      Ovl.RewrittenOpKind = Kind;
+      assert(Ovl.getRewrittenKind());
       if (IsRelationalOrEquality) {
         if (FunctionDecl *FD = Ovl.Function) {
           if (FD->getReturnType()->isUndeducedType()) {
@@ -12577,7 +12578,7 @@ static ExprResult BuildRewrittenCandidate(Sema &S, BinaryOperatorKind Opc,
 
   // Create a dummy expression representing the original expression as written.
   // FIXME(EricWF): This doesn't actually really represent the expression as
-  // written, because it may not result in a to a builtin operator.
+  // written, because it may not result in a call to a builtin operator.
   Expr *Original = new (S.Context)
       BinaryOperator(OpaqueValueExpr::Create(S.Context, Args[0]),
                      OpaqueValueExpr::Create(S.Context, Args[1]), Opc,

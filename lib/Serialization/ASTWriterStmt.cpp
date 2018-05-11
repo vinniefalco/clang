@@ -1707,7 +1707,7 @@ void ASTStmtWriter::VisitCXXRewrittenExpr(CXXRewrittenExpr *E) {
     break;
   }
   }
-  Code = serialization::EXPR_CXX_REWRITTEN_OPERATOR;
+  Code = serialization::EXPR_CXX_REWRITTEN;
 }
 
 void ASTStmtWriter::VisitOpaqueValueExpr(OpaqueValueExpr *E) {
