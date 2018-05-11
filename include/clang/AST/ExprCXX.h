@@ -15,6 +15,7 @@
 #ifndef LLVM_CLANG_AST_EXPRCXX_H
 #define LLVM_CLANG_AST_EXPRCXX_H
 
+#include "clang/AST/ComparisonCategories.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclCXX.h"
@@ -57,6 +58,7 @@ class IdentifierInfo;
 class LambdaCapture;
 class NonTypeTemplateParmDecl;
 class TemplateParameterList;
+enum RewrittenOverloadCandidateKind : unsigned char;
 
 //===--------------------------------------------------------------------===//
 // C++ Expressions.
@@ -4209,72 +4211,62 @@ public:
   child_range children() { return child_range(SubExprs, SubExprs + 2); }
 };
 
-
-class CXXRewrittenExpr : public Expr {
-
+class CXXRewrittenOperatorExpr : public Expr {
 public:
-  enum RewrittenKind { Comparison };
-
-  struct ComparisonBits {
-    /// Whether this rewritten comparison expression has reverse-order
-    /// parameters.
-    unsigned IsSynthesized : 1;
-  };
-
-  union ExtraRewrittenBits {
-    ComparisonBits CompareBits;
-  };
+  using RewrittenOpKind = RewrittenOverloadCandidateKind;
+  typedef BinaryOperatorKind Opcode;
 
 private:
   friend class ASTReader;
   friend class ASTStmtReader;
   friend class ASTStmtWriter;
 
-  Stmt *SubExprs[2];
-  ExtraRewrittenBits ExtraBits;
+  unsigned RewrittenKind : 2;
 
-  CXXRewrittenExpr(EmptyShell Empty) : Expr(CXXRewrittenExprClass, Empty) {}
+  Expr *Rewritten;
+
+  CXXRewrittenOperatorExpr(EmptyShell Empty)
+      : Expr(CXXRewrittenOperatorExprClass, Empty) {}
 
 public:
-  CXXRewrittenExpr(RewrittenKind Kind, Expr *Original, Expr *Rewritten,
-                   ExtraRewrittenBits ExtraBits)
-      : Expr(CXXRewrittenExprClass, Rewritten->getType(),
+  CXXRewrittenOperatorExpr(RewrittenOpKind Kind, Expr *Rewritten)
+      : Expr(CXXRewrittenOperatorExprClass, Rewritten->getType(),
              Rewritten->getValueKind(), Rewritten->getObjectKind(),
              /*Dependent*/ Rewritten->isTypeDependent(),
              Rewritten->isValueDependent(),
-             Original->isInstantiationDependent(),
+             Rewritten->isInstantiationDependent(),
              Rewritten->containsUnexpandedParameterPack()),
-        ExtraBits(ExtraBits) {
-    SubExprs[0] = Original;
-    SubExprs[1] = Rewritten;
+        RewrittenKind(Kind) {}
+
+  RewrittenOpKind getRewrittenKind() const {
+    return static_cast<RewrittenOpKind>(RewrittenKind);
+  }
+  void setRewrittenKind(RewrittenOpKind Kind) { RewrittenKind = Kind; }
+
+  Expr *getRewrittenExpr() const { return Rewritten; }
+  Opcode getOpcode() const;
+  bool isReverseOrder() const {
+    return RewrittenKind == ROC_AsReversedThreeWay;
   }
 
-  RewrittenKind getRewrittenKind() const {
-    return static_cast<RewrittenKind>(CXXRewrittenBits.Kind);
+  SourceLocation getLocStart() const { return Rewritten->getLocStart(); }
+  SourceLocation getLocEnd() const { return Rewritten->getLocEnd(); }
+  SourceLocation getExprLoc() const { return Rewritten->getExprLoc(); }
+  SourceLocation getOperatorLoc() const;
+
+  Opcode getOriginalOpcode() const;
+  Expr *getOriginalLHS() const;
+  Expr *getOriginalRHS() const;
+
+  child_range children() {
+    return child_range(static_cast<Stmt *>(Rewritten),
+                       static_cast<Stmt *>(Rewritten) + 1);
   }
-  void setRewrittenKind(RewrittenKind Kind) { CXXRewrittenBits.Kind = Kind; }
-
-  ExtraRewrittenBits *getRewrittenInfo() { return &ExtraBits; }
-  const ExtraRewrittenBits *getRewrittenInfo() const { return &ExtraBits; }
-
-  Expr *getOriginalExpr() const { return static_cast<Expr *>(SubExprs[0]); }
-  Expr *getRewrittenExpr() const {
-    return static_cast<Expr *>(SubExprs[1]);
-  }
-
-  SourceLocation getLocStart() const {
-    return getOriginalExpr()->getLocStart();
-  }
-  SourceLocation getLocEnd() const { return getOriginalExpr()->getLocEnd(); }
-  SourceLocation getExprLoc() const { return getOriginalExpr()->getExprLoc(); }
-
-  child_range children() { return child_range(SubExprs, SubExprs + 2); }
 
   static bool classof(const Stmt *T) {
-    return T->getStmtClass() == CXXRewrittenExprClass;
+    return T->getStmtClass() == CXXRewrittenOperatorExprClass;
   }
 };
-
 
 /// Represents an expression that might suspend coroutine execution;
 /// either a co_await or co_yield expression.

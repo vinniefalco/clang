@@ -1695,19 +1695,11 @@ void ASTStmtWriter::VisitCXXFoldExpr(CXXFoldExpr *E) {
   Code = serialization::EXPR_CXX_FOLD;
 }
 
-void ASTStmtWriter::VisitCXXRewrittenExpr(CXXRewrittenExpr *E) {
+void ASTStmtWriter::VisitCXXRewrittenOperatorExpr(CXXRewrittenOperatorExpr *E) {
   VisitExpr(E);
   Record.push_back(E->getRewrittenKind());
-  Record.AddStmt(E->SubExprs[0]);
-  Record.AddStmt(E->SubExprs[1]);
-  switch (E->getRewrittenKind()) {
-  case CXXRewrittenExpr::Comparison: {
-    CXXRewrittenExpr::ComparisonBits Bits = E->ExtraBits.CompareBits;
-    Record.push_back(Bits.IsSynthesized);
-    break;
-  }
-  }
-  Code = serialization::EXPR_CXX_REWRITTEN;
+  Record.AddStmt(E->getRewrittenExpr());
+  Code = serialization::EXPR_CXX_REWRITTEN_OPERATOR;
 }
 
 void ASTStmtWriter::VisitOpaqueValueExpr(OpaqueValueExpr *E) {

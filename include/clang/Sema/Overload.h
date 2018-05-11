@@ -72,16 +72,6 @@ class Sema;
     OCD_ViableCandidates
   };
 
-  /// OperatorOverloadCandidateKind - The kind of the operator candidate in
-  /// accordance with [over.match.oper].
-  enum RewrittenOverloadCandidateKind : unsigned char {
-    /// Not a rewritten candidate.
-    ROC_None,
-    /// Rewritten but not synthesized.
-    ROC_AsThreeWay,
-    /// Both rewritten and synthesized.
-    ROC_AsReversedThreeWay
-  };
 
   /// ImplicitConversionKind - The kind of implicit conversion used to
   /// convert an argument to a parameter's type. The enumerator values

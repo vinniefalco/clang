@@ -3217,12 +3217,9 @@ public:
     return getSema().BuildEmptyCXXFoldExpr(EllipsisLoc, Operator);
   }
 
-  ExprResult
-  RebuildCXXRewrittenExpr(CXXRewrittenExpr::RewrittenKind Kind, Expr *Original,
-                          Expr *Rewritten,
-                          CXXRewrittenExpr::ExtraRewrittenBits ExtraBits) {
-    return new (SemaRef.Context)
-        CXXRewrittenExpr(Kind, Original, Rewritten, ExtraBits);
+  ExprResult RebuildCXXRewrittenOperatorExpr(
+      CXXRewrittenOperatorExpr::RewrittenOpKind Kind, Expr *Rewritten) {
+    return new (SemaRef.Context) CXXRewrittenOperatorExpr(Kind, Rewritten);
   }
 
   /// Build a new atomic operation expression.
@@ -11547,8 +11544,8 @@ extractOriginalOperandsFromRewrittenComparison(Expr *E, bool IsThreeWay,
 }
 
 template <typename Derived>
-ExprResult
-TreeTransform<Derived>::TransformCXXRewrittenExpr(CXXRewrittenExpr *E) {
+ExprResult TreeTransform<Derived>::TransformCXXRewrittenOperatorExpr(
+    CXXRewrittenOperatorExpr *E) {
 
   // FIXME(EricWF): Is there a case where the underlying expression has been
   // transformed in such a way that we need to re-compute the rewritten
@@ -11561,28 +11558,8 @@ TreeTransform<Derived>::TransformCXXRewrittenExpr(CXXRewrittenExpr *E) {
   if (Rewritten == E->getRewrittenExpr() && !getDerived().AlwaysRebuild())
     return E;
 
-  Expr *Original;
-  switch (E->getRewrittenKind()) {
-  case CXXRewrittenExpr::Comparison: {
-    BinaryOperator *Op = cast<BinaryOperator>(E->getOriginalExpr());
-
-    // Extract the already transformed operands from the rewritten expression.
-    std::pair<Expr *, Expr *> OrigArgs =
-        extractOriginalOperandsFromRewrittenComparison(
-            Rewritten, Op->getOpcode() == BO_Cmp,
-            E->getRewrittenInfo()->CompareBits.IsSynthesized);
-
-    // Build a dummy node representing the expression as written.
-    Original = new (SemaRef.Context) BinaryOperator(
-        OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.first),
-        OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.second),
-        Op->getOpcode(), Rewritten->getType(), Rewritten->getValueKind(),
-        Rewritten->getObjectKind(), Op->getOperatorLoc(), Op->getFPFeatures());
-    break;
-  }
-  }
-  return getDerived().RebuildCXXRewrittenExpr(
-      E->getRewrittenKind(), Original, Rewritten, *E->getRewrittenInfo());
+  return getDerived().RebuildCXXRewrittenOperatorExpr(E->getRewrittenKind(),
+                                                      Rewritten);
 }
 
 template<typename Derived>

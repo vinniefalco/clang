@@ -5979,7 +5979,6 @@ Sema::AddOverloadCandidate(FunctionDecl *Function,
   Candidate.Function = Function;
   Candidate.Viable = true;
   Candidate.IsSurrogate = false;
-  Candidate.RewrittenOpKind = ROC_None;
   Candidate.IgnoreObjectArgument = false;
   Candidate.ExplicitCallArguments = Args.size();
 
@@ -6670,7 +6669,6 @@ Sema::AddMethodTemplateCandidate(FunctionTemplateDecl *MethodTmpl,
     Candidate.Function = MethodTmpl->getTemplatedDecl();
     Candidate.Viable = false;
     Candidate.IsSurrogate = false;
-    Candidate.RewrittenOpKind = ROC_None;
     Candidate.IgnoreObjectArgument =
         cast<CXXMethodDecl>(Candidate.Function)->isStatic() ||
         ObjectType.isNull();
@@ -6735,7 +6733,6 @@ Sema::AddTemplateOverloadCandidate(FunctionTemplateDecl *FunctionTemplate,
     Candidate.Function = FunctionTemplate->getTemplatedDecl();
     Candidate.Viable = false;
     Candidate.IsSurrogate = false;
-    Candidate.RewrittenOpKind = ROC_None;
     // Ignore the object argument if there is one, since we don't have an object
     // type.
     Candidate.IgnoreObjectArgument =
@@ -6907,7 +6904,6 @@ Sema::AddConversionCandidate(CXXConversionDecl *Conversion,
   Candidate.FoundDecl = FoundDecl;
   Candidate.Function = Conversion;
   Candidate.IsSurrogate = false;
-  Candidate.RewrittenOpKind = ROC_None;
   Candidate.IgnoreObjectArgument = false;
   Candidate.FinalConversion.setAsIdentityConversion();
   Candidate.FinalConversion.setFromType(ConvType);
@@ -7069,7 +7065,6 @@ Sema::AddTemplateConversionCandidate(FunctionTemplateDecl *FunctionTemplate,
     Candidate.Viable = false;
     Candidate.FailureKind = ovl_fail_bad_deduction;
     Candidate.IsSurrogate = false;
-    Candidate.RewrittenOpKind = ROC_None;
     Candidate.IgnoreObjectArgument = false;
     Candidate.ExplicitCallArguments = 1;
     Candidate.DeductionFailure = MakeDeductionFailureInfo(Context, Result,
@@ -7110,7 +7105,6 @@ void Sema::AddSurrogateCandidate(CXXConversionDecl *Conversion,
   Candidate.Surrogate = Conversion;
   Candidate.Viable = true;
   Candidate.IsSurrogate = true;
-  Candidate.RewrittenOpKind = ROC_None;
   Candidate.IgnoreObjectArgument = false;
   Candidate.ExplicitCallArguments = Args.size();
 
@@ -7268,7 +7262,6 @@ void Sema::AddBuiltinCandidate(QualType *ParamTys, ArrayRef<Expr *> Args,
   Candidate.FoundDecl = DeclAccessPair::make(nullptr, AS_none);
   Candidate.Function = nullptr;
   Candidate.IsSurrogate = false;
-  Candidate.RewrittenOpKind = ROC_None;
   Candidate.IgnoreObjectArgument = false;
   std::copy(ParamTys, ParamTys + Args.size(), Candidate.BuiltinParamTypes);
 
@@ -8925,6 +8918,10 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
     for (auto It = std::next(CandidateSet.begin(), InitialSize);
          It != CandidateSet.end(); ++It) {
       OverloadCandidate &Ovl = *It;
+      if (!Ovl.getRewrittenKind()) {
+        if (Ovl.Function)
+          Ovl.Function->dumpColor();
+      }
       assert(Ovl.getRewrittenKind());
       if (IsRelationalOrEquality) {
         if (FunctionDecl *FD = Ovl.Function) {
@@ -12576,19 +12573,8 @@ static ExprResult BuildRewrittenCandidate(Sema &S, BinaryOperatorKind Opc,
   }
   Expr *Rewritten = RewrittenRes.get();
 
-  // Create a dummy expression representing the original expression as written.
-  // FIXME(EricWF): This doesn't actually really represent the expression as
-  // written, because it may not result in a call to a builtin operator.
-  Expr *Original = new (S.Context)
-      BinaryOperator(OpaqueValueExpr::Create(S.Context, Args[0]),
-                     OpaqueValueExpr::Create(S.Context, Args[1]), Opc,
-                     Rewritten->getType(), Rewritten->getValueKind(),
-                     Rewritten->getObjectKind(), OpLoc, S.FPFeatures);
-
-  CXXRewrittenExpr::ExtraRewrittenBits ExtraBits;
-  ExtraBits.CompareBits.IsSynthesized = IsSynthesized;
-  return new (S.Context) CXXRewrittenExpr(CXXRewrittenExpr::Comparison,
-                                          Original, Rewritten, ExtraBits);
+  return new (S.Context)
+      CXXRewrittenOperatorExpr(Ovl.getRewrittenKind(), Rewritten);
 }
 
 /// Create a binary operation that may resolve to an overloaded

@@ -246,8 +246,8 @@ protected:
     /// bit is set to true.
     unsigned IsUnique : 1;
   };
-  class CXXRewrittenExprBitfields {
-    friend class CXXRewrittenExpr;
+  class CXXRewrittenOperatorExprBitfields {
+    friend class CXXRewrittenOperatorExpr;
 
     unsigned : NumExprBits;
 
@@ -316,7 +316,7 @@ protected:
     InitListExprBitfields InitListExprBits;
     TypeTraitExprBitfields TypeTraitExprBits;
     CoawaitExprBitfields CoawaitBits;
-    CXXRewrittenExprBitfields CXXRewrittenBits;
+    CXXRewrittenOperatorExprBitfields CXXRewrittenBits;
   };
 
 public:
