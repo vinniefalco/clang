@@ -3563,10 +3563,16 @@ recurse:
     mangleExpression(cast<CXXStdInitializerListExpr>(E)->getSubExpr(), Arity);
     break;
 
-  case Expr::CXXRewrittenOperatorExprClass:
-    mangleExpression(cast<CXXRewrittenOperatorExpr>(E)->getOriginalExpr(),
-                     Arity);
+  case Expr::CXXRewrittenOperatorExprClass: {
+    const CXXRewrittenOperatorExpr *RE = cast<CXXRewrittenOperatorExpr>(E);
+    const unsigned NumArgs = 2;
+    auto Operator =
+        BinaryOperator::getOverloadedOperator(RE->getOriginalOpcode());
+    mangleOperatorName(Operator, NumArgs);
+    mangleExpression(RE->getOriginalLHS());
+    mangleExpression(RE->getOriginalRHS());
     break;
+  }
 
   case Expr::SubstNonTypeTemplateParmExprClass:
     mangleExpression(cast<SubstNonTypeTemplateParmExpr>(E)->getReplacement(),

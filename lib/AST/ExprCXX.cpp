@@ -1515,21 +1515,22 @@ struct ArgumentExtractor {
 } // namespace
 
 SourceLocation CXXRewrittenOperatorExpr::getOperatorLoc() const {
-  ArgumentExtractor::getOperatorLoc(this->getRewrittenExpr());
+  return ArgumentExtractor::getOperatorLoc(this->getRewrittenExpr());
 }
 
 CXXRewrittenOperatorExpr::Opcode CXXRewrittenOperatorExpr::getOpcode() const {
-  ArgumentExtractor::getOpcode(getRewrittenExpr());
+  return ArgumentExtractor::getOpcode(getRewrittenExpr());
 }
 
 CXXRewrittenOperatorExpr::Opcode
 CXXRewrittenOperatorExpr::getOriginalOpcode() const {
-  ArgumentExtractor{this}.getOriginalOpcode();
+  return ArgumentExtractor{this}.getOriginalOpcode();
 }
 
-CXXRewrittenOperatorExpr::getOriginalLHS() const {
-  ArgumentExtractor{this}.getOriginalLHS();
+Expr *CXXRewrittenOperatorExpr::getOriginalLHS() const {
+  return ArgumentExtractor{this}.getOriginalLHS();
 }
-CXXRewrittenOperatorExpr::getOriginalRHS() const {
-  ArgumentExtractor{this}.getOriginalRHS();
+
+Expr *CXXRewrittenOperatorExpr::getOriginalRHS() const {
+  return ArgumentExtractor{this}.getOriginalRHS();
 }
