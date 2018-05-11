@@ -58,7 +58,6 @@ class IdentifierInfo;
 class LambdaCapture;
 class NonTypeTemplateParmDecl;
 class TemplateParameterList;
-enum RewrittenOverloadCandidateKind : unsigned char;
 
 //===--------------------------------------------------------------------===//
 // C++ Expressions.

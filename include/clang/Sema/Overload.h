@@ -72,7 +72,6 @@ class Sema;
     OCD_ViableCandidates
   };
 
-
   /// ImplicitConversionKind - The kind of implicit conversion used to
   /// convert an argument to a parameter's type. The enumerator values
   /// match with the table titled 'Conversions' in [over.ics.scs] and are listed
