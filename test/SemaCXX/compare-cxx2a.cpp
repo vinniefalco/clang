@@ -552,3 +552,11 @@ void test(T x, T y) {
 }
 
 } // namespace BadRewrittenTest
+
+namespace NullptrOvlTest {
+
+void test(int *p, decltype(nullptr) n) {
+  (void)(p < n);
+}
+
+} // namespace NullptrOvlTest
