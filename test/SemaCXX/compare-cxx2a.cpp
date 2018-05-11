@@ -541,6 +541,7 @@ template auto test<ThreeWay>(ThreeWay const &, ThreeWay const &);
 namespace BadRewrittenTest {
 
 struct T {};
+// FIXME(EricWF): Say the return type and the opcode for the rewritten expression.
 // expected-note@+2 {{return type cannot be used as an operand to the rewritten comparison operator}}
 // expected-note@+1 {{return type cannot be used as an operand to the reversed rewritten comparison operator}}
 std::strong_equality operator<=>(T, T);
