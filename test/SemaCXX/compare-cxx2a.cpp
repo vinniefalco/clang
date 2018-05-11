@@ -448,10 +448,14 @@ struct Y { int x; };
 template <int>
 struct Tag {};
 
+// expected-note@+2 {{candidate function (rewritten operator) not viable: no known conversion from 'TestRewritting::T' to 'TestRewritting::X' for 1st argument}}
+// expected-note@+1 {{candidate function (reversed rewritten operator) not viable: no known conversion from 'TestRewritting::U' to 'TestRewritting::X' for 1st argument}}
 Tag<0> operator<=>(X, Y) {
   return {};
 }
 
+// expected-note@+2 {{candidate function (rewritten operator) not viable: no known conversion from 'TestRewritting::T' to 'TestRewritting::Y' for 1st argument}}
+// expected-note@+1 {{candidate function (reversed rewritten operator) not viable: no known conversion from 'TestRewritting::U' to 'TestRewritting::Y' for 1st argument}}
 constexpr auto operator<=>(Y y, X x) {
   return y.x <=> x.x;
 }
