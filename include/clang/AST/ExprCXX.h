@@ -4221,9 +4221,7 @@ private:
   friend class ASTStmtReader;
   friend class ASTStmtWriter;
 
-  unsigned RewrittenKind : 2;
-
-  Expr *Rewritten;
+  Stmt *Rewritten;
 
   CXXRewrittenOperatorExpr(EmptyShell Empty)
       : Expr(CXXRewrittenOperatorExprClass, Empty) {}
@@ -4235,15 +4233,18 @@ public:
              /*Dependent*/ Rewritten->isTypeDependent(),
              Rewritten->isValueDependent(),
              Rewritten->isInstantiationDependent(),
-             Rewritten->containsUnexpandedParameterPack()),
-        RewrittenKind(Kind) {}
+             Rewritten->containsUnexpandedParameterPack()) {
+    CXXRewrittenOperatorBits.Kind = Kind;
+  }
 
   RewrittenOpKind getRewrittenKind() const {
-    return static_cast<RewrittenOpKind>(RewrittenKind);
+    return static_cast<RewrittenOpKind>(CXXRewrittenOperatorBits.Kind);
   }
-  void setRewrittenKind(RewrittenOpKind Kind) { RewrittenKind = Kind; }
+  void setRewrittenKind(RewrittenOpKind Kind) {
+    CXXRewrittenOperatorBits.Kind = Kind;
+  }
 
-  Expr *getRewrittenExpr() const { return Rewritten; }
+  Expr *getRewrittenExpr() const { return static_cast<Expr *>(Rewritten); }
   Opcode getOpcode() const;
   bool isReverseOrder() const {
     return RewrittenKind == ROC_AsReversedThreeWay;
@@ -4251,17 +4252,14 @@ public:
 
   SourceLocation getLocStart() const { return Rewritten->getLocStart(); }
   SourceLocation getLocEnd() const { return Rewritten->getLocEnd(); }
-  SourceLocation getExprLoc() const { return Rewritten->getExprLoc(); }
+  SourceLocation getExprLoc() const { return getRewrittenExpr()->getExprLoc(); }
   SourceLocation getOperatorLoc() const;
 
   Opcode getOriginalOpcode() const;
   Expr *getOriginalLHS() const;
   Expr *getOriginalRHS() const;
 
-  child_range children() {
-    return child_range(static_cast<Stmt *>(Rewritten),
-                       static_cast<Stmt *>(Rewritten) + 1);
-  }
+  child_range children() { return child_range(&Rewritten, &Rewritten + 1); }
 
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == CXXRewrittenOperatorExprClass;
