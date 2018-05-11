@@ -435,7 +435,7 @@ struct T {
 
 struct U {
   int x;
-  // FIXME(EricWF)
+  // FIXME(EricWF): Are I sure this test case is correct?
   // expected-note@+1 {{return type cannot be used as an operand to the reversed rewritten comparison operator}}
   constexpr std::strong_equality operator<=>(T y) const {
     if (x == y.x)
