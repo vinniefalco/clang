@@ -11520,29 +11520,6 @@ TreeTransform<Derived>::TransformMaterializeTemporaryExpr(
   return getDerived().TransformExpr(E->GetTemporaryExpr());
 }
 
-static Expr *extractOperand(Expr *E, unsigned Idx) {
-  assert(Idx < 2);
-  if (auto *BO = dyn_cast<BinaryOperator>(E)) {
-    if (Idx == 0)
-      return BO->getLHS();
-    return BO->getRHS();
-  }
-  if (auto *CE = dyn_cast<CallExpr>(E)) {
-    assert(CE->getNumArgs() == 2);
-    return CE->getArg(Idx);
-  }
-  llvm_unreachable("unhandled case");
-}
-static std::pair<Expr *, Expr *>
-extractOriginalOperandsFromRewrittenComparison(Expr *E, bool IsThreeWay,
-                                               bool IsSynthesized) {
-  if (IsThreeWay)
-    return {extractOperand(E, IsSynthesized ? 1 : 0),
-            extractOperand(E, IsSynthesized ? 0 : 1)};
-  return extractOriginalOperandsFromRewrittenComparison(
-      extractOperand(E, IsSynthesized ? 1 : 0), true, IsSynthesized);
-}
-
 template <typename Derived>
 ExprResult TreeTransform<Derived>::TransformCXXRewrittenOperatorExpr(
     CXXRewrittenOperatorExpr *E) {

@@ -1436,26 +1436,22 @@ void ArrayTypeTraitExpr::anchor() {}
 
 namespace {
 struct ArgumentExtractor {
-  const CXXRewrittenOperatorExpr *E;
   Expr *Rewritten;
   bool IsReverseOrder;
   bool IsThreeWay;
 
   ArgumentExtractor(const CXXRewrittenOperatorExpr *E)
-      : E(E), Rewritten(E->getRewrittenExpr()) {
-    IsReverseOrder = E->getRewrittenKind() == ROC_AsReversedThreeWay;
+      : Rewritten(E->getRewritten()) {
+    IsReverseOrder = E->getRewrittenKind() = ROC_AsReversedThreeWay;
     IsThreeWay = getOpcode(Rewritten) == BO_Cmp;
   }
 
   static CXXRewrittenOperatorExpr::Opcode getOpcode(Expr *E) {
-    CXXRewrittenOperatorExpr::Opcode Opc;
-    if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E)) {
-      Opc = BO->getOpcode();
-    } else if (auto *CE = dyn_cast<CXXOperatorCallExpr>(E)) {
-      Opc = BinaryOperator::getOverloadedOpcode(CE->getOperator());
-    } else {
-      llvm_unreachable("unhandled case");
-    }
+    if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E))
+      return BO->getOpcode();
+    if (auto *CE = dyn_cast<CXXOperatorCallExpr>(E))
+      return BinaryOperator::getOverloadedOpcode(CE->getOperator());
+    llvm_unreachable("unhandled case");
   }
 
   CXXRewrittenOperatorExpr::Opcode getOriginalOpcode() const {

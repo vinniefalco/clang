@@ -4245,9 +4245,11 @@ public:
 
   Expr *getRewrittenExpr() const { return static_cast<Expr *>(Rewritten); }
   Opcode getOpcode() const;
-  bool isReverseOrder() const {
+
+  bool isRewrittenAsReversed() const {
     return getRewrittenKind() == ROC_AsReversedThreeWay;
   }
+  bool isRewrittenAsThreeWay() const { return getOriginalOpcode() != BO_Cmp; }
 
   SourceLocation getLocStart() const { return Rewritten->getLocStart(); }
   SourceLocation getLocEnd() const { return Rewritten->getLocEnd(); }
