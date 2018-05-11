@@ -3503,8 +3503,6 @@ def ext_param_promoted_not_compatible_with_prototype : ExtWarn<
   InGroup<KNRPromotedParameter>;
 
 
-def
-
 // C++ Overloading Semantic Analysis.
 def err_ovl_diff_return_type : Error<
   "functions that differ only in their return type cannot be overloaded">;

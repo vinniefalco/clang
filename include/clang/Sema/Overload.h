@@ -78,9 +78,9 @@ class Sema;
     /// Not a rewritten candidate.
     ROC_None,
     /// Rewritten but not synthesized.
-    ROC_Rewritten,
+    ROC_AsThreeWay,
     /// Both rewritten and synthesized.
-    ROC_Synthesized
+    ROC_AsReversedThreeWay
   };
 
   /// ImplicitConversionKind - The kind of implicit conversion used to

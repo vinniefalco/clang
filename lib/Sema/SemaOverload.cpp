@@ -837,7 +837,7 @@ OverloadCandidate::getConversion(unsigned ArgIdx) const {
 }
 
 unsigned OverloadCandidate::getConversionIndexForArgIndex(unsigned Idx) const {
-  if (getRewrittenKind() != ROC_Synthesized)
+  if (getRewrittenKind() != ROC_AsReversedThreeWay)
     return Idx;
   // FIXME(EricWF): Handle these cases.
   assert(Idx < 2);
@@ -8972,7 +8972,7 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
   // If we have a relational or equality operation, add the rewritten candidates
   // of the form: (LHS <=> RHS) @ 0
   if (IsRelationalOrEquality)
-   AddCandidates(InputArgs, ROC_Rewritten);
+    AddCandidates(InputArgs, ROC_AsThreeWay);
 
   // TODO: We should be able to avoid adding synthesized candidates when LHS and
   // RHS have the same type, value category, and other relevent properties.
@@ -8984,7 +8984,7 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
   // For relational, equality, and three-way comparisons, add the rewritten and
   // synthesized candidates of the form: 0 @ (RHS <=> LHS)
   SmallVector<Expr *, 2> ReverseArgs(InputArgs.rbegin(), InputArgs.rend());
-  AddCandidates(ReverseArgs, ROC_Synthesized);
+  AddCandidates(ReverseArgs, ROC_AsReversedThreeWay);
 }
 
 /// Add function candidates found via argument-dependent lookup
@@ -9265,7 +9265,8 @@ bool clang::isBetterOverloadCandidate(
         return !C1Roc;
       // --- F1 and F2 are rewritten candidates, and F2 is a synthesized
       // candidate with reversed order of parameters and F1 is not.
-      if ((C1Roc == ROC_Synthesized || C2Roc == ROC_Synthesized) &&
+      if ((C1Roc == ROC_AsReversedThreeWay ||
+           C2Roc == ROC_AsReversedThreeWay) &&
           C1Roc != C2Roc) {
         auto GetParamTypes = [&](const OverloadCandidate &Ovl) {
           SmallVector<QualType, 2> Types;
@@ -9288,12 +9289,12 @@ bool clang::isBetterOverloadCandidate(
           for (unsigned I = 0; I < Ovl.getNumParams(); ++I)
             Types.push_back(Ovl.getParamType(I).getCanonicalType());
           assert(Types.size() == 2);
-          if (Ovl.getRewrittenKind() == ROC_Synthesized)
+          if (Ovl.getRewrittenKind() == ROC_AsReversedThreeWay)
             std::swap(Types[0], Types[1]);
           return Types;
         };
         if (GetParamTypes(Cand1) == GetParamTypes(Cand2))
-          return C2Roc == ROC_Synthesized;
+          return C2Roc == ROC_AsReversedThreeWay;
       }
     }
   }
@@ -9555,10 +9556,10 @@ ClassifyOverloadCandidate(Sema &S, NamedDecl *Found, FunctionDecl *Fn,
     return oc_method;
   }
 
-  if (ROC == ROC_Rewritten)
+  if (ROC == ROC_AsThreeWay)
     return isTemplate ? oc_rewritten_comparison_operator_template
                       : oc_rewritten_comparison_operator;
-  if (ROC == ROC_Synthesized)
+  if (ROC == ROC_AsReversedThreeWay)
     return isTemplate ? oc_synthesized_comparison_operator_template
                       : oc_synthesized_comparison_operator;
 
@@ -12537,7 +12538,7 @@ static ExprResult BuildRewrittenCandidate(Sema &S, BinaryOperatorKind Opc,
                                           bool PerformADL) {
   Expr *RewrittenArgs[2] = {Args[0], Args[1]};
   assert(Ovl.getRewrittenKind());
-  bool IsSynthesized = Ovl.getRewrittenKind() == ROC_Synthesized;
+  bool IsSynthesized = Ovl.getRewrittenKind() == ROC_AsReversedThreeWay;
   if (IsSynthesized)
     std::swap(RewrittenArgs[0], RewrittenArgs[1]);
 
@@ -12563,7 +12564,7 @@ static ExprResult BuildRewrittenCandidate(Sema &S, BinaryOperatorKind Opc,
 
     Expr *NewLHS = RewrittenRes.get();
     Expr *NewRHS = Zero;
-    if (Ovl.getRewrittenKind() == ROC_Synthesized)
+    if (Ovl.getRewrittenKind() == ROC_AsReversedThreeWay)
       std::swap(NewLHS, NewRHS);
 
     RewrittenRes =
