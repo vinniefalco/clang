@@ -4232,7 +4232,8 @@ public:
              /*Dependent*/ Rewritten->isTypeDependent(),
              Rewritten->isValueDependent(),
              Rewritten->isInstantiationDependent(),
-             Rewritten->containsUnexpandedParameterPack()) {
+             Rewritten->containsUnexpandedParameterPack()),
+        Rewritten(Rewritten) {
     CXXRewrittenOperatorBits.Kind = Kind;
   }
 
