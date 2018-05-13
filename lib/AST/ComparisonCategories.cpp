@@ -148,16 +148,6 @@ QualType ComparisonCategoryInfo::getType() const {
   return QualType(Record->getTypeForDecl(), 0);
 }
 
-bool ComparisonCategoryInfo::isUsableWithOperator(
-        ComparisonCategoryType CompKind, BinaryOperatorKind Opcode) {
-  assert(BinaryOperator::isComparisonOp(Opcode));
-  if (BinaryOperator::isRelationalOp(Opcode))
-    return isOrdered(CompKind);
-  // We either have an equality or three-way opcode. These are all OK for
-  // any comparison category type.
-  return true;
-}
-
 StringRef ComparisonCategories::getCategoryString(ComparisonCategoryType Kind) {
   using CCKT = ComparisonCategoryType;
   switch (Kind) {
@@ -254,23 +244,73 @@ ComparisonCategories::computeComparisonTypeForBuiltin(QualType Ty,
   return None;
 }
 
+// FIXME(EricWF): The rules to deduce the composite argument type are actually
+// quite complicated. However the rules to compute the comparison type for a
+// single builtin argument type are simple, and so are the rules to compute the
+// common comparison type. So we do that to determine the "likely" comparison
+// category type for the specified set of parameter types for a builtin
+// function.
+//
+// This information is used during overload resolution to determine if the
+// rewritten expression '(LHS <=> RHS) @ 0' (or the reversed candidate) is
+// valid for a given '@'. For example `(MemPtr <=> MemPtr) < 0` is ill-formed
+// because  `std::strong_equality` cannot be used in a relational operator.
+Optional<ComparisonCategoryType>
+ComparisonCategories::computeComparisonTypeForBuiltin(QualType LHSTy,
+                                                      QualType RHSTy) {
+  QualType Args[2] = {LHSTy, RHSTy};
+  SmallVector<ComparisonCategoryType, 8> TypeKinds;
+  for (auto QT : Args) {
+    Optional<ComparisonCategoryType> CompType =
+        computeComparisonTypeForBuiltin(QT);
+    if (!CompType)
+      return None;
+    TypeKinds.push_back(*CompType);
+  }
+  return computeCommonComparisonType(TypeKinds);
+}
+
+bool ComparisonCategoryInfo::isUsableWithOperator(
+        ComparisonCategoryType CompKind, BinaryOperatorKind Opcode) {
+  assert(BinaryOperator::isComparisonOp(Opcode));
+  if (BinaryOperator::isRelationalOp(Opcode))
+    return isOrdered(CompKind);
+  // We either have an equality or three-way opcode. These are all OK for
+  // any comparison category type.
+  return true;
+}
+
 /// C++2a [class.spaceship]p4 - compute the common category type.
 const ComparisonCategoryInfo *ComparisonCategories::computeCommonComparisonType(
     ArrayRef<QualType> Types) const {
-  using CCT = ComparisonCategoryType;
-  std::array<unsigned, static_cast<unsigned>(CCT::Last) + 1> Seen = {};
-  auto Count = [&](CCT T) { return Seen[static_cast<unsigned>(T)]; };
-
-  // Count the number of times each comparison category type occurs in the
-  // specified type list. If any type is not a comparison category, return
-  // nullptr.
+  SmallVector<ComparisonCategoryType, 8> Kinds;
+  // If any type is not a comparison category, return nullptr.
   for (auto Ty : Types) {
     const ComparisonCategoryInfo *Info = lookupInfoForType(Ty);
     // --- If any T is not a comparison category type, U is void.
     if (!Info)
       return nullptr;
-    Seen[static_cast<unsigned>(Info->Kind)]++;
+    Kinds.push_back(Info->Kind);
   }
+  Optional<ComparisonCategoryType> CommonType =
+      computeCommonComparisonType(Kinds);
+  if (!CommonType)
+    return nullptr;
+  return lookupInfo(*CommonType);
+}
+
+Optional<ComparisonCategoryType>
+ComparisonCategories::computeCommonComparisonType(
+    ArrayRef<ComparisonCategoryType> Types) {
+  using CCT = ComparisonCategoryType;
+  std::array<unsigned, static_cast<unsigned>(CCT::Last) + 1> Seen = {};
+  auto Count = [&](CCT T) { return Seen[static_cast<unsigned>(T)]; };
+
+  // Count the number of times each comparison category type occurs in the
+  // specified type list.
+  for (auto TyKind : Types)
+    Seen[static_cast<unsigned>(TyKind)]++;
+
   // --- Otherwise, if at least one Ti is std::weak_equality, or at least one
   // Ti is std::strong_equality and at least one Tj is
   // std::partial_ordering or std::weak_ordering, U is
@@ -278,25 +318,23 @@ const ComparisonCategoryInfo *ComparisonCategories::computeCommonComparisonType(
   if (Count(CCT::WeakEquality) ||
       (Count(CCT::StrongEquality) &&
        (Count(CCT::PartialOrdering) || Count(CCT::WeakOrdering))))
-    return lookupInfo(CCT::WeakEquality);
+    return CCT::WeakEquality;
 
   // --- Otherwise, if at least one Ti is std::strong_equality, U is
   // std::strong_equality
   if (Count(CCT::StrongEquality))
-    return lookupInfo(CCT::StrongEquality);
+    return CCT::StrongEquality;
 
   // --- Otherwise, if at least one Ti is std::partial_ordering, U is
   // std::partial_ordering.
   if (Count(CCT::PartialOrdering))
-    return lookupInfo(CCT::PartialOrdering);
+    return CCT::PartialOrdering;
 
   // --- Otherwise, if at least one Ti is std::weak_ordering, U is
   // std::weak_ordering.
   if (Count(CCT::WeakOrdering))
-    return lookupInfo(CCT::WeakOrdering);
+    return CCT::WeakOrdering;
 
-  // FIXME(EricWF): What if we don't find std::strong_ordering
   // --- Otherwise, U is std::strong_ordering.
-  return lookupInfo(CCT::StrongOrdering);
-
+  return CCT::StrongOrdering;
 }

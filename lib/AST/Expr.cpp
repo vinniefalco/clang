@@ -3188,8 +3188,8 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
     return false;
   }
 
-  case CXXRewrittenExprClass: {
-    const auto *RO = cast<CXXRewrittenExpr>(this);
+  case CXXRewrittenOperatorExprClass: {
+    const auto *RO = cast<CXXRewrittenOperatorExpr>(this);
     return RO->getRewrittenExpr()->HasSideEffects(Ctx, IncludePossibleEffects);
   }
 

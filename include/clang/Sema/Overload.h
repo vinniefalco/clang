@@ -72,17 +72,6 @@ class Sema;
     OCD_ViableCandidates
   };
 
-  /// OperatorOverloadCandidateKind - The kind of the operator candidate in
-  /// accordance with [over.match.oper].
-  enum RewrittenOverloadCandidateKind : unsigned char {
-    /// Not a rewritten candidate.
-    ROC_None,
-    /// Rewritten but not synthesized.
-    ROC_Rewritten,
-    /// Both rewritten and synthesized.
-    ROC_Synthesized
-  };
-
   /// ImplicitConversionKind - The kind of implicit conversion used to
   /// convert an argument to a parameter's type. The enumerator values
   /// match with the table titled 'Conversions' in [over.ics.scs] and are listed
@@ -730,6 +719,10 @@ class Sema;
     /// This candidate was not viable because it is a non-default multiversioned
     /// function.
     ovl_non_default_multiversion_function,
+
+    // Thes candidate was not viable because the return type of the rewritten
+    // expression was not a valid operand to the original binary operator.
+    ovl_rewritten_operand_non_valid_for_operator
   };
 
   /// A list of implicit conversion sequences for the arguments of an
@@ -890,8 +883,11 @@ class Sema;
 
   private:
     SmallVector<OverloadCandidate, 16> Candidates;
-    using DeclSet = llvm::SmallPtrSet<Decl *, 16>;
-    DeclSet Functions;
+
+    using DeclKindPair =
+        llvm::PointerIntPair<Decl *, 2, RewrittenOverloadCandidateKind>;
+    using DeclKindSet = llvm::SmallSet<DeclKindPair, 4>;
+    DeclKindSet Functions;
 
   private:
     // Allocator for ConversionSequenceLists. We store the first few of these
@@ -900,6 +896,8 @@ class Sema;
 
     SourceLocation Loc;
     CandidateSetKind Kind;
+
+    RewrittenOverloadCandidateKind AddingOverloadKind;
 
     constexpr static unsigned NumInlineBytes =
         24 * sizeof(ImplicitConversionSequence);
@@ -935,44 +933,40 @@ class Sema;
     void destroyCandidates();
 
   public:
-    /// \brief RewrittenCandidateContextGuard - Enter a context suitable for
-    /// adding rewritten overload candidates. Rewritten candidates can
-    /// re-consider previously seen functions, so save and clear the list of
-    /// considered functions, and restore it when the rewritten context is
-    /// exited.
-    struct RewrittenCandidateContextGuard {
-      RewrittenCandidateContextGuard(OverloadCandidateSet &CS)
-          : CandidateSet(CS) {
-        assert(CS.Kind == CSK_Operator &&
-               "rewritten expressions can only occur for operators");
-        OldFunctions = std::move(CandidateSet.Functions);
+    friend struct AddingRewrittenCandidateGuard;
+    struct AddingRewrittenCandidateGuard {
+      AddingRewrittenCandidateGuard(
+          OverloadCandidateSet &Candidates,
+          RewrittenOverloadCandidateKind NewOverloadKind)
+          : Candidates(Candidates) {
+        OldRewrittenKind = Candidates.AddingOverloadKind;
+        Candidates.AddingOverloadKind = NewOverloadKind;
       }
-
-      ~RewrittenCandidateContextGuard() {
-        CandidateSet.Functions.insert(OldFunctions.begin(), OldFunctions.end());
+      ~AddingRewrittenCandidateGuard() {
+        Candidates.AddingOverloadKind = OldRewrittenKind;
       }
-
-    private:
-      OverloadCandidateSet &CandidateSet;
-      DeclSet OldFunctions;
+      OverloadCandidateSet &Candidates;
+      RewrittenOverloadCandidateKind OldRewrittenKind;
     };
-
-    friend struct RewrittenCandidateContextGuard;
 
   public:
     OverloadCandidateSet(SourceLocation Loc, CandidateSetKind CSK)
-        : Loc(Loc), Kind(CSK) {}
+        : Loc(Loc), Kind(CSK), AddingOverloadKind(ROC_None) {}
     OverloadCandidateSet(const OverloadCandidateSet &) = delete;
     OverloadCandidateSet &operator=(const OverloadCandidateSet &) = delete;
     ~OverloadCandidateSet() { destroyCandidates(); }
 
     SourceLocation getLocation() const { return Loc; }
     CandidateSetKind getKind() const { return Kind; }
+    RewrittenOverloadCandidateKind getRewrittenKind() const {
+      return AddingOverloadKind;
+    }
 
     /// Determine when this overload candidate will be new to the
     /// overload set.
     bool isNewCandidate(Decl *F) {
-      return Functions.insert(F->getCanonicalDecl()).second;
+      DeclKindPair P(F->getCanonicalDecl(), AddingOverloadKind);
+      return Functions.insert(P).second;
     }
 
     /// Clear out all of the candidates.
@@ -1012,13 +1006,13 @@ class Sema;
       C.Conversions = Conversions.empty()
                           ? allocateConversionSequences(NumConversions)
                           : Conversions;
+      C.RewrittenOpKind = AddingOverloadKind;
       return C;
     }
 
     /// Find the best viable function on this overload set, if it exists.
-    OverloadingResult BestViableFunction(
-        Sema &S, SourceLocation Loc, OverloadCandidateSet::iterator &Best,
-        SmallVectorImpl<OverloadCandidate *> *EquivalentCands = nullptr);
+    OverloadingResult BestViableFunction(Sema &S, SourceLocation Loc,
+                                         OverloadCandidateSet::iterator &Best);
 
     void NoteCandidates(Sema &S,
                         OverloadCandidateDisplayKind OCD,

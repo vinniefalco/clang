@@ -437,8 +437,8 @@ struct T {
 
 struct U {
   int x;
-  // FIXME: This diagnostic is wrong-ish.
-  // expected-note@+1 {{candidate function not viable: requires single argument 'y', but 2 arguments were provided}}
+  // FIXME(EricWF): Are I sure this test case is correct?
+  // expected-note@+1 {{return type cannot be used as an operand to the reversed rewritten comparison operator}}
   constexpr std::strong_equality operator<=>(T y) const {
     if (x == y.x)
       return std::strong_equality::equal;
@@ -450,11 +450,15 @@ struct X { int x; };
 struct Y { int x; };
 template <int>
 struct Tag {};
-// expected-note@+1 2 {{candidate}}
+
+// expected-note@+2 {{candidate function (rewritten operator) not viable: no known conversion from 'TestRewritting::T' to 'TestRewritting::X' for 1st argument}}
+// expected-note@+1 {{candidate function (reversed rewritten operator) not viable: no known conversion from 'TestRewritting::U' to 'TestRewritting::X' for 1st argument}}
 Tag<0> operator<=>(X, Y) {
   return {};
 }
-// expected-note@+1 2 {{candidate}}
+
+// expected-note@+2 {{candidate function (rewritten operator) not viable: no known conversion from 'TestRewritting::T' to 'TestRewritting::Y' for 1st argument}}
+// expected-note@+1 {{candidate function (reversed rewritten operator) not viable: no known conversion from 'TestRewritting::U' to 'TestRewritting::Y' for 1st argument}}
 constexpr auto operator<=>(Y y, X x) {
   return y.x <=> x.x;
 }
@@ -488,13 +492,11 @@ void foo() {
 // rewritten candidates if any of them resolve to a member function.
 namespace TestOvlMatchingIgnoresImplicitObject {
 struct U;
-// expected-note@+2 {{candidate}}
 struct T {
   std::strong_ordering operator<=>(U const &RHS) const;
 };
-// expected-note@+2 {{candidate}}
 struct U {
-  std::strong_ordering operator<=>(T const &RHS) const;
+  std::strong_ordering operator<=>(T const &RHS) const = delete;
 };
 
 struct V {
@@ -508,7 +510,7 @@ auto operator<(V const &, V &&) { // expected-note {{candidate}}
 }
 
 void test() {
-  // expected-error@+1 {{use of overloaded operator '<' is ambiguous}}
+  // OK. selects T::operator<=>(U)
   (void)(T{} < U{});
   // expected-error@+1 {{use of overloaded operator '<' is ambiguous}}
   (void)(V{} < V{});
@@ -537,6 +539,33 @@ std::strong_ordering operator<=>(ThreeWay, ThreeWay);
 template auto test<ThreeWay>(ThreeWay const &, ThreeWay const &);
 
 } // namespace TestRewrittenTemplate
+
+namespace BadRewrittenTest {
+
+struct T {};
+// FIXME(EricWF): Say the return type and the opcode for the rewritten expression.
+// expected-note@+2 {{return type cannot be used as an operand to the rewritten comparison operator}}
+// expected-note@+1 {{return type cannot be used as an operand to the reversed rewritten comparison operator}}
+std::strong_equality operator<=>(T, T);
+
+void test(T x, T y) {
+  // expected-error@+1 {{invalid operands to binary expression}}
+  (void)(x < y);
+}
+
+} // namespace BadRewrittenTest
+
+namespace NullptrOvlTest {
+
+void test(int *p, decltype(nullptr) n) {
+  (void)(p == n); // OK
+  (void)(n == nullptr); // OK
+  // expected-error@+1 {{invalid operands to binary expression ('int *' and 'decltype(nullptr)' (aka 'nullptr_t'))}}
+  (void)(p < n);
+}
+
+} // namespace NullptrOvlTest
+
 
 namespace IllFormedSpecialMemberTest {
 
@@ -590,7 +619,7 @@ auto operator<=>(T3 const &, T3 const &);
 struct T3 {
   // expected-error@+1 {{defaulted definition must be first declaration}}
   friend auto operator<=>(T3 const &, T3 const &) = default;
-  
+
   // expected-error@+1 {{explicitly-defaulted comparison operator must return 'bool'}}
   int operator<=(T3 const &) const = default;
   // expected-error@+1 {{explicitly-defaulted comparison operator must return 'bool'}}

@@ -957,6 +957,7 @@ public:
   QualType RebuildDependentTemplateSpecializationType(
                                           ElaboratedTypeKeyword Keyword,
                                           NestedNameSpecifierLoc QualifierLoc,
+                                          SourceLocation TemplateKWLoc,
                                           const IdentifierInfo *Name,
                                           SourceLocation NameLoc,
                                           TemplateArgumentListInfo &Args,
@@ -965,9 +966,9 @@ public:
     // TODO: avoid TemplateName abstraction
     CXXScopeSpec SS;
     SS.Adopt(QualifierLoc);
-    TemplateName InstName
-      = getDerived().RebuildTemplateName(SS, *Name, NameLoc, QualType(),
-                                         nullptr, AllowInjectedClassName);
+    TemplateName InstName = getDerived().RebuildTemplateName(
+        SS, TemplateKWLoc, *Name, NameLoc, QualType(), nullptr,
+        AllowInjectedClassName);
 
     if (InstName.isNull())
       return QualType();
@@ -1146,9 +1147,9 @@ public:
   /// template name. Subclasses may override this routine to provide different
   /// behavior.
   TemplateName RebuildTemplateName(CXXScopeSpec &SS,
+                                   SourceLocation TemplateKWLoc,
                                    const IdentifierInfo &Name,
-                                   SourceLocation NameLoc,
-                                   QualType ObjectType,
+                                   SourceLocation NameLoc, QualType ObjectType,
                                    NamedDecl *FirstQualifierInScope,
                                    bool AllowInjectedClassName);
 
@@ -1160,9 +1161,9 @@ public:
   /// template name. Subclasses may override this routine to provide different
   /// behavior.
   TemplateName RebuildTemplateName(CXXScopeSpec &SS,
+                                   SourceLocation TemplateKWLoc,
                                    OverloadedOperatorKind Operator,
-                                   SourceLocation NameLoc,
-                                   QualType ObjectType,
+                                   SourceLocation NameLoc, QualType ObjectType,
                                    bool AllowInjectedClassName);
 
   /// Build a new template name given a template template parameter pack
@@ -3217,15 +3218,12 @@ public:
     return getSema().BuildEmptyCXXFoldExpr(EllipsisLoc, Operator);
   }
 
-  ExprResult
-  RebuildCXXRewrittenExpr(CXXRewrittenExpr::RewrittenKind Kind, Expr *Original,
-                          Expr *Rewritten,
-                          CXXRewrittenExpr::ExtraRewrittenBits ExtraBits) {
-    return new (SemaRef.Context)
-        CXXRewrittenExpr(Kind, Original, Rewritten, ExtraBits);
+  ExprResult RebuildCXXRewrittenOperatorExpr(
+      CXXRewrittenOperatorExpr::RewrittenOpKind Kind, Expr *Rewritten) {
+    return new (SemaRef.Context) CXXRewrittenOperatorExpr(Kind, Rewritten);
   }
 
-  /// Build a new atomic operation expression
+  /// Build a new atomic operation expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
   /// Subclasses may override this routine to provide different behavior.
@@ -3760,8 +3758,12 @@ TreeTransform<Derived>::TransformTemplateName(CXXScopeSpec &SS,
         ObjectType.isNull())
       return Name;
 
+    // FIXME: Preserve the location of the "template" keyword.
+    SourceLocation TemplateKWLoc = NameLoc;
+
     if (DTN->isIdentifier()) {
       return getDerived().RebuildTemplateName(SS,
+                                              TemplateKWLoc,
                                               *DTN->getIdentifier(),
                                               NameLoc,
                                               ObjectType,
@@ -3769,7 +3771,8 @@ TreeTransform<Derived>::TransformTemplateName(CXXScopeSpec &SS,
                                               AllowInjectedClassName);
     }
 
-    return getDerived().RebuildTemplateName(SS, DTN->getOperator(), NameLoc,
+    return getDerived().RebuildTemplateName(SS, TemplateKWLoc,
+                                            DTN->getOperator(), NameLoc,
                                             ObjectType, AllowInjectedClassName);
   }
 
@@ -4348,6 +4351,7 @@ TypeSourceInfo *TreeTransform<Derived>::TransformTSIInObjectScope(
 
     TemplateName Template
       = getDerived().RebuildTemplateName(SS,
+                                         SpecTL.getTemplateKeywordLoc(),
                                          *SpecTL.getTypePtr()->getIdentifier(),
                                          SpecTL.getTemplateNameLoc(),
                                          ObjectType, UnqualLookup,
@@ -6146,8 +6150,8 @@ TransformDependentTemplateSpecializationType(TypeLocBuilder &TLB,
     return QualType();
 
   QualType Result = getDerived().RebuildDependentTemplateSpecializationType(
-      T->getKeyword(), QualifierLoc, T->getIdentifier(),
-      TL.getTemplateNameLoc(), NewTemplateArgs,
+      T->getKeyword(), QualifierLoc, TL.getTemplateKeywordLoc(),
+      T->getIdentifier(), TL.getTemplateNameLoc(), NewTemplateArgs,
       /*AllowInjectedClassName*/ false);
   if (Result.isNull())
     return QualType();
@@ -11523,32 +11527,9 @@ TreeTransform<Derived>::TransformMaterializeTemporaryExpr(
   return getDerived().TransformExpr(E->GetTemporaryExpr());
 }
 
-static Expr *extractOperand(Expr *E, unsigned Idx) {
-  assert(Idx < 2);
-  if (auto *BO = dyn_cast<BinaryOperator>(E)) {
-    if (Idx == 0)
-      return BO->getLHS();
-    return BO->getRHS();
-  }
-  if (auto *CE = dyn_cast<CallExpr>(E)) {
-    assert(CE->getNumArgs() == 2);
-    return CE->getArg(Idx);
-  }
-  llvm_unreachable("unhandled case");
-}
-static std::pair<Expr *, Expr *>
-extractOriginalOperandsFromRewrittenComparison(Expr *E, bool IsThreeWay,
-                                               bool IsSynthesized) {
-  if (IsThreeWay)
-    return {extractOperand(E, IsSynthesized ? 1 : 0),
-            extractOperand(E, IsSynthesized ? 0 : 1)};
-  return extractOriginalOperandsFromRewrittenComparison(
-      extractOperand(E, IsSynthesized ? 1 : 0), true, IsSynthesized);
-}
-
 template <typename Derived>
-ExprResult
-TreeTransform<Derived>::TransformCXXRewrittenExpr(CXXRewrittenExpr *E) {
+ExprResult TreeTransform<Derived>::TransformCXXRewrittenOperatorExpr(
+    CXXRewrittenOperatorExpr *E) {
 
   // FIXME(EricWF): Is there a case where the underlying expression has been
   // transformed in such a way that we need to re-compute the rewritten
@@ -11561,28 +11542,8 @@ TreeTransform<Derived>::TransformCXXRewrittenExpr(CXXRewrittenExpr *E) {
   if (Rewritten == E->getRewrittenExpr() && !getDerived().AlwaysRebuild())
     return E;
 
-  Expr *Original;
-  switch (E->getRewrittenKind()) {
-  case CXXRewrittenExpr::Comparison: {
-    BinaryOperator *Op = cast<BinaryOperator>(E->getOriginalExpr());
-
-    // Extract the already transformed operands from the rewritten expression.
-    std::pair<Expr *, Expr *> OrigArgs =
-        extractOriginalOperandsFromRewrittenComparison(
-            Rewritten, Op->getOpcode() == BO_Cmp,
-            E->getRewrittenInfo()->CompareBits.IsSynthesized);
-
-    // Build a dummy node representing the expression as written.
-    Original = new (SemaRef.Context) BinaryOperator(
-        OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.first),
-        OpaqueValueExpr::Create(SemaRef.Context, OrigArgs.second),
-        Op->getOpcode(), Rewritten->getType(), Rewritten->getValueKind(),
-        Rewritten->getObjectKind(), Op->getOperatorLoc(), Op->getFPFeatures());
-    break;
-  }
-  }
-  return getDerived().RebuildCXXRewrittenExpr(
-      E->getRewrittenKind(), Original, Rewritten, *E->getRewrittenInfo());
+  return getDerived().RebuildCXXRewrittenOperatorExpr(E->getRewrittenKind(),
+                                                      Rewritten);
 }
 
 template<typename Derived>
@@ -12580,6 +12541,7 @@ TreeTransform<Derived>::RebuildTemplateName(CXXScopeSpec &SS,
 template<typename Derived>
 TemplateName
 TreeTransform<Derived>::RebuildTemplateName(CXXScopeSpec &SS,
+                                            SourceLocation TemplateKWLoc,
                                             const IdentifierInfo &Name,
                                             SourceLocation NameLoc,
                                             QualType ObjectType,
@@ -12588,7 +12550,6 @@ TreeTransform<Derived>::RebuildTemplateName(CXXScopeSpec &SS,
   UnqualifiedId TemplateName;
   TemplateName.setIdentifier(&Name, NameLoc);
   Sema::TemplateTy Template;
-  SourceLocation TemplateKWLoc; // FIXME: retrieve it from caller.
   getSema().ActOnDependentTemplateName(/*Scope=*/nullptr,
                                        SS, TemplateKWLoc, TemplateName,
                                        ParsedType::make(ObjectType),
@@ -12600,6 +12561,7 @@ TreeTransform<Derived>::RebuildTemplateName(CXXScopeSpec &SS,
 template<typename Derived>
 TemplateName
 TreeTransform<Derived>::RebuildTemplateName(CXXScopeSpec &SS,
+                                            SourceLocation TemplateKWLoc,
                                             OverloadedOperatorKind Operator,
                                             SourceLocation NameLoc,
                                             QualType ObjectType,
@@ -12608,7 +12570,6 @@ TreeTransform<Derived>::RebuildTemplateName(CXXScopeSpec &SS,
   // FIXME: Bogus location information.
   SourceLocation SymbolLocations[3] = { NameLoc, NameLoc, NameLoc };
   Name.setOperatorFunctionId(NameLoc, Operator, SymbolLocations);
-  SourceLocation TemplateKWLoc; // FIXME: retrieve it from caller.
   Sema::TemplateTy Template;
   getSema().ActOnDependentTemplateName(/*Scope=*/nullptr,
                                        SS, TemplateKWLoc, Name,

@@ -66,6 +66,17 @@ enum class ComparisonCategoryResult : unsigned char {
   Last = Unordered
 };
 
+/// OperatorOverloadCandidateKind - The kind of the operator candidate in
+/// accordance with [over.match.oper].
+enum RewrittenOverloadCandidateKind : unsigned char {
+  /// Not a rewritten candidate.
+  ROC_None,
+  /// Rewritten but not synthesized.
+  ROC_AsThreeWay,
+  /// Both rewritten and synthesized.
+  ROC_AsReversedThreeWay
+};
+
 class ComparisonCategoryInfo {
   friend class ComparisonCategories;
   friend class Sema;
@@ -204,6 +215,15 @@ public:
   static StringRef getCategoryString(ComparisonCategoryType Kind);
   static StringRef getResultString(ComparisonCategoryResult Kind);
 
+  /// Return the comparison category information for the
+  /// "common comparison type" for a specified list of types. If there is no
+  /// such common comparison type, or if any of the specified types are not
+  /// comparison category types, null is returned.
+  const ComparisonCategoryInfo *
+  computeCommonComparisonType(ArrayRef<QualType> Types) const;
+  static Optional<ComparisonCategoryType>
+  computeCommonComparisonType(ArrayRef<ComparisonCategoryType> Types);
+
   /// Return the comparison category type which would be returned
   /// for a builtin comparison operator taking the specified type, or None if no
   /// such type exists.
@@ -214,12 +234,8 @@ public:
   static Optional<ComparisonCategoryType>
   computeComparisonTypeForBuiltin(QualType Ty, bool IsMixedNullCompare = false);
 
-  /// Return the comparison category information for the
-  /// "common comparison type" for a specified list of types. If there is no
-  /// such common comparison type, or if any of the specified types are not
-  /// comparison category types, null is returned.
-  const ComparisonCategoryInfo *
-  computeCommonComparisonType(ArrayRef<QualType> Types) const;
+  static Optional<ComparisonCategoryType>
+  computeComparisonTypeForBuiltin(QualType LHSTy, QualType RHSTy);
 
   /// Return the list of results which are valid for the specified
   /// comparison category type.
@@ -241,6 +257,7 @@ public:
   /// NOTE: Lookup is expected to succeed. Use lookupInfo if failure is
   /// possible.
   const ComparisonCategoryInfo &getInfoForType(QualType Ty) const;
+  const ComparisonCategoryInfo *lookupInfoForType(QualType Ty) const;
 
 public:
   /// Return the cached comparison category information for the
@@ -253,9 +270,6 @@ public:
     const auto &This = *this;
     return const_cast<ComparisonCategoryInfo *>(This.lookupInfo(Kind));
   }
-
-private:
-  const ComparisonCategoryInfo *lookupInfoForType(QualType Ty) const;
 
 private:
   friend class ASTContext;

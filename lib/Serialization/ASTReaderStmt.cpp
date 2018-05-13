@@ -1705,19 +1705,11 @@ void ASTStmtReader::VisitCXXFoldExpr(CXXFoldExpr *E) {
   E->Opcode = (BinaryOperatorKind)Record.readInt();
 }
 
-void ASTStmtReader::VisitCXXRewrittenExpr(CXXRewrittenExpr *E) {
+void ASTStmtReader::VisitCXXRewrittenOperatorExpr(CXXRewrittenOperatorExpr *E) {
   VisitExpr(E);
   E->setRewrittenKind(
-      static_cast<CXXRewrittenExpr::RewrittenKind>(Record.readInt()));
-  E->SubExprs[0] = Record.readSubExpr();
-  E->SubExprs[1] = Record.readSubExpr();
-  switch (E->getRewrittenKind()) {
-  case CXXRewrittenExpr::Comparison: {
-    CXXRewrittenExpr::ComparisonBits &Bits = E->ExtraBits.CompareBits;
-    Bits.IsSynthesized = Record.readInt();
-    break;
-  }
-  }
+      static_cast<CXXRewrittenOperatorExpr::RewrittenOpKind>(Record.readInt()));
+  E->Rewritten = Record.readSubExpr();
 }
 
 void ASTStmtReader::VisitOpaqueValueExpr(OpaqueValueExpr *E) {
@@ -4090,7 +4082,7 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       break;
 
     case EXPR_CXX_REWRITTEN_OPERATOR:
-      S = new (Context) CXXRewrittenExpr(Empty);
+      S = new (Context) CXXRewrittenOperatorExpr(Empty);
 
     case EXPR_OPAQUE_VALUE:
       S = new (Context) OpaqueValueExpr(Empty);

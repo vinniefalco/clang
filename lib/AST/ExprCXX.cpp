@@ -1433,3 +1433,109 @@ TypeTraitExpr *TypeTraitExpr::CreateDeserialized(const ASTContext &C,
 }
 
 void ArrayTypeTraitExpr::anchor() {}
+
+namespace {
+struct ArgumentExtractor {
+  Expr *Rewritten;
+  bool IsReverseOrder;
+  bool IsThreeWay;
+
+  ArgumentExtractor(const CXXRewrittenOperatorExpr *E)
+      : Rewritten(E->getRewrittenExpr()) {
+    IsReverseOrder = E->getRewrittenKind() == ROC_AsReversedThreeWay;
+    IsThreeWay = getOpcode(Rewritten) == BO_Cmp;
+  }
+
+  static CXXRewrittenOperatorExpr::Opcode getOpcode(Expr *E) {
+    if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E))
+      return BO->getOpcode();
+    if (auto *CE = dyn_cast<CXXOperatorCallExpr>(E))
+      return BinaryOperator::getOverloadedOpcode(CE->getOperator());
+    llvm_unreachable("unhandled case");
+  }
+
+  CXXRewrittenOperatorExpr::Opcode getOriginalOpcode() const {
+    if (IsThreeWay)
+      return BO_Cmp;
+    if (IsReverseOrder)
+      return getOpcode(getRHS(Rewritten));
+    return getOpcode(Rewritten);
+  }
+
+  static Expr *getLHS(Expr *E) {
+    if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E))
+      return BO->getLHS();
+    if (auto *CE = dyn_cast<CXXOperatorCallExpr>(E))
+      return CE->getArg(0);
+    llvm_unreachable("unhandled case");
+  }
+
+  static Expr *getRHS(Expr *E) {
+    if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E))
+      return BO->getRHS();
+    if (auto *CE = dyn_cast<CXXOperatorCallExpr>(E))
+      return CE->getArg(1);
+    llvm_unreachable("unhandled case");
+  }
+
+  Expr *getOriginalLHS() const {
+    if (IsThreeWay) {
+      if (IsReverseOrder)
+        return getRHS(Rewritten);
+      return getLHS(Rewritten);
+    }
+    if (IsReverseOrder)
+      return getRHS(getRHS(Rewritten));
+    return getLHS(getLHS(Rewritten));
+  }
+
+  Expr *getOriginalRHS() const {
+    if (IsThreeWay) {
+      if (IsReverseOrder)
+        return getLHS(Rewritten);
+      return getRHS(Rewritten);
+    }
+    if (IsReverseOrder)
+      return getRHS(getLHS(Rewritten));
+    return getLHS(getRHS(Rewritten));
+  }
+
+  static SourceLocation getOperatorLoc(Expr *E) {
+    if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E))
+      return BO->getOperatorLoc();
+    if (auto *CE = dyn_cast<CXXOperatorCallExpr>(E))
+      return CE->getOperatorLoc();
+    llvm_unreachable("unhandled case");
+  }
+};
+} // namespace
+
+SourceLocation CXXRewrittenOperatorExpr::getLocStart() const {
+  return getOriginalLHS()->getLocStart();
+}
+SourceLocation CXXRewrittenOperatorExpr::getLocEnd() const {
+  return getOriginalRHS()->getLocEnd();
+}
+SourceLocation CXXRewrittenOperatorExpr::getExprLoc() const {
+  return getOriginalLHS()->getExprLoc();
+}
+SourceLocation CXXRewrittenOperatorExpr::getOperatorLoc() const {
+  return ArgumentExtractor::getOperatorLoc(this->getRewrittenExpr());
+}
+
+CXXRewrittenOperatorExpr::Opcode CXXRewrittenOperatorExpr::getOpcode() const {
+  return ArgumentExtractor::getOpcode(getRewrittenExpr());
+}
+
+CXXRewrittenOperatorExpr::Opcode
+CXXRewrittenOperatorExpr::getOriginalOpcode() const {
+  return ArgumentExtractor{this}.getOriginalOpcode();
+}
+
+Expr *CXXRewrittenOperatorExpr::getOriginalLHS() const {
+  return ArgumentExtractor{this}.getOriginalLHS();
+}
+
+Expr *CXXRewrittenOperatorExpr::getOriginalRHS() const {
+  return ArgumentExtractor{this}.getOriginalRHS();
+}
