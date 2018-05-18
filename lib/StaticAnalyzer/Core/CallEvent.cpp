@@ -67,11 +67,13 @@ using namespace clang;
 using namespace ento;
 
 QualType CallEvent::getResultType() const {
-  const Expr *E = getOriginExpr();
-  assert(E && "Calls without origin expressions do not have results");
-  QualType ResultTy = E->getType();
-
   ASTContext &Ctx = getState()->getStateManager().getContext();
+  const Expr *E = getOriginExpr();
+  if (!E)
+    return Ctx.VoidTy;
+  assert(E);
+
+  QualType ResultTy = E->getType();
 
   // A function that returns a reference to 'int' will have a result type
   // of simply 'int'. Check the origin expr's value kind to recover the
@@ -164,7 +166,7 @@ bool CallEvent::isGlobalCFunction(StringRef FunctionName) const {
   return CheckerContext::isCLibraryFunction(FD, FunctionName);
 }
 
-/// \brief Returns true if a type is a pointer-to-const or reference-to-const
+/// Returns true if a type is a pointer-to-const or reference-to-const
 /// with no further indirection.
 static bool isPointerToConst(QualType Ty) {
   QualType PointeeTy = Ty->getPointeeType();
@@ -387,23 +389,24 @@ ArrayRef<ParmVarDecl*> AnyFunctionCall::parameters() const {
 
 RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
   const FunctionDecl *FD = getDecl();
+  if (!FD)
+    return {};
+
   // Note that the AnalysisDeclContext will have the FunctionDecl with
   // the definition (if one exists).
-  if (FD) {
-    AnalysisDeclContext *AD =
-      getLocationContext()->getAnalysisDeclContext()->
-      getManager()->getContext(FD);
-    bool IsAutosynthesized;
-    Stmt* Body = AD->getBody(IsAutosynthesized);
-    DEBUG({
-        if (IsAutosynthesized)
-          llvm::dbgs() << "Using autosynthesized body for " << FD->getName()
-                       << "\n";
-    });
-    if (Body) {
-      const Decl* Decl = AD->getDecl();
-      return RuntimeDefinition(Decl);
-    }
+  AnalysisDeclContext *AD =
+    getLocationContext()->getAnalysisDeclContext()->
+    getManager()->getContext(FD);
+  bool IsAutosynthesized;
+  Stmt* Body = AD->getBody(IsAutosynthesized);
+  LLVM_DEBUG({
+    if (IsAutosynthesized)
+      llvm::dbgs() << "Using autosynthesized body for " << FD->getName()
+                   << "\n";
+  });
+  if (Body) {
+    const Decl* Decl = AD->getDecl();
+    return RuntimeDefinition(Decl);
   }
 
   SubEngine *Engine = getState()->getStateManager().getOwningEngine();
@@ -411,7 +414,7 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
 
   // Try to get CTU definition only if CTUDir is provided.
   if (!Opts.naiveCTUEnabled())
-    return RuntimeDefinition();
+    return {};
 
   cross_tu::CrossTranslationUnitContext &CTUCtx =
       *Engine->getCrossTranslationUnitContext();
@@ -936,15 +939,14 @@ const ObjCPropertyDecl *ObjCMethodCall::getAccessedProperty() const {
 bool ObjCMethodCall::canBeOverridenInSubclass(ObjCInterfaceDecl *IDecl,
                                              Selector Sel) const {
   assert(IDecl);
-  const SourceManager &SM =
-    getState()->getStateManager().getContext().getSourceManager();
-
+  AnalysisManager &AMgr =
+      getState()->getStateManager().getOwningEngine()->getAnalysisManager();
   // If the class interface is declared inside the main file, assume it is not
   // subcassed.
   // TODO: It could actually be subclassed if the subclass is private as well.
   // This is probably very rare.
   SourceLocation InterfLoc = IDecl->getEndOfDefinitionLoc();
-  if (InterfLoc.isValid() && SM.isInMainFile(InterfLoc))
+  if (InterfLoc.isValid() && AMgr.isInCodeFile(InterfLoc))
     return false;
 
   // Assume that property accessors are not overridden.
@@ -966,7 +968,7 @@ bool ObjCMethodCall::canBeOverridenInSubclass(ObjCInterfaceDecl *IDecl,
       return false;
 
     // If outside the main file,
-    if (D->getLocation().isValid() && !SM.isInMainFile(D->getLocation()))
+    if (D->getLocation().isValid() && !AMgr.isInCodeFile(D->getLocation()))
       return true;
 
     if (D->isOverriding()) {

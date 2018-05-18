@@ -348,7 +348,9 @@ ExprEngine::createTemporaryRegionIfNeeded(ProgramStateRef State,
       break;
     case SubobjectAdjustment::MemberPointerAdjustment:
       // FIXME: Unimplemented.
-      State = State->bindDefault(Reg, UnknownVal(), LC);
+      State = State->invalidateRegions(Reg, InitWithAdjustments,
+                                       currBldrCtx->blockCount(), LC, true,
+                                       nullptr, nullptr, nullptr);
       return State;
     }
   }
@@ -455,29 +457,51 @@ ProgramStateRef ExprEngine::addAllNecessaryTemporaryInfo(
     const LocationContext *LC, const MemRegion *R) {
   const CXXBindTemporaryExpr *BTE = nullptr;
   const MaterializeTemporaryExpr *MTE = nullptr;
-  const LocationContext *TempLC = LC;
 
   if (CC) {
-    // In case of temporary object construction, extract data necessary for
-    // destruction and lifetime extension.
-    const auto *TCC = dyn_cast<TemporaryObjectConstructionContext>(CC);
-
     // If the temporary is being returned from the function, it will be
     // destroyed or lifetime-extended in the caller stack frame.
     if (isa<ReturnedValueConstructionContext>(CC)) {
       const StackFrameContext *SFC = LC->getCurrentStackFrame();
       assert(SFC);
-      if (SFC->getParent()) {
-        TempLC = SFC->getParent();
-        const CFGElement &CallElem =
-            (*SFC->getCallSiteBlock())[SFC->getIndex()];
-        if (auto RTCElem = CallElem.getAs<CFGCXXRecordTypedCall>()) {
-          TCC = cast<TemporaryObjectConstructionContext>(
-              RTCElem->getConstructionContext());
-        }
+      LC = SFC->getParent();
+      if (!LC) {
+        // We are on the top frame. We won't ever need any info
+        // for this temporary, so don't set anything.
+        return State;
       }
+      const CFGElement &CallElem =
+          (*SFC->getCallSiteBlock())[SFC->getIndex()];
+      auto RTCElem = CallElem.getAs<CFGCXXRecordTypedCall>();
+      if (!RTCElem) {
+        // We have a parent stack frame, but no construction context for the
+        // return value. Give up until we provide the construction context
+        // at the call site.
+        return State;
+      }
+      // We use the ReturnedValueConstructionContext as an indication that we
+      // need to look for the actual construction context on the parent stack
+      // frame. This purpose has been fulfilled, so now we replace CC with the
+      // actual construction context.
+      CC = RTCElem->getConstructionContext();
+      if (!isa<TemporaryObjectConstructionContext>(CC)) {
+        // TODO: We are not returning an object into a temporary. There must
+        // be copy elision happening at the call site. We still need to
+        // explicitly support the situation when the return value is put
+        // into another return statement, i.e.
+        // ReturnedValueConstructionContexts are chained through multiple
+        // stack frames before finally settling in a temporary.
+        // We don't seem to need to explicitly support construction into
+        // a variable after a return.
+        return State;
+      }
+      // Proceed to deal with the temporary we've found on the parent
+      // stack frame.
     }
-    if (TCC) {
+
+    // In case of temporary object construction, extract data necessary for
+    // destruction and lifetime extension.
+    if (const auto *TCC = dyn_cast<TemporaryObjectConstructionContext>(CC)) {
       if (AMgr.getAnalyzerOptions().includeTemporaryDtorsInCFG()) {
         BTE = TCC->getCXXBindTemporaryExpr();
         MTE = TCC->getMaterializedTemporaryExpr();
@@ -496,12 +520,12 @@ ProgramStateRef ExprEngine::addAllNecessaryTemporaryInfo(
     }
 
     if (BTE) {
-      State = addInitializedTemporary(State, BTE, TempLC,
+      State = addInitializedTemporary(State, BTE, LC,
                                       cast<CXXTempObjectRegion>(R));
     }
 
     if (MTE) {
-      State = addTemporaryMaterialization(State, MTE, TempLC,
+      State = addTemporaryMaterialization(State, MTE, LC,
                                           cast<CXXTempObjectRegion>(R));
     }
   }
@@ -1064,12 +1088,14 @@ void ExprEngine::ProcessDeleteDtor(const CFGDeleteDtor Dtor,
     // This workaround will just run the first destructor (which will still
     // invalidate the entire array).
     CallOpts.IsArrayCtorOrDtor = true;
+    // Yes, it may even be a multi-dimensional array.
+    while (const auto *AT = getContext().getAsArrayType(DTy))
+      DTy = AT->getElementType();
     if (ArgR)
       ArgR = getStoreManager().GetElementZeroRegion(cast<SubRegion>(ArgR), DTy);
   }
 
-  VisitCXXDestructor(DE->getDestroyedType(), ArgR, DE, /*IsBase=*/false,
-                     Pred, Dst, CallOpts);
+  VisitCXXDestructor(DTy, ArgR, DE, /*IsBase=*/false, Pred, Dst, CallOpts);
 }
 
 void ExprEngine::ProcessBaseDtor(const CFGBaseDtor D,
@@ -1209,23 +1235,27 @@ void ExprEngine::VisitCXXBindTemporaryExpr(const CXXBindTemporaryExpr *BTE,
   }
 }
 
-namespace {
+ProgramStateRef ExprEngine::escapeValue(ProgramStateRef State, SVal V,
+                                        PointerEscapeKind K) const {
+  class CollectReachableSymbolsCallback final : public SymbolVisitor {
+    InvalidatedSymbols Symbols;
 
-class CollectReachableSymbolsCallback final : public SymbolVisitor {
-  InvalidatedSymbols Symbols;
+  public:
+    explicit CollectReachableSymbolsCallback(ProgramStateRef State) {}
 
-public:
-  explicit CollectReachableSymbolsCallback(ProgramStateRef State) {}
+    const InvalidatedSymbols &getSymbols() const { return Symbols; }
 
-  const InvalidatedSymbols &getSymbols() const { return Symbols; }
+    bool VisitSymbol(SymbolRef Sym) override {
+      Symbols.insert(Sym);
+      return true;
+    }
+  };
 
-  bool VisitSymbol(SymbolRef Sym) override {
-    Symbols.insert(Sym);
-    return true;
-  }
-};
-
-} // namespace
+  const CollectReachableSymbolsCallback &Scanner =
+      State->scanReachableSymbols<CollectReachableSymbolsCallback>(V);
+  return getCheckerManager().runCheckersForPointerEscape(
+      State, Scanner.getSymbols(), /*CallEvent*/ nullptr, K, nullptr);
+}
 
 void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
                        ExplodedNodeSet &DstTop) {
@@ -1507,17 +1537,8 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
                                       ->getType()->isRecordType()))
           for (auto Child : Ex->children()) {
             assert(Child);
-
             SVal Val = State->getSVal(Child, LCtx);
-
-            CollectReachableSymbolsCallback Scanner =
-                State->scanReachableSymbols<CollectReachableSymbolsCallback>(
-                    Val);
-            const InvalidatedSymbols &EscapedSymbols = Scanner.getSymbols();
-
-            State = getCheckerManager().runCheckersForPointerEscape(
-                State, EscapedSymbols,
-                /*CallEvent*/ nullptr, PSK_EscapeOther, nullptr);
+            State = escapeValue(State, Val, PSK_EscapeOther);
           }
 
         Bldr2.generateNode(S, N, State);
@@ -2460,7 +2481,7 @@ void ExprEngine::VisitCommonDeclRefExpr(const Expr *Ex, const NamedDecl *D,
     assert(Ex->isGLValue() || VD->getType()->isVoidType());
     const LocationContext *LocCtxt = Pred->getLocationContext();
     const Decl *D = LocCtxt->getDecl();
-    const auto *MD = D ? dyn_cast<CXXMethodDecl>(D) : nullptr;
+    const auto *MD = dyn_cast_or_null<CXXMethodDecl>(D);
     const auto *DeclRefEx = dyn_cast<DeclRefExpr>(Ex);
     Optional<std::pair<SVal, QualType>> VInfo;
 
@@ -2737,15 +2758,7 @@ ProgramStateRef ExprEngine::processPointerEscapedOnBind(ProgramStateRef State,
 
   // Otherwise, find all symbols referenced by 'val' that we are tracking
   // and stop tracking them.
-  CollectReachableSymbolsCallback Scanner =
-      State->scanReachableSymbols<CollectReachableSymbolsCallback>(Val);
-  const InvalidatedSymbols &EscapedSymbols = Scanner.getSymbols();
-  State = getCheckerManager().runCheckersForPointerEscape(State,
-                                                          EscapedSymbols,
-                                                          /*CallEvent*/ nullptr,
-                                                          PSK_EscapeOnBind,
-                                                          nullptr);
-
+  State = escapeValue(State, Val, PSK_EscapeOnBind);
   return State;
 }
 
@@ -2884,43 +2897,6 @@ void ExprEngine::evalLoad(ExplodedNodeSet &Dst,
                           const ProgramPointTag *tag,
                           QualType LoadTy) {
   assert(!location.getAs<NonLoc>() && "location cannot be a NonLoc.");
-
-  // Are we loading from a region?  This actually results in two loads; one
-  // to fetch the address of the referenced value and one to fetch the
-  // referenced value.
-  if (const auto *TR =
-        dyn_cast_or_null<TypedValueRegion>(location.getAsRegion())) {
-
-    QualType ValTy = TR->getValueType();
-    if (const ReferenceType *RT = ValTy->getAs<ReferenceType>()) {
-      static SimpleProgramPointTag
-             loadReferenceTag(TagProviderName, "Load Reference");
-      ExplodedNodeSet Tmp;
-      evalLoadCommon(Tmp, NodeEx, BoundEx, Pred, state,
-                     location, &loadReferenceTag,
-                     getContext().getPointerType(RT->getPointeeType()));
-
-      // Perform the load from the referenced value.
-      for (const auto I : Tmp) {
-        state = I->getState();
-        location = state->getSVal(BoundEx, I->getLocationContext());
-        evalLoadCommon(Dst, NodeEx, BoundEx, I, state, location, tag, LoadTy);
-      }
-      return;
-    }
-  }
-
-  evalLoadCommon(Dst, NodeEx, BoundEx, Pred, state, location, tag, LoadTy);
-}
-
-void ExprEngine::evalLoadCommon(ExplodedNodeSet &Dst,
-                                const Expr *NodeEx,
-                                const Expr *BoundEx,
-                                ExplodedNode *Pred,
-                                ProgramStateRef state,
-                                SVal location,
-                                const ProgramPointTag *tag,
-                                QualType LoadTy) {
   assert(NodeEx);
   assert(BoundEx);
   // Evaluate the location (checks for bad dereferences).

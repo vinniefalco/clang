@@ -266,3 +266,8 @@ void test_builtin_launder(char *p, void *vp, const void *cvp,
   float *fd = __builtin_launder(fp);
   __builtin_launder(fn); // expected-error {{function pointer argument to '__builtin_launder' is not allowed}}
 }
+
+void test21(const int *ptr) {
+  __sync_fetch_and_add(ptr, 1); // expected-error{{address argument to atomic builtin cannot be const-qualified ('const int *' invalid)}}
+  __atomic_fetch_add(ptr, 1, 0);  // expected-error {{address argument to atomic operation must be a pointer to non-const type ('const int *' invalid)}}
+}

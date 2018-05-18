@@ -10,9 +10,16 @@ typedef signed char BOOL;
 @end
 
 typedef int dispatch_semaphore_t;
+typedef int dispatch_group_t;
 typedef void (^block_t)();
 
 dispatch_semaphore_t dispatch_semaphore_create(int);
+dispatch_group_t dispatch_group_create();
+void dispatch_group_enter(dispatch_group_t);
+void dispatch_group_leave(dispatch_group_t);
+void dispatch_group_wait(dispatch_group_t, int);
+
+
 void dispatch_semaphore_wait(dispatch_semaphore_t, int);
 void dispatch_semaphore_signal(dispatch_semaphore_t);
 
@@ -27,7 +34,7 @@ void use_semaphor_antipattern() {
   func(^{
       dispatch_semaphore_signal(sema);
   });
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 }
 
 // It's OK to use pattern in tests.
@@ -47,14 +54,14 @@ void use_semaphor_antipattern_multiple_times() {
   func(^{
       dispatch_semaphore_signal(sema1);
   });
-  dispatch_semaphore_wait(sema1, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema1, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 
   dispatch_semaphore_t sema2 = dispatch_semaphore_create(0);
 
   func(^{
       dispatch_semaphore_signal(sema2);
   });
-  dispatch_semaphore_wait(sema2, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema2, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 }
 
 void use_semaphor_antipattern_multiple_wait() {
@@ -64,8 +71,8 @@ void use_semaphor_antipattern_multiple_wait() {
       dispatch_semaphore_signal(sema1);
   });
   // FIXME: multiple waits on same semaphor should not raise a warning.
-  dispatch_semaphore_wait(sema1, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
-  dispatch_semaphore_wait(sema1, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema1, 100); // expected-warning{{Waiting on a callback using a semaphore}}
+  dispatch_semaphore_wait(sema1, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 }
 
 void warn_incorrect_order() {
@@ -73,7 +80,7 @@ void warn_incorrect_order() {
   // if out of order.
   dispatch_semaphore_t sema = dispatch_semaphore_create(0);
 
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback}}
   func(^{
       dispatch_semaphore_signal(sema);
   });
@@ -85,7 +92,7 @@ void warn_w_typedef() {
   func_w_typedef(^{
       dispatch_semaphore_signal(sema);
   });
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 }
 
 void warn_nested_ast() {
@@ -100,7 +107,7 @@ void warn_nested_ast() {
          dispatch_semaphore_signal(sema);
          });
   }
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 }
 
 void use_semaphore_assignment() {
@@ -110,7 +117,7 @@ void use_semaphore_assignment() {
   func(^{
       dispatch_semaphore_signal(sema);
   });
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 }
 
 void use_semaphore_assignment_init() {
@@ -120,7 +127,7 @@ void use_semaphore_assignment_init() {
   func(^{
       dispatch_semaphore_signal(sema);
   });
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 }
 
 void differentsemaphoreok() {
@@ -172,13 +179,14 @@ void warn_with_cast() {
   func(^{
       dispatch_semaphore_signal((int)sema);
   });
-  dispatch_semaphore_wait((int)sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait((int)sema, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 }
 
 @interface MyInterface1 : NSObject
 -(void)use_method_warn;
 -(void) pass_block_as_second_param_warn;
 -(void)use_objc_callback_warn;
+-(void) use_dispatch_group;
 -(void)testNoWarn;
 -(void)acceptBlock:(block_t)callback;
 -(void)flag:(int)flag acceptBlock:(block_t)callback;
@@ -192,7 +200,7 @@ void warn_with_cast() {
   func(^{
       dispatch_semaphore_signal(sema);
   });
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback}}
 }
 
 -(void) pass_block_as_second_param_warn {
@@ -201,7 +209,7 @@ void warn_with_cast() {
   [self flag:1 acceptBlock:^{
       dispatch_semaphore_signal(sema);
   }];
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback}}
 }
 
 -(void)testNoWarn {
@@ -227,7 +235,17 @@ void warn_with_cast() {
   [self acceptBlock:^{
       dispatch_semaphore_signal(sema);
   }];
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback}}
+}
+
+-(void)use_dispatch_group {
+  dispatch_group_t group = dispatch_group_create();
+  dispatch_group_enter(group);
+  [self acceptBlock:^{
+    dispatch_group_leave(group);
+  }];
+  dispatch_group_wait(group, 100); // expected-warning{{Waiting on a callback using a group}}
+
 }
 
 void use_objc_and_c_callback(MyInterface1 *t) {
@@ -236,14 +254,14 @@ void use_objc_and_c_callback(MyInterface1 *t) {
   func(^{
       dispatch_semaphore_signal(sema);
   });
-  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema, 100); // expected-warning{{Waiting on a callback using a semaphore}}
 
   dispatch_semaphore_t sema1 = dispatch_semaphore_create(0);
 
   [t acceptBlock:^{
       dispatch_semaphore_signal(sema1);
   }];
-  dispatch_semaphore_wait(sema1, 100); // expected-warning{{Waiting on a semaphore with Grand Central Dispatch creates useless threads and is subject to priority inversion}}
+  dispatch_semaphore_wait(sema1, 100); // expected-warning{{Waiting on a callback}}
 }
 @end
 
@@ -279,3 +297,39 @@ void use_objc_and_c_callback(MyInterface1 *t) {
   dispatch_semaphore_wait(sema, 100);
 }
 @end
+
+void dispatch_group_wait_func(MyInterface1 *M) {
+  dispatch_group_t group = dispatch_group_create();
+  dispatch_group_enter(group);
+
+  func(^{
+      dispatch_group_leave(group);
+  });
+  dispatch_group_wait(group, 100); // expected-warning{{Waiting on a callback using a group}}
+}
+
+
+void dispatch_group_wait_cfunc(MyInterface1 *M) {
+  dispatch_group_t group = dispatch_group_create();
+  dispatch_group_enter(group);
+  [M acceptBlock:^{
+    dispatch_group_leave(group);
+  }];
+  dispatch_group_wait(group, 100); // expected-warning{{Waiting on a callback using a group}}
+}
+
+void dispatch_group_and_semaphore_use(MyInterface1 *M) {
+  dispatch_group_t group = dispatch_group_create();
+  dispatch_group_enter(group);
+  [M acceptBlock:^{
+    dispatch_group_leave(group);
+  }];
+  dispatch_group_wait(group, 100); // expected-warning{{Waiting on a callback using a group}}
+
+  dispatch_semaphore_t sema1 = dispatch_semaphore_create(0);
+
+  [M acceptBlock:^{
+      dispatch_semaphore_signal(sema1);
+  }];
+  dispatch_semaphore_wait(sema1, 100); // expected-warning{{Waiting on a callback using a semaphore}}
+}

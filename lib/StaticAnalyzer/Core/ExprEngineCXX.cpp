@@ -134,7 +134,7 @@ ExprEngine::getRegionForConstructedObject(const CXXConstructExpr *CE,
           makeZeroElementRegion(State, LValue, Ty, CallOpts.IsArrayCtorOrDtor);
       return LValue.getAsRegion();
     }
-    case ConstructionContext::ConstructorInitializerKind: {
+    case ConstructionContext::SimpleConstructorInitializerKind: {
       const auto *ICC = cast<ConstructorInitializerConstructionContext>(CC);
       const auto *Init = ICC->getCXXCtorInitializer();
       assert(Init->isAnyMemberInitializer());
@@ -180,14 +180,25 @@ ExprEngine::getRegionForConstructedObject(const CXXConstructExpr *CE,
     }
     case ConstructionContext::TemporaryObjectKind: {
       const auto *TOCC = cast<TemporaryObjectConstructionContext>(CC);
-      // See if we're lifetime-extended via our field. If so, take a note.
-      // Because automatic destructors aren't quite working in this case.
       if (const auto *MTE = TOCC->getMaterializedTemporaryExpr()) {
         if (const ValueDecl *VD = MTE->getExtendingDecl()) {
-          assert(VD->getType()->isReferenceType());
-          if (VD->getType()->getPointeeType().getCanonicalType() !=
-              MTE->GetTemporaryExpr()->getType().getCanonicalType()) {
-            CallOpts.IsTemporaryLifetimeExtendedViaSubobject = true;
+          // Pattern-match various forms of lifetime extension that aren't
+          // currently supported by the CFG.
+          // FIXME: Is there a better way to retrieve this information from
+          // the MaterializeTemporaryExpr?
+          assert(MTE->getStorageDuration() != SD_FullExpression);
+          if (VD->getType()->isReferenceType()) {
+            assert(VD->getType()->isReferenceType());
+            if (VD->getType()->getPointeeType().getCanonicalType() !=
+                MTE->GetTemporaryExpr()->getType().getCanonicalType()) {
+              // We're lifetime-extended via our field. Automatic destructors
+              // aren't quite working in this case.
+              CallOpts.IsTemporaryLifetimeExtendedViaSubobject = true;
+            }
+          } else {
+            // We're lifetime-extended by a surrounding aggregate.
+            // Automatic destructors aren't quite working in this case.
+            CallOpts.IsTemporaryLifetimeExtendedViaAggregate = true;
           }
         }
       }
@@ -196,7 +207,7 @@ ExprEngine::getRegionForConstructedObject(const CXXConstructExpr *CE,
       CallOpts.IsTemporaryCtorOrDtor = true;
       return MRMgr.getCXXTempObjectRegion(CE, LCtx);
     }
-    case ConstructionContext::ReturnedValueKind: {
+    case ConstructionContext::SimpleReturnedValueKind: {
       // The temporary is to be managed by the parent stack frame.
       // So build it in the parent stack frame if we're not in the
       // top frame of the analysis.
@@ -204,13 +215,33 @@ ExprEngine::getRegionForConstructedObject(const CXXConstructExpr *CE,
       // long enough in the region store in this case? Would checkers think
       // that this object immediately goes out of scope?
       const LocationContext *TempLCtx = LCtx;
-      if (const LocationContext *CallerLCtx =
-              LCtx->getCurrentStackFrame()->getParent()) {
+      const StackFrameContext *SFC = LCtx->getCurrentStackFrame();
+      if (const LocationContext *CallerLCtx = SFC->getParent()) {
+        auto RTC = (*SFC->getCallSiteBlock())[SFC->getIndex()]
+                       .getAs<CFGCXXRecordTypedCall>();
+        if (!RTC) {
+          // We were unable to find the correct construction context for the
+          // call in the parent stack frame. This is equivalent to not being
+          // able to find construction context at all.
+          CallOpts.IsCtorOrDtorWithImproperlyModeledTargetRegion = true;
+        } else if (!isa<TemporaryObjectConstructionContext>(
+                       RTC->getConstructionContext())) {
+          // FXIME: The return value is constructed directly into a
+          // non-temporary due to C++17 mandatory copy elision. This is not
+          // implemented yet.
+          assert(getContext().getLangOpts().CPlusPlus17);
+          CallOpts.IsCtorOrDtorWithImproperlyModeledTargetRegion = true;
+        }
         TempLCtx = CallerLCtx;
       }
       CallOpts.IsTemporaryCtorOrDtor = true;
       return MRMgr.getCXXTempObjectRegion(CE, TempLCtx);
     }
+    case ConstructionContext::CXX17ElidedCopyVariableKind:
+    case ConstructionContext::CXX17ElidedCopyReturnedValueKind:
+    case ConstructionContext::CXX17ElidedCopyConstructorInitializerKind:
+      // Not implemented yet.
+      break;
     }
   }
   // If we couldn't find an existing region to construct into, assume we're
@@ -344,9 +375,6 @@ void ExprEngine::VisitCXXConstructExpr(const CXXConstructExpr *CE,
          I != E; ++I) {
       ProgramStateRef State = (*I)->getState();
       if (CE->requiresZeroInitialization()) {
-        // Type of the zero doesn't matter.
-        SVal ZeroVal = svalBuilder.makeZeroVal(getContext().CharTy);
-
         // FIXME: Once we properly handle constructors in new-expressions, we'll
         // need to invalidate the region before setting a default value, to make
         // sure there aren't any lingering bindings around. This probably needs
@@ -359,7 +387,7 @@ void ExprEngine::VisitCXXConstructExpr(const CXXConstructExpr *CE,
         // actually make things worse. Placement new makes this tricky as well,
         // since it's then possible to be initializing one part of a multi-
         // dimensional array.
-        State = State->bindDefault(loc::MemRegionVal(Target), ZeroVal, LCtx);
+        State = State->bindDefaultZero(loc::MemRegionVal(Target), LCtx);
       }
 
       State = addAllNecessaryTemporaryInfo(State, CC, LCtx, Target);
@@ -390,7 +418,7 @@ void ExprEngine::VisitCXXConstructExpr(const CXXConstructExpr *CE,
       defaultEvalCall(Bldr, *I, *Call, CallOpts);
   }
 
-  // If the CFG was contructed without elements for temporary destructors
+  // If the CFG was constructed without elements for temporary destructors
   // and the just-called constructor created a temporary object then
   // stop exploration if the temporary object has a noreturn constructor.
   // This can lose coverage because the destructor, if it were present
@@ -518,7 +546,7 @@ void ExprEngine::VisitCXXNewAllocatorCall(const CXXNewExpr *CNE,
     if (const FunctionDecl *FD = CNE->getOperatorNew()) {
       QualType Ty = FD->getType();
       if (const auto *ProtoType = Ty->getAs<FunctionProtoType>())
-        if (!ProtoType->isNothrow(getContext()))
+        if (!ProtoType->isNothrow())
           State = State->assume(RetVal.castAs<DefinedOrUnknownSVal>(), true);
     }
 
@@ -591,7 +619,7 @@ void ExprEngine::VisitCXXNewExpr(const CXXNewExpr *CNE, ExplodedNode *Pred,
     if (FD) {
       QualType Ty = FD->getType();
       if (const auto *ProtoType = Ty->getAs<FunctionProtoType>())
-        if (!ProtoType->isNothrow(getContext()))
+        if (!ProtoType->isNothrow())
           if (auto dSymVal = symVal.getAs<DefinedOrUnknownSVal>())
             State = State->assume(*dSymVal, true);
     }

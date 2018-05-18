@@ -154,7 +154,7 @@ static bool beforeThanCompareGroups(const GroupInfo *LHS, const GroupInfo *RHS){
                            RHS->DiagsInGroup.front());
 }
 
-/// \brief Invert the 1-[0/1] mapping of diags to group into a one to many
+/// Invert the 1-[0/1] mapping of diags to group into a one to many
 /// mapping of groups to diags in the group.
 static void groupDiagnostics(const std::vector<Record*> &Diags,
                              const std::vector<Record*> &DiagGroups,
@@ -207,9 +207,9 @@ static void groupDiagnostics(const std::vector<Record*> &Diags,
                                               E = SortedGroups.end();
        I != E; ++I) {
     MutableArrayRef<const Record *> GroupDiags = (*I)->DiagsInGroup;
-    std::sort(GroupDiags.begin(), GroupDiags.end(), beforeThanCompare);
+    llvm::sort(GroupDiags.begin(), GroupDiags.end(), beforeThanCompare);
   }
-  std::sort(SortedGroups.begin(), SortedGroups.end(), beforeThanCompareGroups);
+  llvm::sort(SortedGroups.begin(), SortedGroups.end(), beforeThanCompareGroups);
 
   // Warn about the same group being used anonymously in multiple places.
   for (SmallVectorImpl<GroupInfo *>::const_iterator I = SortedGroups.begin(),
@@ -572,7 +572,7 @@ static std::string getDiagCategoryEnum(llvm::StringRef name) {
   return enumName.str();
 }
 
-/// \brief Emit the array of diagnostic subgroups.
+/// Emit the array of diagnostic subgroups.
 ///
 /// The array of diagnostic subgroups contains for each group a list of its
 /// subgroups. The individual lists are separated by '-1'. Groups with no
@@ -619,7 +619,7 @@ static void emitDiagSubGroups(std::map<std::string, GroupInfo> &DiagsInGroup,
   OS << "};\n\n";
 }
 
-/// \brief Emit the list of diagnostic arrays.
+/// Emit the list of diagnostic arrays.
 ///
 /// This data structure is a large array that contains itself arrays of varying
 /// size. Each array represents a list of diagnostics. The different arrays are
@@ -660,7 +660,7 @@ static void emitDiagArrays(std::map<std::string, GroupInfo> &DiagsInGroup,
   OS << "};\n\n";
 }
 
-/// \brief Emit a list of group names.
+/// Emit a list of group names.
 ///
 /// This creates a long string which by itself contains a list of pascal style
 /// strings, which consist of a length byte directly followed by the string.
@@ -677,7 +677,7 @@ static void emitDiagGroupNames(StringToOffsetTable &GroupNames,
   OS << "};\n\n";
 }
 
-/// \brief Emit diagnostic arrays and related data structures.
+/// Emit diagnostic arrays and related data structures.
 ///
 /// This creates the actual diagnostic array, an array of diagnostic subgroups
 /// and an array of subgroup names.
@@ -701,7 +701,7 @@ static void emitAllDiagArrays(std::map<std::string, GroupInfo> &DiagsInGroup,
   OS << "#endif // GET_DIAG_ARRAYS\n\n";
 }
 
-/// \brief Emit diagnostic table.
+/// Emit diagnostic table.
 ///
 /// The table is sorted by the name of the diagnostic group. Each element
 /// consists of the name of the diagnostic group (given as offset in the
@@ -776,7 +776,7 @@ static void emitDiagTable(std::map<std::string, GroupInfo> &DiagsInGroup,
   OS << "#endif // GET_DIAG_TABLE\n\n";
 }
 
-/// \brief Emit the table of diagnostic categories.
+/// Emit the table of diagnostic categories.
 ///
 /// The table has the form of macro calls that have two parameters. The
 /// category's name as well as an enum that represents the category. The
@@ -863,9 +863,10 @@ void EmitClangDiagsIndexName(RecordKeeper &Records, raw_ostream &OS) {
     Index.push_back(RecordIndexElement(R));
   }
 
-  std::sort(Index.begin(), Index.end(),
-            [](const RecordIndexElement &Lhs,
-               const RecordIndexElement &Rhs) { return Lhs.Name < Rhs.Name; });
+  llvm::sort(Index.begin(), Index.end(),
+             [](const RecordIndexElement &Lhs, const RecordIndexElement &Rhs) {
+               return Lhs.Name < Rhs.Name;
+            });
 
   for (unsigned i = 0, e = Index.size(); i != e; ++i) {
     const RecordIndexElement &R = Index[i];
@@ -1212,7 +1213,7 @@ void EmitClangDiagDocs(RecordKeeper &Records, raw_ostream &OS) {
       Records.getAllDerivedDefinitions("Diagnostic");
   std::vector<Record*> DiagGroups =
       Records.getAllDerivedDefinitions("DiagGroup");
-  std::sort(DiagGroups.begin(), DiagGroups.end(), diagGroupBeforeByName);
+  llvm::sort(DiagGroups.begin(), DiagGroups.end(), diagGroupBeforeByName);
 
   DiagGroupParentMap DGParentMap(Records);
 
@@ -1231,10 +1232,10 @@ void EmitClangDiagDocs(RecordKeeper &Records, raw_ostream &OS) {
                               DiagsInPedanticSet.end());
     RecordVec GroupsInPedantic(GroupsInPedanticSet.begin(),
                                GroupsInPedanticSet.end());
-    std::sort(DiagsInPedantic.begin(), DiagsInPedantic.end(),
-              beforeThanCompare);
-    std::sort(GroupsInPedantic.begin(), GroupsInPedantic.end(),
-              beforeThanCompare);
+    llvm::sort(DiagsInPedantic.begin(), DiagsInPedantic.end(),
+               beforeThanCompare);
+    llvm::sort(GroupsInPedantic.begin(), GroupsInPedantic.end(),
+               beforeThanCompare);
     PedDiags.DiagsInGroup.insert(PedDiags.DiagsInGroup.end(),
                                  DiagsInPedantic.begin(),
                                  DiagsInPedantic.end());
@@ -1283,7 +1284,7 @@ void EmitClangDiagDocs(RecordKeeper &Records, raw_ostream &OS) {
         OS << "Also controls ";
 
       bool First = true;
-      std::sort(GroupInfo.SubGroups.begin(), GroupInfo.SubGroups.end());
+      llvm::sort(GroupInfo.SubGroups.begin(), GroupInfo.SubGroups.end());
       for (const auto &Name : GroupInfo.SubGroups) {
         if (!First) OS << ", ";
         OS << "`" << (IsRemarkGroup ? "-R" : "-W") << Name << "`_";

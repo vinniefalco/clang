@@ -1,7 +1,11 @@
 // RUN: %clang_analyze_cc1 -Wno-unused -std=c++11 -analyzer-checker=core,debug.ExprInspection -analyzer-config cfg-temporary-dtors=false -verify %s
 // RUN: %clang_analyze_cc1 -Wno-unused -std=c++11 -analyzer-checker=core,debug.ExprInspection -analyzer-config cfg-temporary-dtors=true,c++-temp-dtor-inlining=true -DTEMPORARIES -verify %s
+// RUN: %clang_analyze_cc1 -Wno-unused -std=c++17 -analyzer-checker=core,debug.ExprInspection -analyzer-config cfg-temporary-dtors=true,c++-temp-dtor-inlining=true -DTEMPORARIES %s
 // RUN: %clang_analyze_cc1 -Wno-unused -std=c++11 -analyzer-checker=core,debug.ExprInspection -analyzer-config cfg-temporary-dtors=false -DMOVES -verify %s
 // RUN: %clang_analyze_cc1 -Wno-unused -std=c++11 -analyzer-checker=core,debug.ExprInspection -analyzer-config cfg-temporary-dtors=true,c++-temp-dtor-inlining=true -DTEMPORARIES -DMOVES -verify %s
+// RUN: %clang_analyze_cc1 -Wno-unused -std=c++17 -analyzer-checker=core,debug.ExprInspection -analyzer-config cfg-temporary-dtors=true,c++-temp-dtor-inlining=true -DTEMPORARIES -DMOVES %s
+
+// Note: The C++17 run-lines don't -verify yet - it is a no-crash test.
 
 void clang_analyzer_eval(bool);
 void clang_analyzer_checkInlined(bool);
@@ -139,6 +143,37 @@ void f5() {
   C *after, *before;
   {
     const bool &x = C(true, &after, &before).x; // no-crash
+  }
+  // FIXME: Should be TRUE. Should not warn about garbage value.
+  clang_analyzer_eval(after == before); // expected-warning{{UNKNOWN}}
+}
+
+struct A { // A is an aggregate.
+  const C &c;
+};
+
+void f6() {
+  C *after, *before;
+  {
+    A a{C(true, &after, &before)};
+  }
+  // FIXME: Should be TRUE. Should not warn about garbage value.
+  clang_analyzer_eval(after == before); // expected-warning{{UNKNOWN}}
+}
+
+void f7() {
+  C *after, *before;
+  {
+    A a = {C(true, &after, &before)};
+  }
+  // FIXME: Should be TRUE. Should not warn about garbage value.
+  clang_analyzer_eval(after == before); // expected-warning{{UNKNOWN}}
+}
+
+void f8() {
+  C *after, *before;
+  {
+    A a[2] = {C(false, nullptr, nullptr), C(true, &after, &before)};
   }
   // FIXME: Should be TRUE. Should not warn about garbage value.
   clang_analyzer_eval(after == before); // expected-warning{{UNKNOWN}}
