@@ -1935,7 +1935,6 @@ public:
   bool shouldLinkDependentDeclWithPrevious(Decl *D, Decl *OldDecl);
   void CheckMain(FunctionDecl *FD, const DeclSpec &D);
   void CheckMSVCRTEntryPoint(FunctionDecl *FD);
-  Attr *getImplicitSectionAttrForFunction(const FunctionDecl *FD, bool IsDefinition = true);
   Decl *ActOnParamDeclarator(Scope *S, Declarator &D);
   ParmVarDecl *BuildParmVarDeclForTypedef(DeclContext *DC,
                                           SourceLocation Loc,
@@ -5850,7 +5849,6 @@ public:
   /// ensure that referenceDLLExportedClassMethods is called some point later
   /// when all outer classes of Class are complete.
   void checkClassLevelDLLAttribute(CXXRecordDecl *Class);
-  void checkClassLevelSectionAttribute(CXXRecordDecl *Class);
 
   void referenceDLLExportedClassMethods();
 
