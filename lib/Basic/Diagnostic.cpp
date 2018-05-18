@@ -468,7 +468,10 @@ void DiagnosticsEngine::Report(const StoredDiagnostic &storedDiag) {
 
   CurDiagLoc = storedDiag.getLocation();
   CurDiagID = storedDiag.getID();
-  NumDiagArgs = 0;
+
+  DiagArgumentsKind.clear();
+  DiagArgumentsStr.clear();
+  DiagArgumentsVal.clear();
 
   DiagRanges.clear();
   DiagRanges.append(storedDiag.range_begin(), storedDiag.range_end());
@@ -617,11 +620,12 @@ static void HandleOrdinalModifier(unsigned ValNo,
   Out << ValNo << llvm::getOrdinalSuffix(ValNo);
 }
 
-/// PluralNumber - Parse an unsigned integer and advance Start.
-static unsigned PluralNumber(const char *&Start, const char *End) {
+/// ParseNumber - Parse an unsigned integer and advance Start.
+static unsigned ParseNumber(const char *&Start, const char *End) {
+  assert(Start != End && isDigit(*Start) && "invalid start for number");
   // Programming 101: Parse a decimal number :-)
   unsigned Val = 0;
-  while (Start != End && *Start >= '0' && *Start <= '9') {
+  while (Start != End && isDigit(*Start)) {
     Val *= 10;
     Val += *Start - '0';
     ++Start;
@@ -632,15 +636,15 @@ static unsigned PluralNumber(const char *&Start, const char *End) {
 /// TestPluralRange - Test if Val is in the parsed range. Modifies Start.
 static bool TestPluralRange(unsigned Val, const char *&Start, const char *End) {
   if (*Start != '[') {
-    unsigned Ref = PluralNumber(Start, End);
+    unsigned Ref = ParseNumber(Start, End);
     return Ref == Val;
   }
 
   ++Start;
-  unsigned Low = PluralNumber(Start, End);
+  unsigned Low = ParseNumber(Start, End);
   assert(*Start == ',' && "Bad plural expression syntax: expected ,");
   ++Start;
-  unsigned High = PluralNumber(Start, End);
+  unsigned High = ParseNumber(Start, End);
   assert(*Start == ']' && "Bad plural expression syntax: expected )");
   ++Start;
   return Low <= Val && Val <= High;
@@ -657,14 +661,14 @@ static bool EvalPluralExpr(unsigned ValNo, const char *Start, const char *End) {
     if (C == '%') {
       // Modulo expression
       ++Start;
-      unsigned Arg = PluralNumber(Start, End);
+      unsigned Arg = ParseNumber(Start, End);
       assert(*Start == '=' && "Bad plural expression syntax: expected =");
       ++Start;
       unsigned ValMod = ValNo % Arg;
       if (TestPluralRange(ValMod, Start, End))
         return true;
     } else {
-      assert((C == '[' || (C >= '0' && C <= '9')) &&
+      assert((C == '[' || isDigit(C)) &&
              "Bad plural expression syntax: unexpected character");
       // Range expression
       if (TestPluralRange(ValNo, Start, End))
@@ -843,7 +847,7 @@ FormatDiagnostic(const char *DiagStr, const char *DiagEnd,
     }
 
     assert(isDigit(*DiagStr) && "Invalid format for argument in diagnostic");
-    unsigned ArgNo = *DiagStr++ - '0';
+    unsigned ArgNo = ParseNumber(DiagStr, DiagEnd);
 
     // Only used for type diffing.
     unsigned ArgNo2 = ArgNo;
@@ -853,7 +857,7 @@ FormatDiagnostic(const char *DiagStr, const char *DiagEnd,
       assert(*DiagStr == ',' && isDigit(*(DiagStr + 1)) &&
              "Invalid format for diff modifier");
       ++DiagStr;  // Comma.
-      ArgNo2 = *DiagStr++ - '0';
+      ArgNo2 = ParseNumber(DiagStr, DiagEnd);
       DiagnosticsEngine::ArgumentKind Kind2 = getArgKind(ArgNo2);
       if (Kind == DiagnosticsEngine::ak_qualtype &&
           Kind2 == DiagnosticsEngine::ak_qualtype)
@@ -870,12 +874,15 @@ FormatDiagnostic(const char *DiagStr, const char *DiagEnd,
                "Found too many '|'s in a %diff modifier!");
         const char *FirstDollar = ScanFormat(Argument, Pipe, '$');
         const char *SecondDollar = ScanFormat(FirstDollar + 1, Pipe, '$');
-        const char ArgStr1[] = { '%', static_cast<char>('0' + ArgNo) };
-        const char ArgStr2[] = { '%', static_cast<char>('0' + ArgNo2) };
+        std::string ArgStr1 = (llvm::Twine("%") + std::to_string(ArgNo)).str();
+        std::string ArgStr2 = (llvm::Twine("%") + std::to_string(ArgNo2)).str();
+
         FormatDiagnostic(Argument, FirstDollar, OutStr);
-        FormatDiagnostic(ArgStr1, ArgStr1 + 2, OutStr);
+        FormatDiagnostic(ArgStr1.data(), ArgStr1.data() + ArgStr1.size(),
+                         OutStr);
         FormatDiagnostic(FirstDollar + 1, SecondDollar, OutStr);
-        FormatDiagnostic(ArgStr2, ArgStr2 + 2, OutStr);
+        FormatDiagnostic(ArgStr2.data(), ArgStr2.data() + ArgStr2.size(),
+                         OutStr);
         FormatDiagnostic(SecondDollar + 1, Pipe, OutStr);
         continue;
       }

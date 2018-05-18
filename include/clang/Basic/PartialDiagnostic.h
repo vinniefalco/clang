@@ -34,41 +34,24 @@ class IdentifierInfo;
 
 class PartialDiagnostic {
 public:
-  enum {
-      // The MaxArguments and MaxFixItHints member enum values from
-      // DiagnosticsEngine are private but DiagnosticsEngine declares
-      // PartialDiagnostic a friend.  These enum values are redeclared
-      // here so that the nested Storage class below can access them.
-      MaxArguments = DiagnosticsEngine::MaxArguments
-  };
-
   struct Storage {
-    enum {
-        /// The maximum number of arguments we can hold. We
-        /// currently only support up to 10 arguments (%0-%9).
-        ///
-        /// A single diagnostic with more than that almost certainly has to
-        /// be simplified anyway.
-        MaxArguments = PartialDiagnostic::MaxArguments
-    };
-
     /// The number of entries in Arguments.
-    unsigned char NumDiagArgs = 0;
+    unsigned getNumArgs() const { return DiagArgumentsKind.size(); }
 
     /// Specifies for each argument whether it is in DiagArgumentsStr
     /// or in DiagArguments.
-    unsigned char DiagArgumentsKind[MaxArguments];
+    SmallVector<unsigned char, 10> DiagArgumentsKind;
 
     /// The values for the various substitution positions.
     ///
     /// This is used when the argument is not an std::string. The specific value
     /// is mangled into an intptr_t and the interpretation depends on exactly
     /// what sort of argument kind it is.
-    intptr_t DiagArgumentsVal[MaxArguments];
+    llvm::DenseMap<unsigned, intptr_t> DiagArgumentsVal;
 
     /// The values for the various substitution positions that have
     /// string arguments.
-    std::string DiagArgumentsStr[MaxArguments];
+    llvm::DenseMap<unsigned, std::string> DiagArgumentsStr;
 
     /// The list of ranges added to this diagnostic.
     SmallVector<CharSourceRange, 8> DiagRanges;
@@ -98,7 +81,9 @@ public:
         return new Storage;
 
       Storage *Result = FreeList[--NumFreeListEntries];
-      Result->NumDiagArgs = 0;
+      Result->DiagArgumentsKind.clear();
+      Result->DiagArgumentsVal.clear();
+      Result->DiagArgumentsStr.clear();
       Result->DiagRanges.clear();
       Result->FixItHints.clear();
       return Result;
@@ -272,21 +257,16 @@ public:
     if (!DiagStorage)
       DiagStorage = getStorage();
 
-    assert(DiagStorage->NumDiagArgs < Storage::MaxArguments &&
-           "Too many arguments to diagnostic!");
-    DiagStorage->DiagArgumentsKind[DiagStorage->NumDiagArgs] = Kind;
-    DiagStorage->DiagArgumentsVal[DiagStorage->NumDiagArgs++] = V;
+    DiagStorage->DiagArgumentsKind.push_back(Kind);
+    DiagStorage->DiagArgumentsVal[DiagStorage->getNumArgs() - 1] = V;
   }
 
   void AddString(StringRef V) const {
     if (!DiagStorage)
       DiagStorage = getStorage();
 
-    assert(DiagStorage->NumDiagArgs < Storage::MaxArguments &&
-           "Too many arguments to diagnostic!");
-    DiagStorage->DiagArgumentsKind[DiagStorage->NumDiagArgs]
-      = DiagnosticsEngine::ak_std_string;
-    DiagStorage->DiagArgumentsStr[DiagStorage->NumDiagArgs++] = V;
+    DiagStorage->DiagArgumentsKind.push_back(DiagnosticsEngine::ak_std_string);
+    DiagStorage->DiagArgumentsStr[DiagStorage->getNumArgs() - 1] = V;
   }
 
   void Emit(const DiagnosticBuilder &DB) const {
@@ -294,7 +274,7 @@ public:
       return;
 
     // Add all arguments.
-    for (unsigned i = 0, e = DiagStorage->NumDiagArgs; i != e; ++i) {
+    for (unsigned i = 0, e = DiagStorage->getNumArgs(); i != e; ++i) {
       if ((DiagnosticsEngine::ArgumentKind)DiagStorage->DiagArgumentsKind[i]
             == DiagnosticsEngine::ak_std_string)
         DB.AddString(DiagStorage->DiagArgumentsStr[i]);
@@ -336,7 +316,7 @@ public:
   /// Retrieve the string argument at the given index.
   StringRef getStringArg(unsigned I) {
     assert(DiagStorage && "No diagnostic storage?");
-    assert(I < DiagStorage->NumDiagArgs && "Not enough diagnostic args");
+    assert(I < DiagStorage->getNumArgs() && "Not enough diagnostic args");
     assert(DiagStorage->DiagArgumentsKind[I]
              == DiagnosticsEngine::ak_std_string && "Not a string arg");
     return DiagStorage->DiagArgumentsStr[I];

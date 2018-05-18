@@ -907,37 +907,28 @@ private:
   /// diagnostic in flight.
   unsigned CurDiagID;
 
-  enum {
-    /// The maximum number of arguments we can hold.
-    ///
-    /// We currently only support up to 10 arguments (%0-%9).  A single
-    /// diagnostic with more than that almost certainly has to be simplified
-    /// anyway.
-    MaxArguments = 10,
-  };
-
   /// The number of entries in Arguments.
-  signed char NumDiagArgs;
+  unsigned getNumArgs() const { return DiagArgumentsKind.size(); }
 
   /// Specifies whether an argument is in DiagArgumentsStr or
   /// in DiagArguments.
   ///
   /// This is an array of ArgumentKind::ArgumentKind enum values, one for each
   /// argument.
-  unsigned char DiagArgumentsKind[MaxArguments];
+  SmallVector<unsigned char, 10> DiagArgumentsKind;
 
   /// Holds the values of each string argument for the current
   /// diagnostic.
   ///
   /// This is only used when the corresponding ArgumentKind is ak_std_string.
-  std::string DiagArgumentsStr[MaxArguments];
+  llvm::DenseMap<unsigned, std::string> DiagArgumentsStr;
 
   /// The values for the various substitution positions.
   ///
   /// This is used when the argument is not an std::string.  The specific
   /// value is mangled into an intptr_t and the interpretation depends on
   /// exactly what sort of argument kind it is.
-  intptr_t DiagArgumentsVal[MaxArguments];
+  llvm::DenseMap<unsigned, intptr_t> DiagArgumentsVal;
 
   /// The list of ranges added to this diagnostic.
   SmallVector<CharSourceRange, 8> DiagRanges;
@@ -1062,13 +1053,17 @@ class DiagnosticBuilder {
   explicit DiagnosticBuilder(DiagnosticsEngine *diagObj)
       : DiagObj(diagObj), IsActive(true) {
     assert(diagObj && "DiagnosticBuilder requires a valid DiagnosticsEngine!");
+
     diagObj->DiagRanges.clear();
     diagObj->DiagFixItHints.clear();
   }
 
 protected:
   void FlushCounts() {
-    DiagObj->NumDiagArgs = NumArgs;
+    assert(DiagObj->getNumArgs() >= NumArgs);
+    if (DiagObj->getNumArgs() > NumArgs)
+      DiagObj->DiagArgumentsKind.resize(NumArgs);
+    assert(DiagObj->getNumArgs() == NumArgs);
   }
 
   /// Clear out the current diagnostic.
@@ -1144,19 +1139,26 @@ public:
   /// \endcode
   operator bool() const { return true; }
 
+private:
+  void AddArgKind(DiagnosticsEngine::ArgumentKind Kind) const {
+    assert(NumArgs <= DiagObj->getNumArgs() &&
+           "NumArgs doesn't match number of argument kinds");
+    if (DiagObj->getNumArgs() == NumArgs)
+      DiagObj->DiagArgumentsKind.push_back(Kind);
+    else
+      DiagObj->DiagArgumentsKind[NumArgs] = Kind;
+  }
+
+public:
   void AddString(StringRef S) const {
     assert(isActive() && "Clients must not add to cleared diagnostic!");
-    assert(NumArgs < DiagnosticsEngine::MaxArguments &&
-           "Too many arguments to diagnostic!");
-    DiagObj->DiagArgumentsKind[NumArgs] = DiagnosticsEngine::ak_std_string;
+    AddArgKind(DiagnosticsEngine::ak_std_string);
     DiagObj->DiagArgumentsStr[NumArgs++] = S;
   }
 
   void AddTaggedVal(intptr_t V, DiagnosticsEngine::ArgumentKind Kind) const {
     assert(isActive() && "Clients must not add to cleared diagnostic!");
-    assert(NumArgs < DiagnosticsEngine::MaxArguments &&
-           "Too many arguments to diagnostic!");
-    DiagObj->DiagArgumentsKind[NumArgs] = Kind;
+    AddArgKind(Kind);
     DiagObj->DiagArgumentsVal[NumArgs++] = V;
   }
 
@@ -1327,7 +1329,7 @@ public:
   bool hasSourceManager() const { return DiagObj->hasSourceManager(); }
   SourceManager &getSourceManager() const { return DiagObj->getSourceManager();}
 
-  unsigned getNumArgs() const { return DiagObj->NumDiagArgs; }
+  unsigned getNumArgs() const { return DiagObj->getNumArgs(); }
 
   /// Return the kind of the specified index.
   ///
@@ -1345,7 +1347,9 @@ public:
   const std::string &getArgStdStr(unsigned Idx) const {
     assert(getArgKind(Idx) == DiagnosticsEngine::ak_std_string &&
            "invalid argument accessor!");
-    return DiagObj->DiagArgumentsStr[Idx];
+    auto It = DiagObj->DiagArgumentsStr.find(Idx);
+    assert(It != DiagObj->DiagArgumentsStr.end() && "No string for index");
+    return It->second;
   }
 
   /// Return the specified C string argument.
@@ -1353,7 +1357,7 @@ public:
   const char *getArgCStr(unsigned Idx) const {
     assert(getArgKind(Idx) == DiagnosticsEngine::ak_c_string &&
            "invalid argument accessor!");
-    return reinterpret_cast<const char*>(DiagObj->DiagArgumentsVal[Idx]);
+    return reinterpret_cast<const char *>(getRawArg(Idx));
   }
 
   /// Return the specified signed integer argument.
@@ -1361,7 +1365,7 @@ public:
   int getArgSInt(unsigned Idx) const {
     assert(getArgKind(Idx) == DiagnosticsEngine::ak_sint &&
            "invalid argument accessor!");
-    return (int)DiagObj->DiagArgumentsVal[Idx];
+    return (int)getRawArg(Idx);
   }
 
   /// Return the specified unsigned integer argument.
@@ -1369,7 +1373,7 @@ public:
   unsigned getArgUInt(unsigned Idx) const {
     assert(getArgKind(Idx) == DiagnosticsEngine::ak_uint &&
            "invalid argument accessor!");
-    return (unsigned)DiagObj->DiagArgumentsVal[Idx];
+    return (unsigned)getRawArg(Idx);
   }
 
   /// Return the specified IdentifierInfo argument.
@@ -1377,7 +1381,7 @@ public:
   const IdentifierInfo *getArgIdentifier(unsigned Idx) const {
     assert(getArgKind(Idx) == DiagnosticsEngine::ak_identifierinfo &&
            "invalid argument accessor!");
-    return reinterpret_cast<IdentifierInfo*>(DiagObj->DiagArgumentsVal[Idx]);
+    return reinterpret_cast<IdentifierInfo *>(getRawArg(Idx));
   }
 
   /// Return the specified non-string argument in an opaque form.
@@ -1385,7 +1389,9 @@ public:
   intptr_t getRawArg(unsigned Idx) const {
     assert(getArgKind(Idx) != DiagnosticsEngine::ak_std_string &&
            "invalid argument accessor!");
-    return DiagObj->DiagArgumentsVal[Idx];
+    auto It = DiagObj->DiagArgumentsVal.find(Idx);
+    assert(It != DiagObj->DiagArgumentsVal.end() && "No value for index");
+    return It->second;
   }
 
   /// Return the number of source ranges associated with this diagnostic.

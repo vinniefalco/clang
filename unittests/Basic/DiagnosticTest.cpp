@@ -94,4 +94,50 @@ TEST(DiagnosticTest, diagnosticError) {
   EXPECT_EQ(*Value, std::make_pair(20, 1));
   EXPECT_EQ(Value->first, 20);
 }
+
+TEST(DiagnosticTest, testArgumentsOver10) {
+  DiagnosticsEngine Diags(new DiagnosticIDs(), new DiagnosticOptions,
+                          new IgnoringDiagConsumer());
+  auto DiagIDs = Diags.getDiagnosticIDs();
+  unsigned ID = DiagIDs->getCustomDiagID(DiagnosticIDs::Error, "%0 %1 %2%3 %4 %5 %6 %7 %8 %9 %10 %11%12");
+
+  const char *Args[] = {"zero", "one", "2", " three", "four", "five", "six",
+    "seven", "eight", "nine", "ten", "11", " twelve"};
+  const unsigned NumArgs = sizeof(Args) / sizeof(Args[0]);
+  ASSERT_EQ(NumArgs, 13u);
+
+  const std::string ExpectText =
+      "zero one 2 three four five six seven eight nine ten 11 twelve";
+
+  DiagnosticBuilder Builder = Diags.Report(ID);
+  for (const char* Arg : Args) {
+    if (isDigit(*Arg))
+      Builder << std::stoi(Arg);
+    else
+      Builder << Arg;
+  }
+
+  Diagnostic D(&Diags);
+
+  ASSERT_TRUE(Diags.isDiagnosticInFlight());
+
+  ASSERT_EQ(D.getNumArgs(), NumArgs);
+  for (unsigned I=0; I < NumArgs; ++I) {
+    if (isDigit(*Args[I])) {
+      int Expect = std::stoi(Args[I]);
+      int Arg = D.getArgSInt(I);
+      EXPECT_EQ(Expect, Arg);
+    } else {
+      const char* Expect = Args[I];
+      const char* Arg = D.getArgCStr(I);
+      EXPECT_EQ(Expect, Arg);
+    }
+  }
+
+  SmallVector<char, 1> DiagText;
+  DiagText.reserve(1024);
+  D.FormatDiagnostic(DiagText);
+  std::string Text(DiagText.begin(), DiagText.end());
+  EXPECT_EQ(ExpectText, Text);
+}
 }
