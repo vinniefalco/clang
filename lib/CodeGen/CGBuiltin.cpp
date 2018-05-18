@@ -1022,10 +1022,11 @@ static llvm::Value *dumpRecord(CodeGenFunction &CGF, QualType RType,
 }
 
 static bool
-TypeRequiresBuiltinLaunderImp(QualType Ty,
-                           llvm::DenseSet<const CXXRecordDecl *> &Seen) {
+TypeRequiresBuiltinLaunderImp(const ASTContext &Ctx, QualType Ty,
+                              llvm::DenseSet<const CXXRecordDecl *> &Seen) {
   if (const auto *Arr = Ty->getAs<ArrayType>())
-    return TypeRequiresBuiltinLaunderImp(Arr->getBaseElementType(), Seen);
+    return TypeRequiresBuiltinLaunderImp(Ctx, Ctx.getBaseElementType(Arr),
+                                         Seen);
 
   const auto *Record = Ty->getAsCXXRecordDecl();
   if (!Record || !Seen.insert(Record).second)
@@ -1033,7 +1034,7 @@ TypeRequiresBuiltinLaunderImp(QualType Ty,
   if (Record->isDynamicClass())
     return true;
   for (FieldDecl *F : Record->fields()) {
-    if (TypeRequiresBuiltinLaunderImp(F->getType(), Seen))
+    if (TypeRequiresBuiltinLaunderImp(Ctx, F->getType(), Seen))
       return true;
   }
   return false;
@@ -1045,7 +1046,7 @@ static bool TypeRequiresBuiltinLaunder(CodeGenModule &CGM, QualType Ty) {
   if (!CGM.getCodeGenOpts().StrictVTablePointers)
     return false;
   llvm::DenseSet<const CXXRecordDecl *> Seen;
-  return TypeRequiresBuiltinLaunderImp(Ty, Seen);
+  return TypeRequiresBuiltinLaunderImp(CGM.getContext(), Ty, Seen);
 }
 
 RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
