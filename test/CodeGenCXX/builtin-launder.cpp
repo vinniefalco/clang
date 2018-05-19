@@ -252,9 +252,29 @@ extern "C" void test_builtin_launder_uninstantiated_template(WithMember<TestNoIn
 }
 
 struct Incomplete;
+// CHECK-LABEL: define void @test_builtin_launder_incomplete(
 extern "C" void test_builtin_launder_incomplete(Incomplete *p) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
+  // CHECK: ret void
   Incomplete *d = __builtin_launder(p);
 }
+
+struct LaterComplete;
+
+// FIXME: Can/Should we dig out the definition for LaterComplete when performing
+// CodeGen?
+
+// CHECK-LABEL: define void @test_builtin_launder_complete_later(
+extern "C" void test_builtin_launder_complete_later(LaterComplete *p) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
+  // CHECK: ret void
+  LaterComplete *d = __builtin_launder(p);
+}
+struct LaterComplete {};
 
 template <class T>
 struct WithBase : T {};

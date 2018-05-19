@@ -1023,12 +1023,15 @@ static llvm::Value *dumpRecord(CodeGenFunction &CGF, QualType RType,
 
 static bool TypeRequiresBuiltinLaunderImp(const ASTContext &Ctx, QualType Ty,
                                           llvm::DenseSet<const Decl *> &Seen) {
-  // Ty = Ty.getCanonicalType();
   if (const auto *Arr = Ctx.getAsArrayType(Ty))
     Ty = Ctx.getBaseElementType(Arr);
 
   const auto *Record = Ty->getAsCXXRecordDecl();
-  if (!Record || !Seen.insert(Record).second)
+  if (!Record)
+    return false;
+
+  // We've already checked this type, or are in the process of checking it.
+  if (!Seen.insert(Record).second)
     return false;
 
   // FIXME: We either have an incomplete class type, or we have a class template
