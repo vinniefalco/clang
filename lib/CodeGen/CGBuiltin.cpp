@@ -1021,18 +1021,30 @@ static llvm::Value *dumpRecord(CodeGenFunction &CGF, QualType RType,
   return Res;
 }
 
-static bool
-TypeRequiresBuiltinLaunderImp(const ASTContext &Ctx, QualType Ty,
-                              llvm::DenseSet<const CXXRecordDecl *> &Seen) {
+static bool TypeRequiresBuiltinLaunderImp(const ASTContext &Ctx, QualType Ty,
+                                          llvm::DenseSet<const Decl *> &Seen) {
+  // Ty = Ty.getCanonicalType();
   if (const auto *Arr = Ctx.getAsArrayType(Ty))
-    return TypeRequiresBuiltinLaunderImp(Ctx, Ctx.getBaseElementType(Arr),
-                                         Seen);
+    Ty = Ctx.getBaseElementType(Arr);
 
   const auto *Record = Ty->getAsCXXRecordDecl();
   if (!Record || !Seen.insert(Record).second)
     return false;
+
+  // FIXME: We either have an incomplete class type, or we have a class template
+  // whose instantiation has not been forced. Example:
+  //
+  //   template <class T> struct Foo { T value; };
+  //   Foo<int> *p = nullptr;
+  //   auto *d = __builtin_launder(p);
+  if (!Record->hasDefinition())
+    return true;
+
   if (Record->isDynamicClass())
     return true;
+
+  // if (!Seen.insert(Record).second)
+  //  return false;
   for (FieldDecl *F : Record->fields()) {
     if (TypeRequiresBuiltinLaunderImp(Ctx, F->getType(), Seen))
       return true;
@@ -1045,7 +1057,7 @@ TypeRequiresBuiltinLaunderImp(const ASTContext &Ctx, QualType Ty,
 static bool TypeRequiresBuiltinLaunder(CodeGenModule &CGM, QualType Ty) {
   if (!CGM.getCodeGenOpts().StrictVTablePointers)
     return false;
-  llvm::DenseSet<const CXXRecordDecl *> Seen;
+  llvm::DenseSet<const Decl *> Seen;
   return TypeRequiresBuiltinLaunderImp(CGM.getContext(), Ty, Seen);
 }
 

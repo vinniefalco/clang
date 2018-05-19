@@ -65,7 +65,7 @@ using ConstMemFnType = int (Dummy::*)() const;
 void foo() {}
 
 void test_builtin_launder_diags(void *vp, const void *cvp, FnType *fnp,
-                                MemFnType mfp, ConstMemFnType cmfp) {
+                                MemFnType mfp, ConstMemFnType cmfp, int (&Arr)[5]) {
   __builtin_launder(vp);   // expected-error {{void pointer argument to '__builtin_launder' is not allowed}}
   __builtin_launder(cvp);  // expected-error {{void pointer argument to '__builtin_launder' is not allowed}}
   __builtin_launder(fnp);  // expected-error {{function pointer argument to '__builtin_launder' is not allowed}}
@@ -74,7 +74,8 @@ void test_builtin_launder_diags(void *vp, const void *cvp, FnType *fnp,
   (void)__builtin_launder(&fnp);
   __builtin_launder(42);      // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
   __builtin_launder(nullptr); // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
-  __builtin_launder(foo)      // expected-error {{non-pointer argument to '__builtin_launder' is not allowed}}
+  __builtin_launder(foo);     // expected-error {{function pointer argument to '__builtin_launder' is not allowed}}
+  (void)__builtin_launder(Arr);
 }
 
 void test_builtin_launder(char *p, const volatile int *ip, const float *&fp,

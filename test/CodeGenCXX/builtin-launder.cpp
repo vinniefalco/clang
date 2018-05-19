@@ -81,6 +81,7 @@ struct TestNoInvariant {
 // CHECK-LABEL: define void @test_builtin_launder_ommitted_two
 extern "C" void test_builtin_launder_ommitted_two(TestNoInvariant *p) {
   // CHECK: entry
+  // CHECK-NOT: llvm.launder.invariant.group
   // CHECK-NEXT: %p.addr = alloca [[TYPE:%.*]], align 8
   // CHECK-NEXT: %d = alloca [[TYPE]]
   // CHECK-NEXT: store [[TYPE]] %p, [[TYPE]]* %p.addr
@@ -129,6 +130,7 @@ extern "C" void test_builtin_launder_virtual_reference_member(TestVirtualReferen
 }
 
 struct TestRecursiveMember {
+  TestRecursiveMember() : member(*this) {}
   TestRecursiveMember &member;
 };
 
@@ -141,6 +143,7 @@ extern "C" void test_builtin_launder_recursive_member(TestRecursiveMember *p) {
 }
 
 struct TestVirtualRecursiveMember {
+  TestVirtualRecursiveMember() : member(*this) {}
   TestVirtualRecursiveMember &member;
   virtual void foo();
 };
@@ -169,7 +172,8 @@ extern "C" void test_builtin_launder_array_nested(TestVirtualFn (&Arr)[5][2]) {
   // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
   // CHECK-STRICT: @llvm.launder.invariant.group
   // CHECK: ret void
-  TestVirtualFn **d = __builtin_launder(Arr);
+  using RetTy = TestVirtualFn(*)[2];
+  RetTy d = __builtin_launder(Arr);
 }
 
 // CHECK-LABEL: define void @test_builtin_launder_array_no_invariant(
@@ -185,7 +189,95 @@ extern "C" void test_builtin_launder_array_nested_no_invariant(TestNoInvariant (
   // CHECK: entry
   // CHECK-NOT: @llvm.launder.invariant.group
   // CHECK: ret void
-  TestNoInvariant **d = __builtin_launder(Arr);
+  using RetTy = TestNoInvariant(*)[2];
+  RetTy d = __builtin_launder(Arr);
+}
+
+template <class Member>
+struct WithMember {
+  Member mem;
+};
+
+template struct WithMember<TestVirtualFn[5]>;
+
+// CHECK-LABEL: define void @test_builtin_launder_member_array(
+extern "C" void test_builtin_launder_member_array(WithMember<TestVirtualFn[5]> *p) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
+  // CHECK: ret void
+  auto *d = __builtin_launder(p);
+}
+
+template struct WithMember<TestVirtualFn[5][2]>;
+
+// CHECK-LABEL: define void @test_builtin_launder_member_array_nested(
+extern "C" void test_builtin_launder_member_array_nested(WithMember<TestVirtualFn[5][2]> *p) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
+  // CHECK: ret void
+  auto *d = __builtin_launder(p);
+}
+
+template struct WithMember<TestNoInvariant[5]>;
+
+// CHECK-LABEL: define void @test_builtin_launder_member_array_no_invariant(
+extern "C" void test_builtin_launder_member_array_no_invariant(WithMember<TestNoInvariant[5]> *p) {
+  // CHECK: entry
+  // CHECK-NOT: @llvm.launder.invariant.group
+  // CHECK: ret void
+  auto *d = __builtin_launder(p);
+}
+
+template struct WithMember<TestNoInvariant[5][2]>;
+
+// CHECK-LABEL: define void @test_builtin_launder_member_array_nested_no_invariant(
+extern "C" void test_builtin_launder_member_array_nested_no_invariant(WithMember<TestNoInvariant[5][2]> *p) {
+  // CHECK: entry
+  // CHECK-NOT: @llvm.launder.invariant.group
+  // CHECK: ret void
+  auto *d = __builtin_launder(p);
+}
+
+// FIXME: Because WithMember<TestNoInvariant> is never instantiated, we have to assume
+// it requires laundering.
+// CHECK-LABEL: define void @test_builtin_launder_uninstantiated_template(
+extern "C" void test_builtin_launder_uninstantiated_template(WithMember<TestNoInvariant> *p) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
+  // CHECK: ret void
+  auto *d = __builtin_launder(p);
+}
+
+struct Incomplete;
+extern "C" void test_builtin_launder_incomplete(Incomplete *p) {
+  Incomplete *d = __builtin_launder(p);
+}
+
+template <class T>
+struct WithBase : T {};
+
+template struct WithBase<TestNoInvariant>;
+
+// CHECK-LABEL: define void @test_builtin_launder_base_no_invariant(
+extern "C" void test_builtin_launder_base_no_invariant(WithBase<TestNoInvariant> *p) {
+  // CHECK: entry
+  // CHECK-NOT: @llvm.launder.invariant.group
+  // CHECK: ret void
+  auto *d = __builtin_launder(p);
+}
+
+template struct WithBase<TestVirtualFn>;
+
+// CHECK-LABEL: define void @test_builtin_launder_base(
+extern "C" void test_builtin_launder_base(WithBase<TestVirtualFn> *p) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
+  // CHECK: ret void
+  auto *d = __builtin_launder(p);
 }
 
 /// The test cases in this namespace technically need to be laundered according

@@ -855,7 +855,15 @@ static ExprResult SemaBuiltinLaunder(Sema &S, CallExpr *TheCall) {
   if (checkArgCount(S, TheCall, 1))
     return ExprError();
 
-  QualType ArgTy = TheCall->getArg(0)->getType();
+  Expr *OrigArg = TheCall->getArg(0);
+  // Don't perform LValue conversions since they may strip things like the
+  // restrict qualifier
+  ExprResult Arg = S.DefaultFunctionArrayConversion(OrigArg);
+  if (Arg.isInvalid())
+    return ExprError();
+
+  TheCall->setArg(0, Arg.get());
+  QualType ArgTy = Arg.get()->getType();
   TheCall->setType(ArgTy);
 
   auto DiagSelect = [&]() -> llvm::Optional<unsigned> {
@@ -877,7 +885,7 @@ static ExprResult SemaBuiltinLaunder(Sema &S, CallExpr *TheCall) {
 
   InitializedEntity Entity =
       InitializedEntity::InitializeParameter(S.Context, ArgTy, false);
-  ExprResult Arg = TheCall->getArg(0);
+  Arg = TheCall->getArg(0);
   Arg = S.PerformCopyInitialization(Entity, SourceLocation(), Arg);
   if (Arg.isInvalid())
     return ExprError();
