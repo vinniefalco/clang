@@ -6630,7 +6630,6 @@ void Sema::CheckExplicitlyDefaultedMember(FunctionDecl *FD) {
   // Check for parameter type matching.
   QualType ArgType = ExpectedParams ? Type->getParamType(0) : QualType();
   bool HasConstParam = false;
-  // FIXME(EricWF): Integrate this better
 
   if (CSM == CXXComparisonOperator) {
     auto Opc = BinaryOperator::getOverloadedOpcode(FD->getOverloadedOperator());
