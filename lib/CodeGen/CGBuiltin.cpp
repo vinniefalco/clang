@@ -1024,7 +1024,7 @@ static llvm::Value *dumpRecord(CodeGenFunction &CGF, QualType RType,
 static bool
 TypeRequiresBuiltinLaunderImp(const ASTContext &Ctx, QualType Ty,
                               llvm::DenseSet<const CXXRecordDecl *> &Seen) {
-  if (const auto *Arr = Ty->getAs<ArrayType>())
+  if (const auto *Arr = Ctx.getAsArrayType(Ty))
     return TypeRequiresBuiltinLaunderImp(Ctx, Ctx.getBaseElementType(Arr),
                                          Seen);
 
@@ -2063,7 +2063,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const FunctionDecl *FD,
     QualType ArgTy = Arg->getType()->getPointeeType();
     Value *Ptr = EmitScalarExpr(Arg);
     if (TypeRequiresBuiltinLaunder(CGM, ArgTy))
-      Ptr = Builder.CreateInvariantGroupBarrier(Ptr);
+      Ptr = Builder.CreateLaunderInvariantGroup(Ptr);
 
     return RValue::get(Ptr);
   }

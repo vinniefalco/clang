@@ -1,6 +1,6 @@
-// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -fstrict-vtable-pointers -o - %s \
+// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -fstrict-vtable-pointers -o - %s -std=c++11 \
 // RUN: | FileCheck --check-prefixes=CHECK,CHECK-STRICT %s
-// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -o - %s \
+// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -o - %s -std=c++11 \
 // RUN: | FileCheck --check-prefixes=CHECK,CHECK-NONSTRICT %s
 
 //===----------------------------------------------------------------------===//
@@ -22,7 +22,7 @@ extern "C" void test_builtin_launder_virtual_fn(TestVirtualFn *p) {
   // CHECK-NONSTRICT-NEXT: store [[TYPE]] [[TMP0]], [[TYPE]]* %d
 
   // CHECK-STRICT-NEXT: [[TMP1:%.*]] = bitcast [[TYPE]] [[TMP0]] to i8*
-  // CHECK-STRICT-NEXT: [[TMP2:%.*]] = call i8* @llvm.invariant.group.barrier.p0i8(i8* [[TMP1]])
+  // CHECK-STRICT-NEXT: [[TMP2:%.*]] = call i8* @llvm.launder.invariant.group.p0i8(i8* [[TMP1]])
   // CHECK-STRICT-NEXT: [[TMP3:%.*]] = bitcast i8* [[TMP2]] to [[TYPE]]
   // CHECK-STRICT-NEXT: store [[TYPE]] [[TMP3]], [[TYPE]]* %d
 
@@ -36,9 +36,9 @@ struct TestPolyBase : TestVirtualFn {
 // CHECK-LABEL: define void @test_builtin_launder_poly_base
 extern "C" void test_builtin_launder_poly_base(TestPolyBase *p) {
   // CHECK-STRICT-NOT: ret void
-  // CHECK-STRICT: @llvm.invariant.group.barrier
+  // CHECK-STRICT: @llvm.launder.invariant.group
 
-  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
 
   // CHECK: ret void
   TestPolyBase *d = __builtin_launder(p);
@@ -50,9 +50,9 @@ struct TestVirtualBase : virtual TestBase {};
 // CHECK-LABEL: define void @test_builtin_launder_virtual_base
 extern "C" void test_builtin_launder_virtual_base(TestVirtualBase *p) {
   // CHECK-STRICT-NOT: ret void
-  // CHECK-STRICT: @llvm.invariant.group.barrier
+  // CHECK-STRICT: @llvm.launder.invariant.group
 
-  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
 
   // CHECK: ret void
   TestVirtualBase *d = __builtin_launder(p);
@@ -97,8 +97,8 @@ struct TestVirtualMember {
 // CHECK-LABEL: define void @test_builtin_launder_virtual_member
 extern "C" void test_builtin_launder_virtual_member(TestVirtualMember *p) {
   // CHECK: entry
-  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
-  // CHECK-STRICT: @llvm.invariant.group.barrier
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
   // CHECK: ret void
   TestVirtualMember *d = __builtin_launder(p);
 }
@@ -110,8 +110,8 @@ struct TestVirtualMemberDepth2 {
 // CHECK-LABEL: define void @test_builtin_launder_virtual_member_depth_2
 extern "C" void test_builtin_launder_virtual_member_depth_2(TestVirtualMemberDepth2 *p) {
   // CHECK: entry
-  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
-  // CHECK-STRICT: @llvm.invariant.group.barrier
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
   // CHECK: ret void
   TestVirtualMemberDepth2 *d = __builtin_launder(p);
 }
@@ -123,7 +123,7 @@ struct TestVirtualReferenceMember {
 // CHECK-LABEL: define void @test_builtin_launder_virtual_reference_member
 extern "C" void test_builtin_launder_virtual_reference_member(TestVirtualReferenceMember *p) {
   // CHECK: entry
-  // CHECK-NOT: @llvm.invariant.group.barrier
+  // CHECK-NOT: @llvm.launder.invariant.group
   // CHECK: ret void
   TestVirtualReferenceMember *d = __builtin_launder(p);
 }
@@ -135,7 +135,7 @@ struct TestRecursiveMember {
 // CHECK-LABEL: define void @test_builtin_launder_recursive_member
 extern "C" void test_builtin_launder_recursive_member(TestRecursiveMember *p) {
   // CHECK: entry
-  // CHECK-NOT: @llvm.invariant.group.barrier
+  // CHECK-NOT: @llvm.launder.invariant.group
   // CHECK: ret void
   TestRecursiveMember *d = __builtin_launder(p);
 }
@@ -148,10 +148,25 @@ struct TestVirtualRecursiveMember {
 // CHECK-LABEL: define void @test_builtin_launder_virtual_recursive_member
 extern "C" void test_builtin_launder_virtual_recursive_member(TestVirtualRecursiveMember *p) {
   // CHECK: entry
-  // CHECK-NONSTRICT-NOT: @llvm.invariant.group.barrier
-  // CHECK-STRICT: @llvm.invariant.group.barrier
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
   // CHECK: ret void
   TestVirtualRecursiveMember *d = __builtin_launder(p);
+}
+
+// CHECK-LABEL: define void @test_builtin_launder_array(
+extern "C" void test_builtin_launder_array(TestVirtualFn (&Arr)[5]) {
+  TestVirtualFn *d = __builtin_launder(Arr);
+}
+
+// CHECK-LABEL: define void @test_builtin_launder_array_nested(
+extern "C" void test_builtin_launder_array_nested(TestVirtualFn (&Arr)[5][2]) {
+  TestVirtualFn **d = __builtin_launder(Arr);
+}
+
+// CHECK-LABEL: define void @test_builtin_launder_array_nested_no_invariant(
+extern "C" void test_builtin_launder_array_nested_no_invariant(TestNoInvariant (&Arr)[5][2]) {
+  TestNoInvariant **d = __builtin_launder(Arr);
 }
 
 /// The test cases in this namespace technically need to be laundered according
@@ -170,7 +185,7 @@ struct TestConstMember {
 // CHECK-LABEL: define void @test_builtin_launder_const_member
 extern "C" void test_builtin_launder_const_member(TestConstMember *p) {
   // CHECK: entry
-  // CHECK-NOT: @llvm.invariant.group.barrier
+  // CHECK-NOT: @llvm.launder.invariant.group
   // CHECK: ret void
   TestConstMember *d = __builtin_launder(p);
 }
@@ -182,7 +197,7 @@ struct TestConstSubobject {
 // CHECK-LABEL: define void @test_builtin_launder_const_subobject
 extern "C" void test_builtin_launder_const_subobject(TestConstSubobject *p) {
   // CHECK: entry
-  // CHECK-NOT: @llvm.invariant.group.barrier
+  // CHECK-NOT: @llvm.launder.invariant.group
   // CHECK: ret void
   TestConstSubobject *d = __builtin_launder(p);
 }
@@ -194,7 +209,7 @@ struct TestConstObject {
 // CHECK-LABEL: define void @test_builtin_launder_const_object
 extern "C" void test_builtin_launder_const_object(TestConstObject *p) {
   // CHECK: entry
-  // CHECK-NOT: @llvm.invariant.group.barrier
+  // CHECK-NOT: @llvm.launder.invariant.group
   // CHECK: ret void
   TestConstObject *d = __builtin_launder(p);
 }
@@ -206,7 +221,7 @@ struct TestReferenceMember {
 // CHECK-LABEL: define void @test_builtin_launder_reference_member
 extern "C" void test_builtin_launder_reference_member(TestReferenceMember *p) {
   // CHECK: entry
-  // CHECK-NOT: @llvm.invariant.group.barrier
+  // CHECK-NOT: @llvm.launder.invariant.group
   // CHECK: ret void
   TestReferenceMember *d = __builtin_launder(p);
 }
