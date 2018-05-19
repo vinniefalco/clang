@@ -1,6 +1,6 @@
-// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -fstrict-vtable-pointers -o - %s -std=c++11 \
+// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -fstrict-vtable-pointers -o - %s \
 // RUN: | FileCheck --check-prefixes=CHECK,CHECK-STRICT %s
-// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -o - %s -std=c++11 \
+// RUN: %clang_cc1 -triple=x86_64-linux-gnu -emit-llvm -o - %s \
 // RUN: | FileCheck --check-prefixes=CHECK,CHECK-NONSTRICT %s
 
 //===----------------------------------------------------------------------===//
@@ -156,16 +156,35 @@ extern "C" void test_builtin_launder_virtual_recursive_member(TestVirtualRecursi
 
 // CHECK-LABEL: define void @test_builtin_launder_array(
 extern "C" void test_builtin_launder_array(TestVirtualFn (&Arr)[5]) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
+  // CHECK: ret void
   TestVirtualFn *d = __builtin_launder(Arr);
 }
 
 // CHECK-LABEL: define void @test_builtin_launder_array_nested(
 extern "C" void test_builtin_launder_array_nested(TestVirtualFn (&Arr)[5][2]) {
+  // CHECK: entry
+  // CHECK-NONSTRICT-NOT: @llvm.launder.invariant.group
+  // CHECK-STRICT: @llvm.launder.invariant.group
+  // CHECK: ret void
   TestVirtualFn **d = __builtin_launder(Arr);
+}
+
+// CHECK-LABEL: define void @test_builtin_launder_array_no_invariant(
+extern "C" void test_builtin_launder_array_no_invariant(TestNoInvariant (&Arr)[5]) {
+  // CHECK: entry
+  // CHECK-NOT: @llvm.launder.invariant.group
+  // CHECK: ret void
+  TestNoInvariant *d = __builtin_launder(Arr);
 }
 
 // CHECK-LABEL: define void @test_builtin_launder_array_nested_no_invariant(
 extern "C" void test_builtin_launder_array_nested_no_invariant(TestNoInvariant (&Arr)[5][2]) {
+  // CHECK: entry
+  // CHECK-NOT: @llvm.launder.invariant.group
+  // CHECK: ret void
   TestNoInvariant **d = __builtin_launder(Arr);
 }
 
