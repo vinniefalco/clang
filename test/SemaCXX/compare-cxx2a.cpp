@@ -563,3 +563,56 @@ void test(int *p, decltype(nullptr) n) {
 }
 
 } // namespace NullptrOvlTest
+
+namespace DeduceTest {
+template <class U = int>
+struct T {
+  auto operator<=>(T const&) const {
+    return std::strong_ordering::equal;
+  }
+};
+void test(T<> &t1, T<>& t2) {
+  auto r = t1 < t2;
+}
+}
+
+namespace DeduceTestTwo {
+template <class U  = int>
+struct T {
+  int x = 0;
+  auto operator<=>(T const& O) const {
+    return x ? O : x;
+  }
+};
+void test(T<> &t1, T<>& t2) {
+  auto r = t1 <=> t2;
+}
+}
+
+namespace CustomType {
+struct Cmp { int val; };
+bool operator<(Cmp L, int x) {
+  return L.val < x;
+}
+struct T {
+  auto operator<=>(T const&) const {
+    return Cmp{-1};
+  }
+};
+void test(T l, T r) {
+  auto rr = l < r;
+}
+}
+
+
+namespace CustomTypeFail {
+struct Cmp { int val; };
+struct T {
+  auto operator<=>(T const&) const {
+    return Cmp{-1};
+  }
+};
+void test(T l, T r) {
+  auto rr = l < r;
+}
+}

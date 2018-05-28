@@ -839,8 +839,7 @@ OverloadCandidate::getConversion(unsigned ArgIdx) const {
 unsigned OverloadCandidate::getConversionIndexForArgIndex(unsigned Idx) const {
   if (getRewrittenKind() != ROC_AsReversedThreeWay)
     return Idx;
-  // FIXME(EricWF): Handle these cases.
-  assert(Idx < 2);
+  assert(Idx < 2 && "binary operator has more than two arguments?");
   return Idx == 0 ? 1 : 0;
 }
 
@@ -8927,12 +8926,9 @@ void Sema::AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
       if (IsRelationalOrEquality) {
         if (FunctionDecl *FD = Ovl.Function) {
           if (FD->getReturnType()->isUndeducedType()) {
-            // FIXME(EricWF): Must the return type already be deduced?
-            // Attempt to write a test case to hit this, otherwise remove it.
-            assert(false);
             if (DeduceReturnType(FD, OpLoc)) {
               // FIXME(EricWF): Does deduction failure actually make this
-              // non-vialble? probably not?
+              // non-vialble? How does this happen?
               assert(false);
               Ovl.Viable = false;
               continue;

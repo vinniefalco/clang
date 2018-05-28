@@ -258,6 +258,7 @@ ComparisonCategories::computeComparisonTypeForBuiltin(QualType Ty,
 Optional<ComparisonCategoryType>
 ComparisonCategories::computeComparisonTypeForBuiltin(QualType LHSTy,
                                                       QualType RHSTy) {
+  // FIXME: Handle mixed nullptr conversions.
   QualType Args[2] = {LHSTy, RHSTy};
   SmallVector<ComparisonCategoryType, 8> TypeKinds;
   for (auto QT : Args) {
@@ -308,7 +309,7 @@ ComparisonCategories::computeCommonComparisonType(
 
   // Count the number of times each comparison category type occurs in the
   // specified type list.
-  for (auto TyKind : Types)
+  for (CCT TyKind : Types)
     Seen[static_cast<unsigned>(TyKind)]++;
 
   // --- Otherwise, if at least one Ti is std::weak_equality, or at least one
