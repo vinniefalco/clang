@@ -41,7 +41,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
@@ -1016,7 +1015,7 @@ MacroArgs *Preprocessor::ReadMacroCallArgumentList(Token &MacroName,
   return MacroArgs::create(MI, ArgTokens, isVarargsElided, *this);
 }
 
-/// \brief Keeps macro expanded tokens for TokenLexers.
+/// Keeps macro expanded tokens for TokenLexers.
 //
 /// Works like a stack; a TokenLexer adds the macro expanded tokens that is
 /// going to lex in the cache and when it finishes the tokens are removed
@@ -1105,7 +1104,8 @@ static bool HasFeature(const Preprocessor &PP, StringRef Feature) {
             LangOpts.Sanitize.hasOneOf(SanitizerKind::Address |
                                        SanitizerKind::KernelAddress))
       .Case("hwaddress_sanitizer",
-            LangOpts.Sanitize.hasOneOf(SanitizerKind::HWAddress))
+            LangOpts.Sanitize.hasOneOf(SanitizerKind::HWAddress |
+                                       SanitizerKind::KernelHWAddress))
       .Case("assume_nonnull", true)
       .Case("attribute_analyzer_noreturn", true)
       .Case("attribute_availability", true)
@@ -1151,6 +1151,7 @@ static bool HasFeature(const Preprocessor &PP, StringRef Feature) {
       // Objective-C features
       .Case("objc_arr", LangOpts.ObjCAutoRefCount) // FIXME: REMOVE?
       .Case("objc_arc", LangOpts.ObjCAutoRefCount)
+      .Case("objc_arc_fields", true)
       .Case("objc_arc_weak", LangOpts.ObjCWeak)
       .Case("objc_default_synthesize_properties", LangOpts.ObjC2)
       .Case("objc_fixed_enum", LangOpts.ObjC2)
@@ -1274,6 +1275,8 @@ static bool HasFeature(const Preprocessor &PP, StringRef Feature) {
       .Case("is_union", LangOpts.CPlusPlus)
       .Case("modules", LangOpts.Modules)
       .Case("safe_stack", LangOpts.Sanitize.has(SanitizerKind::SafeStack))
+      .Case("shadow_call_stack",
+            LangOpts.Sanitize.has(SanitizerKind::ShadowCallStack))
       .Case("tls", PP.getTargetInfo().isTLSSupported())
       .Case("underlying_type", LangOpts.CPlusPlus)
       .Default(false);
@@ -1343,7 +1346,7 @@ static bool EvaluateHasIncludeCommon(Token &Tok,
 
   // These expressions are only allowed within a preprocessor directive.
   if (!PP.isParsingIfOrElifDirective()) {
-    PP.Diag(LParenLoc, diag::err_pp_directive_required) << II->getName();
+    PP.Diag(LParenLoc, diag::err_pp_directive_required) << II;
     // Return a valid identifier token.
     assert(Tok.is(tok::identifier));
     Tok.setIdentifierInfo(II);
@@ -1482,7 +1485,7 @@ static bool EvaluateHasIncludeNext(Token &Tok,
   return EvaluateHasIncludeCommon(Tok, II, PP, Lookup, LookupFromFile);
 }
 
-/// \brief Process single-argument builtin feature-like macros that return
+/// Process single-argument builtin feature-like macros that return
 /// integer values.
 static void EvaluateFeatureLikeBuiltinMacro(llvm::raw_svector_ostream& OS,
                                             Token &Tok, IdentifierInfo *II,
@@ -1585,7 +1588,7 @@ already_lexed:
   }
 }
 
-/// \brief Helper function to return the IdentifierInfo structure of a Token
+/// Helper function to return the IdentifierInfo structure of a Token
 /// or generate a diagnostic if none available.
 static IdentifierInfo *ExpectFeatureIdentifierInfo(Token &Tok,
                                                    Preprocessor &PP,
@@ -1686,7 +1689,7 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
     // can matter for a function-like macro that expands to contain __LINE__.
     // Skip down through expansion points until we find a file loc for the
     // end of the expansion history.
-    Loc = SourceMgr.getExpansionRange(Loc).second;
+    Loc = SourceMgr.getExpansionRange(Loc).getEnd();
     PresumedLoc PLoc = SourceMgr.getPresumedLoc(Loc);
 
     // __LINE__ expands to a simple numeric value.
@@ -1800,12 +1803,21 @@ void Preprocessor::ExpandBuiltinMacro(Token &Tok) {
       [this](Token &Tok, bool &HasLexedNextToken) -> int {
         IdentifierInfo *II = ExpectFeatureIdentifierInfo(Tok, *this,
                                            diag::err_feature_check_malformed);
+        const LangOptions &LangOpts = getLangOpts();
         if (!II)
           return false;
-        else if (II->getBuiltinID() != 0)
+        else if (II->getBuiltinID() != 0) {
+          switch (II->getBuiltinID()) {
+          case Builtin::BI__builtin_operator_new:
+          case Builtin::BI__builtin_operator_delete:
+            // denotes date of behavior change to support calling arbitrary
+            // usual allocation and deallocation functions. Required by libc++
+            return 201802;
+          default:
+            return true;
+          }
           return true;
-        else {
-          const LangOptions &LangOpts = getLangOpts();
+        } else {
           return llvm::StringSwitch<bool>(II->getName())
                       .Case("__make_integer_seq", LangOpts.CPlusPlus)
                       .Case("__type_pack_element", LangOpts.CPlusPlus)

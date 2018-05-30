@@ -437,6 +437,7 @@ llvm::Type *CodeGenTypes::ConvertType(QualType T) {
     case BuiltinType::ULongLong:
     case BuiltinType::WChar_S:
     case BuiltinType::WChar_U:
+    case BuiltinType::Char8:
     case BuiltinType::Char16:
     case BuiltinType::Char32:
       ResultType = llvm::IntegerType::get(getLLVMContext(),
@@ -767,7 +768,7 @@ bool CodeGenTypes::isZeroInitializable(QualType T) {
   // Records are non-zero-initializable if they contain any
   // non-zero-initializable subobjects.
   if (const RecordType *RT = T->getAs<RecordType>()) {
-    auto RD = cast<RecordDecl>(RT->getDecl());
+    const RecordDecl *RD = RT->getDecl();
     return isZeroInitializable(RD);
   }
 

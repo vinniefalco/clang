@@ -2,7 +2,7 @@
 // RUN: %clang_cc1 -ffreestanding %s -triple=x86_64-apple-darwin -target-feature +avx2 -fno-signed-char -emit-llvm -o - -Wall -Werror | FileCheck %s
 
 
-#include <x86intrin.h>
+#include <immintrin.h>
 
 // NOTE: This should match the tests in llvm/test/CodeGen/X86/avx2-intrinsics-fast-isel.ll
 
@@ -835,13 +835,19 @@ __m256i test_mm256_mpsadbw_epu8(__m256i x, __m256i y) {
 
 __m256i test_mm256_mul_epi32(__m256i a, __m256i b) {
   // CHECK-LABEL: test_mm256_mul_epi32
-  // CHECK: call <4 x i64> @llvm.x86.avx2.pmul.dq(<8 x i32> %{{.*}}, <8 x i32> %{{.*}})
+  // CHECK: shl <4 x i64> %{{.*}}, <i64 32, i64 32, i64 32, i64 32>
+  // CHECK: ashr <4 x i64> %{{.*}}, <i64 32, i64 32, i64 32, i64 32>
+  // CHECK: shl <4 x i64> %{{.*}}, <i64 32, i64 32, i64 32, i64 32>
+  // CHECK: ashr <4 x i64> %{{.*}}, <i64 32, i64 32, i64 32, i64 32>
+  // CHECK: mul <4 x i64> %{{.*}}, %{{.*}}
   return _mm256_mul_epi32(a, b);
 }
 
 __m256i test_mm256_mul_epu32(__m256i a, __m256i b) {
   // CHECK-LABEL: test_mm256_mul_epu32
-  // CHECK: call <4 x i64> @llvm.x86.avx2.pmulu.dq(<8 x i32> %{{.*}}, <8 x i32> %{{.*}})
+  // CHECK: and <4 x i64> %{{.*}}, <i64 4294967295, i64 4294967295, i64 4294967295, i64 4294967295>
+  // CHECK: and <4 x i64> %{{.*}}, <i64 4294967295, i64 4294967295, i64 4294967295, i64 4294967295>
+  // CHECK: mul <4 x i64> %{{.*}}, %{{.*}}
   return _mm256_mul_epu32(a, b);
 }
 

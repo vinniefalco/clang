@@ -2652,7 +2652,7 @@
 // Thumbebv7: #define __THUMB_INTERWORK__ 1
 // Thumbebv7: #define __thumb2__ 1
 
-// RUN: %clang -E -dM -ffreestanding -target thumbv7-pc-mingw32 %s -o - | FileCheck -match-full-lines -check-prefix THUMB-MINGW %s
+// RUN: %clang_cc1 -E -dM -ffreestanding -triple=thumbv7-pc-windows-gnu -fdwarf-exceptions %s -o - | FileCheck -match-full-lines -check-prefix THUMB-MINGW %s
 
 // THUMB-MINGW:#define __ARM_DWARF_EH__ 1
 
@@ -8965,6 +8965,9 @@
 // PS4:#define __x86_64__ 1
 // PS4:#define unix 1
 //
+// RUN: %clang_cc1 -x c++ -E -dM -ffreestanding -triple=x86_64-scei-ps4 < /dev/null | FileCheck -match-full-lines -check-prefix PS4-CXX %s
+// PS4-CXX:#define __STDCPP_DEFAULT_NEW_ALIGNMENT__ 32UL
+//
 // RUN: %clang_cc1 -E -dM -triple=x86_64-pc-mingw32 < /dev/null | FileCheck -match-full-lines -check-prefix X86-64-DECLSPEC %s
 // RUN: %clang_cc1 -E -dM -fms-extensions -triple=x86_64-unknown-mingw32 < /dev/null | FileCheck -match-full-lines -check-prefix X86-64-DECLSPEC %s
 // X86-64-DECLSPEC: #define __declspec{{.*}}
@@ -8998,6 +9001,13 @@
 // RUN: %clang_cc1 -x c++ -triple i686-pc-linux-gnu -fobjc-runtime=gcc -E -dM < /dev/null | FileCheck -match-full-lines -check-prefix GNUSOURCE %s
 // RUN: %clang_cc1 -x c++ -triple sparc-rtems-elf -E -dM < /dev/null | FileCheck -match-full-lines -check-prefix GNUSOURCE %s
 // GNUSOURCE:#define _GNU_SOURCE 1
+//
+// Check that the GNUstep Objective-C ABI defines exist and are clamped at the
+// highest supported version.
+// RUN: %clang_cc1 -x objective-c -triple i386-unknown-freebsd -fobjc-runtime=gnustep-1.9 -E -dM < /dev/null | FileCheck -match-full-lines -check-prefix GNUSTEP1 %s
+// GNUSTEP1:#define __OBJC_GNUSTEP_RUNTIME_ABI__ 18
+// RUN: %clang_cc1 -x objective-c -triple i386-unknown-freebsd -fobjc-runtime=gnustep-2.5 -E -dM < /dev/null | FileCheck -match-full-lines -check-prefix GNUSTEP2 %s
+// GNUSTEP2:#define __OBJC_GNUSTEP_RUNTIME_ABI__ 20
 //
 // RUN: %clang_cc1 -x c++ -std=c++98 -fno-rtti -E -dM < /dev/null | FileCheck -match-full-lines -check-prefix NORTTI %s
 // NORTTI: #define __GXX_ABI_VERSION {{.*}}
@@ -10007,6 +10017,9 @@
 // RUN:   | FileCheck -match-full-lines -check-prefix=RISCV32 %s
 // RUN: %clang_cc1 -E -dM -ffreestanding -triple=riscv32-unknown-linux < /dev/null \
 // RUN:   | FileCheck -match-full-lines -check-prefixes=RISCV32,RISCV32-LINUX %s
+// RUN: %clang_cc1 -E -dM -ffreestanding -triple=riscv32 \
+// RUN: -fforce-enable-int128 < /dev/null | FileCheck -match-full-lines \
+// RUN: -check-prefixes=RISCV32,RISCV32-INT128 %s
 // RISCV32: #define _ILP32 1
 // RISCV32: #define __ATOMIC_ACQUIRE 2
 // RISCV32: #define __ATOMIC_ACQ_REL 4
@@ -10136,6 +10149,7 @@
 // RISCV32: #define __SIG_ATOMIC_WIDTH__ 32
 // RISCV32: #define __SIZEOF_DOUBLE__ 8
 // RISCV32: #define __SIZEOF_FLOAT__ 4
+// RISCV32-INT128: #define __SIZEOF_INT128__ 16
 // RISCV32: #define __SIZEOF_INT__ 4
 // RISCV32: #define __SIZEOF_LONG_DOUBLE__ 16
 // RISCV32: #define __SIZEOF_LONG_LONG__ 8

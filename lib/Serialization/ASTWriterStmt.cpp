@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief Implements serialization for Statements and Expressions.
+/// Implements serialization for Statements and Expressions.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -1710,6 +1710,7 @@ void ASTStmtWriter::VisitOpaqueValueExpr(OpaqueValueExpr *E) {
   VisitExpr(E);
   Record.AddStmt(E->getSourceExpr());
   Record.AddSourceLocation(E->getLocation());
+  Record.push_back(E->isUnique());
   Code = serialization::EXPR_OPAQUE_VALUE;
 }
 
@@ -2687,7 +2688,7 @@ void ASTWriter::ClearSwitchCaseIDs() {
   SwitchCaseIDs.clear();
 }
 
-/// \brief Write the given substatement or subexpression to the
+/// Write the given substatement or subexpression to the
 /// bitstream.
 void ASTWriter::WriteSubStmt(Stmt *S) {
   RecordData Record;
@@ -2731,7 +2732,7 @@ void ASTWriter::WriteSubStmt(Stmt *S) {
   SubStmtEntries[S] = Offset;
 }
 
-/// \brief Flush all of the statements that have been added to the
+/// Flush all of the statements that have been added to the
 /// queue via AddStmt().
 void ASTRecordWriter::FlushStmts() {
   // We expect to be the only consumer of the two temporary statement maps,

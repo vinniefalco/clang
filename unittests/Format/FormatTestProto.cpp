@@ -21,13 +21,13 @@ class FormatTestProto : public ::testing::Test {
 protected:
   static std::string format(llvm::StringRef Code, unsigned Offset,
                             unsigned Length, const FormatStyle &Style) {
-    DEBUG(llvm::errs() << "---\n");
-    DEBUG(llvm::errs() << Code << "\n\n");
+    LLVM_DEBUG(llvm::errs() << "---\n");
+    LLVM_DEBUG(llvm::errs() << Code << "\n\n");
     std::vector<tooling::Range> Ranges(1, tooling::Range(Offset, Length));
     tooling::Replacements Replaces = reformat(Style, Code, Ranges);
     auto Result = applyAllReplacements(Code, Replaces);
     EXPECT_TRUE(static_cast<bool>(Result));
-    DEBUG(llvm::errs() << "\n" << *Result << "\n\n");
+    LLVM_DEBUG(llvm::errs() << "\n" << *Result << "\n\n");
     return *Result;
   }
 
@@ -38,6 +38,7 @@ protected:
   }
 
   static void verifyFormat(llvm::StringRef Code) {
+    EXPECT_EQ(Code.str(), format(Code)) << "Expected code is not stable";
     EXPECT_EQ(Code.str(), format(test::messUp(Code)));
   }
 };
@@ -158,9 +159,8 @@ TEST_F(FormatTestProto, MessageFieldAttributes) {
                "    key: 'a'  //\n"
                "  }\n"
                "];");
-  verifyFormat("optional string test = 1 [default =\n"
-               "                              \"test\"\n"
-               "                              \"test\"];");
+  verifyFormat("optional string test = 1 [default = \"test\"\n"
+               "                                    \"test\"];");
   verifyFormat("optional Aaaaaaaa aaaaaaaa = 12 [\n"
                "  (aaa) = aaaa,\n"
                "  (bbbbbbbbbbbbbbbbbbbbbbbbbb) = {\n"
@@ -442,9 +442,11 @@ TEST_F(FormatTestProto, FormatsOptionsExtensions) {
                "};");
 }
 
-TEST_F(FormatTestProto, NoSpaceAfterPercent) {
+TEST_F(FormatTestProto, SpacesAroundPercents) {
   verifyFormat("option (MyProto.options) = {\n"
                "  key: %lld\n"
+               "  key: 0x%04x\n"
+               "  key: \"%d %d\"\n"
                "};");
 }
 
@@ -475,6 +477,19 @@ TEST_F(FormatTestProto, FormatsRepeatedListInitializersInOptions) {
                "    ]\n"
                "  }\n"
                "  key: value\n"
+               "};");
+}
+
+TEST_F(FormatTestProto, AcceptsOperatorAsKeyInOptions) {
+  verifyFormat("option (MyProto.options) = {\n"
+               "  bbbbbbbbb: <\n"
+               "    ccccccccccccccccccccccc: <\n"
+               "      operator: 1\n"
+               "      operator: 2\n"
+               "      operator: 3\n"
+               "      operator { key: value }\n"
+               "    >\n"
+               "  >\n"
                "};");
 }
 

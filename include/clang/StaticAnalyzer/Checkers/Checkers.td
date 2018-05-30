@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "clang/StaticAnalyzer/Checkers/CheckerBase.td"
+include "CheckerBase.td"
 
 //===----------------------------------------------------------------------===//
 // Packages.
@@ -218,6 +218,14 @@ def NullableReturnedFromNonnullChecker : Checker<"NullableReturnedFromNonnull">,
 
 } // end "nullability"
 
+let ParentPackage = APIModeling in {
+
+def TrustNonnullChecker : Checker<"TrustNonnull">,
+  HelpText<"Trust that returns from framework methods annotated with _Nonnull are not null">,
+  DescFile<"TrustNonnullChecker.cpp">;
+
+}
+
 //===----------------------------------------------------------------------===//
 // Evaluate "builtin" functions.
 //===----------------------------------------------------------------------===//
@@ -365,6 +373,15 @@ def PaddingChecker : Checker<"Padding">,
 //===----------------------------------------------------------------------===//
 
 let ParentPackage = InsecureAPI in {
+  def bcmp : Checker<"bcmp">,
+    HelpText<"Warn on uses of the 'bcmp' function">,
+    DescFile<"CheckSecuritySyntaxOnly.cpp">;
+  def bcopy : Checker<"bcopy">,
+    HelpText<"Warn on uses of the 'bcopy' function">,
+    DescFile<"CheckSecuritySyntaxOnly.cpp">;
+  def bzero : Checker<"bzero">,
+    HelpText<"Warn on uses of the 'bzero' function">,
+    DescFile<"CheckSecuritySyntaxOnly.cpp">;
   def gets : Checker<"gets">,
     HelpText<"Warn on uses of the 'gets' function">,
     DescFile<"CheckSecuritySyntaxOnly.cpp">;
@@ -413,6 +430,13 @@ def ReturnPointerRangeChecker : Checker<"ReturnPtrRange">,
 def MallocOverflowSecurityChecker : Checker<"MallocOverflow">,
   HelpText<"Check for overflows in the arguments to malloc()">,
   DescFile<"MallocOverflowSecurityChecker.cpp">;
+
+// Operating systems specific PROT_READ/PROT_WRITE values is not implemented,
+// the defaults are correct for several common operating systems though, 
+// but may need to be overridden via the related analyzer-config flags.
+def MmapWriteExecChecker : Checker<"MmapWriteExec">,
+  HelpText<"Warn on mmap() calls that are both writable and executable">,
+  DescFile<"MmapWriteExecChecker.cpp">;
 
 } // end "alpha.security"
 
@@ -601,7 +625,17 @@ def ObjCSuperDeallocChecker : Checker<"SuperDealloc">,
   HelpText<"Warn about improper use of '[super dealloc]' in Objective-C">,
   DescFile<"ObjCSuperDeallocChecker.cpp">;
 
+def AutoreleaseWriteChecker : Checker<"AutoreleaseWrite">,
+  HelpText<"Warn about potentially crashing writes to autoreleasing objects from different autoreleasing pools in Objective-C">,
+  DescFile<"ObjCAutoreleaseWriteChecker.cpp">;
 } // end "osx.cocoa"
+
+let ParentPackage = Performance in {
+
+def GCDAntipattern : Checker<"GCDAntipattern">,
+  HelpText<"Check for performance anti-patterns when using Grand Central Dispatch">,
+  DescFile<"GCDAntipatternChecker.cpp">;
+} // end "optin.performance"
 
 let ParentPackage = CocoaAlpha in {
 

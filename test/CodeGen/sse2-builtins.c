@@ -2,7 +2,7 @@
 // RUN: %clang_cc1 -ffreestanding %s -triple=x86_64-apple-darwin -target-feature +sse2 -fno-signed-char -emit-llvm -o - -Wall -Werror | FileCheck %s
 
 
-#include <x86intrin.h>
+#include <immintrin.h>
 
 // NOTE: This should match the tests in llvm/test/CodeGen/X86/sse2-intrinsics-fast-isel.ll
 
@@ -468,7 +468,7 @@ __m128d test_mm_cvtepi32_pd(__m128i A) {
 
 __m128 test_mm_cvtepi32_ps(__m128i A) {
   // CHECK-LABEL: test_mm_cvtepi32_ps
-  // CHECK: call <4 x float> @llvm.x86.sse2.cvtdq2ps(<4 x i32> %{{.*}})
+  // CHECK: sitofp <4 x i32> %{{.*}} to <4 x float>
   return _mm_cvtepi32_ps(A);
 }
 
@@ -816,7 +816,9 @@ int test_mm_movemask_pd(__m128d A) {
 
 __m128i test_mm_mul_epu32(__m128i A, __m128i B) {
   // CHECK-LABEL: test_mm_mul_epu32
-  // CHECK: call <2 x i64> @llvm.x86.sse2.pmulu.dq(<4 x i32> %{{.*}}, <4 x i32> %{{.*}})
+  // CHECK: and <2 x i64> %{{.*}}, <i64 4294967295, i64 4294967295>
+  // CHECK: and <2 x i64> %{{.*}}, <i64 4294967295, i64 4294967295>
+  // CHECK: mul <2 x i64> %{{.*}}, %{{.*}}
   return _mm_mul_epu32(A, B);
 }
 
