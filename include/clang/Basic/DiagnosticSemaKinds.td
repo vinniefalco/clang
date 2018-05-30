@@ -3533,7 +3533,10 @@ def select_ovl_candidate_kind : TextSubstitution<
     "constructor (the implicit move constructor)|"
     "function (the implicit copy assignment operator)|"
     "function (the implicit move assignment operator)|"
-    "inherited constructor}0%select{| template| %2}1">;
+    "inherited constructor|"
+    "function (rewritten operator)|"
+    "function (reversed rewritten operator)}0"
+    "%select{| template| %2}1">;
 
 def note_ovl_candidate : Note<
     "candidate %sub{select_ovl_candidate_kind}0,1,3"
