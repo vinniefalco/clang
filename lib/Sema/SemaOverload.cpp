@@ -694,6 +694,11 @@ void DeductionFailureInfo::Destroy() {
   }
 }
 
+void DeductionFailureInfo::Release() {
+  HasDiagnostic = false;
+  Data = nullptr;
+}
+
 PartialDiagnosticAt *DeductionFailureInfo::getSFINAEDiagnostic() {
   if (HasDiagnostic)
     return static_cast<PartialDiagnosticAt*>(static_cast<void*>(Diagnostic));
@@ -843,13 +848,20 @@ unsigned OverloadCandidate::getConversionIndexForArgIndex(unsigned Idx) const {
   return Idx == 0 ? 1 : 0;
 }
 
-void OverloadCandidateSet::destroyCandidates() {
-  for (iterator i = begin(), e = end(); i != e; ++i) {
-    for (auto &C : i->Conversions)
-      C.~ImplicitConversionSequence();
-    if (!i->Viable && i->FailureKind == ovl_fail_bad_deduction)
-      i->DeductionFailure.Destroy();
+static void destroyCandidate(OverloadCandidate &Ovl) {
+  for (auto &C : Ovl.Conversions)
+    C.~ImplicitConversionSequence();
+  if (!Ovl.Viable && Ovl.FailureKind == ovl_fail_bad_deduction)
+    Ovl.DeductionFailure.Destroy();
+  if (Ovl.RewrittenOvl) {
+    destroyCandidate(*Ovl.RewrittenOvl);
+    Ovl.RewrittenOvl->~OverloadCandidate();
   }
+}
+
+void OverloadCandidateSet::destroyCandidates() {
+  for (iterator i = begin(), e = end(); i != e; ++i)
+    destroyCandidate(*i);
 }
 
 void OverloadCandidateSet::clear(CandidateSetKind CSK) {
@@ -8914,73 +8926,81 @@ void Sema::AddRewrittenOperatorCandidates(
                                            CandidateSet);
     AddBuiltinOperatorCandidates(CmpOp, OpLoc, Args, CandidateSet);
 
+    if (!IsRelationalOrEquality)
+      return;
     for (auto It = std::next(CandidateSet.begin(), InitialSize);
          It != CandidateSet.end(); ++It) {
       OverloadCandidate &Ovl = *It;
       assert(Ovl.getRewrittenKind());
-      if (IsRelationalOrEquality) {
-        if (FunctionDecl *FD = Ovl.Function) {
-          if (FD->getReturnType()->isUndeducedType()) {
-            if (DeduceReturnType(FD, OpLoc)) {
-              // FIXME(EricWF): Does deduction failure actually make this
-              // non-vialble? How does this happen?
-              assert(false);
-              Ovl.Viable = false;
-              continue;
-            }
-          }
-          QualType RetTy = FD->getReturnType();
-          assert(!RetTy->isDependentType());
-          if (const ComparisonCategoryInfo *Info =
-                  Context.CompCategories.lookupInfoForType(RetTy)) {
-            if (!Info->isUsableWithOperator(Opc)) {
-              Ovl.Viable = false;
-              Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
-              continue;
-            }
-          } else {
-            // Build an opaque value expression representing the return type.
-            OpaqueValueExpr RetObj(OpLoc, RetTy, VK_RValue),
-                ZeroLit(OpLoc, Context.IntTy, VK_RValue);
-            Expr *NewLHS = &RetObj, *NewRHS = &ZeroLit;
-            if (Kind == ROC_AsReversedThreeWay)
-              std::swap(NewLHS, NewRHS);
 
-            OverloadCandidateSet CandidateSet(
-                OpLoc, OverloadCandidateSet::CSK_Operator);
-            LookupOverloadedBinOp(OpLoc, CandidateSet, Opc, CmpOpFns, NewLHS,
-                                  NewRHS,
-                                  /*AllowADL*/ true, /*AllowRewritten*/ false);
-            OverloadCandidateSet::iterator Best;
-            switch (CandidateSet.BestViableFunction(*this, OpLoc, Best)) {
-            case OR_Success:
-              // FIXME(EricW
-              // Good!
-              break;
-            case OR_No_Viable_Function:
-            case OR_Deleted:
-            case OR_Ambiguous:
-              Ovl.Viable = false;
-              Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
-              break;
-            }
-            if (!Ovl.Viable)
-              continue;
-            // FIXME(EricWF): Check that the return type can be used with
-            // the specified relational operator
+      if (FunctionDecl *FD = Ovl.Function) {
+        if (FD->getReturnType()->isUndeducedType()) {
+          if (DeduceReturnType(FD, OpLoc)) {
+            // FIXME(EricWF): Does deduction failure actually make this
+            // non-vialble? How does this happen?
+            assert(false);
+            Ovl.Viable = false;
+            continue;
           }
-        } else {
-          // Attempt to compute the comparison category type for a selecetd
-          // builtin function.
-          Optional<ComparisonCategoryType> CompType =
-              ComparisonCategories::computeComparisonTypeForBuiltin(
-                  Ovl.BuiltinParamTypes[0], Ovl.BuiltinParamTypes[1]);
-          if (!CompType ||
-              !ComparisonCategoryInfo::isUsableWithOperator(*CompType, Opc)) {
+        }
+        QualType RetTy = FD->getReturnType();
+        assert(!RetTy->isDependentType());
+        // FIXME(EricWF): Maybe handle everything with the else logic below.
+        if (const ComparisonCategoryInfo *Info =
+                Context.CompCategories.lookupInfoForType(RetTy)) {
+          if (!Info->isUsableWithOperator(Opc)) {
             Ovl.Viable = false;
             Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
             continue;
           }
+        } else {
+          // Build an opaque value expression representing the return type.
+          OpaqueValueExpr RetObj(OpLoc, RetTy, VK_RValue),
+              ZeroLit(OpLoc, Context.IntTy, VK_RValue);
+          Expr *NewLHS = &RetObj, *NewRHS = &ZeroLit;
+          if (Kind == ROC_AsReversedThreeWay)
+            std::swap(NewLHS, NewRHS);
+
+          OverloadCandidateSet RewrittenCandidateSet(
+              OpLoc, OverloadCandidateSet::CSK_Operator);
+          LookupOverloadedBinOp(OpLoc, RewrittenCandidateSet, Opc, CmpOpFns,
+                                NewLHS, NewRHS,
+                                /*AllowADL*/ true, /*AllowRewritten*/ false);
+          OverloadCandidateSet::iterator Best;
+          switch (
+              RewrittenCandidateSet.BestViableFunction(*this, OpLoc, Best)) {
+          case OR_Success:
+            Ovl.RewrittenOvl =
+                CandidateSet.allocateAndMoveCandidate(std::move(*Best));
+            break;
+          case OR_Deleted:
+            Ovl.RewrittenOvl =
+                CandidateSet.allocateAndMoveCandidate(std::move(*Best));
+            Ovl.Viable = false;
+            Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
+            break;
+          case OR_No_Viable_Function:
+          case OR_Ambiguous:
+            Ovl.Viable = false;
+            Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
+            break;
+          }
+          if (!Ovl.Viable)
+            continue;
+          // FIXME(EricWF): Check that the return type can be used with
+          // the specified relational operator
+        }
+      } else {
+        // Attempt to compute the comparison category type for a selected
+        // builtin function.
+        Optional<ComparisonCategoryType> CompType =
+            ComparisonCategories::computeComparisonTypeForBuiltin(
+                Ovl.BuiltinParamTypes[0], Ovl.BuiltinParamTypes[1]);
+        if (!CompType ||
+            !ComparisonCategoryInfo::isUsableWithOperator(*CompType, Opc)) {
+          Ovl.Viable = false;
+          Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
+          continue;
         }
       }
     }
@@ -12609,10 +12629,17 @@ static ExprResult BuildRewrittenCandidate(Sema &S, BinaryOperatorKind Opc,
     Expr *NewRHS = Zero;
     if (Ovl.getRewrittenKind() == ROC_AsReversedThreeWay)
       std::swap(NewLHS, NewRHS);
-
-    RewrittenRes =
-        S.CreateOverloadedBinOp(OpLoc, Opc, Fns, NewLHS, NewRHS, PerformADL,
-                                /*AllowRewrittenCandidates*/ false);
+    if (!Ovl.RewrittenOvl) {
+      RewrittenRes =
+          S.CreateOverloadedBinOp(OpLoc, Opc, Fns, NewLHS, NewRHS, PerformADL,
+                                  /*AllowRewrittenCandidates*/ false);
+    } else {
+      OverloadCandidate &RewrittenOvl = *Ovl.RewrittenOvl;
+      assert(RewrittenOvl.Viable);
+      RewrittenRes = S.BuildBinaryOperatorCandidate(
+          OpLoc, Opc, RewrittenOvl, NewLHS, NewRHS,
+          /*HadMultipleCandidates*/ true);
+    }
     if (RewrittenRes.isInvalid())
       return ExprError();
   }
