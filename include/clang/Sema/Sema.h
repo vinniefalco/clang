@@ -2789,7 +2789,8 @@ public:
   void AddRewrittenOperatorCandidates(OverloadedOperatorKind Op,
                                       SourceLocation OpLoc,
                                       ArrayRef<Expr *> InputArgs,
-                                      const UnresolvedSetImpl &Fns,
+                                      const UnresolvedSetImpl &ThreeWayFns,
+                                      const UnresolvedSetImpl &RelFns,
                                       OverloadCandidateSet &CandidateSet,
                                       bool PerformADL);
   // Emit as a 'note' the specific overload candidate
@@ -2928,6 +2929,13 @@ public:
                                      UnaryOperatorKind Opc,
                                      const UnresolvedSetImpl &Fns,
                                      Expr *input, bool RequiresADL = true);
+
+  void LookupOverloadedBinOp(SourceLocation OpLoc,
+                             OverloadCandidateSet &LookupRes,
+                             BinaryOperatorKind Opc,
+                             const UnresolvedSetImpl &Fns, Expr *LHS, Expr *RHS,
+                             bool RequiresADL = true,
+                             bool AllowRewrittenCandidates = true);
 
   ExprResult CreateOverloadedBinOp(SourceLocation OpLoc, BinaryOperatorKind Opc,
                                    const UnresolvedSetImpl &Fns, Expr *LHS,
