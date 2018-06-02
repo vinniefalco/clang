@@ -266,9 +266,28 @@ static unsigned getBuiltinDiagClass(unsigned DiagID) {
 //===----------------------------------------------------------------------===//
 
 namespace clang {
-  namespace diag {
+namespace diag {
+namespace {
+struct DiagDesc {
+  std::string Name;
+  DiagnosticIDs::Level Level;
+  std::string Description;
+};
+
+inline bool operator==(DiagDesc const &LHS, DiagDesc const &RHS) {
+  return LHS.Name == RHS.Name && LHS.Level == RHS.Level &&
+         LHS.Description == RHS.Description;
+}
+
+inline bool operator<(DiagDesc const &LHS, DiagDesc const &RHS) {
+  if (LHS.Name != RHS.Name)
+    return LHS.Name < RHS.Name;
+  if (LHS.Level != RHS.Level)
+    return LHS.Level < RHS.Level;
+  return LHS.Description < RHS.Description;
+}
+} // namespace
     class CustomDiagInfo {
-      typedef std::pair<DiagnosticIDs::Level, std::string> DiagDesc;
       std::vector<DiagDesc> DiagInfo;
       std::map<DiagDesc, unsigned> DiagIDs;
     public:
@@ -278,19 +297,19 @@ namespace clang {
       StringRef getDescription(unsigned DiagID) const {
         assert(DiagID - DIAG_UPPER_LIMIT < DiagInfo.size() &&
                "Invalid diagnostic ID");
-        return DiagInfo[DiagID-DIAG_UPPER_LIMIT].second;
+        return DiagInfo[DiagID - DIAG_UPPER_LIMIT].Description;
       }
 
       /// getLevel - Return the level of the specified custom diagnostic.
       DiagnosticIDs::Level getLevel(unsigned DiagID) const {
         assert(DiagID - DIAG_UPPER_LIMIT < DiagInfo.size() &&
                "Invalid diagnostic ID");
-        return DiagInfo[DiagID-DIAG_UPPER_LIMIT].first;
+        return DiagInfo[DiagID - DIAG_UPPER_LIMIT].Level;
       }
 
-      unsigned getOrCreateDiagID(DiagnosticIDs::Level L, StringRef Message,
-                                 DiagnosticIDs &Diags) {
-        DiagDesc D(L, Message);
+      unsigned getOrCreateDiagID(StringRef Name, DiagnosticIDs::Level L,
+                                 StringRef Message, DiagnosticIDs &Diags) {
+        DiagDesc D{Name, L, Message};
         // Check to see if it already exists.
         std::map<DiagDesc, unsigned>::iterator I = DiagIDs.lower_bound(D);
         if (I != DiagIDs.end() && I->first == D)
@@ -304,7 +323,7 @@ namespace clang {
       }
     };
 
-  } // end diag namespace
+    } // namespace diag
 } // end clang namespace
 
 
@@ -324,12 +343,12 @@ DiagnosticIDs::~DiagnosticIDs() {
 ///
 /// \param FormatString A fixed diagnostic format string that will be hashed and
 /// mapped to a unique DiagID.
-unsigned DiagnosticIDs::getCustomDiagID(Level L, StringRef FormatString) {
+unsigned DiagnosticIDs::getCustomDiagID(Level L, StringRef FormatString,
+                                        StringRef Name) {
   if (!CustomDiagInfo)
     CustomDiagInfo = new diag::CustomDiagInfo();
-  return CustomDiagInfo->getOrCreateDiagID(L, FormatString, *this);
+  return CustomDiagInfo->getOrCreateDiagID(Name, L, FormatString, *this);
 }
-
 
 /// isBuiltinWarningOrExtension - Return true if the unmapped diagnostic
 /// level of the specified diagnostic ID is a Warning or Extension.

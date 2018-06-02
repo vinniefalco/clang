@@ -185,7 +185,8 @@ public:
   // FIXME: Replace this function with a create-only facilty like
   // createCustomDiagIDFromFormatString() to enforce safe usage. At the time of
   // writing, nearly all callers of this function were invalid.
-  unsigned getCustomDiagID(Level L, StringRef FormatString);
+  unsigned getCustomDiagID(Level L, StringRef FormatString,
+                           StringRef Name = "");
 
   //===--------------------------------------------------------------------===//
   // Diagnostic classification and reporting interfaces.

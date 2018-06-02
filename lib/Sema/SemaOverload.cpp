@@ -6331,7 +6331,7 @@ static bool diagnoseDiagnoseIfAttrsWith(Sema &S, const NamedDecl *ND,
                                IsSuccessful);
   if (ErrAttr != WarningBegin) {
     const DiagnoseIfAttr *DIA = *ErrAttr;
-    S.Diag(Loc, diag::err_diagnose_if_succeeded) << DIA->getMessage();
+    S.Diag(Loc, DIA->getDiagnosticID()) << DIA->getMessage();
     S.Diag(DIA->getLocation(), diag::note_from_diagnose_if)
         << DIA->getParent() << DIA->getCond()->getSourceRange();
     return true;
@@ -6339,7 +6339,7 @@ static bool diagnoseDiagnoseIfAttrsWith(Sema &S, const NamedDecl *ND,
 
   for (const auto *DIA : llvm::make_range(WarningBegin, Attrs.end()))
     if (IsSuccessful(DIA)) {
-      S.Diag(Loc, diag::warn_diagnose_if_succeeded) << DIA->getMessage();
+      S.Diag(Loc, DIA->getDiagnosticID()) << DIA->getMessage();
       S.Diag(DIA->getLocation(), diag::note_from_diagnose_if)
           << DIA->getParent() << DIA->getCond()->getSourceRange();
     }

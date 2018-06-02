@@ -1005,22 +1005,32 @@ static void handleDiagnoseIfAttr(Sema &S, Decl *D, const AttributeList &AL) {
            diag::err_diagnose_if_invalid_diagnostic_type);
     return;
   }
+  bool IsErrorDiag = DiagType == DiagnoseIfAttr::DT_Error;
 
   StringRef DiagNameStr;
-  int DiagID = 0;
+  unsigned DiagID = 0;
   if (AL.getNumArgs() == 4) {
     if (!S.checkStringLiteralArgumentAttr(AL, 3, DiagNameStr))
       return;
+    auto DiagIDs = S.getDiagnostics().getDiagnosticIDs();
+    DiagID = DiagIDs->getCustomDiagID(IsErrorDiag ? DiagnosticIDs::Error
+                                                  : DiagnosticIDs::Warning,
+                                      "%0", DiagNameStr);
     // FIXME(EricWF): Create a CustomDiagID for this name if we haven't
     // seen it before.
+  } else {
+    DiagNameStr = "user-defined-warning";
+    DiagID = IsErrorDiag ? diag::err_diagnose_if_succeeded
+                         : diag::warn_diagnose_if_succeeded;
   }
 
   bool ArgDependent = false;
   if (const auto *FD = dyn_cast<FunctionDecl>(D))
     ArgDependent = ArgumentDependenceChecker(FD).referencesArgs(Cond);
   D->addAttr(::new (S.Context) DiagnoseIfAttr(
-      AL.getRange(), S.Context, Cond, Msg, DiagType, DiagNameStr, DiagID,
-      ArgDependent, cast<NamedDecl>(D), AL.getAttributeSpellingListIndex()));
+      AL.getRange(), S.Context, Cond, Msg, DiagType, DiagNameStr,
+      static_cast<int>(DiagID), ArgDependent, cast<NamedDecl>(D),
+      AL.getAttributeSpellingListIndex()));
 }
 
 static void handlePassObjectSizeAttr(Sema &S, Decl *D,
