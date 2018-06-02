@@ -2044,7 +2044,7 @@ bool CXXMethodDecl::isUsualDeallocationFunction() const {
   // usual deallocation functions.
   if (Context.getLangOpts().AlignedAllocation)
     return true;
-
+                 
   // This function is a usual deallocation function if there are no 
   // single-parameter deallocation functions of the same kind.
   DeclContext::lookup_result R = getDeclContext()->lookup(getDeclName());
