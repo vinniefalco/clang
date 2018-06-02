@@ -286,39 +286,52 @@ inline bool operator<(DiagDesc const &LHS, DiagDesc const &RHS) {
     return LHS.Level < RHS.Level;
   return LHS.Description < RHS.Description;
 }
+
+struct DiagLessThan {
+  bool operator()(DiagDesc const *LHS, DiagDesc const *RHS) const {
+    return *LHS < *RHS;
+  }
+};
 } // namespace
     class CustomDiagInfo {
-      std::vector<DiagDesc> DiagInfo;
-      std::map<DiagDesc, unsigned> DiagIDs;
-    public:
+      std::vector<DiagDesc *> DiagInfo;
+      std::map<DiagDesc *, unsigned, DiagLessThan> DiagIDs;
 
+    public:
+      CustomDiagInfo() = default;
+      ~CustomDiagInfo() {
+        for (DiagDesc *D : DiagInfo)
+          delete D;
+      }
       /// getDescription - Return the description of the specified custom
       /// diagnostic.
       StringRef getDescription(unsigned DiagID) const {
         assert(DiagID - DIAG_UPPER_LIMIT < DiagInfo.size() &&
                "Invalid diagnostic ID");
-        return DiagInfo[DiagID - DIAG_UPPER_LIMIT].Description;
+        return DiagInfo[DiagID - DIAG_UPPER_LIMIT]->Description;
       }
 
       /// getLevel - Return the level of the specified custom diagnostic.
       DiagnosticIDs::Level getLevel(unsigned DiagID) const {
         assert(DiagID - DIAG_UPPER_LIMIT < DiagInfo.size() &&
                "Invalid diagnostic ID");
-        return DiagInfo[DiagID - DIAG_UPPER_LIMIT].Level;
+        return DiagInfo[DiagID - DIAG_UPPER_LIMIT]->Level;
       }
 
       unsigned getOrCreateDiagID(StringRef Name, DiagnosticIDs::Level L,
                                  StringRef Message, DiagnosticIDs &Diags) {
-        DiagDesc D{Name, L, Message};
+        std::unique_ptr<DiagDesc> D(new DiagDesc{Name, L, Message});
+
         // Check to see if it already exists.
-        std::map<DiagDesc, unsigned>::iterator I = DiagIDs.lower_bound(D);
-        if (I != DiagIDs.end() && I->first == D)
+        auto I = DiagIDs.lower_bound(D.get());
+        if (I != DiagIDs.end() && *I->first == D.get())
           return I->second;
 
         // If not, assign a new ID.
         unsigned ID = DiagInfo.size()+DIAG_UPPER_LIMIT;
-        DiagIDs.insert(std::make_pair(D, ID));
-        DiagInfo.push_back(D);
+        DiagDesc *DPtr = D.release();
+        DiagInfo.push_back(DPtr);
+        DiagIDs.insert(std::make_pair(DPtr, ID));
         return ID;
       }
     };
