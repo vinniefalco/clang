@@ -18,7 +18,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <map>
+#include <set>
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
@@ -253,8 +253,8 @@ static DiagnosticMapping GetDefaultDiagMapping(unsigned DiagID) {
 unsigned DiagnosticIDs::getCategoryNumberForDiag(unsigned DiagID) {
   if (const StaticDiagInfoRec *Info = GetDiagInfo(DiagID))
     return Info->Category;
-  if (CustomDiagInfo->)
-    return 0;
+  // FIXME(EricWF): Fix this.
+  return 0;
 }
 
 namespace {
