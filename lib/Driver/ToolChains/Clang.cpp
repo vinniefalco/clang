@@ -3406,6 +3406,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     A->claim();
   }
 
+  Args.AddAllArgs(CmdArgs, options::OPT_Wuser_defined_warnings_EQ);
+  Args.AddAllArgs(CmdArgs, options::OPT_Wno_user_defined_warnings_EQ);
+
   if (!Args.hasFlag(options::OPT_fjump_tables, options::OPT_fno_jump_tables,
                     true))
     CmdArgs.push_back("-fno-jump-tables");

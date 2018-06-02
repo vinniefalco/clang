@@ -5295,7 +5295,10 @@ bool ASTReader::ParseDiagnosticOptions(const RecordData &Record, bool Complain,
     DiagOpts->Warnings.push_back(ReadString(Record, Idx));
   for (unsigned N = Record[Idx++]; N; --N)
     DiagOpts->Remarks.push_back(ReadString(Record, Idx));
-
+  for (unsigned N = Record[Idx++]; N; --N) {
+    std::string Value = ReadString(Record, Idx);
+    DiagOpts->UserDefinedWarnings.emplace_back(std::move(Value), Record[Idx++]);
+  }
   return Listener.ReadDiagnosticOptions(DiagOpts, Complain);
 }
 

@@ -500,6 +500,32 @@ namespace {
       for (const std::string &Remark : DiagOpts->Remarks)
         Out.indent(6) << "-R" << Remark << "\n";
 
+      std::vector<std::string> EnabledUserDefinedWarnings,
+          DisabledUserDefinedWarnings;
+      for (const std::pair<std::string, bool> &UserDefinedWarn :
+           DiagOpts->UserDefinedWarnings) {
+        auto &Dest = UserDefinedWarn.second ? EnabledUserDefinedWarnings
+                                            : DisabledUserDefinedWarnings;
+        Dest.push_back(UserDefinedWarn.first);
+      }
+      auto PrintUserDefWarnings = [&](std::vector<std::string> const &Warns,
+                                      bool Enabled) {
+        unsigned Size = Warns.size();
+        if (Size == 0)
+          return;
+        Out.indent(6) << "-W"
+                      << (Enabled ? "user-defined-warnings="
+                                  : "no-user-defined-warnings=");
+
+        for (unsigned I = 0; I < Size; ++I) {
+          Out << Warns[I];
+          if (I != (Size - 1))
+            Out << ",";
+        }
+        Out << "\n";
+      };
+      PrintUserDefWarnings(EnabledUserDefinedWarnings, true);
+      PrintUserDefWarnings(DisabledUserDefinedWarnings, false);
       return false;
     }
 

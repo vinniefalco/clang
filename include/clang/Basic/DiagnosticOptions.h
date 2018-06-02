@@ -107,6 +107,11 @@ public:
   /// default).
   std::vector<std::string> VerifyPrefixes;
 
+  /// The list of -Wuser-defined=args,... and -Wno-user-defined=args,... with
+  /// the second value in the pair representing wheither it's enabled or
+  /// disabled.
+  std::vector<std::pair<std::string, bool>> UserDefinedWarnings;
+
 public:
   // Define accessors/mutators for diagnostic options of enumeration type.
 #define DIAGOPT(Name, Bits, Default)

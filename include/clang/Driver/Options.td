@@ -454,6 +454,16 @@ def Wp_COMMA : CommaJoined<["-"], "Wp,">,
   MetaVarName<"<arg>">, Group<Preprocessor_Group>;
 def Wwrite_strings : Flag<["-"], "Wwrite-strings">, Group<W_Group>, Flags<[CC1Option, HelpHidden]>;
 def Wno_write_strings : Flag<["-"], "Wno-write-strings">, Group<W_Group>, Flags<[CC1Option, HelpHidden]>;
+
+
+def W_user_defined_Group :
+  OptionGroup<"<Wuser-defined-warnings= with value group>">, DocFlatten;
+def Wuser_defined_warnings_EQ : CommaJoined<["-"], "Wuser-defined-warnings=">,
+  Group<W_user_defined_Group>, Flags<[CC1Option, HelpHidden]>;
+def Wno_user_defined_warnings_EQ : CommaJoined<["-"], "Wno-user-defined-warnings=">,
+  Group<W_user_defined_Group>, Flags<[CC1Option, HelpHidden]>;
+
+
 def W_Joined : Joined<["-"], "W">, Group<W_Group>, Flags<[CC1Option, CoreOption]>,
   MetaVarName<"<warning>">, HelpText<"Enable the specified warning">;
 def Xanalyzer : Separate<["-"], "Xanalyzer">,

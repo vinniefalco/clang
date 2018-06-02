@@ -1347,6 +1347,18 @@ bool clang::ParseDiagnosticArgs(DiagnosticOptions &Opts, ArgList &Args,
   addDiagnosticArgs(Args, OPT_W_Group, OPT_W_value_Group, Opts.Warnings);
   addDiagnosticArgs(Args, OPT_R_Group, OPT_R_value_Group, Opts.Remarks);
 
+  for (auto *A : Args.filtered(OPT_W_user_defined_Group)) {
+    assert(A->getOption().matches(options::OPT_Wuser_defined_warnings_EQ) ||
+           A->getOption().matches(options::OPT_Wno_user_defined_warnings_EQ));
+    A->claim();
+    bool EnableWarning =
+        A->getOption().matches(options::OPT_Wuser_defined_warnings_EQ);
+    for (unsigned I = 0, End = A->getNumValues(); I < End; ++I) {
+      const char *Value = A->getValue(I);
+      Opts.UserDefinedWarnings.emplace_back(Value, EnableWarning);
+    }
+  }
+
   return Success;
 }
 

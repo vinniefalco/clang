@@ -1006,11 +1006,18 @@ static void handleDiagnoseIfAttr(Sema &S, Decl *D, const AttributeList &AL) {
     return;
   }
 
+  StringRef DiagNameStr;
+  int DiagID = 0;
+  if (AL.getNumArgs() == 4) {
+    if (!S.checkStringLiteralArgumentAttr(AL, 3, DiagNameStr))
+      return;
+  }
+
   bool ArgDependent = false;
   if (const auto *FD = dyn_cast<FunctionDecl>(D))
     ArgDependent = ArgumentDependenceChecker(FD).referencesArgs(Cond);
   D->addAttr(::new (S.Context) DiagnoseIfAttr(
-      AL.getRange(), S.Context, Cond, Msg, DiagType, ArgDependent,
+      AL.getRange(), S.Context, Cond, Msg, DiagType, DiagIDStr, ArgDependent,
       cast<NamedDecl>(D), AL.getAttributeSpellingListIndex()));
 }
 

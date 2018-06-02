@@ -235,7 +235,8 @@ static void instantiateDependentDiagnoseIfAttr(
   if (Cond)
     New->addAttr(new (S.getASTContext()) DiagnoseIfAttr(
         DIA->getLocation(), S.getASTContext(), Cond, DIA->getMessage(),
-        DIA->getDiagnosticType(), DIA->getArgDependent(), New,
+        DIA->getDiagnosticType(), DIA->getDiagnosticName(),
+        DIA->getDiagnosticID(), DIA->getArgDependent(), New,
         DIA->getSpellingListIndex()));
 }
 

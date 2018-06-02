@@ -1428,6 +1428,11 @@ ASTFileSignature ASTWriter::writeUnhashedControlBlock(Preprocessor &PP,
   Record.push_back(DiagOpts.Remarks.size());
   for (unsigned I = 0, N = DiagOpts.Remarks.size(); I != N; ++I)
     AddString(DiagOpts.Remarks[I], Record);
+  Record.push_back(DiagOpts.UserDefinedWarnings.size());
+  for (unsigned I = 0, N = DiagOpts.UserDefinedWarnings.size(); I != N; ++I) {
+    AddString(DiagOpts.UserDefinedWarnings[I].first, Record);
+    Record.push_back(DiagOpts.UserDefinedWarnings[I].second);
+  }
   // Note: we don't serialize the log or serialization file names, because they
   // are generally transient files and will almost always be overridden.
   Stream.EmitRecord(DIAGNOSTIC_OPTIONS, Record);

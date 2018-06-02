@@ -154,7 +154,8 @@ class Argument<string name, bit optional, bit fake = 0> {
 class BoolArgument<string name, bit opt = 0, bit fake = 0> : Argument<name, opt,
                                                                       fake>;
 class IdentifierArgument<string name, bit opt = 0> : Argument<name, opt>;
-class IntArgument<string name, bit opt = 0> : Argument<name, opt>;
+class IntArgument<string name, bit opt = 0, bit fake = 0> : Argument<name, opt,
+                                                                          fake>;
 class StringArgument<string name, bit opt = 0> : Argument<name, opt>;
 class ExprArgument<string name, bit opt = 0> : Argument<name, opt>;
 class FunctionArgument<string name, bit opt = 0, bit fake = 0> : Argument<name,
@@ -1975,6 +1976,8 @@ def DiagnoseIf : InheritableAttr {
                            "DiagnosticType",
                            ["error", "warning"],
                            ["DT_Error", "DT_Warning"]>,
+              StringArgument<"DiagnosticName", /*Optional*/1>,
+              IntArgument<"DiagnosticID", 0, /*fake*/ 1>,
               BoolArgument<"ArgDependent", 0, /*fake*/ 1>,
               NamedArgument<"Parent", 0, /*fake*/ 1>];
   let InheritEvenIfAlreadyPresent = 1;
@@ -1982,6 +1985,7 @@ def DiagnoseIf : InheritableAttr {
   let AdditionalMembers = [{
     bool isError() const { return diagnosticType == DT_Error; }
     bool isWarning() const { return diagnosticType == DT_Warning; }
+    bool hasDiagnosticID() const { return diagnosticID != 0; }
   }];
   let TemplateDependent = 1;
   let Documentation = [DiagnoseIfDocs];

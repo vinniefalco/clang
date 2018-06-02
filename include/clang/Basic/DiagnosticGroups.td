@@ -778,8 +778,7 @@ def Most : DiagGroup<"most", [
     OverloadedVirtual,
     PrivateExtern,
     SelTypeCast,
-    ExternCCompat,
-    UserDefinedWarnings
+    ExternCCompat
  ]>;
 
 // Thread Safety warnings 
