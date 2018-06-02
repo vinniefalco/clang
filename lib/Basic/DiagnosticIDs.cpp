@@ -224,7 +224,7 @@ public:
       ItRes.first->DiagID = ID;
       DiagInfo.push_back(*ItRes.first);
     }
-    return ItRes.first;
+    return *ItRes.first;
   }
 };
 
