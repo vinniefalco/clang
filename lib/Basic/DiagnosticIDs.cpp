@@ -221,7 +221,8 @@ public:
     if (ItRes.second) {
       (void)D.release();
       unsigned ID = DiagInfo.size() + DIAG_UPPER_LIMIT;
-      ItRes.first->DiagID = ID;
+      CustomDiagnosticID *DID = *ItRes.first;
+      DID->DiagID = ID;
       DiagInfo.push_back(*ItRes.first);
     }
     return *ItRes.first;
