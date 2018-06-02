@@ -2115,9 +2115,16 @@ def err_deduction_guide_explicit_mismatch : Error<
 def err_deduction_guide_specialized : Error<"deduction guide cannot be "
   "%select{explicitly instantiated|explicitly specialized}0">;
 def err_deduction_guide_template_not_deducible : Error<
-    "deduction guide template contains "
-    "%select{a template parameter|template parameters}0 that cannot be "
-    "deduced">;
+  "deduction guide template contains "
+  "%select{a template parameter|template parameters}0 that cannot be "
+  "deduced">;
+def err_deduction_guide_wrong_access : Error<
+  "deduction guide has different access from the corresponding "
+  "member template">;
+def note_deduction_guide_template_access : Note<
+  "member template declared %0 here">;
+def note_deduction_guide_access : Note<
+  "deduction guide declared %0 by intervening access specifier">;
 
 // C++1y deduced return types
 def err_auto_fn_deduction_failure : Error<
@@ -6357,6 +6364,8 @@ def err_bad_memptr_rhs : Error<
 def err_bad_memptr_lhs : Error<
   "left hand operand to %0 must be a %select{|pointer to }1class "
   "compatible with the right hand operand, but is %2">;
+def err_memptr_incomplete : Error<
+  "member pointer has incomplete base type %0">;
 def warn_exception_caught_by_earlier_handler : Warning<
   "exception of type %0 will be caught by earlier handler">,
   InGroup<Exceptions>;
