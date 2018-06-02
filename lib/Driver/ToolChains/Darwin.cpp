@@ -2018,7 +2018,13 @@ bool Darwin::isAlignedAllocationUnavailable() const {
 void Darwin::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                                    llvm::opt::ArgStringList &CC1Args,
                                    Action::OffloadKind DeviceOffloadKind) const {
-  if (isAlignedAllocationUnavailable())
+  // Pass "-faligned-alloc-unavailable" only when the user hasn't manually
+  // enabled or disabled aligned allocations and hasn't specified a custom
+  // standard library installation.
+  if (!DriverArgs.hasArgNoClaim(options::OPT_faligned_allocation,
+                                options::OPT_fno_aligned_allocation,
+                                options::OPT_nostdincxx) &&
+      isAlignedAllocationUnavailable())
     CC1Args.push_back("-faligned-alloc-unavailable");
 }
 
