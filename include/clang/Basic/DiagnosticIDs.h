@@ -158,6 +158,45 @@ public:
   }
 };
 
+class CustomDiagnosticID {
+public:
+  // These members participate in the relational and equality comparisons
+  // for the object.
+  const std::string Name;
+  const unsigned Level;
+  const std::string Description;
+
+public:
+  unsigned DiagID = -1;
+  unsigned Category = -1;
+  unsigned OptionGroupIndex = 0;
+
+public:
+  CustomDiagnosticID(std::string Name, unsigned Level, std::string Description)
+      : Name(std::move(Name)), Level(Level),
+        Description(std::move(Description)) {}
+  CustomDiagnosticID(CustomDiagnosticID const &) = delete;
+};
+
+inline bool operator==(CustomDiagnosticID const &LHS,
+                       CustomDiagnosticID const &RHS) {
+  return LHS.Name == RHS.Name && LHS.Level == RHS.Level &&
+         LHS.Description == RHS.Description;
+}
+
+inline bool operator!=(CustomDiagnosticID const &LHS,
+                       CustomDiagnosticID const &RHS) {
+  return !(LHS == RHS);
+}
+inline bool operator<(CustomDiagnosticID const &LHS,
+                      CustomDiagnosticID const &RHS) {
+  if (LHS.Name != RHS.Name)
+    return LHS.Name < RHS.Name;
+  if (LHS.Level != RHS.Level)
+    return LHS.Level < RHS.Level;
+  return LHS.Description < RHS.Description;
+}
+
 /// Used for handling and querying diagnostic IDs.
 ///
 /// Can be used and shared by multiple Diagnostics for multiple translation units.
@@ -185,8 +224,10 @@ public:
   // FIXME: Replace this function with a create-only facilty like
   // createCustomDiagIDFromFormatString() to enforce safe usage. At the time of
   // writing, nearly all callers of this function were invalid.
-  unsigned getCustomDiagID(Level L, StringRef FormatString,
-                           StringRef Name = "");
+  unsigned getCustomDiagID(Level L, StringRef FormatString);
+
+  CustomDiagnosticID *makeCustomDiagID(StringRef Name, StringRef FormatString,
+                                       Level L);
 
   //===--------------------------------------------------------------------===//
   // Diagnostic classification and reporting interfaces.

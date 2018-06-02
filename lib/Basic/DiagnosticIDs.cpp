@@ -170,6 +170,67 @@ CATEGORY(REFACTORING, ANALYSIS)
   return Found;
 }
 
+//===----------------------------------------------------------------------===//
+// Custom Diagnostic information
+//===----------------------------------------------------------------------===//
+
+namespace clang {
+namespace diag {
+namespace {
+struct DiagLessThan {
+  bool operator()(CustomDiagnosticID const *LHS,
+                  CustomDiagnosticID const *RHS) const {
+    return *LHS < *RHS;
+  }
+};
+} // namespace
+class CustomDiagInfo {
+  std::vector<CustomDiagnosticID *> DiagInfo;
+  std::set<CustomDiagnosticID *, DiagLessThan> DiagIDs;
+
+public:
+  CustomDiagInfo() = default;
+  ~CustomDiagInfo() {
+    for (CustomDiagnosticID *D : DiagInfo)
+      delete D;
+  }
+  /// getDescription - Return the description of the specified custom
+  /// diagnostic.
+  StringRef getDescription(unsigned DiagID) const {
+    assert(DiagID - DIAG_UPPER_LIMIT < DiagInfo.size() &&
+           "Invalid diagnostic ID");
+    return DiagInfo[DiagID - DIAG_UPPER_LIMIT]->Description;
+  }
+
+  /// getLevel - Return the level of the specified custom diagnostic.
+  DiagnosticIDs::Level getLevel(unsigned DiagID) const {
+    assert(DiagID - DIAG_UPPER_LIMIT < DiagInfo.size() &&
+           "Invalid diagnostic ID");
+    return static_cast<DiagnosticIDs::Level>(
+        DiagInfo[DiagID - DIAG_UPPER_LIMIT]->Level);
+  }
+
+  CustomDiagnosticID *getOrCreateDiagID(StringRef Name, DiagnosticIDs::Level L,
+                                        StringRef Message,
+                                        DiagnosticIDs &Diags) {
+    std::unique_ptr<CustomDiagnosticID> D(
+        new CustomDiagnosticID{Name, L, Message});
+
+    // Check to see if it already exists.
+    auto ItRes = DiagIDs.insert(D.get());
+    if (ItRes.second) {
+      (void)D.release();
+      unsigned ID = DiagInfo.size() + DIAG_UPPER_LIMIT;
+      ItRes.first->DiagID = ID;
+      DiagInfo.push_back(*ItRes.first);
+    }
+    return ItRes.first;
+  }
+};
+
+} // namespace diag
+} // namespace clang
+
 static DiagnosticMapping GetDefaultDiagMapping(unsigned DiagID) {
   DiagnosticMapping Info = DiagnosticMapping::Make(
       diag::Severity::Fatal, /*IsUser=*/false, /*IsPragma=*/false);
@@ -192,7 +253,8 @@ static DiagnosticMapping GetDefaultDiagMapping(unsigned DiagID) {
 unsigned DiagnosticIDs::getCategoryNumberForDiag(unsigned DiagID) {
   if (const StaticDiagInfoRec *Info = GetDiagInfo(DiagID))
     return Info->Category;
-  return 0;
+  if (CustomDiagInfo->)
+    return 0;
 }
 
 namespace {
@@ -262,85 +324,6 @@ static unsigned getBuiltinDiagClass(unsigned DiagID) {
 }
 
 //===----------------------------------------------------------------------===//
-// Custom Diagnostic information
-//===----------------------------------------------------------------------===//
-
-namespace clang {
-namespace diag {
-namespace {
-struct DiagDesc {
-  std::string Name;
-  DiagnosticIDs::Level Level;
-  std::string Description;
-};
-
-inline bool operator==(DiagDesc const &LHS, DiagDesc const &RHS) {
-  return LHS.Name == RHS.Name && LHS.Level == RHS.Level &&
-         LHS.Description == RHS.Description;
-}
-
-inline bool operator<(DiagDesc const &LHS, DiagDesc const &RHS) {
-  if (LHS.Name != RHS.Name)
-    return LHS.Name < RHS.Name;
-  if (LHS.Level != RHS.Level)
-    return LHS.Level < RHS.Level;
-  return LHS.Description < RHS.Description;
-}
-
-struct DiagLessThan {
-  bool operator()(DiagDesc const *LHS, DiagDesc const *RHS) const {
-    return *LHS < *RHS;
-  }
-};
-} // namespace
-    class CustomDiagInfo {
-      std::vector<DiagDesc *> DiagInfo;
-      std::map<DiagDesc *, unsigned, DiagLessThan> DiagIDs;
-
-    public:
-      CustomDiagInfo() = default;
-      ~CustomDiagInfo() {
-        for (DiagDesc *D : DiagInfo)
-          delete D;
-      }
-      /// getDescription - Return the description of the specified custom
-      /// diagnostic.
-      StringRef getDescription(unsigned DiagID) const {
-        assert(DiagID - DIAG_UPPER_LIMIT < DiagInfo.size() &&
-               "Invalid diagnostic ID");
-        return DiagInfo[DiagID - DIAG_UPPER_LIMIT]->Description;
-      }
-
-      /// getLevel - Return the level of the specified custom diagnostic.
-      DiagnosticIDs::Level getLevel(unsigned DiagID) const {
-        assert(DiagID - DIAG_UPPER_LIMIT < DiagInfo.size() &&
-               "Invalid diagnostic ID");
-        return DiagInfo[DiagID - DIAG_UPPER_LIMIT]->Level;
-      }
-
-      unsigned getOrCreateDiagID(StringRef Name, DiagnosticIDs::Level L,
-                                 StringRef Message, DiagnosticIDs &Diags) {
-        std::unique_ptr<DiagDesc> D(new DiagDesc{Name, L, Message});
-
-        // Check to see if it already exists.
-        auto I = DiagIDs.lower_bound(D.get());
-        if (I != DiagIDs.end() && *I->first == D.get())
-          return I->second;
-
-        // If not, assign a new ID.
-        unsigned ID = DiagInfo.size()+DIAG_UPPER_LIMIT;
-        DiagDesc *DPtr = D.release();
-        DiagInfo.push_back(DPtr);
-        DiagIDs.insert(std::make_pair(DPtr, ID));
-        return ID;
-      }
-    };
-
-    } // namespace diag
-} // end clang namespace
-
-
-//===----------------------------------------------------------------------===//
 // Common Diagnostic implementation
 //===----------------------------------------------------------------------===//
 
@@ -356,8 +339,13 @@ DiagnosticIDs::~DiagnosticIDs() {
 ///
 /// \param FormatString A fixed diagnostic format string that will be hashed and
 /// mapped to a unique DiagID.
-unsigned DiagnosticIDs::getCustomDiagID(Level L, StringRef FormatString,
-                                        StringRef Name) {
+unsigned DiagnosticIDs::getCustomDiagID(Level L, StringRef FormatString) {
+  return makeCustomDiagID("", FormatString, L)->DiagID;
+}
+
+CustomDiagnosticID *DiagnosticIDs::makeCustomDiagID(StringRef Name,
+                                                    StringRef FormatString,
+                                                    Level L) {
   if (!CustomDiagInfo)
     CustomDiagInfo = new diag::CustomDiagInfo();
   return CustomDiagInfo->getOrCreateDiagID(Name, L, FormatString, *this);

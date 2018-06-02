@@ -1013,9 +1013,11 @@ static void handleDiagnoseIfAttr(Sema &S, Decl *D, const AttributeList &AL) {
     if (!S.checkStringLiteralArgumentAttr(AL, 3, DiagNameStr))
       return;
     auto DiagIDs = S.getDiagnostics().getDiagnosticIDs();
-    DiagID = DiagIDs->getCustomDiagID(IsErrorDiag ? DiagnosticIDs::Error
-                                                  : DiagnosticIDs::Warning,
-                                      "%0", DiagNameStr);
+    CustomDiagnosticID *ID = DiagIDs->makeCustomDiagID(
+        DiagNameStr, "%0",
+        IsErrorDiag ? DiagnosticIDs::Error : DiagnosticIDs::Warning);
+    DiagID = ID->DiagID;
+
     // FIXME(EricWF): Create a CustomDiagID for this name if we haven't
     // seen it before.
   } else {
