@@ -1496,8 +1496,8 @@ struct ArgumentExtractor {
       return getRHS(Rewritten);
     }
     if (IsReverseOrder)
-      return getRHS(getLHS(Rewritten));
-    return getLHS(getRHS(Rewritten));
+      return getLHS(getRHS(Rewritten));
+    return getRHS(getLHS(Rewritten));
   }
 
   static SourceLocation getOperatorLoc(Expr *E) {

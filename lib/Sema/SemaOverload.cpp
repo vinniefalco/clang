@@ -8914,7 +8914,7 @@ void Sema::AddRewrittenOperatorCandidates(
     const UnresolvedSetImpl &ThreeWayFns, const UnresolvedSetImpl &CmpOpFns,
     OverloadCandidateSet &CandidateSet, bool PerformADL) {
   auto Opc = BinaryOperator::getOverloadedOpcode(Op);
-  auto OrigOpName = Context.DeclarationNames.getCXXOperatorName(Op);
+
   bool IsEquality = BinaryOperator::isEqualityOp(Opc);
   bool IsRelational = BinaryOperator::isRelationalOp(Opc);
   bool IsRelationalOrEquality = IsEquality || IsRelational;
@@ -9011,9 +9011,11 @@ void Sema::AddRewrittenOperatorCandidates(
         }
         Ovl.ReturnType = Info->getType();
       }
-      continue;
+      // continue;
       assert(!Ovl.ReturnType.isNull());
-      Ovl.ReturnType = Ovl.ReturnType.getCanonicalType();
+      assert(!Ovl.ReturnType->isDependentType() &&
+             !Ovl.ReturnType->isUndeducedType());
+      // Ovl.ReturnType = Ovl.ReturnType.getCanonicalType();
       OverloadCandidateSet::RewrittenCandidateCacheInfo Info =
           CandidateSet.lookupRewrittenCandidateInCache(Ovl.getRewrittenKind(),
                                                        Ovl.ReturnType);
@@ -9022,9 +9024,16 @@ void Sema::AddRewrittenOperatorCandidates(
         assert(!Ovl.ReturnType.isNull() && !Ovl.ReturnType->isDependentType());
 
         // Build an opaque value expression representing the return type.
-        OpaqueValueExpr RetObj(OpLoc, Ovl.ReturnType, VK_RValue),
-            ZeroLit(OpLoc, Context.IntTy, VK_RValue);
+        OpaqueValueExpr RetObj(OpLoc, Ovl.ReturnType, VK_RValue);
+        llvm::APInt I =
+            llvm::APInt::getNullValue(Context.getIntWidth(Context.IntTy));
+        IntegerLiteral ZeroLit(Context, I, Context.IntTy, SourceLocation());
         Expr *NewLHS = &RetObj, *NewRHS = &ZeroLit;
+        if (checkPlaceholderForOverload(*this, NewLHS))
+          assert(false);
+        if (checkPlaceholderForOverload(*this, NewRHS))
+          assert(false);
+        Ovl.ReturnType = NewLHS->getType();
         if (Kind == ROC_AsReversedThreeWay)
           std::swap(NewLHS, NewRHS);
 
@@ -9042,7 +9051,7 @@ void Sema::AddRewrittenOperatorCandidates(
         OverloadingResult OvlRes =
             RewrittenCandidateSet.BestViableFunction(*this, OpLoc, Best);
 
-        if (OvlRes == OR_Success)
+        if (Best != RewrittenCandidateSet.end())
           Info = CandidateSet.createRewrittenCandidateCache(
               Ovl.getRewrittenKind(), Ovl.ReturnType, OvlRes, std::move(*Best));
         else
@@ -9050,7 +9059,7 @@ void Sema::AddRewrittenOperatorCandidates(
               Ovl.getRewrittenKind(), Ovl.ReturnType, OvlRes);
       }
 
-      assert(Info.Found);
+      // assert(Info.Found);
       Ovl.RewrittenOvl = Info.Cand;
       switch (Info.Result) {
       case OR_Success:
@@ -12895,37 +12904,15 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
       Expr *NewLHS = Res.get();
       Expr *NewRHS = Zero;
 
-      bool DoAssert = false;
-      QualType Ty = NewArgs[0]->getType();
-      if (auto *RD = Ty->getAsCXXRecordDecl()) {
-        StringRef S = RD->getIdentifier()->getName();
-        if (!S.empty() && S.data()) {
-          DoAssert = S == "T";
-        }
-      }
-      if (DoAssert) {
-        llvm::errs() << "CANDIDATES " << OrigFuncs.size() << "\n";
-        for (auto *F : OrigFuncs)
-          F->dumpColor();
-      }
       if (Ovl.getRewrittenKind() == ROC_AsReversedThreeWay)
         std::swap(NewLHS, NewRHS);
 
-      if (Ovl.RewrittenOvl) {
-        assert(false);
-        // FIXME(EricWF): Do something with HadMultipleCandidates.
-        Res = BuildBinaryOperatorCandidate(OpLoc, Opc, *Ovl.RewrittenOvl,
-                                           NewLHS, NewRHS,
-                                           /*HadMultipleCandidates*/ true);
-#if 1
-      } else {
+      assert(Ovl.RewrittenOvl);
+      // FIXME(EricWF): Do something with HadMultipleCandidates.
+      Res = BuildBinaryOperatorCandidate(OpLoc, Opc, *Ovl.RewrittenOvl, NewLHS,
+                                         NewRHS,
+                                         /*HadMultipleCandidates*/ true);
 
-        Res = CreateOverloadedBinOp(OpLoc, Opc, OrigFuncs, NewLHS, NewRHS,
-                                    /*PerformADL*/ true,
-                                    /*AllowRewrittenCandidates*/ false);
-        assert(!Res.isInvalid());
-      }
-#endif
       if (Res.isInvalid())
         return ExprError();
     }

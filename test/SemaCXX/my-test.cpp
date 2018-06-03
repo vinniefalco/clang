@@ -11,10 +11,7 @@ using FnTy = void();
 struct T {
   int x;
 };
-template <class U>
-auto operator<=>(U const &LHS, U const &RHS) {
-  return LHS.x <=> RHS.x;
-}
+
 auto operator<=>(T const &LHS, T const &RHS) {
   return LHS.x <=> RHS.x;
 }
