@@ -243,10 +243,6 @@ struct DeductionFailureInfo {
 
   /// Free any memory associated with this deduction failure.
   void Destroy();
-
-  /// Release any memory associated with this deduction failure so that
-  /// "Destroy" has no effect.
-  void Release();
 };
 
 /// TemplateSpecCandidate - This is a generalization of OverloadCandidate

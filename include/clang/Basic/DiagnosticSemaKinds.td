@@ -3605,7 +3605,7 @@ def warn_diagnose_if_succeeded : Warning<"%0">, InGroup<UserDefinedWarnings>,
 def note_ovl_candidate_disabled_by_function_cond_attr : Note<
     "candidate disabled: %0">;
 def note_ovl_rewritten_candidate_invalid_operator : Note<
-    "return type cannot be used as an operand to the "
+    "return type %1 cannot be used as an operand to the "
     "%select{<<ERROR>|rewritten|reversed rewritten}0 "
     "comparison operator">;
 def note_ovl_candidate_disabled_by_extension : Note<

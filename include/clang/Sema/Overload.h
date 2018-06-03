@@ -797,7 +797,7 @@ class Sema;
       StandardConversionSequence FinalConversion;
     };
 
-    OverloadCandidate *RewrittenOvl = nullptr;
+    QualType ReturnType;
 
     /// hasAmbiguousConversion - Returns whether this overload
     /// candidate requires an ambiguous conversion or not.
@@ -912,13 +912,12 @@ class Sema;
     /// instead.
     /// FIXME: Now that this only allocates ImplicitConversionSequences, do we
     /// want to un-generalize this?
-    template <typename T> void *slabAllocate(unsigned N) {
+    template <typename T> T *slabAllocate(unsigned N) {
       // It's simpler if this doesn't need to consider alignment.
       static_assert(alignof(T) == alignof(void *),
                     "Only works for pointer-aligned types.");
       static_assert(std::is_trivial<T>::value ||
-                        std::is_same<ImplicitConversionSequence, T>::value ||
-                        std::is_same<OverloadCandidate, T>::value,
+                        std::is_same<ImplicitConversionSequence, T>::value,
                     "Add destruction logic to OverloadCandidateSet::clear().");
 
       unsigned NBytes = sizeof(T) * N;
@@ -929,7 +928,7 @@ class Sema;
              "Misaligned storage!");
 
       NumInlineBytesUsed += NBytes;
-      return FreeSpaceStart;
+      return reinterpret_cast<T *>(FreeSpaceStart);
     }
 
     void destroyCandidates();
@@ -987,8 +986,7 @@ class Sema;
     ConversionSequenceList
     allocateConversionSequences(unsigned NumConversions) {
       ImplicitConversionSequence *Conversions =
-          ::new (slabAllocate<ImplicitConversionSequence>(NumConversions))
-              ImplicitConversionSequence();
+          slabAllocate<ImplicitConversionSequence>(NumConversions);
 
       // Construct the new objects.
       for (unsigned I = 0; I != NumConversions; ++I)
@@ -1011,23 +1009,6 @@ class Sema;
                           : Conversions;
       C.RewrittenOpKind = AddingOverloadKind;
       return C;
-    }
-
-    OverloadCandidate *allocateAndMoveCandidate(OverloadCandidate &&Ovl) {
-      OverloadCandidate *NewCand =
-          ::new (slabAllocate<OverloadCandidate>(1)) OverloadCandidate(Ovl);
-      unsigned NumConversions = Ovl.Conversions.size();
-      // Copy tho conversion sequences over.
-      NewCand->Conversions = allocateConversionSequences(NumConversions);
-      for (unsigned I = 0; I < NumConversions; I++)
-        NewCand->Conversions[I] = Ovl.Conversions[I];
-      if (!Ovl.Viable && Ovl.FailureKind == ovl_fail_bad_deduction) {
-        assert(!NewCand->Viable && NewCand->FailureKind == Ovl.FailureKind);
-        // Take ownership of the deduction failure object and its memory
-        // from the original candidate.
-        Ovl.DeductionFailure.Release();
-      }
-      return NewCand;
     }
 
     /// Find the best viable function on this overload set, if it exists.
