@@ -12649,15 +12649,6 @@ static ExprResult BuildRewrittenCandidate(Sema &S, BinaryOperatorKind Opc,
       CXXRewrittenOperatorExpr(Ovl.getRewrittenKind(), Rewritten);
 }
 
-void Sema::LookupOverloadedBinOp(SourceLocation OpLoc,
-                                 OverloadCandidateSet &CandidateSet,
-                                 BinaryOperatorKind Opc,
-                                 const UnresolvedSetImpl &Fns, Expr *LHS,
-                                 Expr *RHS, bool PerformADL,
-                                 bool AllowRewrittenCandidates) {
-  assert(false);
-}
-
 /// Create a binary operation that may resolve to an overloaded
 /// operator.
 ///
