@@ -436,7 +436,7 @@ struct T {
 struct U {
   int x;
   // FIXME(EricWF): Are I sure this test case is correct?
-  // expected-note@+1 {{return type cannot be used as an operand to the reversed rewritten comparison operator}}
+  // expected-note@+1 {{return type 'std::strong_equality' cannot be used as an operand to the reversed rewritten comparison operator}}
   constexpr std::strong_equality operator<=>(T y) const {
     if (x == y.x)
       return std::strong_equality::equal;
@@ -542,8 +542,8 @@ namespace BadRewrittenTest {
 
 struct T {};
 // FIXME(EricWF): Say the return type and the opcode for the rewritten expression.
-// expected-note@+2 {{return type cannot be used as an operand to the rewritten comparison operator}}
-// expected-note@+1 {{return type cannot be used as an operand to the reversed rewritten comparison operator}}
+// expected-note@+2 {{return type 'std::strong_equality' cannot be used as an operand to the rewritten comparison operator}}
+// expected-note@+1 {{return type 'std::strong_equality' cannot be used as an operand to the reversed rewritten comparison operator}}
 std::strong_equality operator<=>(T, T);
 
 void test(T x, T y) {

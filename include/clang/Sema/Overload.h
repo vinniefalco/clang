@@ -798,6 +798,7 @@ class Sema;
     };
 
     QualType ReturnType;
+    OverloadCandidate *RewrittenOvl = nullptr;
 
     /// hasAmbiguousConversion - Returns whether this overload
     /// candidate requires an ambiguous conversion or not.
@@ -885,6 +886,8 @@ class Sema;
 
   private:
     SmallVector<OverloadCandidate, 16> Candidates;
+    llvm::DenseMap<std::pair<QualType, unsigned>, OverloadCandidate *>
+        RewrittenCandidateCache;
 
     using DeclKindPair =
         llvm::PointerIntPair<Decl *, 2, RewrittenOverloadCandidateKind>;
@@ -912,12 +915,13 @@ class Sema;
     /// instead.
     /// FIXME: Now that this only allocates ImplicitConversionSequences, do we
     /// want to un-generalize this?
-    template <typename T> T *slabAllocate(unsigned N) {
+    template <typename T> void *slabAllocate(unsigned N) {
       // It's simpler if this doesn't need to consider alignment.
       static_assert(alignof(T) == alignof(void *),
                     "Only works for pointer-aligned types.");
       static_assert(std::is_trivial<T>::value ||
-                        std::is_same<ImplicitConversionSequence, T>::value,
+                        std::is_same<ImplicitConversionSequence, T>::value ||
+                        std::is_same<OverloadCandidate, T>::value,
                     "Add destruction logic to OverloadCandidateSet::clear().");
 
       unsigned NBytes = sizeof(T) * N;
@@ -928,7 +932,7 @@ class Sema;
              "Misaligned storage!");
 
       NumInlineBytesUsed += NBytes;
-      return reinterpret_cast<T *>(FreeSpaceStart);
+      return FreeSpaceStart;
     }
 
     void destroyCandidates();
@@ -986,7 +990,8 @@ class Sema;
     ConversionSequenceList
     allocateConversionSequences(unsigned NumConversions) {
       ImplicitConversionSequence *Conversions =
-          slabAllocate<ImplicitConversionSequence>(NumConversions);
+          static_cast<ImplicitConversionSequence *>(
+              slabAllocate<ImplicitConversionSequence>(NumConversions));
 
       // Construct the new objects.
       for (unsigned I = 0; I != NumConversions; ++I)
@@ -1010,6 +1015,13 @@ class Sema;
       C.RewrittenOpKind = AddingOverloadKind;
       return C;
     }
+
+    OverloadCandidate *lookupRewrittenCandidateInCache(
+        RewrittenOverloadCandidateKind RewrittenKind, QualType Ty);
+
+    OverloadCandidate *
+    createRewrittenCandidateCache(RewrittenOverloadCandidateKind RewrittenKind,
+                                  QualType Ty, OverloadCandidate &&Ovl);
 
     /// Find the best viable function on this overload set, if it exists.
     OverloadingResult BestViableFunction(Sema &S, SourceLocation Loc,
