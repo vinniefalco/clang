@@ -873,8 +873,10 @@ static void destroyCandidate(OverloadCandidate *Ovl) {
 void OverloadCandidateSet::destroyCandidates() {
   for (iterator i = begin(), e = end(); i != e; ++i)
     destroyCandidate(&(*i));
-  for (auto &KV : RewrittenCandidateCache)
-    destroyCandidate(KV.second);
+  for (auto &KV : RewrittenCandidateCache) {
+    if (KV.second.Cand)
+      destroyCandidate(KV.second.Cand);
+  }
 }
 
 void OverloadCandidateSet::clear(CandidateSetKind CSK) {
@@ -8997,9 +8999,10 @@ void Sema::AddRewrittenOperatorCandidates(
       }
       assert(!Ovl.ReturnType.isNull());
 
-      Ovl.RewrittenOvl = CandidateSet.lookupRewrittenCandidateInCache(
-          Ovl.getRewrittenKind(), Ovl.ReturnType);
-      if (!Ovl.RewrittenOvl) {
+      OverloadCandidateSet::RewrittenCandidateCacheInfo Info =
+          CandidateSet.lookupRewrittenCandidateInCache(Ovl.getRewrittenKind(),
+                                                       Ovl.ReturnType);
+      if (!Info.Found) {
         // Build an opaque value expression representing the return type.
         OpaqueValueExpr RetObj(OpLoc, Ovl.ReturnType, VK_RValue),
             ZeroLit(OpLoc, Context.IntTy, VK_RValue);
@@ -9015,20 +9018,25 @@ void Sema::AddRewrittenOperatorCandidates(
         OverloadingResult OvlRes =
             RewrittenCandidateSet.BestViableFunction(*this, OpLoc, Best);
 
-        if (Best != OverloadCandidateSet::iterator()) {
-          Ovl.RewrittenOvl = CandidateSet.createRewrittenCandidateCache(
-              Ovl.getRewrittenKind(), Ovl.ReturnType, std::move(*Best));
-        }
-        switch (OvlRes) {
-        case OR_Success:
-          break;
-        case OR_Deleted:
-        case OR_No_Viable_Function:
-        case OR_Ambiguous:
-          Ovl.Viable = false;
-          Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
-          break;
-        }
+        if (Best != OverloadCandidateSet::iterator())
+          Info = CandidateSet.createRewrittenCandidateCache(
+              Ovl.getRewrittenKind(), Ovl.ReturnType, OvlRes, std::move(*Best));
+        else
+          Info = CandidateSet.createRewrittenCandidateCache(
+              Ovl.getRewrittenKind(), Ovl.ReturnType, OvlRes);
+      }
+      assert(Info.Found);
+      Ovl.RewrittenOvl = Info.Cand;
+      switch (Info.Result) {
+      case OR_Success:
+        assert(Ovl.RewrittenOvl);
+        break;
+      case OR_Deleted:
+      case OR_No_Viable_Function:
+      case OR_Ambiguous:
+        Ovl.Viable = false;
+        Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
+        break;
       }
     }
   };
@@ -9470,9 +9478,10 @@ void Sema::diagnoseEquivalentInternalLinkageDeclarations(
   }
 }
 
-OverloadCandidate *OverloadCandidateSet::createRewrittenCandidateCache(
+OverloadCandidateSet::RewrittenCandidateCacheInfo
+OverloadCandidateSet::createRewrittenCandidateCache(
     RewrittenOverloadCandidateKind RewrittenKind, QualType Ty,
-    OverloadCandidate &&Rewritten) {
+    OverloadingResult OvlRes, OverloadCandidate &&Rewritten) {
   assert(RewrittenKind != ROC_None);
   std::pair<QualType, unsigned> Key(Ty, static_cast<unsigned>(RewrittenKind));
   assert(RewrittenCandidateCache.count(Key) == 0 && "entry already exists");
@@ -9488,11 +9497,35 @@ OverloadCandidate *OverloadCandidateSet::createRewrittenCandidateCache(
     assert(NewCand->Viable && NewCand->FailureKind == Rewritten.FailureKind);
     Rewritten.DeductionFailure.Release();
   }
-  RewrittenCandidateCache.try_emplace(Key, NewCand);
-  return NewCand;
+
+  RewrittenCandidateCacheInfo Info;
+  Info.Found = true;
+  Info.Result = OvlRes;
+  Info.Cand = NewCand;
+
+  RewrittenCandidateCache.try_emplace(Key, Info);
+  return Info;
 }
 
-OverloadCandidate *OverloadCandidateSet::lookupRewrittenCandidateInCache(
+OverloadCandidateSet::RewrittenCandidateCacheInfo
+OverloadCandidateSet::createRewrittenCandidateCache(
+    RewrittenOverloadCandidateKind RewrittenKind, QualType Ty,
+    OverloadingResult OvlRes) {
+  assert(RewrittenKind != ROC_None);
+  std::pair<QualType, unsigned> Key(Ty, static_cast<unsigned>(RewrittenKind));
+  assert(RewrittenCandidateCache.count(Key) == 0 && "entry already exists");
+
+  RewrittenCandidateCacheInfo Info;
+  Info.Found = true;
+  Info.Result = OvlRes;
+  Info.Cand = nullptr;
+
+  RewrittenCandidateCache.try_emplace(Key, Info);
+  return Info;
+}
+
+OverloadCandidateSet::RewrittenCandidateCacheInfo
+OverloadCandidateSet::lookupRewrittenCandidateInCache(
     RewrittenOverloadCandidateKind RewrittenKind, QualType Ty) {
   assert(RewrittenKind != ROC_None);
   std::pair<QualType, unsigned> Key(Ty, static_cast<unsigned>(RewrittenKind));
@@ -12790,7 +12823,7 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
       OrigFuncs.addDecl(D);
   }
 
-  OverloadCandidateSet CandidateSet;
+  OverloadCandidateSet CandidateSet(OpLoc, OverloadCandidateSet::CSK_Operator);
   LookupOverloadedBinOp(CandidateSet, OpLoc, Opc, OrigFuncs, ThreeWayFuncs,
                         Args[0], Args[1], PerformADL, AllowRewrittenCandidates);
 
@@ -12827,17 +12860,23 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
       Expr *NewRHS = Zero;
       if (Ovl.getRewrittenKind() == ROC_AsReversedThreeWay)
         std::swap(NewLHS, NewRHS);
+      assert(Ovl.RewrittenOvl);
 
-      if (Ovl.RewrittenOvl) {
-
+      // FIXME(EricWF): Do something with HadMultipleCandidates.
+      Res =
+          BuildBinaryOperatorCandidate(OpLoc, Opc, *Ovl.RewrittenOvl, NewLHS,
+                                       NewRHS, /*HadMultipleCandidates*/ true);
+#if 0
       } else {
         Res = CreateOverloadedBinOp(OpLoc, Opc, OrigFuncs, NewLHS, NewRHS,
                                     /*PerformADL*/ true,
                                     /*AllowRewrittenCandidates*/ false);
       }
+#endif
       if (Res.isInvalid())
         return ExprError();
     }
+    assert(!Res.isInvalid());
 
     return new (Context)
         CXXRewrittenOperatorExpr(Ovl.getRewrittenKind(), Res.get());

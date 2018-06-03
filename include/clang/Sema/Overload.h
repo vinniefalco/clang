@@ -886,7 +886,16 @@ class Sema;
 
   private:
     SmallVector<OverloadCandidate, 16> Candidates;
-    llvm::DenseMap<std::pair<QualType, unsigned>, OverloadCandidate *>
+
+  public:
+    struct RewrittenCandidateCacheInfo {
+      bool Found = false;
+      OverloadingResult Result = OR_No_Viable_Function;
+      OverloadCandidate *Cand = nullptr;
+    };
+
+  private:
+    llvm::DenseMap<std::pair<QualType, unsigned>, RewrittenCandidateCacheInfo>
         RewrittenCandidateCache;
 
     using DeclKindPair =
@@ -1016,12 +1025,17 @@ class Sema;
       return C;
     }
 
-    OverloadCandidate *lookupRewrittenCandidateInCache(
+    RewrittenCandidateCacheInfo lookupRewrittenCandidateInCache(
         RewrittenOverloadCandidateKind RewrittenKind, QualType Ty);
 
-    OverloadCandidate *
+    RewrittenCandidateCacheInfo
     createRewrittenCandidateCache(RewrittenOverloadCandidateKind RewrittenKind,
-                                  QualType Ty, OverloadCandidate &&Ovl);
+                                  QualType Ty, OverloadingResult OvlRes,
+                                  OverloadCandidate &&Ovl);
+
+    RewrittenCandidateCacheInfo
+    createRewrittenCandidateCache(RewrittenOverloadCandidateKind RewrittenKind,
+                                  QualType Ty, OverloadingResult OvlRes);
 
     /// Find the best viable function on this overload set, if it exists.
     OverloadingResult BestViableFunction(Sema &S, SourceLocation Loc,
