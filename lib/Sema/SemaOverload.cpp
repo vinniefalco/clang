@@ -8922,16 +8922,6 @@ void Sema::AddRewrittenOperatorCandidates(
     return;
   assert(InputArgs.size() == 2);
   assert(!InputArgs[0]->isTypeDependent() && !InputArgs[1]->isTypeDependent());
-  bool DoAssert = false;
-  if (IsRelationalOrEquality) {
-    QualType Ty = InputArgs[0]->getType();
-    if (auto *RD = Ty->getAsCXXRecordDecl()) {
-      StringRef S = RD->getIdentifier()->getName();
-      if (!S.empty() && S.data()) {
-        DoAssert = S == "T";
-      }
-    }
-  }
 
   OverloadedOperatorKind CmpOp = OO_Spaceship;
   DeclarationName OpName = Context.DeclarationNames.getCXXOperatorName(CmpOp);

@@ -797,7 +797,9 @@ class Sema;
       StandardConversionSequence FinalConversion;
     };
 
-    // FIXME(EricWF): Document this
+    /// If the candidate is a rewritten operator, this value represents the
+    /// the result of overload resolution.
+    // FIXME(EricWF) Fix this.
     OverloadCandidate *RewrittenOvl = nullptr;
 
     /// hasAmbiguousConversion - Returns whether this overload
