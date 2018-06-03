@@ -797,7 +797,7 @@ class Sema;
       StandardConversionSequence FinalConversion;
     };
 
-    QualType ReturnType;
+    // FIXME(EricWF): Document this
     OverloadCandidate *RewrittenOvl = nullptr;
 
     /// hasAmbiguousConversion - Returns whether this overload

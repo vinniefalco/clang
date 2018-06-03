@@ -8965,30 +8965,21 @@ void Sema::AddRewrittenOperatorCandidates(
       if (!Ovl.Viable)
         continue;
 
+      QualType RetTy;
       // FIXME(EricWF): I'm not sure we should be doing any of this.
       if (FunctionDecl *FD = Ovl.Function) {
-        Ovl.ReturnType = FD->getReturnType();
-        if (Ovl.ReturnType->isUndeducedType()) {
+        RetTy = FD->getReturnType();
+        if (RetTy->isUndeducedType()) {
           // FIXME(EricWF): What's the correct thing to do when the return
           // type can't be deduced.
           if (DeduceReturnType(FD, OpLoc)) {
             continue;
           }
-          Ovl.ReturnType = FD->getReturnType();
+          RetTy = FD->getReturnType();
         }
-        assert(!Ovl.ReturnType->isDependentType() &&
-               !Ovl.ReturnType->isUndeducedType());
-        // FIXME(EricWF): Maybe handle everything with the else logic below.
-        if (const ComparisonCategoryInfo *Info =
-                Context.CompCategories.lookupInfoForType(Ovl.ReturnType)) {
-          if (!Info->isUsableWithOperator(Opc)) {
-            Ovl.Viable = false;
-            Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
-            continue;
-          }
-        }
+        assert(!RetTy->isDependentType() && !RetTy->isUndeducedType());
+
       } else {
-        assert(!Ovl.FoundDecl);
         // Attempt to compute the comparison category type for a selected
         // builtin function.
         Optional<ComparisonCategoryType> CompType =
@@ -9009,54 +9000,45 @@ void Sema::AddRewrittenOperatorCandidates(
           Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
           continue;
         }
-        Ovl.ReturnType = Info->getType();
+        RetTy = Info->getType();
       }
       // continue;
-      assert(!Ovl.ReturnType.isNull());
-      assert(!Ovl.ReturnType->isDependentType() &&
-             !Ovl.ReturnType->isUndeducedType());
-      // Ovl.ReturnType = Ovl.ReturnType.getCanonicalType();
+      assert(!RetTy.isNull());
+      assert(!RetTy->isDependentType() && !RetTy->isUndeducedType());
+      // RetTy = RetTy.getCanonicalType();
       OverloadCandidateSet::RewrittenCandidateCacheInfo Info =
           CandidateSet.lookupRewrittenCandidateInCache(Ovl.getRewrittenKind(),
-                                                       Ovl.ReturnType);
+                                                       RetTy);
 
       if (!Info.Found) {
-        assert(!Ovl.ReturnType.isNull() && !Ovl.ReturnType->isDependentType());
+        assert(!RetTy.isNull() && !RetTy->isDependentType());
 
         // Build an opaque value expression representing the return type.
-        OpaqueValueExpr RetObj(OpLoc, Ovl.ReturnType, VK_RValue);
+        OpaqueValueExpr RetObj(OpLoc, RetTy, VK_RValue);
         llvm::APInt I =
             llvm::APInt::getNullValue(Context.getIntWidth(Context.IntTy));
         IntegerLiteral ZeroLit(Context, I, Context.IntTy, SourceLocation());
         Expr *NewLHS = &RetObj, *NewRHS = &ZeroLit;
-        if (checkPlaceholderForOverload(*this, NewLHS))
-          assert(false);
-        if (checkPlaceholderForOverload(*this, NewRHS))
-          assert(false);
-        Ovl.ReturnType = NewLHS->getType();
+
+        RetTy = NewLHS->getType();
         if (Kind == ROC_AsReversedThreeWay)
           std::swap(NewLHS, NewRHS);
 
-        UnresolvedSet<16> Functions;
-        Functions.append(CmpOpFns.begin(), CmpOpFns.end());
-        LookupOverloadedOperatorName(Op, getCurScope(), NewLHS->getType(),
-                                     NewRHS->getType(), Functions);
-
         OverloadCandidateSet RewrittenCandidateSet(
             OpLoc, OverloadCandidateSet::CSK_Operator);
-
-        LookupOverloadedBinOp(RewrittenCandidateSet, OpLoc, Opc, Functions,
+        LookupOverloadedBinOp(RewrittenCandidateSet, OpLoc, Opc, CmpOpFns,
                               NewLHS, NewRHS, /*AllowADL*/ true);
+
         OverloadCandidateSet::iterator Best;
         OverloadingResult OvlRes =
             RewrittenCandidateSet.BestViableFunction(*this, OpLoc, Best);
 
         if (Best != RewrittenCandidateSet.end())
           Info = CandidateSet.createRewrittenCandidateCache(
-              Ovl.getRewrittenKind(), Ovl.ReturnType, OvlRes, std::move(*Best));
+              Ovl.getRewrittenKind(), RetTy, OvlRes, std::move(*Best));
         else
           Info = CandidateSet.createRewrittenCandidateCache(
-              Ovl.getRewrittenKind(), Ovl.ReturnType, OvlRes);
+              Ovl.getRewrittenKind(), RetTy, OvlRes);
       }
 
       // assert(Info.Found);
@@ -9064,6 +9046,8 @@ void Sema::AddRewrittenOperatorCandidates(
       switch (Info.Result) {
       case OR_Success:
         assert(Ovl.RewrittenOvl);
+        // FIXME(EricWF): Ensure rewritten equality and relational operators
+        // have a return type which is convertible to bool.
         break;
       case OR_Deleted:
       case OR_No_Viable_Function:
