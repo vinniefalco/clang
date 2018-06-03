@@ -2940,11 +2940,7 @@ public:
   void LookupOverloadedBinOp(OverloadCandidateSet &CandidateSet,
                              SourceLocation OpLoc, BinaryOperatorKind Opc,
                              const UnresolvedSetImpl &OrigFns, Expr *LHS,
-                             Expr *RHS, bool RequiresADL = true) {
-    UnresolvedSet<0> DummyFnSet;
-    LookupOverloadedBinOp(CandidateSet, OpLoc, Opc, OrigFns, DummyFnSet, LHS,
-                          RHS, RequiresADL, /*AllowRewrittenCandidates*/ false);
-  }
+                             Expr *RHS, bool RequiresADL = true);
 
   ExprResult CreateOverloadedBinOp(SourceLocation OpLoc, BinaryOperatorKind Opc,
                                    const UnresolvedSetImpl &Fns, Expr *LHS,
