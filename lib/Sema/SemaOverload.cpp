@@ -12870,7 +12870,7 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
       if (Ovl.getRewrittenKind() == ROC_AsReversedThreeWay)
         std::swap(NewLHS, NewRHS);
 
-      assert(Ovl.RewrittenInfo && Ovl.RewrittenInfo->hasRewrittenOvl());
+      assert(Ovl.RewrittenInfo && Ovl.RewrittenInfo->getRewrittenOvl());
       const OverloadCandidate *RewrittenOvl =
           Ovl.RewrittenInfo->getRewrittenOvl();
       // FIXME(EricWF): Do something with HadMultipleCandidates.
