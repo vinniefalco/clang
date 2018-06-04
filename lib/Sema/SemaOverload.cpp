@@ -10529,17 +10529,19 @@ static void DiagnoseBadTarget(Sema &S, OverloadCandidate *Cand) {
 
 static void DiagnoseFailedRewrittenOperand(Sema &S, OverloadCandidate *Cand) {
   // FIXME(EricWF): Get the opcode we for the candidate.
-  assert(Cand && Cand->getRewrittenKind() &&
-         !Cand->RewrittenOperandType.isNull());
+  assert(Cand && Cand->getRewrittenKind() && Cand->RewrittenInfo != nullptr &&
+         !Cand->RewrittenInfo->RewrittenOperandType.isNull());
   if (Cand->Function) {
     S.Diag(Cand->Function->getLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
-        << Cand->getRewrittenKind() << Cand->RewrittenOperandType;
+        << Cand->getRewrittenKind()
+        << Cand->RewrittenInfo->RewrittenOperandType;
   } else {
     // FIXME(EricWF): Get a real source location for the builtin.
     S.Diag(SourceLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
-        << Cand->getRewrittenKind() << Cand->RewrittenOperandType;
+        << Cand->getRewrittenKind()
+        << Cand->RewrittenInfo->RewrittenOperandType;
   }
 }
 
@@ -10662,6 +10664,7 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
     DiagnoseFailedRewrittenOperand(S, Cand);
     break;
   case ovl_rewritten_builtin_operand_return_type_not_found:
+  case ovl_rewritten_builtin_operand_invalid:
     // FIXME(EricWF): Produce a note?
     break;
   }
