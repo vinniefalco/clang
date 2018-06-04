@@ -9542,8 +9542,12 @@ RewrittenOverloadCandidateInfo *
 OverloadCandidateSet::createRewrittenCandidateCache(
     Sema &S, OverloadCandidate &ThisCand,
     OverloadCandidateSet &RewrittenCands) {
-  assert(ThisCand.getRewrittenKind() &&
-         !ThisCand.RewrittenOperandType.isNull());
+  assert(ThisCand.getRewrittenKind() != ROC_None &&
+         "not a rewritten candidate");
+  assert(!ThisCand.RewrittenOperandType.isNull() &&
+         "rewritten candidate operand type not set");
+  assert(ThisCand.RewrittenInfo == nullptr &&
+         "rewritten candidate already has rewritten information");
 
   // Lookup the
   iterator Best;
@@ -9563,10 +9567,15 @@ OverloadCandidateSet::createRewrittenCandidateCache(
 
 RewrittenOverloadCandidateInfo *
 OverloadCandidateSet::lookupRewrittenCandidateInCache(
-    RewrittenOverloadCandidateKind RewrittenKind, QualType Ty) {
-  assert(RewrittenKind != ROC_None);
+    const OverloadCandidate &Cand) {
+  assert(Cand.getRewrittenKind() != ROC_None && "not a rewritten candidate");
+  assert(!Cand.RewrittenOperandType.isNull() &&
+         "rewritten candidate operand type not set");
+  assert(Cand.RewrittenInfo == nullptr &&
+         "rewritten candidate already has rewritten information");
   return RewrittenCandidateCache.lookup(
-      std::make_pair(Ty, static_cast<unsigned>(RewrittenKind)));
+      std::make_pair(Cand.RewrittenOperandType,
+                     static_cast<unsigned>(Cand.getRewrittenKind())));
 }
 
 /// Computes the best viable function (C++ 13.3.3)
