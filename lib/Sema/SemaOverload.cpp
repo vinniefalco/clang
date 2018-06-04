@@ -8956,7 +8956,6 @@ void Sema::AddRewrittenOperatorCandidates(
         continue;
 
       QualType RetTy;
-      // FIXME(EricWF): I'm not sure we should be doing any of this.
       if (FunctionDecl *FD = Ovl.Function) {
         RetTy = FD->getReturnType();
         if (RetTy->isUndeducedType()) {
@@ -8967,8 +8966,6 @@ void Sema::AddRewrittenOperatorCandidates(
           }
           RetTy = FD->getReturnType();
         }
-        assert(!RetTy->isDependentType() && !RetTy->isUndeducedType());
-
       } else {
         // Attempt to compute the comparison category type for a selected
         // builtin function.
@@ -9033,6 +9030,7 @@ void Sema::AddRewrittenOperatorCandidates(
 
       // assert(Info.Found);
       Ovl.RewrittenOvl = Info.Cand;
+      Ovl.ReturnType = RetTy;
       switch (Info.Result) {
       case OR_Success:
         assert(Ovl.RewrittenOvl);

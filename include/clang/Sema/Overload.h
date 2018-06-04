@@ -801,6 +801,7 @@ class Sema;
     /// the result of overload resolution.
     // FIXME(EricWF) Fix this.
     OverloadCandidate *RewrittenOvl = nullptr;
+    QualType ReturnType;
 
     /// hasAmbiguousConversion - Returns whether this overload
     /// candidate requires an ambiguous conversion or not.
