@@ -874,8 +874,8 @@ void OverloadCandidateSet::destroyCandidates() {
   for (iterator i = begin(), e = end(); i != e; ++i)
     destroyCandidate(&(*i));
   for (auto &KV : RewrittenCandidateCache) {
-    if (KV.second->hasRewrittenOvl())
-      destroyCandidate(KV.second->getRewrittenOvl());
+    if (OverloadCandidate *RewrittenOvl = KV.second->getRewrittenOvl())
+      destroyCandidate(RewrittenOvl);
   }
 }
 
