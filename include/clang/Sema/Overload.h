@@ -1072,7 +1072,7 @@ class Sema;
     RewrittenOverloadCandidateInfo(OverloadCandidateSet &Candidates,
                                    OverloadingResult Result,
                                    OverloadCandidateSet::iterator Best,
-                                   const OverloadCandidateSet &RewrittenCands);
+                                   OverloadCandidateSet &RewrittenCands);
     RewrittenOverloadCandidateInfo(RewrittenOverloadCandidateInfo const &) =
         delete;
 

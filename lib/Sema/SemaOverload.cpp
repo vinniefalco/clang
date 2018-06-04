@@ -9516,9 +9516,7 @@ void Sema::diagnoseEquivalentInternalLinkageDeclarations(
 
 RewrittenOverloadCandidateInfo::RewrittenOverloadCandidateInfo(
     OverloadCandidateSet &Candidates, OverloadingResult Result,
-
-    OverloadCandidateSet::iterator Best,
-    const OverloadCandidateSet &RewrittenCands)
+    OverloadCandidateSet::iterator Best, OverloadCandidateSet &RewrittenCands)
     : Result(Result), HadMultipleCandidates(RewrittenCands.size() > 1),
       HasRewrittenOvl(false) {
   if (Best == RewrittenCands.end())
