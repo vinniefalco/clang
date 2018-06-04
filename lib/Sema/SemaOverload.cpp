@@ -9002,7 +9002,7 @@ void Sema::AddRewrittenOperatorCandidates(
           // FIXME(EricWF): What's the correct thing to do when the return
           // type can't be deduced.
             continue;
-        Ovl.ReturnType = FD->getReturnType();
+        Ovl.RewrittenOperandType = FD->getReturnType();
 
       } else {
         // Attempt to compute the comparison category type for a selected
@@ -9025,12 +9025,12 @@ void Sema::AddRewrittenOperatorCandidates(
           Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
           continue;
         }
-        Ovl.ReturnType = Info->getType();
+        Ovl.RewrittenOperandType = Info->getType();
       }
       // continue;
-      assert(!Ovl.ReturnType.isNull());
-      assert(!Ovl.ReturnType->isDependentType() &&
-             !Ovl.ReturnType->isUndeducedType());
+      assert(!Ovl.RewrittenOperandType.isNull());
+      assert(!Ovl.RewrittenOperandType->isDependentType() &&
+             !Ovl.RewrittenOperandType->isUndeducedType());
       // RetTy = RetTy.getCanonicalType();
       RewrittenOverloadCandidateInfo *Info =
           CandidateSet.lookupRewrittenCandidateInCache(Ovl);
@@ -9542,7 +9542,8 @@ RewrittenOverloadCandidateInfo *
 OverloadCandidateSet::createRewrittenCandidateCache(
     Sema &S, OverloadCandidate &ThisCand,
     OverloadCandidateSet &RewrittenCands) {
-  assert(ThisCand.getRewrittenKind() && !ThisCand.ReturnType.isNull());
+  assert(ThisCand.getRewrittenKind() &&
+         !ThisCand.RewrittenOperandType.isNull());
 
   // Lookup the
   iterator Best;
@@ -9552,7 +9553,7 @@ OverloadCandidateSet::createRewrittenCandidateCache(
       RewrittenOverloadCandidateInfo(*this, OvlRes, Best, RewrittenCands);
 
   auto ItPair = RewrittenCandidateCache.try_emplace(
-      std::make_pair(ThisCand.ReturnType,
+      std::make_pair(ThisCand.RewrittenOperandType,
                      static_cast<unsigned>(ThisCand.getRewrittenKind())),
       Info);
   assert(ItPair.second && "inserted value which is already present?");
@@ -10525,16 +10526,17 @@ static void DiagnoseBadTarget(Sema &S, OverloadCandidate *Cand) {
 
 static void DiagnoseFailedRewrittenOperand(Sema &S, OverloadCandidate *Cand) {
   // FIXME(EricWF): Get the opcode we for the candidate.
-  assert(Cand && Cand->getRewrittenKind() && !Cand->ReturnType.isNull());
+  assert(Cand && Cand->getRewrittenKind() &&
+         !Cand->RewrittenOperandType.isNull());
   if (Cand->Function) {
     S.Diag(Cand->Function->getLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
-        << Cand->getRewrittenKind() << Cand->ReturnType;
+        << Cand->getRewrittenKind() << Cand->RewrittenOperandType;
   } else {
     // FIXME(EricWF): Get a real source location for the builtin.
     S.Diag(SourceLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
-        << Cand->getRewrittenKind() << Cand->ReturnType;
+        << Cand->getRewrittenKind() << Cand->RewrittenOperandType;
   }
 }
 

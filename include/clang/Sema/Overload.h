@@ -800,10 +800,15 @@ class Sema;
       StandardConversionSequence FinalConversion;
     };
 
-    /// If the candidate is a rewritten operator, this value represents the
-    /// the result of overload resolution.
+    /// If the candidate is a rewritten operator, this represents the
+    /// the result of overload resolution performed on the fully rewritten
+    /// expression (LHS <=> RHS) @ 0.
     RewrittenOverloadCandidateInfo *RewrittenInfo;
-    QualType ReturnType;
+
+    /// If the candidate is a rewritten operator, this represents the type of
+    /// the rewritten operand. This coorisponds to the return type of the
+    /// selected function or builtin.
+    QualType RewrittenOperandType;
 
     /// hasAmbiguousConversion - Returns whether this overload
     /// candidate requires an ambiguous conversion or not.
