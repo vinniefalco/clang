@@ -730,6 +730,8 @@ class Sema;
   using ConversionSequenceList =
       llvm::MutableArrayRef<ImplicitConversionSequence>;
 
+  struct RewrittenOverloadCandidateInfo;
+
   /// OverloadCandidate - A single candidate in an overload set (C++ 13.3).
   struct OverloadCandidate {
     /// Function - The actual function that this candidate
@@ -799,9 +801,7 @@ class Sema;
 
     /// If the candidate is a rewritten operator, this value represents the
     /// the result of overload resolution.
-    // FIXME(EricWF) Fix this.
-    OverloadCandidate *RewrittenOvl = nullptr;
-    QualType ReturnType;
+    RewrittenOverloadCandidateInfo *RewrittenInfo;
 
     /// hasAmbiguousConversion - Returns whether this overload
     /// candidate requires an ambiguous conversion or not.
@@ -861,6 +861,41 @@ class Sema;
     }
   };
 
+  struct RewrittenOverloadCandidateInfo {
+    OverloadingResult Result;
+    QualType ReturnType;
+    bool HadMultipleCandidates : 1;
+
+  private:
+    bool HasRewrittenOvl : 1;
+    using StorageT = std::aligned_storage<sizeof(OverloadCandidate),
+                                          alignof(OverloadCandidate)>::type;
+    StorageT RewrittenOvlStorage;
+
+  public:
+    bool hasRewrittenOvl() const { return HasRewrittenOvl; }
+
+    const OverloadCandidate *getRewrittenOvl() const {
+      assert(hasRewrittenOvl());
+      return reinterpret_cast<const OverloadCandidate *>(&RewrittenOvlStorage);
+    }
+    OverloadCandidate *getRewrittenOvl() {
+      assert(hasRewrittenOvl());
+      return reinterpret_cast<OverloadCandidate *>(&RewrittenOvlStorage);
+    }
+
+  private:
+    friend class OverloadCandidateSet;
+    RewrittenOverloadCandidateInfo(OverloadingResult Result,
+                                   QualType ReturnType,
+                                   bool HadMultipleCandidates);
+    RewrittenOverloadCandidateInfo(RewrittenOverloadCandidateInfo const &) =
+        delete;
+
+    void setRewrittenOvl(OverloadCandidateSet &Candidates,
+                         OverloadCandidate &&Rewritten);
+  };
+
   /// OverloadCandidateSet - A set of overload candidates, used in C++
   /// overload resolution (C++ 13.3).
   class OverloadCandidateSet {
@@ -888,17 +923,12 @@ class Sema;
     };
 
   private:
+    friend struct RewrittenOverloadCandidateInfo;
+
     SmallVector<OverloadCandidate, 16> Candidates;
 
-  public:
-    struct RewrittenCandidateCacheInfo {
-      bool Found = false;
-      OverloadingResult Result = OR_No_Viable_Function;
-      OverloadCandidate *Cand = nullptr;
-    };
-
-  private:
-    llvm::DenseMap<std::pair<QualType, unsigned>, RewrittenCandidateCacheInfo>
+    llvm::DenseMap<std::pair<QualType, unsigned>,
+                   RewrittenOverloadCandidateInfo *>
         RewrittenCandidateCache;
 
     using DeclKindPair =
@@ -933,7 +963,7 @@ class Sema;
                     "Only works for pointer-aligned types.");
       static_assert(std::is_trivial<T>::value ||
                         std::is_same<ImplicitConversionSequence, T>::value ||
-                        std::is_same<OverloadCandidate, T>::value,
+                        std::is_same<RewrittenOverloadCandidateInfo, T>::value,
                     "Add destruction logic to OverloadCandidateSet::clear().");
 
       unsigned NBytes = sizeof(T) * N;
@@ -1028,17 +1058,13 @@ class Sema;
       return C;
     }
 
-    RewrittenCandidateCacheInfo lookupRewrittenCandidateInCache(
+    RewrittenOverloadCandidateInfo *lookupRewrittenCandidateInCache(
         RewrittenOverloadCandidateKind RewrittenKind, QualType Ty);
 
-    RewrittenCandidateCacheInfo
-    createRewrittenCandidateCache(RewrittenOverloadCandidateKind RewrittenKind,
-                                  QualType Ty, OverloadingResult OvlRes,
-                                  OverloadCandidate &&Ovl);
-
-    RewrittenCandidateCacheInfo
-    createRewrittenCandidateCache(RewrittenOverloadCandidateKind RewrittenKind,
-                                  QualType Ty, OverloadingResult OvlRes);
+    RewrittenOverloadCandidateInfo *
+    createRewrittenCandidateCache(Sema &S, OverloadCandidate &ThisCand,
+                                  QualType ReturnType,
+                                  OverloadCandidateSet &RewrittenCands);
 
     /// Find the best viable function on this overload set, if it exists.
     OverloadingResult BestViableFunction(Sema &S, SourceLocation Loc,

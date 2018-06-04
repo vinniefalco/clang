@@ -2930,18 +2930,6 @@ public:
                                      const UnresolvedSetImpl &Fns,
                                      Expr *input, bool RequiresADL = true);
 
-  void LookupOverloadedBinOp(OverloadCandidateSet &CandidateSet,
-                             SourceLocation OpLoc, BinaryOperatorKind Opc,
-                             const UnresolvedSetImpl &OrigFns,
-                             const UnresolvedSetImpl &ThreeWayFns, Expr *LHS,
-                             Expr *RHS, bool RequiresADL = true,
-                             bool AllowRewrittenCandidates = true);
-
-  void LookupOverloadedBinOp(OverloadCandidateSet &CandidateSet,
-                             SourceLocation OpLoc, BinaryOperatorKind Opc,
-                             const UnresolvedSetImpl &OrigFns, Expr *LHS,
-                             Expr *RHS, bool RequiresADL = true);
-
   ExprResult CreateOverloadedBinOp(SourceLocation OpLoc, BinaryOperatorKind Opc,
                                    const UnresolvedSetImpl &Fns, Expr *LHS,
                                    Expr *RHS, bool RequiresADL = true,

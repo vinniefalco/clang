@@ -874,8 +874,8 @@ void OverloadCandidateSet::destroyCandidates() {
   for (iterator i = begin(), e = end(); i != e; ++i)
     destroyCandidate(&(*i));
   for (auto &KV : RewrittenCandidateCache) {
-    if (KV.second.Cand)
-      destroyCandidate(KV.second.Cand);
+    if (KV.second->hasRewrittenOvl())
+      destroyCandidate(KV.second->getRewrittenOvl());
   }
 }
 
@@ -8905,6 +8905,46 @@ void Sema::AddBuiltinOperatorCandidates(OverloadedOperatorKind Op,
   }
 }
 
+void LookupOverloadedBinOp(Sema &S, OverloadCandidateSet &CandidateSet,
+                           SourceLocation OpLoc, BinaryOperatorKind Opc,
+                           const UnresolvedSetImpl &OrigFuncs,
+                           const UnresolvedSetImpl &ThreeWayFuncs, Expr *LHS,
+                           Expr *RHS, bool PerformADL,
+                           bool AllowRewrittenCandidates) {
+  Expr *Args[2] = {LHS, RHS};
+  LHS = RHS = nullptr;
+
+  assert(!Args[0]->isTypeDependent() || !Args[1]->isTypeDependent());
+  assert(Opc != BO_PtrMemD);
+  assert(Opc != BO_Assign || Args[0]->getType()->isOverloadableType());
+
+  OverloadedOperatorKind Op = BinaryOperator::getOverloadedOperator(Opc);
+  DeclarationName OpName = S.Context.DeclarationNames.getCXXOperatorName(Op);
+  // Build an empty overload set.
+
+  // Add the candidates from the given function set.
+  S.AddFunctionCandidates(OrigFuncs, Args, CandidateSet);
+
+  // Add operator candidates that are member functions.
+  S.AddMemberOperatorCandidates(Op, OpLoc, Args, CandidateSet);
+
+  // Add candidates from ADL. Per [over.match.oper]p2, this lookup is not
+  // performed for an assignment operator (nor for operator[] nor operator->,
+  // which don't get here).
+  if (Opc != BO_Assign && PerformADL)
+    S.AddArgumentDependentLookupCandidates(OpName, OpLoc, Args,
+                                           /*ExplicitTemplateArgs*/ nullptr,
+                                           CandidateSet);
+
+  // Add builtin operator candidates.
+  S.AddBuiltinOperatorCandidates(Op, OpLoc, Args, CandidateSet);
+
+  // C++2a Add rewritten and synthesized operator candidates.
+  if (S.getLangOpts().CPlusPlus2a && AllowRewrittenCandidates &&
+      BinaryOperator::isComparisonOp(Opc))
+    S.AddRewrittenOperatorCandidates(Op, OpLoc, Args, ThreeWayFuncs, OrigFuncs,
+                                     CandidateSet, PerformADL);
+}
 
 /// Add the rewritten and synthesized candidates for binary comparison
 /// operators. No additional semantic checking is done to see if the candidate
@@ -8993,11 +9033,11 @@ void Sema::AddRewrittenOperatorCandidates(
       assert(!RetTy.isNull());
       assert(!RetTy->isDependentType() && !RetTy->isUndeducedType());
       // RetTy = RetTy.getCanonicalType();
-      OverloadCandidateSet::RewrittenCandidateCacheInfo Info =
+      RewrittenOverloadCandidateInfo *Info =
           CandidateSet.lookupRewrittenCandidateInCache(Ovl.getRewrittenKind(),
                                                        RetTy);
 
-      if (!Info.Found) {
+      if (!Info) {
         assert(!RetTy.isNull() && !RetTy->isDependentType());
 
         // Build an opaque value expression representing the return type.
@@ -9013,31 +9053,24 @@ void Sema::AddRewrittenOperatorCandidates(
 
         OverloadCandidateSet RewrittenCandidateSet(
             OpLoc, OverloadCandidateSet::CSK_Operator);
-        LookupOverloadedBinOp(RewrittenCandidateSet, OpLoc, Opc, CmpOpFns,
-                              NewLHS, NewRHS, /*AllowADL*/ true);
+        UnresolvedSet<1> ThreeWayFuncsDummy;
+        LookupOverloadedBinOp(*this, RewrittenCandidateSet, OpLoc, Opc,
+                              CmpOpFns, ThreeWayFuncsDummy, NewLHS, NewRHS,
+                              /*AllowADL*/ true, /*AllowRewritten*/ false);
 
-        OverloadCandidateSet::iterator Best;
-        OverloadingResult OvlRes =
-            RewrittenCandidateSet.BestViableFunction(*this, OpLoc, Best);
-
-        if (Best != RewrittenCandidateSet.end())
-          Info = CandidateSet.createRewrittenCandidateCache(
-              Ovl.getRewrittenKind(), RetTy, OvlRes, std::move(*Best));
-        else
-          Info = CandidateSet.createRewrittenCandidateCache(
-              Ovl.getRewrittenKind(), RetTy, OvlRes);
+        Info = CandidateSet.createRewrittenCandidateCache(
+            Ovl, RetTy, RewrittenCandidateSet);
       }
+      assert(Info);
 
-      // assert(Info.Found);
-      Ovl.RewrittenOvl = Info.Cand;
-      Ovl.ReturnType = RetTy;
-      switch (Info.Result) {
+      switch (Info->Result) {
       case OR_Success:
-        assert(Ovl.RewrittenOvl);
+        assert(Info->hasRewrittenOvl());
         // FIXME(EricWF): Ensure rewritten equality and relational operators
         // have a return type which is convertible to bool.
         break;
       case OR_Deleted:
+        assert(Info->hasRewrittenOvl());
       case OR_No_Viable_Function:
       case OR_Ambiguous:
         Ovl.Viable = false;
@@ -9484,55 +9517,56 @@ void Sema::diagnoseEquivalentInternalLinkageDeclarations(
   }
 }
 
-OverloadCandidateSet::RewrittenCandidateCacheInfo
-OverloadCandidateSet::createRewrittenCandidateCache(
-    RewrittenOverloadCandidateKind RewrittenKind, QualType Ty,
-    OverloadingResult OvlRes, OverloadCandidate &&Rewritten) {
-  assert(OvlRes == OR_Success || OvlRes == OR_Deleted);
-  assert(RewrittenKind != ROC_None);
-  std::pair<QualType, unsigned> Key(Ty, static_cast<unsigned>(RewrittenKind));
-  assert(RewrittenCandidateCache.count(Key) == 0 && "entry already exists");
+RewrittenOverloadCandidateInfo::RewrittenOverloadCandidateInfo(
+    OverloadingResult Result, QualType RetTy, bool HadMultipleCandidates)
+    : Result(Result), ReturnType(ReturnType),
+      HadMultipleCandidates(HadMultipleCandidates), HasRewrittenOvl(false) {}
 
-  OverloadCandidate *NewCand = new (slabAllocate<OverloadCandidate>(1))
-      OverloadCandidate(std::move(Rewritten));
+void RewrittenOverloadCandidateInfo::setRewrittenOvl(
+    OverloadCandidateSet &Candidates, OverloadCandidate &&Rewritten) {
+  assert(!hasRewrittenOvl() && "rewritten overload already set");
+  HasRewrittenOvl = true;
+
+  OverloadCandidate *NewCand = new (static_cast<void *>(&RewrittenOvlStorage))
+      OverloadCandidate(Rewritten);
+  HasRewrittenOvl = true;
+
   unsigned NumConversions = Rewritten.Conversions.size();
 
-  NewCand->Conversions = allocateConversionSequences(NumConversions);
+  NewCand->Conversions = Candidates.allocateConversionSequences(NumConversions);
   for (unsigned I = 0; I < NumConversions; ++I)
     NewCand->Conversions[I] = Rewritten.Conversions[I];
   if (!Rewritten.Viable && Rewritten.FailureKind == ovl_fail_bad_deduction) {
     assert(NewCand->Viable && NewCand->FailureKind == Rewritten.FailureKind);
     Rewritten.DeductionFailure.Release();
   }
-
-  RewrittenCandidateCacheInfo Info;
-  Info.Found = true;
-  Info.Result = OvlRes;
-  Info.Cand = NewCand;
-
-  RewrittenCandidateCache.try_emplace(Key, Info);
-  return Info;
 }
 
-OverloadCandidateSet::RewrittenCandidateCacheInfo
+RewrittenOverloadCandidateInfo *
 OverloadCandidateSet::createRewrittenCandidateCache(
-    RewrittenOverloadCandidateKind RewrittenKind, QualType Ty,
-    OverloadingResult OvlRes) {
-  assert(RewrittenKind != ROC_None);
-  assert(OvlRes != OR_Success && OvlRes != OR_Deleted);
-  std::pair<QualType, unsigned> Key(Ty, static_cast<unsigned>(RewrittenKind));
-  assert(RewrittenCandidateCache.count(Key) == 0 && "entry already exists");
+    Sema &S, OverloadCandidate &ThisCand, QualType ReturnType,
+    OverloadCandidateSet &RewrittenCands) {
+  assert(ThisCand.getRewrittenKind());
+  iterator Best;
+  OverloadingResult OvlRes = RewrittenCands.BestViableFunction(S, Loc, Best);
 
-  RewrittenCandidateCacheInfo Info;
-  Info.Found = true;
-  Info.Result = OvlRes;
-  Info.Cand = nullptr;
+  std::pair<QualType, unsigned> Key(
+      ReturnType, static_cast<unsigned>(ThisCand.getRewrittenKind()));
 
-  RewrittenCandidateCache.try_emplace(Key, Info);
+  auto *Info = new (slabAllocate<RewrittenOverloadCandidateInfo>(1))
+      RewrittenOverloadCandidateInfo(OvlRes, ReturnType,
+                                     RewrittenCands.size() > 1);
+
+  if (Best != RewrittenCands.end())
+    Info->setRewrittenOvl(*this, std::move(*Best));
+
+  auto ItPair = RewrittenCandidateCache.try_emplace(Key, Info);
+  assert(ItPair.second && "inserted value which is already present?");
+
   return Info;
 }
 
-OverloadCandidateSet::RewrittenCandidateCacheInfo
+RewrittenOverloadCandidateInfo *
 OverloadCandidateSet::lookupRewrittenCandidateInCache(
     RewrittenOverloadCandidateKind RewrittenKind, QualType Ty) {
   assert(RewrittenKind != ROC_None);
@@ -12691,55 +12725,6 @@ ExprResult Sema::BuildBinaryOperatorCandidate(SourceLocation OpLoc,
   return CreateBuiltinBinOp(OpLoc, Opc, Args[0], Args[1]);
 }
 
-void Sema::LookupOverloadedBinOp(OverloadCandidateSet &CandidateSet,
-                                 SourceLocation OpLoc, BinaryOperatorKind Opc,
-                                 const UnresolvedSetImpl &OrigFuncs,
-                                 const UnresolvedSetImpl &ThreeWayFuncs,
-                                 Expr *LHS, Expr *RHS, bool PerformADL,
-                                 bool AllowRewrittenCandidates) {
-  Expr *Args[2] = {LHS, RHS};
-  LHS = RHS = nullptr;
-
-  assert(!Args[0]->isTypeDependent() || !Args[1]->isTypeDependent());
-  assert(Opc != BO_PtrMemD);
-  assert(Opc != BO_Assign || Args[0]->getType()->isOverloadableType());
-
-  OverloadedOperatorKind Op = BinaryOperator::getOverloadedOperator(Opc);
-  DeclarationName OpName = Context.DeclarationNames.getCXXOperatorName(Op);
-  // Build an empty overload set.
-
-  // Add the candidates from the given function set.
-  AddFunctionCandidates(OrigFuncs, Args, CandidateSet);
-
-  // Add operator candidates that are member functions.
-  AddMemberOperatorCandidates(Op, OpLoc, Args, CandidateSet);
-
-  // Add candidates from ADL. Per [over.match.oper]p2, this lookup is not
-  // performed for an assignment operator (nor for operator[] nor operator->,
-  // which don't get here).
-  if (Opc != BO_Assign && PerformADL)
-    AddArgumentDependentLookupCandidates(OpName, OpLoc, Args,
-                                         /*ExplicitTemplateArgs*/ nullptr,
-                                         CandidateSet);
-
-  // Add builtin operator candidates.
-  AddBuiltinOperatorCandidates(Op, OpLoc, Args, CandidateSet);
-
-  // C++2a Add rewritten and synthesized operator candidates.
-  if (getLangOpts().CPlusPlus2a && AllowRewrittenCandidates &&
-      BinaryOperator::isComparisonOp(Opc))
-    AddRewrittenOperatorCandidates(Op, OpLoc, Args, ThreeWayFuncs, OrigFuncs,
-                                   CandidateSet, PerformADL);
-}
-
-void Sema::LookupOverloadedBinOp(OverloadCandidateSet &CandidateSet,
-                                 SourceLocation OpLoc, BinaryOperatorKind Opc,
-                                 const UnresolvedSetImpl &OrigFns, Expr *LHS,
-                                 Expr *RHS, bool RequiresADL) {
-  UnresolvedSet<1> DummyFnSet;
-  LookupOverloadedBinOp(CandidateSet, OpLoc, Opc, OrigFns, DummyFnSet, LHS, RHS,
-                        RequiresADL, /*AllowRewrittenCandidates*/ false);
-}
 
 /// Create a binary operation that may resolve to an overloaded
 /// operator.
@@ -12841,8 +12826,9 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
   }
 
   OverloadCandidateSet CandidateSet(OpLoc, OverloadCandidateSet::CSK_Operator);
-  LookupOverloadedBinOp(CandidateSet, OpLoc, Opc, OrigFuncs, ThreeWayFuncs,
-                        Args[0], Args[1], PerformADL, AllowRewrittenCandidates);
+  LookupOverloadedBinOp(*this, CandidateSet, OpLoc, Opc, OrigFuncs,
+                        ThreeWayFuncs, Args[0], Args[1], PerformADL,
+                        AllowRewrittenCandidates);
 
   // Perform final overload resolution.
   bool HadMultipleCandidates = (CandidateSet.size() > 1);
@@ -12879,11 +12865,13 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
       if (Ovl.getRewrittenKind() == ROC_AsReversedThreeWay)
         std::swap(NewLHS, NewRHS);
 
-      assert(Ovl.RewrittenOvl);
+      assert(Ovl.RewrittenInfo && Ovl.RewrittenInfo->hasRewrittenOvl());
+      const OverloadCandidate *RewrittenOvl =
+          Ovl.RewrittenInfo->getRewrittenOvl();
       // FIXME(EricWF): Do something with HadMultipleCandidates.
-      Res = BuildBinaryOperatorCandidate(OpLoc, Opc, *Ovl.RewrittenOvl, NewLHS,
-                                         NewRHS,
-                                         /*HadMultipleCandidates*/ true);
+      Res = BuildBinaryOperatorCandidate(
+          OpLoc, Opc, *RewrittenOvl, NewLHS, NewRHS,
+          Ovl.RewrittenInfo->HadMultipleCandidates);
 
       if (Res.isInvalid())
         return ExprError();
