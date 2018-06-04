@@ -9537,7 +9537,7 @@ RewrittenOverloadCandidateInfo::RewrittenOverloadCandidateInfo(
 
 RewrittenOverloadCandidateInfo *
 OverloadCandidateSet::createRewrittenCandidateInfo(
-    Sema &S, OverloadCandidate &ThisCand, BinaryOperatorKind OpKind,
+    Sema &S, OverloadCandidate &ThisCand, BinaryOperatorKind RewrittenOpKind,
     QualType RewrittenOperandType, OverloadCandidateSet &RewrittenCands) {
   assert(ThisCand.getRewrittenKind() != ROC_None &&
          "not a rewritten candidate");
@@ -9551,8 +9551,8 @@ OverloadCandidateSet::createRewrittenCandidateInfo(
   iterator Best;
   OverloadingResult Result = RewrittenCands.BestViableFunction(S, Loc, Best);
   auto *Info = new (slabAllocate<RewrittenOverloadCandidateInfo>(1))
-      RewrittenOverloadCandidateInfo(OpKind, RewrittenOperandType, *this,
-                                     Result, Best, RewrittenCands);
+      RewrittenOverloadCandidateInfo(RewrittenOpKind, RewrittenOperandType,
+                                     *this, Result, Best, RewrittenCands);
   auto ItPair = RewrittenCandidateCache.try_emplace(Key, Info);
   assert(ItPair.second);
   return ItPair.first->second;

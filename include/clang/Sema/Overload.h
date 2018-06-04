@@ -1043,10 +1043,9 @@ class Sema;
     lookupRewrittenCandidateInfo(OverloadCandidate &Cand,
                                  QualType RewrittenOperandType);
 
-    RewrittenOverloadCandidateInfo *
-    createRewrittenCandidateInfo(Sema &S, OverloadCandidate &Cand,
-                                 QualType RewrittenOperandType,
-                                 OverloadCandidateSet &RewrittenCands);
+    RewrittenOverloadCandidateInfo *createRewrittenCandidateInfo(
+        Sema &S, OverloadCandidate &Cand, BinaryOperatorKind RewrittenOpKind,
+        QualType RewrittenOperandType, OverloadCandidateSet &RewrittenCands);
 
     /// Find the best viable function on this overload set, if it exists.
     OverloadingResult BestViableFunction(Sema &S, SourceLocation Loc,
