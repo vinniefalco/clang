@@ -723,7 +723,17 @@ class Sema;
     /// This candidate was not viable because the return type of the rewritten
     /// three-way operator was not a valid operand to the original binary
     /// operator.
-    ovl_rewritten_operand_non_valid_for_operator
+    ovl_rewritten_operand_non_valid_for_operator,
+
+    /// This candidate was not viable because the rewritten operand selects
+    /// a builtin comparison operator for which the operand types are invalid.
+    ovl_rewritten_builtin_operand_invalid,
+
+    /// This candidate was not viable because the rewritten operand selects
+    /// a builtin comparison operator for which the comparison category
+    /// type has not been found.
+    /// FIXME(EricWF): I'm not sure this is the correct way to handle that.
+    ovl_rewritten_builtin_operand_return_type_not_found
   };
 
   /// A list of implicit conversion sequences for the arguments of an
@@ -804,11 +814,6 @@ class Sema;
     /// the result of overload resolution performed on the fully rewritten
     /// expression (LHS <=> RHS) @ 0.
     RewrittenOverloadCandidateInfo *RewrittenInfo;
-
-    /// If the candidate is a rewritten operator, this represents the type of
-    /// the rewritten operand. This coorisponds to the return type of the
-    /// selected function or builtin.
-    QualType RewrittenOperandType;
 
     /// hasAmbiguousConversion - Returns whether this overload
     /// candidate requires an ambiguous conversion or not.
@@ -1035,11 +1040,13 @@ class Sema;
 
     // FIXME(EricWF): Document this
     RewrittenOverloadCandidateInfo *
-    lookupRewrittenCandidateInCache(const OverloadCandidate &ThisCand);
+    lookupRewrittenCandidateInfo(OverloadCandidate &Cand,
+                                 QualType RewrittenOperandType);
 
     RewrittenOverloadCandidateInfo *
-    createRewrittenCandidateCache(Sema &S, OverloadCandidate &ThisCand,
-                                  OverloadCandidateSet &RewrittenCands);
+    createRewrittenCandidateInfo(Sema &S, OverloadCandidate &Cand,
+                                 QualType RewrittenOperandType,
+                                 OverloadCandidateSet &RewrittenCands);
 
     /// Find the best viable function on this overload set, if it exists.
     OverloadingResult BestViableFunction(Sema &S, SourceLocation Loc,
@@ -1059,6 +1066,13 @@ class Sema;
   /// (or the reversed rewritten expression '0 @ (RHS <=> RHS)' for the
   /// rewritten overload resolution candidate '(LHS <=> RHS)'.
   struct RewrittenOverloadCandidateInfo {
+    /// The comparison operator '@' which is being rewritten.
+    BinaryOperatorKind OpKind;
+
+    /// The type of the rewritten operand. This coorisponds to the return type
+    /// of the selected function or builtin.
+    QualType RewrittenOperandType;
+
     /// The result of overload resolution for '(LHS <=> RHS) @ 0'.
     OverloadingResult Result;
 
@@ -1087,10 +1101,14 @@ class Sema;
     StorageT RewrittenOvlStorage;
 
     friend class OverloadCandidateSet;
-    RewrittenOverloadCandidateInfo(OverloadCandidateSet &Candidates,
+
+    RewrittenOverloadCandidateInfo(BinaryOperatorKind OpKind,
+                                   QualType RewrittenOperandType,
+                                   OverloadCandidateSet &Candidates,
                                    OverloadingResult Result,
                                    OverloadCandidateSet::iterator Best,
                                    OverloadCandidateSet &RewrittenCands);
+
     RewrittenOverloadCandidateInfo(RewrittenOverloadCandidateInfo const &) =
         delete;
   };

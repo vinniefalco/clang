@@ -9002,7 +9002,7 @@ void Sema::AddRewrittenOperatorCandidates(
           // FIXME(EricWF): What's the correct thing to do when the return
           // type can't be deduced.
             continue;
-        Ovl.RewrittenOperandType = FD->getReturnType();
+        RetTy = FD->getReturnType();
 
       } else {
         // Attempt to compute the comparison category type for a selected
@@ -9010,10 +9010,9 @@ void Sema::AddRewrittenOperatorCandidates(
         Optional<ComparisonCategoryType> CompType =
             ComparisonCategories::computeComparisonTypeForBuiltin(
                 Ovl.BuiltinParamTypes[0], Ovl.BuiltinParamTypes[1]);
-        if (!CompType ||
-            !ComparisonCategoryInfo::isUsableWithOperator(*CompType, Opc)) {
+        if (!CompType) {
           Ovl.Viable = false;
-          Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
+          Ovl.FailureKind = ovl_rewritten_builtin_operand_invalid;
           continue;
         }
         // FIXME(EricWF): Do something when we fail to find the declaration for
@@ -9022,21 +9021,18 @@ void Sema::AddRewrittenOperatorCandidates(
             Context.CompCategories.lookupInfo(*CompType);
         if (!Info) {
           Ovl.Viable = false;
-          Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
+          Ovl.FailureKind = ovl_rewritten_builtin_operand_return_type_not_found;
           continue;
         }
-        Ovl.RewrittenOperandType = Info->getType();
+        RetTy = Info->getType();
       }
       // continue;
-      assert(!Ovl.RewrittenOperandType.isNull());
-      assert(!Ovl.RewrittenOperandType->isDependentType() &&
-             !Ovl.RewrittenOperandType->isUndeducedType());
+      assert(!RetTy.isNull());
+      assert(!RetTy->isDependentType() && !RetTy->isUndeducedType());
       // RetTy = RetTy.getCanonicalType();
-      RewrittenOverloadCandidateInfo *Info =
-          CandidateSet.lookupRewrittenCandidateInCache(Ovl);
 
-      if (!Info) {
-
+      if ((Ovl.RewrittenInfo = CandidateSet.lookupRewrittenCandidateInfo(
+               Ovl, RetTy)) == nullptr) {
         // Build an opaque value expression representing the return type.
         OpaqueValueExpr RetObj(OpLoc, RetTy, VK_RValue);
         llvm::APInt I =
@@ -9054,20 +9050,19 @@ void Sema::AddRewrittenOperatorCandidates(
         LookupOverloadedBinOp(*this, RewrittenCandidateSet, OpLoc, Opc,
                               CmpOpFns, ThreeWayFuncsDummy, NewLHS, NewRHS,
                               /*AllowADL*/ true, /*AllowRewritten*/ false);
-
-        Info = CandidateSet.createRewrittenCandidateCache(
-            *this, Ovl, RewrittenCandidateSet);
+        Ovl.RewrittenInfo = CandidateSet.createRewrittenCandidateInfo(
+            *this, Ovl, RetTy, RewrittenCandidateSet);
       }
-      assert(Info);
+      assert(Ovl.RewrittenInfo);
 
-      switch (Info->Result) {
+      switch (Ovl.RewrittenInfo->Result) {
       case OR_Success:
-        assert(Info->hasRewrittenOvl());
+        assert(Ovl.RewrittenInfo->getRewrittenOvl());
         // FIXME(EricWF): Ensure rewritten equality and relational operators
         // have a return type which is convertible to bool.
         break;
       case OR_Deleted:
-        assert(Info->hasRewrittenOvl());
+        assert(Ovl.RewrittenInfo->getRewrittenOvl());
       case OR_No_Viable_Function:
       case OR_Ambiguous:
         Ovl.Viable = false;
@@ -9515,17 +9510,19 @@ void Sema::diagnoseEquivalentInternalLinkageDeclarations(
 }
 
 RewrittenOverloadCandidateInfo::RewrittenOverloadCandidateInfo(
+    BinaryOperatorKind OpKind, QualType RewrittenOperandType,
     OverloadCandidateSet &Candidates, OverloadingResult Result,
     OverloadCandidateSet::iterator Best, OverloadCandidateSet &RewrittenCands)
-    : Result(Result), HadMultipleCandidates(RewrittenCands.size() > 1),
+    : OpKind(OpKind), RewrittenOperandType(RewrittenOperandType),
+      Result(Result), HadMultipleCandidates(RewrittenCands.size() > 1),
       HasRewrittenOvl(false) {
   if (Best == RewrittenCands.end())
     return;
 
+  HasRewrittenOvl = true;
   OverloadCandidate &Rewritten = *Best;
   OverloadCandidate *NewCand = new (static_cast<void *>(&RewrittenOvlStorage))
       OverloadCandidate(Rewritten);
-  HasRewrittenOvl = true;
 
   unsigned NumConversions = Rewritten.Conversions.size();
 
@@ -9539,43 +9536,40 @@ RewrittenOverloadCandidateInfo::RewrittenOverloadCandidateInfo(
 }
 
 RewrittenOverloadCandidateInfo *
-OverloadCandidateSet::createRewrittenCandidateCache(
-    Sema &S, OverloadCandidate &ThisCand,
-    OverloadCandidateSet &RewrittenCands) {
+OverloadCandidateSet::createRewrittenCandidateInfo(
+    Sema &S, OverloadCandidate &ThisCand, BinaryOperatorKind OpKind,
+    QualType RewrittenOperandType, OverloadCandidateSet &RewrittenCands) {
   assert(ThisCand.getRewrittenKind() != ROC_None &&
          "not a rewritten candidate");
-  assert(!ThisCand.RewrittenOperandType.isNull() &&
-         "rewritten candidate operand type not set");
   assert(ThisCand.RewrittenInfo == nullptr &&
          "rewritten candidate already has rewritten information");
 
+  auto Key = std::make_pair(RewrittenOperandType,
+                            static_cast<unsigned>(ThisCand.getRewrittenKind()));
+
   // Lookup the
   iterator Best;
-  OverloadingResult OvlRes = RewrittenCands.BestViableFunction(S, Loc, Best);
-
+  OverloadingResult Result = RewrittenCands.BestViableFunction(S, Loc, Best);
   auto *Info = new (slabAllocate<RewrittenOverloadCandidateInfo>(1))
-      RewrittenOverloadCandidateInfo(*this, OvlRes, Best, RewrittenCands);
-
-  auto ItPair = RewrittenCandidateCache.try_emplace(
-      std::make_pair(ThisCand.RewrittenOperandType,
-                     static_cast<unsigned>(ThisCand.getRewrittenKind())),
-      Info);
-  assert(ItPair.second && "inserted value which is already present?");
-
-  return Info;
+      RewrittenOverloadCandidateInfo(OpKind, RewrittenOperandType, *this,
+                                     Result, Best, RewrittenCands);
+  auto ItPair = RewrittenCandidateCache.try_emplace(Key, Info);
+  assert(ItPair.second);
+  return ItPair.first->second;
 }
 
 RewrittenOverloadCandidateInfo *
-OverloadCandidateSet::lookupRewrittenCandidateInCache(
-    const OverloadCandidate &Cand) {
+OverloadCandidateSet::lookupRewrittenCandidateInfo(
+    OverloadCandidate &Cand, QualType RewrittenOperandType) {
   assert(Cand.getRewrittenKind() != ROC_None && "not a rewritten candidate");
-  assert(!Cand.RewrittenOperandType.isNull() &&
+  assert(!RewrittenOperandType.isNull() &&
          "rewritten candidate operand type not set");
   assert(Cand.RewrittenInfo == nullptr &&
          "rewritten candidate already has rewritten information");
-  return RewrittenCandidateCache.lookup(
-      std::make_pair(Cand.RewrittenOperandType,
-                     static_cast<unsigned>(Cand.getRewrittenKind())));
+  auto Key = std::make_pair(RewrittenOperandType,
+                            static_cast<unsigned>(Cand.getRewrittenKind()));
+
+  return RewrittenCandidateCache.lookup(Key);
 }
 
 /// Computes the best viable function (C++ 13.3.3)
@@ -10666,6 +10660,9 @@ static void NoteFunctionCandidate(Sema &S, OverloadCandidate *Cand,
     break;
   case ovl_rewritten_operand_non_valid_for_operator:
     DiagnoseFailedRewrittenOperand(S, Cand);
+    break;
+  case ovl_rewritten_builtin_operand_return_type_not_found:
+    // FIXME(EricWF): Produce a note?
     break;
   }
 }
