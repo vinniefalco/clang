@@ -9059,7 +9059,7 @@ void Sema::AddRewrittenOperatorCandidates(
                               /*AllowADL*/ true, /*AllowRewritten*/ false);
 
         Info = CandidateSet.createRewrittenCandidateCache(
-            Ovl, RetTy, RewrittenCandidateSet);
+            *this, Ovl, RetTy, RewrittenCandidateSet);
       }
       assert(Info);
 
