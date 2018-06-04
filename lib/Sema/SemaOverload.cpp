@@ -9518,15 +9518,17 @@ void Sema::diagnoseEquivalentInternalLinkageDeclarations(
 }
 
 RewrittenOverloadCandidateInfo::RewrittenOverloadCandidateInfo(
-    OverloadingResult Result, QualType RetTy, bool HadMultipleCandidates)
+    OverloadCandidateSet &Candidates, QualType ReturnType,
+    OverloadingResult Result,
+
+    OverloadCandidateSet::iterator Best,
+    const OverloadCandidateSet &RewrittenCands)
     : Result(Result), ReturnType(ReturnType),
-      HadMultipleCandidates(HadMultipleCandidates), HasRewrittenOvl(false) {}
+      HadMultipleCandidates(RewrittenCands.size() > 1), HasRewrittenOvl(false) {
+  if (Best == RewrittenCands.end())
+    return;
 
-void RewrittenOverloadCandidateInfo::setRewrittenOvl(
-    OverloadCandidateSet &Candidates, OverloadCandidate &&Rewritten) {
-  assert(!hasRewrittenOvl() && "rewritten overload already set");
-  HasRewrittenOvl = true;
-
+  OverloadCandidate &Rewritten = *Best;
   OverloadCandidate *NewCand = new (static_cast<void *>(&RewrittenOvlStorage))
       OverloadCandidate(Rewritten);
   HasRewrittenOvl = true;
@@ -9547,20 +9549,19 @@ OverloadCandidateSet::createRewrittenCandidateCache(
     Sema &S, OverloadCandidate &ThisCand, QualType ReturnType,
     OverloadCandidateSet &RewrittenCands) {
   assert(ThisCand.getRewrittenKind());
+
+  // Lookup the
   iterator Best;
   OverloadingResult OvlRes = RewrittenCands.BestViableFunction(S, Loc, Best);
 
-  std::pair<QualType, unsigned> Key(
-      ReturnType, static_cast<unsigned>(ThisCand.getRewrittenKind()));
-
   auto *Info = new (slabAllocate<RewrittenOverloadCandidateInfo>(1))
-      RewrittenOverloadCandidateInfo(OvlRes, ReturnType,
-                                     RewrittenCands.size() > 1);
+      RewrittenOverloadCandidateInfo(*this, ReturnType, OvlRes, Best,
+                                     RewrittenCands);
 
-  if (Best != RewrittenCands.end())
-    Info->setRewrittenOvl(*this, std::move(*Best));
-
-  auto ItPair = RewrittenCandidateCache.try_emplace(Key, Info);
+  auto ItPair = RewrittenCandidateCache.try_emplace(
+      std::make_pair(ReturnType,
+                     static_cast<unsigned>(ThisCand.getRewrittenKind())),
+      Info);
   assert(ItPair.second && "inserted value which is already present?");
 
   return Info;
@@ -9570,8 +9571,8 @@ RewrittenOverloadCandidateInfo *
 OverloadCandidateSet::lookupRewrittenCandidateInCache(
     RewrittenOverloadCandidateKind RewrittenKind, QualType Ty) {
   assert(RewrittenKind != ROC_None);
-  std::pair<QualType, unsigned> Key(Ty, static_cast<unsigned>(RewrittenKind));
-  return RewrittenCandidateCache.lookup(Key);
+  return RewrittenCandidateCache.lookup(
+      std::make_pair(Ty, static_cast<unsigned>(RewrittenKind)));
 }
 
 /// Computes the best viable function (C++ 13.3.3)
@@ -10531,16 +10532,16 @@ static void DiagnoseBadTarget(Sema &S, OverloadCandidate *Cand) {
 
 static void DiagnoseFailedRewrittenOperand(Sema &S, OverloadCandidate *Cand) {
   // FIXME(EricWF): Get the opcode we for the candidate.
-  assert(Cand && Cand->getRewrittenKind() && !Cand->ReturnType.isNull());
+  assert(Cand && Cand->getRewrittenKind() && Cand->RewrittenInfo);
   if (Cand->Function) {
     S.Diag(Cand->Function->getLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
-        << Cand->getRewrittenKind() << Cand->ReturnType;
+        << Cand->getRewrittenKind() << Cand->RewrittenInfo->ReturnType;
   } else {
     // FIXME(EricWF): Get a real source location for the builtin.
     S.Diag(SourceLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
-        << Cand->getRewrittenKind() << Cand->ReturnType;
+        << Cand->getRewrittenKind() << Cand->RewrittenInfo->ReturnType;
   }
 }
 

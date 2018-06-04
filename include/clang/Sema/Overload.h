@@ -720,8 +720,9 @@ class Sema;
     /// function.
     ovl_non_default_multiversion_function,
 
-    // Thes candidate was not viable because the return type of the rewritten
-    // expression was not a valid operand to the original binary operator.
+    /// This candidate was not viable because the return type of the rewritten
+    /// three-way operator was not a valid operand to the original binary
+    /// operator.
     ovl_rewritten_operand_non_valid_for_operator
   };
 
@@ -859,41 +860,6 @@ class Sema;
     RewrittenOverloadCandidateKind getRewrittenKind() const {
       return static_cast<RewrittenOverloadCandidateKind>(RewrittenOpKind);
     }
-  };
-
-  struct RewrittenOverloadCandidateInfo {
-    OverloadingResult Result;
-    QualType ReturnType;
-    bool HadMultipleCandidates : 1;
-
-  private:
-    bool HasRewrittenOvl : 1;
-    using StorageT = std::aligned_storage<sizeof(OverloadCandidate),
-                                          alignof(OverloadCandidate)>::type;
-    StorageT RewrittenOvlStorage;
-
-  public:
-    bool hasRewrittenOvl() const { return HasRewrittenOvl; }
-
-    const OverloadCandidate *getRewrittenOvl() const {
-      assert(hasRewrittenOvl());
-      return reinterpret_cast<const OverloadCandidate *>(&RewrittenOvlStorage);
-    }
-    OverloadCandidate *getRewrittenOvl() {
-      assert(hasRewrittenOvl());
-      return reinterpret_cast<OverloadCandidate *>(&RewrittenOvlStorage);
-    }
-
-  private:
-    friend class OverloadCandidateSet;
-    RewrittenOverloadCandidateInfo(OverloadingResult Result,
-                                   QualType ReturnType,
-                                   bool HadMultipleCandidates);
-    RewrittenOverloadCandidateInfo(RewrittenOverloadCandidateInfo const &) =
-        delete;
-
-    void setRewrittenOvl(OverloadCandidateSet &Candidates,
-                         OverloadCandidate &&Rewritten);
   };
 
   /// OverloadCandidateSet - A set of overload candidates, used in C++
@@ -1077,6 +1043,43 @@ class Sema;
                         SourceLocation Loc = SourceLocation(),
                         llvm::function_ref<bool(OverloadCandidate&)> Filter =
                           [](OverloadCandidate&) { return true; });
+  };
+
+  struct RewrittenOverloadCandidateInfo {
+    OverloadingResult Result;
+    QualType ReturnType;
+    bool HadMultipleCandidates : 1;
+
+  private:
+    bool HasRewrittenOvl : 1;
+    using StorageT = std::aligned_storage<sizeof(OverloadCandidate),
+                                          alignof(OverloadCandidate)>::type;
+    StorageT RewrittenOvlStorage;
+
+  public:
+    bool hasRewrittenOvl() const { return HasRewrittenOvl; }
+
+    const OverloadCandidate *getRewrittenOvl() const {
+      assert(hasRewrittenOvl());
+      return reinterpret_cast<const OverloadCandidate *>(&RewrittenOvlStorage);
+    }
+    OverloadCandidate *getRewrittenOvl() {
+      assert(hasRewrittenOvl());
+      return reinterpret_cast<OverloadCandidate *>(&RewrittenOvlStorage);
+    }
+
+  private:
+    friend class OverloadCandidateSet;
+    RewrittenOverloadCandidateInfo(OverloadCandidateSet &Candidates,
+                                   QualType ReturnType,
+                                   OverloadingResult Result,
+                                   OverloadCandidateSet::iterator Best,
+                                   const OverloadCandidateSet &RewrittenCands);
+    RewrittenOverloadCandidateInfo(RewrittenOverloadCandidateInfo const &) =
+        delete;
+
+    void setRewrittenOvl(OverloadCandidateSet &Candidates,
+                         OverloadCandidate &&Rewritten);
   };
 
   bool isBetterOverloadCandidate(Sema &S,
