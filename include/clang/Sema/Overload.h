@@ -899,6 +899,9 @@ class Sema;
 
     SmallVector<OverloadCandidate, 16> Candidates;
 
+    /// A cache representing the results of overload resolution for the
+    /// rewritten operand for a rewritten relational or equality operator
+    /// expression. FIXME(EricWF): Document this better.
     llvm::DenseMap<std::pair<QualType, unsigned>,
                    RewrittenOverloadCandidateInfo *>
         RewrittenCandidateCache;
@@ -1030,6 +1033,7 @@ class Sema;
       return C;
     }
 
+    // FIXME(EricWF): Document this
     RewrittenOverloadCandidateInfo *
     lookupRewrittenCandidateInCache(const OverloadCandidate &ThisCand);
 
@@ -1050,29 +1054,38 @@ class Sema;
                           [](OverloadCandidate&) { return true; });
   };
 
+  /// RewrittenOverloadCandidateInfo - Information representing the result of
+  /// overload resolution for the fully rewritten expression '(LHS <=> RHS) @ 0'
+  /// (or the reversed rewritten expression '0 @ (RHS <=> RHS)' for the
+  /// rewritten overload resolution candidate '(LHS <=> RHS)'.
   struct RewrittenOverloadCandidateInfo {
+    /// The result of overload resolution for '(LHS <=> RHS) @ 0'.
     OverloadingResult Result;
+
+    /// Whether the candidate set for '(LHS <=> RHS) @ 0' contained more than
+    /// one candidate.
     bool HadMultipleCandidates : 1;
 
-  private:
-    bool HasRewrittenOvl : 1;
-    using StorageT = std::aligned_storage<sizeof(OverloadCandidate),
-                                          alignof(OverloadCandidate)>::type;
-    StorageT RewrittenOvlStorage;
-
-  public:
-    bool hasRewrittenOvl() const { return HasRewrittenOvl; }
-
+    /// Returns the best overload candidate during overload resolution for
+    /// '(LHS <=> RHS) @ 0' if it exists.
     const OverloadCandidate *getRewrittenOvl() const {
-      assert(hasRewrittenOvl());
+      if (!HasRewrittenOvl)
+        return nullptr;
       return reinterpret_cast<const OverloadCandidate *>(&RewrittenOvlStorage);
     }
+
     OverloadCandidate *getRewrittenOvl() {
-      assert(hasRewrittenOvl());
+      if (!HasRewrittenOvl)
+        return nullptr;
       return reinterpret_cast<OverloadCandidate *>(&RewrittenOvlStorage);
     }
 
   private:
+    using StorageT = std::aligned_storage<sizeof(OverloadCandidate),
+                                          alignof(OverloadCandidate)>::type;
+    bool HasRewrittenOvl : 1;
+    StorageT RewrittenOvlStorage;
+
     friend class OverloadCandidateSet;
     RewrittenOverloadCandidateInfo(OverloadCandidateSet &Candidates,
                                    OverloadingResult Result,
@@ -1080,9 +1093,6 @@ class Sema;
                                    OverloadCandidateSet &RewrittenCands);
     RewrittenOverloadCandidateInfo(RewrittenOverloadCandidateInfo const &) =
         delete;
-
-    void setRewrittenOvl(OverloadCandidateSet &Candidates,
-                         OverloadCandidate &&Rewritten);
   };
 
   bool isBetterOverloadCandidate(Sema &S,
