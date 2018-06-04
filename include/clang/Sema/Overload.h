@@ -803,6 +803,7 @@ class Sema;
     /// If the candidate is a rewritten operator, this value represents the
     /// the result of overload resolution.
     RewrittenOverloadCandidateInfo *RewrittenInfo;
+    QualType ReturnType;
 
     /// hasAmbiguousConversion - Returns whether this overload
     /// candidate requires an ambiguous conversion or not.
@@ -1024,12 +1025,11 @@ class Sema;
       return C;
     }
 
-    RewrittenOverloadCandidateInfo *lookupRewrittenCandidateInCache(
-        RewrittenOverloadCandidateKind RewrittenKind, QualType Ty);
+    RewrittenOverloadCandidateInfo *
+    lookupRewrittenCandidateInCache(const OverloadCandidate &ThisCand);
 
     RewrittenOverloadCandidateInfo *
     createRewrittenCandidateCache(Sema &S, OverloadCandidate &ThisCand,
-                                  QualType ReturnType,
                                   OverloadCandidateSet &RewrittenCands);
 
     /// Find the best viable function on this overload set, if it exists.
@@ -1047,7 +1047,6 @@ class Sema;
 
   struct RewrittenOverloadCandidateInfo {
     OverloadingResult Result;
-    QualType ReturnType;
     bool HadMultipleCandidates : 1;
 
   private:
@@ -1071,7 +1070,6 @@ class Sema;
   private:
     friend class OverloadCandidateSet;
     RewrittenOverloadCandidateInfo(OverloadCandidateSet &Candidates,
-                                   QualType ReturnType,
                                    OverloadingResult Result,
                                    OverloadCandidateSet::iterator Best,
                                    const OverloadCandidateSet &RewrittenCands);

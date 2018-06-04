@@ -8997,15 +8997,13 @@ void Sema::AddRewrittenOperatorCandidates(
 
       QualType RetTy;
       if (FunctionDecl *FD = Ovl.Function) {
-        RetTy = FD->getReturnType();
-        if (RetTy->isUndeducedType()) {
+        if (FD->getReturnType()->isUndeducedType() &&
+            DeduceReturnType(FD, OpLoc))
           // FIXME(EricWF): What's the correct thing to do when the return
           // type can't be deduced.
-          if (DeduceReturnType(FD, OpLoc)) {
             continue;
-          }
-          RetTy = FD->getReturnType();
-        }
+        Ovl.ReturnType = FD->getReturnType();
+
       } else {
         // Attempt to compute the comparison category type for a selected
         // builtin function.
@@ -9027,18 +9025,17 @@ void Sema::AddRewrittenOperatorCandidates(
           Ovl.FailureKind = ovl_rewritten_operand_non_valid_for_operator;
           continue;
         }
-        RetTy = Info->getType();
+        Ovl.ReturnType = Info->getType();
       }
       // continue;
-      assert(!RetTy.isNull());
-      assert(!RetTy->isDependentType() && !RetTy->isUndeducedType());
+      assert(!Ovl.ReturnType.isNull());
+      assert(!Ovl.ReturnType->isDependentType() &&
+             !Ovl.ReturnType->isUndeducedType());
       // RetTy = RetTy.getCanonicalType();
       RewrittenOverloadCandidateInfo *Info =
-          CandidateSet.lookupRewrittenCandidateInCache(Ovl.getRewrittenKind(),
-                                                       RetTy);
+          CandidateSet.lookupRewrittenCandidateInCache(Ovl);
 
       if (!Info) {
-        assert(!RetTy.isNull() && !RetTy->isDependentType());
 
         // Build an opaque value expression representing the return type.
         OpaqueValueExpr RetObj(OpLoc, RetTy, VK_RValue);
@@ -9059,7 +9056,7 @@ void Sema::AddRewrittenOperatorCandidates(
                               /*AllowADL*/ true, /*AllowRewritten*/ false);
 
         Info = CandidateSet.createRewrittenCandidateCache(
-            *this, Ovl, RetTy, RewrittenCandidateSet);
+            *this, Ovl, RewrittenCandidateSet);
       }
       assert(Info);
 
@@ -9518,13 +9515,12 @@ void Sema::diagnoseEquivalentInternalLinkageDeclarations(
 }
 
 RewrittenOverloadCandidateInfo::RewrittenOverloadCandidateInfo(
-    OverloadCandidateSet &Candidates, QualType ReturnType,
-    OverloadingResult Result,
+    OverloadCandidateSet &Candidates, OverloadingResult Result,
 
     OverloadCandidateSet::iterator Best,
     const OverloadCandidateSet &RewrittenCands)
-    : Result(Result), ReturnType(ReturnType),
-      HadMultipleCandidates(RewrittenCands.size() > 1), HasRewrittenOvl(false) {
+    : Result(Result), HadMultipleCandidates(RewrittenCands.size() > 1),
+      HasRewrittenOvl(false) {
   if (Best == RewrittenCands.end())
     return;
 
@@ -9546,20 +9542,19 @@ RewrittenOverloadCandidateInfo::RewrittenOverloadCandidateInfo(
 
 RewrittenOverloadCandidateInfo *
 OverloadCandidateSet::createRewrittenCandidateCache(
-    Sema &S, OverloadCandidate &ThisCand, QualType ReturnType,
+    Sema &S, OverloadCandidate &ThisCand,
     OverloadCandidateSet &RewrittenCands) {
-  assert(ThisCand.getRewrittenKind());
+  assert(ThisCand.getRewrittenKind() && !ThisCand.ReturnType.isNull());
 
   // Lookup the
   iterator Best;
   OverloadingResult OvlRes = RewrittenCands.BestViableFunction(S, Loc, Best);
 
   auto *Info = new (slabAllocate<RewrittenOverloadCandidateInfo>(1))
-      RewrittenOverloadCandidateInfo(*this, ReturnType, OvlRes, Best,
-                                     RewrittenCands);
+      RewrittenOverloadCandidateInfo(*this, OvlRes, Best, RewrittenCands);
 
   auto ItPair = RewrittenCandidateCache.try_emplace(
-      std::make_pair(ReturnType,
+      std::make_pair(ThisCand.ReturnType,
                      static_cast<unsigned>(ThisCand.getRewrittenKind())),
       Info);
   assert(ItPair.second && "inserted value which is already present?");
@@ -10532,16 +10527,16 @@ static void DiagnoseBadTarget(Sema &S, OverloadCandidate *Cand) {
 
 static void DiagnoseFailedRewrittenOperand(Sema &S, OverloadCandidate *Cand) {
   // FIXME(EricWF): Get the opcode we for the candidate.
-  assert(Cand && Cand->getRewrittenKind() && Cand->RewrittenInfo);
+  assert(Cand && Cand->getRewrittenKind() && !Cand->ReturnType.isNull());
   if (Cand->Function) {
     S.Diag(Cand->Function->getLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
-        << Cand->getRewrittenKind() << Cand->RewrittenInfo->ReturnType;
+        << Cand->getRewrittenKind() << Cand->ReturnType;
   } else {
     // FIXME(EricWF): Get a real source location for the builtin.
     S.Diag(SourceLocation(),
            diag::note_ovl_rewritten_candidate_invalid_operator)
-        << Cand->getRewrittenKind() << Cand->RewrittenInfo->ReturnType;
+        << Cand->getRewrittenKind() << Cand->ReturnType;
   }
 }
 
