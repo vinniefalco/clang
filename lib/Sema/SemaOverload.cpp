@@ -9051,7 +9051,7 @@ void Sema::AddRewrittenOperatorCandidates(
                               CmpOpFns, ThreeWayFuncsDummy, NewLHS, NewRHS,
                               /*AllowADL*/ true, /*AllowRewritten*/ false);
         Ovl.RewrittenInfo = CandidateSet.createRewrittenCandidateInfo(
-            *this, Ovl, RetTy, RewrittenCandidateSet);
+            *this, Ovl, Opc, RetTy, RewrittenCandidateSet);
       }
       assert(Ovl.RewrittenInfo);
 
