@@ -10,7 +10,7 @@
 #include "Darwin.h"
 #include "Arch/ARM.h"
 #include "CommonArgs.h"
-#include "clang/Basic/AlignedAllocation.h"
+#include "clang/Basic/AllocationAvailability.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/VirtualFileSystem.h"
 #include "clang/Driver/Compilation.h"
@@ -1994,25 +1994,26 @@ void MachO::AddLinkRuntimeLibArgs(const ArgList &Args,
   AddLinkRuntimeLib(Args, CmdArgs, CompilerRT, RLO_IsEmbedded);
 }
 
-bool Darwin::isAlignedAllocationUnavailable() const {
-  llvm::Triple::OSType OS;
-
-  switch (TargetPlatform) {
-  case MacOS: // Earlier than 10.13.
-    OS = llvm::Triple::MacOSX;
-    break;
-  case IPhoneOS:
-    OS = llvm::Triple::IOS;
-    break;
-  case TvOS: // Earlier than 11.0.
-    OS = llvm::Triple::TvOS;
-    break;
-  case WatchOS: // Earlier than 4.0.
-    OS = llvm::Triple::WatchOS;
-    break;
+static llvm::Triple::OSType getOSType(const Darwin &TC) {
+  switch (TC.TargetPlatform) {
+  case Darwin::MacOS:
+    return llvm::Triple::MacOSX;
+  case Darwin::IPhoneOS:
+    return llvm::Triple::IOS;
+  case Darwin::TvOS:
+    return llvm::Triple::TvOS;
+  case Darwin::WatchOS:
+    return llvm::Triple::WatchOS;
   }
+  llvm_unreachable("unhandled case");
+}
 
-  return TargetVersion < alignedAllocMinVersion(OS);
+bool Darwin::isAlignedAllocationUnavailable() const {
+  return TargetVersion < alignedAllocMinVersion(getOSType(*this));
+}
+
+bool Darwin::isSizedDeallocationUnavailable() const {
+  return TargetVersion < sizedDeallocMinVersion(getOSType(*this));
 }
 
 void Darwin::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
@@ -2026,6 +2027,8 @@ void Darwin::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                                 options::OPT_nostdincxx) &&
       isAlignedAllocationUnavailable())
     CC1Args.push_back("-faligned-alloc-unavailable");
+  if (isSizedDeallocationUnavailable())
+    CC1Args.push_back("-fsized-deallocation-unavailable");
 }
 
 DerivedArgList *
