@@ -229,7 +229,7 @@ bool Sema::DiagnoseUseOfDecl(NamedDecl *D, ArrayRef<SourceLocation> Locs,
     if (FD->isMain())
       Diag(Loc, diag::ext_main_used);
 
-    DiagnoseUnavailableAllocationFunction(FD, Loc);
+    // DiagnoseUnavailableAllocationFunction(FD, Loc);
   }
 
   // See if this is an auto-typed variable whose initializer we are parsing.
