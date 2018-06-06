@@ -3334,8 +3334,11 @@ Sema::ActOnCXXDelete(SourceLocation StartLoc, bool UseGlobal,
       OperatorDelete = FindUsualDeallocationFunction(StartLoc, CanProvideSize,
                                                      Overaligned, DeleteName);
     }
-
-    MarkFunctionReferenced(StartLoc, OperatorDelete);
+    if (OperatorDelete) {
+      if (DiagnoseUseOfDecl(OperatorDelete, StartLoc))
+        return ExprError();
+      MarkFunctionReferenced(StartLoc, OperatorDelete);
+    }
 
     // Check access and ambiguity of destructor if we're going to call it.
     // Note that this is required even for a virtual delete.
@@ -3347,8 +3350,6 @@ Sema::ActOnCXXDelete(SourceLocation StartLoc, bool UseGlobal,
         IsVirtualDelete = Dtor->isVirtual();
       }
     }
-
-    DiagnoseUnavailableAllocationFunction(OperatorDelete, StartLoc);
 
     // Convert the operand to the type of the first parameter of operator
     // delete. This is only necessary if we selected a destroying operator
