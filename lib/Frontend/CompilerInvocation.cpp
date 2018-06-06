@@ -1980,6 +1980,7 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
   Opts.GNUKeywords = Opts.GNUMode;
   Opts.CXXOperatorNames = Opts.CPlusPlus;
 
+  Opts.SizedDeallocation = Opts.CPlusPlus14;
   Opts.AlignedAllocation = Opts.CPlusPlus17;
 
   Opts.DollarIdents = !Opts.AsmPreprocessor;
@@ -2404,7 +2405,11 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.NoMathBuiltin = Args.hasArg(OPT_fno_math_builtin);
   Opts.RelaxedTemplateTemplateArgs =
       Args.hasArg(OPT_frelaxed_template_template_args);
-  Opts.SizedDeallocation = Args.hasArg(OPT_fsized_deallocation);
+  Opts.SizedDeallocation =
+      Args.hasFlag(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
+                   Opts.SizedDeallocation);
+  if (Args.hasArg(OPT_fsized_deallocation_unavailable))
+    Opts.SizedDeallocation = false;
   Opts.AlignedAllocation =
       Args.hasFlag(OPT_faligned_allocation, OPT_fno_aligned_allocation,
                    Opts.AlignedAllocation);
