@@ -2022,13 +2022,16 @@ void Darwin::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
   // Pass "-faligned-alloc-unavailable" only when the user hasn't manually
   // enabled or disabled aligned allocations and hasn't specified a custom
   // standard library installation.
-  if (!DriverArgs.hasArgNoClaim(options::OPT_faligned_allocation,
-                                options::OPT_fno_aligned_allocation,
-                                options::OPT_nostdincxx) &&
-      isAlignedAllocationUnavailable())
-    CC1Args.push_back("-faligned-alloc-unavailable");
-  if (isSizedDeallocationUnavailable())
-    CC1Args.push_back("-fsized-deallocation-unavailable");
+  if (!DriverArgs.hasArgNoClaim(options::OPT_nostdincxx)) {
+    if (!DriverArgs.hasArgNoClaim(options::OPT_faligned_allocation,
+                                  options::OPT_fno_aligned_allocation) &&
+        isAlignedAllocationUnavailable())
+      CC1Args.push_back("-faligned-alloc-unavailable");
+    if (!DriverArgs.hasArgNoClaim(options::OPT_fsized_deallocation,
+                                  options::OPT_fno_sized_deallocation) &&
+        isSizedDeallocationUnavailable())
+      CC1Args.push_back("-fsized-deallocation-unavailable");
+  }
 }
 
 DerivedArgList *

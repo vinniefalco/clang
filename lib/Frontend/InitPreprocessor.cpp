@@ -530,7 +530,7 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
     Builder.defineMacro("__cpp_aggregate_nsdmi", "201304");
     Builder.defineMacro("__cpp_variable_templates", "201304");
   }
-  if (LangOpts.SizedDeallocation)
+  if (LangOpts.SizedDeallocation && !LangOpts.SizedDeallocationUnavailable)
     Builder.defineMacro("__cpp_sized_deallocation", "201309");
 
   // C++17 features.

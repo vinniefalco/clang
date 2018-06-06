@@ -1679,28 +1679,46 @@ static bool isLegalArrayNewInitializer(CXXNewExpr::InitializationStyle Style,
   return false;
 }
 
+enum AllocationFunctionKind {
+  AFK_None,
+  AFK_AlignedAllocation,
+  AFK_AlignedDeallocation,
+  AFK_SizedDeallocation
+};
+
 // Emit a diagnostic if an aligned allocation/deallocation function that is not
 // implemented in the standard library is selected.
-static void diagnoseUnavailableAlignedAllocation(const FunctionDecl &FD,
-                                                 SourceLocation Loc, bool IsDelete,
-                                                 Sema &S) {
-  if (!S.getLangOpts().AlignedAllocationUnavailable)
-    return;
-
+static void diagnoseUnavailableAllocationFunction(const FunctionDecl &FD,
+                                                  SourceLocation Loc,
+                                                  bool IsDelete, Sema &S) {
   // Return if there is a definition.
   if (FD.isDefined())
     return;
 
-  bool IsAligned = false;
-  if (FD.isReplaceableGlobalAllocationFunction(&IsAligned) && IsAligned) {
+  bool IsAligned = false, IsSizedDelete = false;
+  if (FD.isReplaceableGlobalAllocationFunction(&IsAligned, &IsSizedDelete)) {
+    // Figure out if the found allocation/deallocation function is unavailable
+    // and gather the required information for the diagnostic.
+    AllocationFunctionKind AllocKind;
+    if (IsAligned && S.getLangOpts().AlignedAllocationUnavailable)
+      AllocKind = IsDelete ? AFK_AlignedDeallocation : AFK_AlignedAllocation;
+    else if (IsSizedDelete && S.getLangOpts().SizedDeallocationUnavailable)
+      AllocKind = AFK_SizedDeallocation;
+    else
+      return; // nothing to do
+
     const llvm::Triple &T = S.getASTContext().getTargetInfo().getTriple();
+    VersionTuple MinVer = AllocKind == AFK_SizedDeallocation
+                              ? sizedDeallocMinVersion(T.getOS())
+                              : alignedAllocMinVersion(T.getOS());
     StringRef OSName = AvailabilityAttr::getPlatformNameSourceSpelling(
         S.getASTContext().getTargetInfo().getPlatformName());
 
-    S.Diag(Loc, diag::err_aligned_allocation_unavailable)
-        << IsDelete << FD.getType().getAsString() << OSName
-        << alignedAllocMinVersion(T.getOS()).getAsString();
-    S.Diag(Loc, diag::note_silence_unligned_allocation_unavailable);
+    S.Diag(Loc, diag::err_allocation_function_unavailable)
+        << (unsigned)AllocKind << FD.getType().getAsString() << OSName
+        << MinVer.getAsString();
+    S.Diag(Loc, diag::note_silence_allocation_function_unavailable)
+        << (unsigned)AllocKind;
   }
 }
 
@@ -2091,13 +2109,14 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
     if (DiagnoseUseOfDecl(OperatorNew, StartLoc))
       return ExprError();
     MarkFunctionReferenced(StartLoc, OperatorNew);
-    diagnoseUnavailableAlignedAllocation(*OperatorNew, StartLoc, false, *this);
+    diagnoseUnavailableAllocationFunction(*OperatorNew, StartLoc, false, *this);
   }
   if (OperatorDelete) {
     if (DiagnoseUseOfDecl(OperatorDelete, StartLoc))
       return ExprError();
     MarkFunctionReferenced(StartLoc, OperatorDelete);
-    diagnoseUnavailableAlignedAllocation(*OperatorDelete, StartLoc, true, *this);
+    diagnoseUnavailableAllocationFunction(*OperatorDelete, StartLoc, true,
+                                          *this);
   }
 
   // C++0x [expr.new]p17:
@@ -3329,8 +3348,8 @@ Sema::ActOnCXXDelete(SourceLocation StartLoc, bool UseGlobal,
       }
     }
 
-    diagnoseUnavailableAlignedAllocation(*OperatorDelete, StartLoc, true,
-                                         *this);
+    diagnoseUnavailableAllocationFunction(*OperatorDelete, StartLoc, true,
+                                          *this);
 
     // Convert the operand to the type of the first parameter of operator
     // delete. This is only necessary if we selected a destroying operator

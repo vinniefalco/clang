@@ -4359,12 +4359,15 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    options::OPT_fno_relaxed_template_template_args, false))
     CmdArgs.push_back("-frelaxed-template-template-args");
 
-  // -fsized-deallocation is off by default, as it is an ABI-breaking change for
-  // most platforms.
-  if (Args.hasFlag(options::OPT_fsized_deallocation,
-                   options::OPT_fno_sized_deallocation, false))
-    CmdArgs.push_back("-fsized-deallocation");
-
+  // -fsized-deallocation is on by default in C++14 onwards and otherwise off
+  // by default.
+  if (Arg *A = Args.getLastArg(options::OPT_fsized_deallocation,
+                               options::OPT_fno_sized_deallocation)) {
+    if (A->getOption().matches(options::OPT_fno_sized_deallocation))
+      CmdArgs.push_back("-fno-sized-deallocation");
+    else
+      CmdArgs.push_back("-fsized-deallocation");
+  }
   // -faligned-allocation is on by default in C++17 onwards and otherwise off
   // by default.
   if (Arg *A = Args.getLastArg(options::OPT_faligned_allocation,

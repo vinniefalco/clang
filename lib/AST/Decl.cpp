@@ -2746,7 +2746,8 @@ bool FunctionDecl::isReservedGlobalPlacementOperator() const {
   return (proto->getParamType(1).getCanonicalType() == Context.VoidPtrTy);
 }
 
-bool FunctionDecl::isReplaceableGlobalAllocationFunction(bool *IsAligned) const {
+bool FunctionDecl::isReplaceableGlobalAllocationFunction(
+    bool *IsAligned, bool *IsSizedDelete) const {
   if (getDeclName().getNameKind() != DeclarationName::CXXOperatorName)
     return false;
   if (getDeclName().getCXXOverloadedOperator() != OO_New &&
@@ -2781,12 +2782,14 @@ bool FunctionDecl::isReplaceableGlobalAllocationFunction(bool *IsAligned) const 
   };
 
   // In C++14, the next parameter can be a 'std::size_t' for sized delete.
-  bool IsSizedDelete = false;
+  bool MyIsSizedDelete = false;
+  if (!IsSizedDelete)
+    IsSizedDelete = &MyIsSizedDelete;
   if (Ctx.getLangOpts().SizedDeallocation &&
       (getDeclName().getCXXOverloadedOperator() == OO_Delete ||
        getDeclName().getCXXOverloadedOperator() == OO_Array_Delete) &&
       Ctx.hasSameType(Ty, Ctx.getSizeType())) {
-    IsSizedDelete = true;
+    *IsSizedDelete = true;
     Consume();
   }
 
@@ -2800,7 +2803,7 @@ bool FunctionDecl::isReplaceableGlobalAllocationFunction(bool *IsAligned) const 
 
   // Finally, if this is not a sized delete, the final parameter can
   // be a 'const std::nothrow_t&'.
-  if (!IsSizedDelete && !Ty.isNull() && Ty->isReferenceType()) {
+  if (!(*IsSizedDelete) && !Ty.isNull() && Ty->isReferenceType()) {
     Ty = Ty->getPointeeType();
     if (Ty.getCVRQualifiers() != Qualifiers::Const)
       return false;

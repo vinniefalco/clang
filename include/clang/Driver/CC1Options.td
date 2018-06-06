@@ -612,6 +612,9 @@ def fno_pch_timestamp : Flag<["-"], "fno-pch-timestamp">,
   
 def aligned_alloc_unavailable : Flag<["-"], "faligned-alloc-unavailable">,
   HelpText<"Aligned allocation/deallocation functions are unavailable">;
+def sized_deallocation_unavailable : Flag<["-"], "fsized-deallocation-unavailable">,
+  HelpText<"Sized deallocation functions are unavailable">;
+
 
 //===----------------------------------------------------------------------===//
 // Language Options

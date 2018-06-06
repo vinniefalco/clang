@@ -2165,7 +2165,9 @@ public:
   ///
   /// If this function is an aligned allocation/deallocation function, return
   /// true through IsAligned.
-  bool isReplaceableGlobalAllocationFunction(bool *IsAligned = nullptr) const;
+  bool
+  isReplaceableGlobalAllocationFunction(bool *IsAligned = nullptr,
+                                        bool *IsSizedDelete = nullptr) const;
 
   /// Determine whether this is a destroying operator delete.
   bool isDestroyingOperatorDelete() const;
