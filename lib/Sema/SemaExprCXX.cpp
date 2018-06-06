@@ -1719,7 +1719,7 @@ static void Sema::DiagnoseUnavailableAllocationFunction(const FunctionDecl *FD,
       Context.getTargetInfo().getPlatformName());
 
   Diag(Loc, diag::err_allocation_function_unavailable)
-      << (unsigned)AllocKind << FD.getType().getAsString() << OSName
+      << (unsigned)AllocKind << FD->getType().getAsString() << OSName
       << MinVer.getAsString();
   Diag(Loc, diag::note_silence_allocation_function_unavailable)
       << (unsigned)AllocKind;
