@@ -1687,8 +1687,8 @@ enum AllocationFunctionKind {
 
 // Emit a diagnostic if an aligned allocation/deallocation function that is not
 // implemented in the standard library is selected.
-static void Sema::DiagnoseUnavailableAllocationFunction(const FunctionDecl *FD,
-                                                        SourceLocation Loc) {
+void Sema::DiagnoseUnavailableAllocationFunction(const FunctionDecl *FD,
+                                                 SourceLocation Loc) {
   // Return if there is a definition.
   if (FD->isDefined())
     return;
