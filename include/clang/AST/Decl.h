@@ -34,6 +34,7 @@
 #include "clang/Basic/Visibility.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
@@ -2147,13 +2148,14 @@ public:
   /// This function must be an allocation or deallocation function.
   bool isReservedGlobalPlacementOperator() const;
 
-  enum AllocationFunctionClassification {
-    AFC_None = 0,
-    AFC_Allocation = 1 << 0,
-    AFC_Deallocation = 1 << 1,
-    AFC_Aligned = 1 << 2,
-    AFC_Sized = 1 << 3,
-    AFC_Array = 1 << 4
+  enum class AllocationFunctionClassification : unsigned {
+    None = 0,
+    Allocation = 1 << 0,
+    Deallocation = 1 << 1,
+    Aligned = 1 << 2,
+    Sized = 1 << 3,
+    Array = 1 << 4,
+    LLVM_BITMASK_LARGEST_ENUMERATOR = Array,
   };
 
   /// Determines whether this function is one of the replaceable
@@ -2177,7 +2179,8 @@ public:
   classifyReplaceableGlobalAllocationFunction() const;
 
   bool isReplaceableGlobalAllocationFunction() const {
-    return classifyReplaceableGlobalAllocationFunction() != AFC_None;
+    return classifyReplaceableGlobalAllocationFunction() !=
+           AllocationFunctionClassification::None;
   }
 
   /// Determine whether this is a destroying operator delete.

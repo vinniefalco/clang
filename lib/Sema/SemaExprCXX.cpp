@@ -1698,11 +1698,11 @@ static void Sema::DiagnoseUnavailableAllocationFunction(const FunctionDecl *FD,
     // Figure out if the found allocation/deallocation function is unavailable
     // and gather the required information for the diagnostic.
     AllocationFunctionKind AllocKind;
-    if ((Classify & AFC::AFC_Aligned) &&
+    if (bool(Classify & AFC::Aligned) &&
         getLangOpts().AlignedAllocationUnavailable)
-      AllocKind = (Classify & AFC::AFC_Allocation) ? AFK_AlignedAllocation
+      AllocKind = bool(Classify & AFC::Allocation) ? AFK_AlignedAllocation
                                                    : AFK_AlignedDeallocation;
-    else if ((Classify & (AFC::AFC_Sized | AFC::AFC_Deallocation)) &&
+    else if (bool(Classify & (AFC::Sized | AFC::Deallocation)) &&
              getLangOpts().SizedDeallocationUnavailable)
       AllocKind = AFK_SizedDeallocation;
     else
