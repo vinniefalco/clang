@@ -1705,7 +1705,7 @@ void Sema::DiagnoseUnavailableAllocationFunction(const FunctionDecl *FD,
       getLangOpts().AlignedAllocationUnavailable)
     AllocKind = bool(Classify & AFC::Allocation) ? AFK_AlignedAllocation
                                                  : AFK_AlignedDeallocation;
-  else if (bool(Classify & (AFC::Sized | AFC::Deallocation)) &&
+  else if (bool(Classify & AFC::Sized) &&
            getLangOpts().SizedDeallocationUnavailable)
     AllocKind = AFK_SizedDeallocation;
   else
