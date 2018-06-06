@@ -3348,7 +3348,7 @@ Sema::ActOnCXXDelete(SourceLocation StartLoc, bool UseGlobal,
       }
     }
 
-    DiagnoseUnavailableAllocationFunction(OperatorDelete, StartLoc, true);
+    DiagnoseUnavailableAllocationFunction(OperatorDelete, StartLoc);
 
     // Convert the operand to the type of the first parameter of operator
     // delete. This is only necessary if we selected a destroying operator
