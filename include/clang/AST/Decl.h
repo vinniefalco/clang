@@ -2157,7 +2157,8 @@ public:
   };
 
   /// Determines whether this function is one of the replaceable
-  /// global allocation functions:
+  /// global allocation functions, and classifies the kind of allocation or
+  /// deallocation function it is:
   ///    void *operator new(size_t);
   ///    void *operator new(size_t, const std::nothrow_t &) noexcept;
   ///    void *operator new[](size_t);
@@ -2172,10 +2173,12 @@ public:
   ///    An implementation is allowed to omit a call to a replaceable global
   ///    allocation function. [...]
   ///
-  /// If this function is an aligned allocation/deallocation function, return
-  /// true through IsAligned.
   AllocationFunctionClassification
   classifyReplaceableGlobalAllocationFunction() const;
+
+  bool isReplaceableGlobalAllocationFunction() const {
+    return classifyReplaceableGlobalAllocationFunction() != AFC_None;
+  }
 
   /// Determine whether this is a destroying operator delete.
   bool isDestroyingOperatorDelete() const;
