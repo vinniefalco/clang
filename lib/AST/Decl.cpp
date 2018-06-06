@@ -2757,10 +2757,10 @@ FunctionDecl::classifyReplaceableGlobalAllocationFunction() const {
       {OO_Array_New, AFC::Allocation & AFC::Array},
       {OO_Delete, AFC::Deallocation},
       {OO_Array_Delete, AFC::Deallocation & AFC::Array}};
-  auto It = llvm::find_if(
-      Classifications, [&](std::pair<OverloadedOperatorKind, unsigned> Info) {
-        return Info.first == OpKind;
-      });
+  auto It = llvm::find_if(Classifications,
+                          [&](std::pair<OverloadedOperatorKind, AFC> Info) {
+                            return Info.first == OpKind;
+                          });
   if (It == std::end(Classifications))
     return AFC::None;
 
