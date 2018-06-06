@@ -609,9 +609,11 @@ def find_pch_source_EQ : Joined<["-"], "find-pch-source=">,
            "to this flag.">;
 def fno_pch_timestamp : Flag<["-"], "fno-pch-timestamp">,
   HelpText<"Disable inclusion of timestamp in precompiled headers">;
-  
-def aligned_alloc_unavailable : Flag<["-"], "faligned-alloc-unavailable">,
+
+def aligned_allocation_unavailable : Flag<["-"], "faligned-allocation-unavailable">,
   HelpText<"Aligned allocation/deallocation functions are unavailable">;
+def sized_deallocation_unavailable : Flag<["-"], "fsized-deallocation-unavailable">,
+  HelpText<"Sized deallocation functions are unavailable">;
 
 //===----------------------------------------------------------------------===//
 // Language Options

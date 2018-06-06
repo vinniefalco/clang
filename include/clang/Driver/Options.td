@@ -1443,7 +1443,8 @@ def fno_relaxed_template_template_args : Flag<["-"], "fno-relaxed-template-templ
   Group<f_Group>;
 def fsized_deallocation : Flag<["-"], "fsized-deallocation">, Flags<[CC1Option]>,
   HelpText<"Enable C++14 sized global deallocation functions">, Group<f_Group>;
-def fno_sized_deallocation: Flag<["-"], "fno-sized-deallocation">, Group<f_Group>;
+def fno_sized_deallocation: Flag<["-"], "fno-sized-deallocation">, Flags<[CC1Option]>,
+  HelpText<"Disable C++14 sized global deallocation functions">, Group<f_Group>;
 def faligned_allocation : Flag<["-"], "faligned-allocation">, Flags<[CC1Option]>,
   HelpText<"Enable C++17 aligned allocation functions">, Group<f_Group>;
 def fno_aligned_allocation: Flag<["-"], "fno-aligned-allocation">,

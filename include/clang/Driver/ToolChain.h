@@ -104,6 +104,14 @@ public:
     RM_Disabled,
   };
 
+  using AvailableAllocKinds = uint64_t;
+  enum {
+    AAK_None = 0,
+    AAK_AlignedAllocation = 1 << 0,
+    AAK_SizedDeallocation = 1 << 1,
+    AAK_All = AAK_AlignedAllocation | AAK_SizedDeallocation
+  };
+
 private:
   friend class RegisterEffectiveTriple;
 
@@ -532,6 +540,11 @@ public:
 
   /// Return sanitizers which are enabled by default.
   virtual SanitizerMask getDefaultSanitizers() const { return 0; }
+
+  virtual AvailableAllocKinds
+  getAvailableAllocationFunctions(const llvm::opt::ArgList &Args) const {
+    return AAK_All;
+  }
 };
 
 /// Set a ToolChain's effective triple. Reset it when the registration object
