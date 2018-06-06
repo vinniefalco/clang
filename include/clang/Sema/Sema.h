@@ -5205,6 +5205,9 @@ public:
   FunctionDecl *FindDeallocationFunctionForDestructor(SourceLocation StartLoc,
                                                       CXXRecordDecl *RD);
 
+  void DiagnoseUnavailableAllocationFunction(const FunctionDecl *FD,
+                                             SourceLocation Loc);
+
   /// ActOnCXXDelete - Parsed a C++ 'delete' expression
   ExprResult ActOnCXXDelete(SourceLocation StartLoc,
                             bool UseGlobal, bool ArrayForm,

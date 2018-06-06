@@ -6420,7 +6420,7 @@ def warn_overaligned_type : Warning<
   "guarantees %2 bytes">,
   InGroup<OveralignedType>, DefaultIgnore;
 def err_allocation_function_unavailable : Error<
-  "%select{aligned allocation|aligned deallocation|sized deallocation}0 function"
+  "%select{aligned allocation|aligned deallocation|sized deallocation}0 function "
   "of type '%1' is only available on %2 %3 or newer">;
 def note_silence_allocation_function_unavailable : Note<
   "if you supply your own "

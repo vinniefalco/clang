@@ -1680,7 +1680,6 @@ static bool isLegalArrayNewInitializer(CXXNewExpr::InitializationStyle Style,
 }
 
 enum AllocationFunctionKind {
-  AFK_None,
   AFK_AlignedAllocation,
   AFK_AlignedDeallocation,
   AFK_SizedDeallocation
@@ -1688,36 +1687,38 @@ enum AllocationFunctionKind {
 
 // Emit a diagnostic if an aligned allocation/deallocation function that is not
 // implemented in the standard library is selected.
-static void diagnoseUnavailableAllocationFunction(const FunctionDecl &FD,
-                                                  SourceLocation Loc,
-                                                  bool IsDelete, Sema &S) {
+static void Sema::DiagnoseUnavailableAllocationFunction(const FunctionDecl *FD,
+                                                        SourceLocation Loc) {
   // Return if there is a definition.
-  if (FD.isDefined())
+  if (FD->isDefined())
     return;
 
-  bool IsAligned = false, IsSizedDelete = false;
-  if (FD.isReplaceableGlobalAllocationFunction(&IsAligned, &IsSizedDelete)) {
+  using AFC = FunctionDecl::AllocationFunctionClassification;
+  if (AFC Classify = FD->classifyReplaceableGlobalAllocationFunction()) {
     // Figure out if the found allocation/deallocation function is unavailable
     // and gather the required information for the diagnostic.
     AllocationFunctionKind AllocKind;
-    if (IsAligned && S.getLangOpts().AlignedAllocationUnavailable)
-      AllocKind = IsDelete ? AFK_AlignedDeallocation : AFK_AlignedAllocation;
-    else if (IsSizedDelete && S.getLangOpts().SizedDeallocationUnavailable)
+    if ((Classify & AFC::AFC_Aligned) &&
+        getLangOpts().AlignedAllocationUnavailable)
+      AllocKind = (Classify & AFC::AFC_Allocation) ? AFK_AlignedAllocation
+                                                   : AFK_AlignedDeallocation;
+    else if ((Classify & (AFC::AFC_Sized | AFC::AFC_Deallocation)) &&
+             getLangOpts().SizedDeallocationUnavailable)
       AllocKind = AFK_SizedDeallocation;
     else
       return; // nothing to do
 
-    const llvm::Triple &T = S.getASTContext().getTargetInfo().getTriple();
+    const llvm::Triple &T = Context.getTargetInfo().getTriple();
     VersionTuple MinVer = AllocKind == AFK_SizedDeallocation
                               ? sizedDeallocMinVersion(T.getOS())
                               : alignedAllocMinVersion(T.getOS());
     StringRef OSName = AvailabilityAttr::getPlatformNameSourceSpelling(
-        S.getASTContext().getTargetInfo().getPlatformName());
+        Context.getTargetInfo().getPlatformName());
 
-    S.Diag(Loc, diag::err_allocation_function_unavailable)
+    Diag(Loc, diag::err_allocation_function_unavailable)
         << (unsigned)AllocKind << FD.getType().getAsString() << OSName
         << MinVer.getAsString();
-    S.Diag(Loc, diag::note_silence_allocation_function_unavailable)
+    Diag(Loc, diag::note_silence_allocation_function_unavailable)
         << (unsigned)AllocKind;
   }
 }
@@ -2109,14 +2110,13 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
     if (DiagnoseUseOfDecl(OperatorNew, StartLoc))
       return ExprError();
     MarkFunctionReferenced(StartLoc, OperatorNew);
-    diagnoseUnavailableAllocationFunction(*OperatorNew, StartLoc, false, *this);
+    DiagnoseUnavailableAllocationFunction(OperatorNew, StartLoc, false);
   }
   if (OperatorDelete) {
     if (DiagnoseUseOfDecl(OperatorDelete, StartLoc))
       return ExprError();
     MarkFunctionReferenced(StartLoc, OperatorDelete);
-    diagnoseUnavailableAllocationFunction(*OperatorDelete, StartLoc, true,
-                                          *this);
+    DiagnoseUnavailableAllocationFunction(OperatorDelete, StartLoc, true);
   }
 
   // C++0x [expr.new]p17:
@@ -3348,8 +3348,7 @@ Sema::ActOnCXXDelete(SourceLocation StartLoc, bool UseGlobal,
       }
     }
 
-    diagnoseUnavailableAllocationFunction(*OperatorDelete, StartLoc, true,
-                                          *this);
+    DiagnoseUnavailableAllocationFunction(OperatorDelete, StartLoc, true);
 
     // Convert the operand to the type of the first parameter of operator
     // delete. This is only necessary if we selected a destroying operator

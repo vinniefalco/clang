@@ -2746,31 +2746,40 @@ bool FunctionDecl::isReservedGlobalPlacementOperator() const {
   return (proto->getParamType(1).getCanonicalType() == Context.VoidPtrTy);
 }
 
-bool FunctionDecl::isReplaceableGlobalAllocationFunction(
-    bool *IsAligned, bool *IsSizedDelete) const {
+FunctionDecl::AllocationFunctionClassification
+FunctionDecl::classifyReplaceableGlobalAllocationFunction() const {
   if (getDeclName().getNameKind() != DeclarationName::CXXOperatorName)
-    return false;
-  if (getDeclName().getCXXOverloadedOperator() != OO_New &&
-      getDeclName().getCXXOverloadedOperator() != OO_Delete &&
-      getDeclName().getCXXOverloadedOperator() != OO_Array_New &&
-      getDeclName().getCXXOverloadedOperator() != OO_Array_Delete)
-    return false;
+    return AFC_None;
+  OverloadedOperatorKind OpKind = getDeclName().getCXXOverloadedOperator();
+  std::pair<OverloadedOperatorKind, unsigned> Classifications[] = {
+      {OO_New, AFC_Allocation},
+      {OO_Array_New, AFC_Allocation & AFC_Array},
+      {OO_Delete, AFC_Deallocation},
+      {OO_Array_Delete, AFC_Deallocation & AFC_Array}};
+  auto It = llvm::find_if(
+      Classifications, [&](std::pair<OverloadedOperatorKind, unsigned> Info) {
+        return Info.first == OpKind;
+      });
+  if (It == std::end(Classifications))
+    return AFC_None;
+
+  AllocationFunctionClassification Result(It->second);
 
   if (isa<CXXRecordDecl>(getDeclContext()))
-    return false;
+    return AFC_None;
 
   // This can only fail for an invalid 'operator new' declaration.
   if (!getDeclContext()->getRedeclContext()->isTranslationUnit())
-    return false;
+    return AFC_None;
 
   const auto *FPT = getType()->castAs<FunctionProtoType>();
   if (FPT->getNumParams() == 0 || FPT->getNumParams() > 3 || FPT->isVariadic())
-    return false;
+    return AFC_None;
 
   // If this is a single-parameter function, it must be a replaceable global
   // allocation or deallocation function.
   if (FPT->getNumParams() == 1)
-    return true;
+    return AFC_None;
 
   unsigned Params = 1;
   QualType Ty = FPT->getParamType(Params);
@@ -2782,37 +2791,33 @@ bool FunctionDecl::isReplaceableGlobalAllocationFunction(
   };
 
   // In C++14, the next parameter can be a 'std::size_t' for sized delete.
-  bool MyIsSizedDelete = false;
-  if (!IsSizedDelete)
-    IsSizedDelete = &MyIsSizedDelete;
-  if (Ctx.getLangOpts().SizedDeallocation &&
-      (getDeclName().getCXXOverloadedOperator() == OO_Delete ||
-       getDeclName().getCXXOverloadedOperator() == OO_Array_Delete) &&
+  if (Ctx.getLangOpts().SizedDeallocation && (Result & AFC_Deallocation) &&
       Ctx.hasSameType(Ty, Ctx.getSizeType())) {
-    *IsSizedDelete = true;
+    Result &= AFC_Sized;
     Consume();
   }
 
   // In C++17, the next parameter can be a 'std::align_val_t' for aligned
   // new/delete.
   if (Ctx.getLangOpts().AlignedAllocation && !Ty.isNull() && Ty->isAlignValT()) {
-    if (IsAligned)
-      *IsAligned = true;
+    Result &= AFC_Aligned;
     Consume();
   }
 
   // Finally, if this is not a sized delete, the final parameter can
   // be a 'const std::nothrow_t&'.
-  if (!(*IsSizedDelete) && !Ty.isNull() && Ty->isReferenceType()) {
+  if (!(Result & AFC_Sized) && !Ty.isNull() && Ty->isReferenceType()) {
     Ty = Ty->getPointeeType();
     if (Ty.getCVRQualifiers() != Qualifiers::Const)
-      return false;
+      return AFC_None;
     const CXXRecordDecl *RD = Ty->getAsCXXRecordDecl();
     if (RD && isNamed(RD, "nothrow_t") && RD->isInStdNamespace())
       Consume();
   }
 
-  return Params == FPT->getNumParams();
+  if (Params != FPT->getNumParams())
+    return AFC_None;
+  return Result;
 }
 
 bool FunctionDecl::isDestroyingOperatorDelete() const {

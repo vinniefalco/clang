@@ -2147,6 +2147,15 @@ public:
   /// This function must be an allocation or deallocation function.
   bool isReservedGlobalPlacementOperator() const;
 
+  enum AllocationFunctionClassification {
+    AFC_None = 0,
+    AFC_Allocation = 1 << 0,
+    AFC_Deallocation = 1 << 1,
+    AFC_Aligned = 1 << 2,
+    AFC_Sized = 1 << 3,
+    AFC_Array = 1 << 4
+  };
+
   /// Determines whether this function is one of the replaceable
   /// global allocation functions:
   ///    void *operator new(size_t);
@@ -2165,9 +2174,8 @@ public:
   ///
   /// If this function is an aligned allocation/deallocation function, return
   /// true through IsAligned.
-  bool
-  isReplaceableGlobalAllocationFunction(bool *IsAligned = nullptr,
-                                        bool *IsSizedDelete = nullptr) const;
+  AllocationFunctionClassification
+  classifyReplaceableGlobalAllocationFunction() const;
 
   /// Determine whether this is a destroying operator delete.
   bool isDestroyingOperatorDelete() const;

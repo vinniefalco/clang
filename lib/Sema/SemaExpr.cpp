@@ -222,10 +222,21 @@ bool Sema::DiagnoseUseOfDecl(NamedDecl *D, ArrayRef<SourceLocation> Locs,
       Pos->second.clear();
     }
 
+    const auto *FD = cast<FunctionDecl>(D);
+
     // C++ [basic.start.main]p3:
     //   The function 'main' shall not be used within a program.
-    if (cast<FunctionDecl>(D)->isMain())
+    if (FD->isMain())
       Diag(Loc, diag::ext_main_used);
+
+    OverloadedOperatorKind NewDeleteOps[] = {OO_New, OO_Array_New, OO_Delete,
+                                             OO_Array_Delete};
+    auto It = llvm::find(NewDeleteOps, FD->getOverloadedOperator());
+    if (It != std::end(NewDeleteOps)) {
+      DiagnoseUnavailableAllocationFunction(FD, Loc,
+                                            /*IsDelete*/ *It == OO_Delete ||
+                                                *It == OO_Array_Delete);
+    }
   }
 
   // See if this is an auto-typed variable whose initializer we are parsing.
