@@ -2754,9 +2754,9 @@ FunctionDecl::classifyReplaceableGlobalAllocationFunction() const {
   OverloadedOperatorKind OpKind = getDeclName().getCXXOverloadedOperator();
   std::pair<OverloadedOperatorKind, AFC> Classifications[] = {
       {OO_New, AFC::Allocation},
-      {OO_Array_New, AFC::Allocation & AFC::Array},
+      {OO_Array_New, AFC::Allocation | AFC::Array},
       {OO_Delete, AFC::Deallocation},
-      {OO_Array_Delete, AFC::Deallocation & AFC::Array}};
+      {OO_Array_Delete, AFC::Deallocation | AFC::Array}};
   auto It = llvm::find_if(Classifications,
                           [&](std::pair<OverloadedOperatorKind, AFC> Info) {
                             return Info.first == OpKind;
@@ -2794,14 +2794,14 @@ FunctionDecl::classifyReplaceableGlobalAllocationFunction() const {
   // In C++14, the next parameter can be a 'std::size_t' for sized delete.
   if (Ctx.getLangOpts().SizedDeallocation && bool(Result & AFC::Deallocation) &&
       Ctx.hasSameType(Ty, Ctx.getSizeType())) {
-    Result &= AFC::Sized;
+    Result |= AFC::Sized;
     Consume();
   }
 
   // In C++17, the next parameter can be a 'std::align_val_t' for aligned
   // new/delete.
   if (Ctx.getLangOpts().AlignedAllocation && !Ty.isNull() && Ty->isAlignValT()) {
-    Result &= AFC::Aligned;
+    Result |= AFC::Aligned;
     Consume();
   }
 

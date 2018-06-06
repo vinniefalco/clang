@@ -64,6 +64,9 @@ void operator delete[](void*, size_t);
 void *operator new(size_t, void*, bool) throw(); // expected-note 1+ {{candidate function}}
 void *operator new[](size_t, void*, bool) throw();
 
+void operator delete(void *, size_t, std::align_val_t); // expected-note 1+ {{candidate}}
+void operator delete[](void *, size_t, std::align_val_t);
+
 void *NP = 0;
 
 void test_typo_in_args() {
