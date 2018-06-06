@@ -2533,6 +2533,9 @@ public:
   }
 };
 
+// Used by FunctionDecl::AllocationFunctionClassification
+LLVM_ENABLE_BITMASK_ENUMS_IN_NAMESPACE();
+
 /// Represents a member of a struct/union/class.
 class FieldDecl : public DeclaratorDecl, public Mergeable<FieldDecl> {
   unsigned BitField : 1;

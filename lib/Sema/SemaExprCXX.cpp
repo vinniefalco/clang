@@ -1694,33 +1694,35 @@ static void Sema::DiagnoseUnavailableAllocationFunction(const FunctionDecl *FD,
     return;
 
   using AFC = FunctionDecl::AllocationFunctionClassification;
-  if (AFC Classify = FD->classifyReplaceableGlobalAllocationFunction()) {
-    // Figure out if the found allocation/deallocation function is unavailable
-    // and gather the required information for the diagnostic.
-    AllocationFunctionKind AllocKind;
-    if (bool(Classify & AFC::Aligned) &&
-        getLangOpts().AlignedAllocationUnavailable)
-      AllocKind = bool(Classify & AFC::Allocation) ? AFK_AlignedAllocation
-                                                   : AFK_AlignedDeallocation;
-    else if (bool(Classify & (AFC::Sized | AFC::Deallocation)) &&
-             getLangOpts().SizedDeallocationUnavailable)
-      AllocKind = AFK_SizedDeallocation;
-    else
-      return; // nothing to do
+  AFC Classify = FD->classifyReplaceableGlobalAllocationFunction();
+  if (Classify == AFC::None)
+    return;
 
-    const llvm::Triple &T = Context.getTargetInfo().getTriple();
-    VersionTuple MinVer = AllocKind == AFK_SizedDeallocation
-                              ? sizedDeallocMinVersion(T.getOS())
-                              : alignedAllocMinVersion(T.getOS());
-    StringRef OSName = AvailabilityAttr::getPlatformNameSourceSpelling(
-        Context.getTargetInfo().getPlatformName());
+  // Figure out if the found allocation/deallocation function is unavailable
+  // and gather the required information for the diagnostic.
+  AllocationFunctionKind AllocKind;
+  if (bool(Classify & AFC::Aligned) &&
+      getLangOpts().AlignedAllocationUnavailable)
+    AllocKind = bool(Classify & AFC::Allocation) ? AFK_AlignedAllocation
+                                                 : AFK_AlignedDeallocation;
+  else if (bool(Classify & (AFC::Sized | AFC::Deallocation)) &&
+           getLangOpts().SizedDeallocationUnavailable)
+    AllocKind = AFK_SizedDeallocation;
+  else
+    return; // nothing to do
 
-    Diag(Loc, diag::err_allocation_function_unavailable)
-        << (unsigned)AllocKind << FD.getType().getAsString() << OSName
-        << MinVer.getAsString();
-    Diag(Loc, diag::note_silence_allocation_function_unavailable)
-        << (unsigned)AllocKind;
-  }
+  const llvm::Triple &T = Context.getTargetInfo().getTriple();
+  VersionTuple MinVer = AllocKind == AFK_SizedDeallocation
+                            ? sizedDeallocMinVersion(T.getOS())
+                            : alignedAllocMinVersion(T.getOS());
+  StringRef OSName = AvailabilityAttr::getPlatformNameSourceSpelling(
+      Context.getTargetInfo().getPlatformName());
+
+  Diag(Loc, diag::err_allocation_function_unavailable)
+      << (unsigned)AllocKind << FD.getType().getAsString() << OSName
+      << MinVer.getAsString();
+  Diag(Loc, diag::note_silence_allocation_function_unavailable)
+      << (unsigned)AllocKind;
 }
 
 ExprResult

@@ -2752,7 +2752,7 @@ FunctionDecl::classifyReplaceableGlobalAllocationFunction() const {
   if (getDeclName().getNameKind() != DeclarationName::CXXOperatorName)
     return AFC::None;
   OverloadedOperatorKind OpKind = getDeclName().getCXXOverloadedOperator();
-  std::pair<OverloadedOperatorKind, unsigned> Classifications[] = {
+  std::pair<OverloadedOperatorKind, AFC> Classifications[] = {
       {OO_New, AFC::Allocation},
       {OO_Array_New, AFC::Allocation & AFC::Array},
       {OO_Delete, AFC::Deallocation},
@@ -2792,7 +2792,7 @@ FunctionDecl::classifyReplaceableGlobalAllocationFunction() const {
   };
 
   // In C++14, the next parameter can be a 'std::size_t' for sized delete.
-  if (Ctx.getLangOpts().SizedDeallocation && (Result & AFC::Deallocation) &&
+  if (Ctx.getLangOpts().SizedDeallocation && bool(Result & AFC::Deallocation) &&
       Ctx.hasSameType(Ty, Ctx.getSizeType())) {
     Result &= AFC::Sized;
     Consume();
@@ -2807,7 +2807,7 @@ FunctionDecl::classifyReplaceableGlobalAllocationFunction() const {
 
   // Finally, if this is not a sized delete, the final parameter can
   // be a 'const std::nothrow_t&'.
-  if (!(Result & AFC::Sized) && !Ty.isNull() && Ty->isReferenceType()) {
+  if (!bool(Result & AFC::Sized) && !Ty.isNull() && Ty->isReferenceType()) {
     Ty = Ty->getPointeeType();
     if (Ty.getCVRQualifiers() != Qualifiers::Const)
       return AFC::None;
