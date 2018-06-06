@@ -309,9 +309,9 @@ void NaClToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
   CmdArgs.push_back("-lc++");
 }
 
-void NaClToolChain::addLibCxxIncludePaths(
-    const llvm::opt::ArgList &DriverArgs,
-    llvm::opt::ArgStringList &CC1Args) const {
+ToolChain::path_list NaClToolChain::getLibCxxIncludePaths(
+    const llvm::opt::ArgList &DriverArgs) const {
+  path_list Result;
   const Driver &D = getDriver();
 
   SmallString<128> P(D.Dir + "/../");
@@ -320,21 +320,23 @@ void NaClToolChain::addLibCxxIncludePaths(
     break;
   case llvm::Triple::arm:
     llvm::sys::path::append(P, "arm-nacl/include/c++/v1");
-    addSystemInclude(DriverArgs, CC1Args, P.str());
+    Result.push_back(P.str());
     break;
   case llvm::Triple::x86:
     llvm::sys::path::append(P, "x86_64-nacl/include/c++/v1");
-    addSystemInclude(DriverArgs, CC1Args, P.str());
+    Result.push_back(P.str());
     break;
   case llvm::Triple::x86_64:
     llvm::sys::path::append(P, "x86_64-nacl/include/c++/v1");
-    addSystemInclude(DriverArgs, CC1Args, P.str());
+    Result.push_back(P.str());
     break;
   case llvm::Triple::mipsel:
     llvm::sys::path::append(P, "mipsel-nacl/include/c++/v1");
-    addSystemInclude(DriverArgs, CC1Args, P.str());
+    Result.push_back(P.str());
     break;
   }
+
+  return Result;
 }
 
 ToolChain::CXXStdlibType

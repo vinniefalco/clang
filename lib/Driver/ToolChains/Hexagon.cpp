@@ -540,14 +540,12 @@ void HexagonToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   addExternCSystemInclude(DriverArgs, CC1Args, TargetDir + "/hexagon/include");
 }
 
-
-void HexagonToolChain::addLibStdCxxIncludePaths(
-    const llvm::opt::ArgList &DriverArgs,
-    llvm::opt::ArgStringList &CC1Args) const {
+ToolChain::path_list HexagonToolChain::getLibStdCxxIncludePaths(
+    const llvm::opt::ArgList &DriverArgs) const {
   const Driver &D = getDriver();
   std::string TargetDir = getHexagonTargetDir(D.InstalledDir, D.PrefixDirs);
-  addLibStdCXXIncludePaths(TargetDir, "/hexagon/include/c++", "", "", "", "",
-                           DriverArgs, CC1Args);
+  return getLibStdCXXIncludePaths(TargetDir, "/hexagon/include/c++", "", "", "",
+                                  "", DriverArgs);
 }
 
 ToolChain::CXXStdlibType

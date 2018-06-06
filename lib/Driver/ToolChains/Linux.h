@@ -27,12 +27,10 @@ public:
   void
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &CC1Args) const override;
-  void addLibCxxIncludePaths(
-      const llvm::opt::ArgList &DriverArgs,
-      llvm::opt::ArgStringList &CC1Args) const override;
-  void addLibStdCxxIncludePaths(
-      const llvm::opt::ArgList &DriverArgs,
-      llvm::opt::ArgStringList &CC1Args) const override;
+  path_list
+  getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const override;
+  path_list
+  getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const override;
   void AddCudaIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                           llvm::opt::ArgStringList &CC1Args) const override;
   void AddIAMCUIncludeArgs(const llvm::opt::ArgList &DriverArgs,
