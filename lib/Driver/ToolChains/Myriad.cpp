@@ -242,23 +242,23 @@ void MyriadToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
     addSystemInclude(DriverArgs, CC1Args, getDriver().SysRoot + "/include");
 }
 
-void MyriadToolChain::addLibCxxIncludePaths(
-    const llvm::opt::ArgList &DriverArgs,
-    llvm::opt::ArgStringList &CC1Args) const {
+ToolChain::path_list MyriadToolChain::getLibCxxIncludePaths(
+    const llvm::opt::ArgList &DriverArgs) const {
   std::string Path(getDriver().getInstalledDir());
-  addSystemInclude(DriverArgs, CC1Args, Path + "/../include/c++/v1");
+  path_list Result;
+  Result.push_back(Path + "/../include/c++/v1");
+  return Result;
 }
 
-void MyriadToolChain::addLibStdCxxIncludePaths(
-    const llvm::opt::ArgList &DriverArgs,
-    llvm::opt::ArgStringList &CC1Args) const {
+ToolChain::path_list MyriadToolChain::getLibStdCxxIncludePaths(
+    const llvm::opt::ArgList &DriverArgs) const {
   StringRef LibDir = GCCInstallation.getParentLibPath();
   const GCCVersion &Version = GCCInstallation.getVersion();
   StringRef TripleStr = GCCInstallation.getTriple().str();
   const Multilib &Multilib = GCCInstallation.getMultilib();
-  addLibStdCXXIncludePaths(
+  return getLibStdCXXIncludePaths(
       LibDir.str() + "/../" + TripleStr.str() + "/include/c++/" + Version.Text,
-      "", TripleStr, "", "", Multilib.includeSuffix(), DriverArgs, CC1Args);
+      "", TripleStr, "", "", Multilib.includeSuffix(), DriverArgs);
 }
 
 // MyriadToolChain handles several triples:

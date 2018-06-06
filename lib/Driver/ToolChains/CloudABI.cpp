@@ -106,11 +106,13 @@ CloudABI::CloudABI(const Driver &D, const llvm::Triple &Triple,
   getFilePaths().push_back(P.str());
 }
 
-void CloudABI::addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
-                                     llvm::opt::ArgStringList &CC1Args) const {
+ToolChain::path_list
+CloudABI::getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
   SmallString<128> P(getDriver().Dir);
   llvm::sys::path::append(P, "..", getTriple().str(), "include/c++/v1");
-  addSystemInclude(DriverArgs, CC1Args, P.str());
+  path_list Result;
+  Result.push_back(P.str());
+  return Result;
 }
 
 void CloudABI::AddCXXStdlibLibArgs(const ArgList &Args,

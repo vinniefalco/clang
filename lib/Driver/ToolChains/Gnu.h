@@ -295,6 +295,8 @@ public:
   llvm::opt::DerivedArgList *
   TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
                 Action::OffloadKind DeviceOffloadKind) const override;
+  AvailableAllocKinds getAvailableAllocationFunctions(
+      const llvm::opt::ArgList &Args) const override;
 
 protected:
   Tool *getTool(Action::ActionClass AC) const override;
@@ -316,23 +318,21 @@ protected:
       const llvm::opt::ArgList &DriverArgs,
       llvm::opt::ArgStringList &CC1Args) const override;
 
-  virtual void
-  addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
-                        llvm::opt::ArgStringList &CC1Args) const;
-  virtual void
-  addLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
-                           llvm::opt::ArgStringList &CC1Args) const;
+  virtual path_list
+  getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const;
+  virtual path_list
+  getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const;
 
-  bool addLibStdCXXIncludePaths(Twine Base, Twine Suffix, StringRef GCCTriple,
-                                StringRef GCCMultiarchTriple,
-                                StringRef TargetMultiarchTriple,
-                                Twine IncludeSuffix,
-                                const llvm::opt::ArgList &DriverArgs,
-                                llvm::opt::ArgStringList &CC1Args) const;
+  path_list
+  getLibStdCXXIncludePaths(Twine Base, Twine Suffix, StringRef GCCTriple,
+                           StringRef GCCMultiarchTriple,
+                           StringRef TargetMultiarchTriple, Twine IncludeSuffix,
+                           const llvm::opt::ArgList &DriverArgs) const;
 
   /// @}
 
 private:
+  int getLibcxxVersion(const llvm::opt::ArgList &Args) const;
   mutable std::unique_ptr<tools::gcc::Preprocessor> Preprocess;
   mutable std::unique_ptr<tools::gcc::Compiler> Compile;
 };

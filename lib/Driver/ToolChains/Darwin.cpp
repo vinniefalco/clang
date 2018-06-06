@@ -10,7 +10,7 @@
 #include "Darwin.h"
 #include "Arch/ARM.h"
 #include "CommonArgs.h"
-#include "clang/Basic/AlignedAllocation.h"
+#include "clang/Basic/AllocationAvailability.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/VirtualFileSystem.h"
 #include "clang/Driver/Compilation.h"
@@ -1994,32 +1994,31 @@ void MachO::AddLinkRuntimeLibArgs(const ArgList &Args,
   AddLinkRuntimeLib(Args, CmdArgs, CompilerRT, RLO_IsEmbedded);
 }
 
-bool Darwin::isAlignedAllocationUnavailable() const {
-  llvm::Triple::OSType OS;
-
-  switch (TargetPlatform) {
-  case MacOS: // Earlier than 10.13.
-    OS = llvm::Triple::MacOSX;
-    break;
-  case IPhoneOS:
-    OS = llvm::Triple::IOS;
-    break;
-  case TvOS: // Earlier than 11.0.
-    OS = llvm::Triple::TvOS;
-    break;
-  case WatchOS: // Earlier than 4.0.
-    OS = llvm::Triple::WatchOS;
-    break;
+static llvm::Triple::OSType getOSType(const Darwin &TC) {
+  switch (TC.TargetPlatform) {
+  case Darwin::MacOS:
+    return llvm::Triple::MacOSX;
+  case Darwin::IPhoneOS:
+    return llvm::Triple::IOS;
+  case Darwin::TvOS:
+    return llvm::Triple::TvOS;
+  case Darwin::WatchOS:
+    return llvm::Triple::WatchOS;
   }
+  llvm_unreachable("unhandled case");
+}
 
-  return TargetVersion < alignedAllocMinVersion(OS);
+bool Darwin::isAlignedAllocationUnavailable() const {
+  return TargetVersion < alignedAllocMinVersion(getOSType(*this));
+}
+
+bool Darwin::isSizedDeallocationUnavailable() const {
+  return TargetVersion < sizedDeallocMinVersion(getOSType(*this));
 }
 
 void Darwin::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                                    llvm::opt::ArgStringList &CC1Args,
                                    Action::OffloadKind DeviceOffloadKind) const {
-  if (isAlignedAllocationUnavailable())
-    CC1Args.push_back("-faligned-alloc-unavailable");
 }
 
 DerivedArgList *
@@ -2263,6 +2262,24 @@ void Darwin::CheckObjCARC() const {
       (isTargetMacOS() && !isMacosxVersionLT(10, 6)))
     return;
   getDriver().Diag(diag::err_arc_unsupported_on_toolchain);
+}
+
+ToolChain::AvailableAllocKinds
+Darwin::getAvailableAllocationFunctions(const llvm::opt::ArgList &Args) const {
+  if (Args.hasArgNoClaim(options::OPT_nostdincxx))
+    return AAK_All;
+  switch (GetCXXStdlibType(Args)) {
+  case CST_Libstdcxx:
+    return AAK_All;
+  case CST_Libcxx:
+    AvailableAllocKinds Result = AAK_None;
+    if (!isAlignedAllocationUnavailable())
+      Result |= AAK_AlignedAllocation;
+    if (!isSizedDeallocationUnavailable())
+      Result |= AAK_SizedDeallocation;
+    return Result;
+  }
+  llvm_unreachable("unhandled case");
 }
 
 SanitizerMask Darwin::getSupportedSanitizers() const {

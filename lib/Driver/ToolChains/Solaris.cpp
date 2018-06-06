@@ -257,13 +257,12 @@ void Solaris::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   addExternCSystemInclude(DriverArgs, CC1Args, D.SysRoot + "/usr/include");
 }
 
-void Solaris::addLibStdCxxIncludePaths(
-    const llvm::opt::ArgList &DriverArgs,
-    llvm::opt::ArgStringList &CC1Args) const {
+ToolChain::path_list
+Solaris::getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
   // We need a detected GCC installation on Solaris (similar to Linux)
   // to provide libstdc++'s headers.
   if (!GCCInstallation.isValid())
-    return;
+    return {};
 
   // By default, look for the C++ headers in an include directory adjacent to
   // the lib directory of the GCC installation.
@@ -274,9 +273,8 @@ void Solaris::addLibStdCxxIncludePaths(
   const GCCVersion &Version = GCCInstallation.getVersion();
 
   // The primary search for libstdc++ supports multiarch variants.
-  addLibStdCXXIncludePaths(LibDir.str() + "/../include", "/c++/" + Version.Text,
-                           TripleStr,
-                           /*GCCMultiarchTriple*/ "",
-                           /*TargetMultiarchTriple*/ "",
-                           Multilib.includeSuffix(), DriverArgs, CC1Args);
+  return getLibStdCXXIncludePaths(
+      LibDir.str() + "/../include", "/c++/" + Version.Text, TripleStr,
+      /*GCCMultiarchTriple*/ "",
+      /*TargetMultiarchTriple*/ "", Multilib.includeSuffix(), DriverArgs);
 }

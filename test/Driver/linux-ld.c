@@ -418,6 +418,15 @@
 // CHECK-GCC-VERSION5: "{{.*}}ld{{(.exe)?}}" "--sysroot=[[SYSROOT:[^"]+]]"
 // CHECK-GCC-VERSION5: "{{.*}}/Inputs/gcc_version_parsing5/bin/../lib/gcc/i386-unknown-linux/5{{/|\\\\}}crtbegin.o"
 // CHECK-GCC-VERSION5: "-L{{.*}}/Inputs/gcc_version_parsing5/bin/../lib/gcc/i386-unknown-linux/5"
+// RUN: %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
+// RUN:     --target=i386-unknown-linux -m32 \
+// RUN:     -ccc-install-dir %S/Inputs/gcc_version_parsing7/bin \
+// RUN:     --gcc-toolchain="" \
+// RUN:     --sysroot=%S/Inputs/basic_linux_tree \
+// RUN:   | FileCheck --check-prefix=CHECK-GCC-VERSION7 %s
+// CHECK-GCC-VERSION7: "{{.*}}ld{{(.exe)?}}" "--sysroot=[[SYSROOT:[^"]+]]"
+// CHECK-GCC-VERSION7: "{{.*}}/Inputs/gcc_version_parsing7/bin/../lib/gcc/i386-unknown-linux/7{{/|\\\\}}crtbegin.o"
+// CHECK-GCC-VERSION7: "-L{{.*}}/Inputs/gcc_version_parsing7/bin/../lib/gcc/i386-unknown-linux/7"
 //
 // Test a simulated installation of libc++ on Linux, both through sysroot and
 // the installation path of Clang.

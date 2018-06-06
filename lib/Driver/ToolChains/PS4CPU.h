@@ -63,12 +63,14 @@ public:
          const llvm::opt::ArgList &Args);
 
   // No support for finding a C++ standard library yet.
-  void addLibCxxIncludePaths(
-      const llvm::opt::ArgList &DriverArgs,
-      llvm::opt::ArgStringList &CC1Args) const override {}
-  void addLibStdCxxIncludePaths(
-      const llvm::opt::ArgList &DriverArgs,
-      llvm::opt::ArgStringList &CC1Args) const override {}
+  path_list
+  getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const override {
+    return {};
+  }
+  path_list getLibStdCxxIncludePaths(
+      const llvm::opt::ArgList &DriverArgs) const override {
+    return {};
+  }
 
   bool IsMathErrnoDefault() const override { return false; }
   bool IsObjCNonFragileABIDefault() const override { return true; }
