@@ -2763,7 +2763,7 @@ FunctionDecl::classifyReplaceableGlobalAllocationFunction() const {
   if (It == std::end(Classifications))
     return AFC_None;
 
-  AllocationFunctionClassification Result(It->second);
+  auto Result = static_cast<AllocationFunctionClassification>(It->second);
 
   if (isa<CXXRecordDecl>(getDeclContext()))
     return AFC_None;

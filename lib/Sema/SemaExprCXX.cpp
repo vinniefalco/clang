@@ -2110,13 +2110,11 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
     if (DiagnoseUseOfDecl(OperatorNew, StartLoc))
       return ExprError();
     MarkFunctionReferenced(StartLoc, OperatorNew);
-    DiagnoseUnavailableAllocationFunction(OperatorNew, StartLoc, false);
   }
   if (OperatorDelete) {
     if (DiagnoseUseOfDecl(OperatorDelete, StartLoc))
       return ExprError();
     MarkFunctionReferenced(StartLoc, OperatorDelete);
-    DiagnoseUnavailableAllocationFunction(OperatorDelete, StartLoc, true);
   }
 
   // C++0x [expr.new]p17:

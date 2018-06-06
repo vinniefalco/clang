@@ -229,14 +229,7 @@ bool Sema::DiagnoseUseOfDecl(NamedDecl *D, ArrayRef<SourceLocation> Locs,
     if (FD->isMain())
       Diag(Loc, diag::ext_main_used);
 
-    OverloadedOperatorKind NewDeleteOps[] = {OO_New, OO_Array_New, OO_Delete,
-                                             OO_Array_Delete};
-    auto It = llvm::find(NewDeleteOps, FD->getOverloadedOperator());
-    if (It != std::end(NewDeleteOps)) {
-      DiagnoseUnavailableAllocationFunction(FD, Loc,
-                                            /*IsDelete*/ *It == OO_Delete ||
-                                                *It == OO_Array_Delete);
-    }
+    DiagnoseUnavailableAllocationFunction(FD, Loc);
   }
 
   // See if this is an auto-typed variable whose initializer we are parsing.
