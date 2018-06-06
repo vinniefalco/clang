@@ -2780,7 +2780,7 @@ FunctionDecl::classifyReplaceableGlobalAllocationFunction() const {
   // If this is a single-parameter function, it must be a replaceable global
   // allocation or deallocation function.
   if (FPT->getNumParams() == 1)
-    return AFC::None;
+    return Result;
 
   unsigned Params = 1;
   QualType Ty = FPT->getParamType(Params);
