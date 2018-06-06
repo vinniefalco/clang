@@ -2498,6 +2498,23 @@ bool Generic_GCC::addLibStdCXXIncludePaths(
   return true;
 }
 
+ToolChain::AvailableAllocKinds Generic_GCC::getAvailableAllocationFunctions(
+    const llvm::opt::ArgList &Args) const {
+  // FIXME(EricWF): Should we do something different when -nostdlib is passed?
+  // What about when -L<my-super-secret-path-to-libstdcxx>?
+  switch (GetCXXStdlibType(Args)) {
+  case CST_Libcxx:
+    return AAK_All;
+  case CST_Libstdcxx:
+    // FIXME(EricWF): Find out when this was available
+    AvailableAllocKinds Result = AAK_AlignedAllocation;
+    if (!GCCInstallation.getVersion().isOlderThan(4, 99, 99))
+      Result |= AAK_SizedDeallocation;
+    return Result;
+  }
+  llvm_unreachable("unhandled case");
+}
+
 llvm::opt::DerivedArgList *
 Generic_GCC::TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef,
                            Action::OffloadKind DeviceOffloadKind) const {

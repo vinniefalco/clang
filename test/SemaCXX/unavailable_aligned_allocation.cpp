@@ -1,12 +1,12 @@
-// RUN: %clang_cc1 -triple x86_64-apple-macosx10.12.0 -fexceptions -faligned-alloc-unavailable -std=c++1z -verify %s
-// RUN: %clang_cc1 -triple x86_64-apple-macosx10.12.0 -fexceptions -std=c++1z -verify -DNO_ERRORS %s
-// RUN: %clang_cc1 -triple x86_64-apple-macosx10.12.0 -fexceptions -faligned-allocation -faligned-alloc-unavailable -std=c++14 -verify %s
-// RUN: %clang_cc1 -triple arm64-apple-ios10.0.0 -fexceptions -faligned-alloc-unavailable -std=c++1z -verify -DIOS %s
-// RUN: %clang_cc1 -triple arm64-apple-ios10.0.0 -fexceptions -std=c++1z -verify -DNO_ERRORS %s
-// RUN: %clang_cc1 -triple arm64-apple-tvos10.0.0 -fexceptions -faligned-alloc-unavailable -std=c++1z -verify -DTVOS %s
-// RUN: %clang_cc1 -triple arm64-apple-tvos10.0.0 -fexceptions -std=c++1z -verify -DNO_ERRORS %s
-// RUN: %clang_cc1 -triple armv7k-apple-watchos3.0.0 -fexceptions -faligned-alloc-unavailable -std=c++1z -verify -DWATCHOS %s
-// RUN: %clang_cc1 -triple armv7k-apple-watchos3.0.0 -fexceptions -std=c++1z -verify -DNO_ERRORS %s
+// RUN: %clang_cc1 -triple x86_64-apple-macosx10.12.0 -fexceptions -fno-sized-deallocation -faligned-allocation-unavailable -std=c++1z -verify %s
+// RUN: %clang_cc1 -triple x86_64-apple-macosx10.12.0 -fexceptions -fno-sized-deallocation -std=c++1z -verify -DNO_ERRORS %s
+// RUN: %clang_cc1 -triple x86_64-apple-macosx10.12.0 -fexceptions -fno-sized-deallocation -faligned-allocation -faligned-allocation-unavailable -std=c++14 -verify %s
+// RUN: %clang_cc1 -triple arm64-apple-ios10.0.0 -fexceptions -fno-sized-deallocation -faligned-allocation-unavailable -std=c++1z -verify -DIOS %s
+// RUN: %clang_cc1 -triple arm64-apple-ios10.0.0 -fexceptions -fno-sized-deallocation -std=c++1z -verify -DNO_ERRORS %s
+// RUN: %clang_cc1 -triple arm64-apple-tvos10.0.0 -fexceptions -fno-sized-deallocation -faligned-allocation-unavailable -std=c++1z -verify -DTVOS %s
+// RUN: %clang_cc1 -triple arm64-apple-tvos10.0.0 -fexceptions -fno-sized-deallocation -std=c++1z -verify -DNO_ERRORS %s
+// RUN: %clang_cc1 -triple armv7k-apple-watchos3.0.0 -fexceptions -fno-sized-deallocation -faligned-allocation-unavailable -std=c++1z -verify -DWATCHOS %s
+// RUN: %clang_cc1 -triple armv7k-apple-watchos3.0.0 -fexceptions -fno-sized-deallocation -std=c++1z -verify -DNO_ERRORS %s
 
 namespace std {
   typedef decltype(sizeof(0)) size_t;

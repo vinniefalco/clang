@@ -2019,19 +2019,6 @@ bool Darwin::isSizedDeallocationUnavailable() const {
 void Darwin::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                                    llvm::opt::ArgStringList &CC1Args,
                                    Action::OffloadKind DeviceOffloadKind) const {
-  // Pass "-faligned-alloc-unavailable" only when the user hasn't manually
-  // enabled or disabled aligned allocations and hasn't specified a custom
-  // standard library installation.
-  if (!DriverArgs.hasArgNoClaim(options::OPT_nostdincxx)) {
-    if (!DriverArgs.hasArgNoClaim(options::OPT_faligned_allocation,
-                                  options::OPT_fno_aligned_allocation) &&
-        isAlignedAllocationUnavailable())
-      CC1Args.push_back("-faligned-alloc-unavailable");
-    if (!DriverArgs.hasArgNoClaim(options::OPT_fsized_deallocation,
-                                  options::OPT_fno_sized_deallocation) &&
-        isSizedDeallocationUnavailable())
-      CC1Args.push_back("-fsized-deallocation-unavailable");
-  }
 }
 
 DerivedArgList *
@@ -2275,6 +2262,24 @@ void Darwin::CheckObjCARC() const {
       (isTargetMacOS() && !isMacosxVersionLT(10, 6)))
     return;
   getDriver().Diag(diag::err_arc_unsupported_on_toolchain);
+}
+
+ToolChain::AvailableAllocKinds
+Darwin::getAvailableAllocationFunctions(const llvm::opt::ArgList &Args) const {
+  if (Args.hasArgNoClaim(options::OPT_nostdincxx))
+    return AAK_All;
+  switch (GetCXXStdlibType(Args)) {
+  case CST_Libstdcxx:
+    return AAK_All;
+  case CST_Libcxx:
+    AvailableAllocKinds Result = AAK_None;
+    if (!isAlignedAllocationUnavailable())
+      Result |= AAK_AlignedAllocation;
+    if (!isSizedDeallocationUnavailable())
+      Result |= AAK_SizedDeallocation;
+    return Result;
+  }
+  llvm_unreachable("unhandled case");
 }
 
 SanitizerMask Darwin::getSupportedSanitizers() const {

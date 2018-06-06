@@ -295,6 +295,8 @@ public:
   llvm::opt::DerivedArgList *
   TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
                 Action::OffloadKind DeviceOffloadKind) const override;
+  AvailableAllocKinds getAvailableAllocationFunctions(
+      const llvm::opt::ArgList &Args) const override;
 
 protected:
   Tool *getTool(Action::ActionClass AC) const override;

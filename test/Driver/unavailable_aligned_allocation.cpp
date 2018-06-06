@@ -22,7 +22,7 @@
 // RUN: -c -### %s 2>&1 \
 // RUN:   | FileCheck %s -check-prefix=UNAVAILABLE
 //
-// UNAVAILABLE: "-faligned-alloc-unavailable"
+// UNAVAILABLE: "-faligned-allocation-unavailable"
 
 // RUN: %clang -target x86_64-apple-macosx10.13 -c -### %s 2>&1 \
 // RUN:   | FileCheck %s -check-prefix=AVAILABLE
@@ -52,7 +52,7 @@
 // RUN:   | FileCheck %s -check-prefix=AVAILABLE
 //
 // Check that passing -faligned-allocation, -fno-aligned-allocation, or
-// -nostdinc++ stops the driver from passing -faligned-alloc-unavailable to cc1.
+// -nostdinc++ stops the driver from passing -faligned-allocation-unavailable to cc1.
 //
 // RUN: %clang -target x86_64-apple-macosx10.12 -faligned-allocation -c -### %s 2>&1 \
 // RUN:   | FileCheck %s -check-prefix=AVAILABLE
@@ -63,4 +63,4 @@
 // RUN: %clang -target x86_64-apple-macosx10.12 -nostdinc++ -c -### %s 2>&1 \
 // RUN:   | FileCheck %s -check-prefix=AVAILABLE
 
-// AVAILABLE-NOT: "-faligned-alloc-unavailable"
+// AVAILABLE-NOT: "-faligned-allocation-unavailable"
