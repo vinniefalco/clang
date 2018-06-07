@@ -2411,23 +2411,10 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.SizedDeallocationExplicitlySpecified =
       Args.hasArg(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
                   OPT_sized_deallocation_unavailable);
-
   Opts.SizedDeallocation =
       Args.hasFlag(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
-                   Opts.SizedDeallocation) && !Args.hasArg(OPT_sized_deallocation_unavailable);
-
-  if (Opts.SizedDeallocation && !Opts.SizedDeallocationExplicitlySpecified) {
-    llvm::Triple Trip(TargetOpts.Triple);
-    if (reportUnavailableUsingOsName(Trip.getOS())) {
-      VersionTuple MinVer = alignedAllocMinVersion(Trip.getOS());
-      unsigned Maj, Min, Patch;
-      Trip.getOSVersion(Maj, Min, Patch);
-      VersionTuple Ver(Maj, Min, Patch);
-      if (Ver < MinVer)
-        Opts.SizedDeallocation = false;
-      Opts.SizedDeallocationExplicitlySpecified = true;
-    }
-  }
+                   Opts.SizedDeallocation) &&
+      !Args.hasArg(OPT_sized_deallocation_unavailable);
 
   Opts.AlignedAllocationExplicitlySpecified =
       Args.hasArg(OPT_faligned_allocation, OPT_fno_aligned_allocation,
@@ -2437,18 +2424,6 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
                    Opts.AlignedAllocation);
   Opts.AlignedAllocationUnavailable =
       Args.hasArg(OPT_aligned_allocation_unavailable);
-  if (Opts.AlignedAllocation && !Opts.AlignedAllocationExplicitlySpecified) {
-    llvm::Triple Trip(TargetOpts.Triple);
-    if (reportUnavailableUsingOsName(Trip.getOS())) {
-      VersionTuple MinVer = alignedAllocMinVersion(Trip.getOS());
-      unsigned Maj, Min, Patch;
-      Trip.getOSVersion(Maj, Min, Patch);
-      VersionTuple Ver(Maj, Min, Patch);
-      if (Ver < MinVer)
-        Opts.AlignedAllocationUnavailable = true;
-      Opts.AlignedAllocationExplicitlySpecified = true;
-    }
-  }
 
   Opts.NewAlignOverride =
       getLastArgIntValue(Args, OPT_fnew_alignment_EQ, 0, Diags);
@@ -2986,6 +2961,7 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
   Opts.FeaturesAsWritten = Args.getAllArgValues(OPT_target_feature);
   Opts.LinkerVersion = Args.getLastArgValue(OPT_target_linker_version);
   Opts.Triple = Args.getLastArgValue(OPT_triple);
+  Opts.GCCVersion = Args.getLangArgValue(OPT_target_gcc_version);
   // Use the default target triple if unspecified.
   if (Opts.Triple.empty())
     Opts.Triple = llvm::sys::getDefaultTargetTriple();

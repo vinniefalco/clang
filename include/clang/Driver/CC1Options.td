@@ -32,6 +32,8 @@ def target_abi : Separate<["-"], "target-abi">,
 
 def target_linker_version : Separate<["-"], "target-linker-version">,
   HelpText<"Target linker version">;
+def target_gcc_version : Separate<["-"], "target-gcc-version">,
+  HelpText<"The GCC installation version found by the driver">;
 def triple_EQ : Joined<["-"], "triple=">, Alias<triple>;
 def mfpmath : Separate<["-"], "mfpmath">,
   HelpText<"Which unit to use for fp math">;

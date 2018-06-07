@@ -2628,4 +2628,9 @@ void Generic_ELF::addClangTargetOptions(const ArgList &DriverArgs,
   if (DriverArgs.hasFlag(options::OPT_fuse_init_array,
                          options::OPT_fno_use_init_array, UseInitArrayDefault))
     CC1Args.push_back("-fuse-init-array");
+
+  if (GCCInstallation.isValid()) {
+    CC1Args.push_back("-target-libstdcxx-version");
+    CC1Args.push_back(DriverArgs.MakeArgString(V.Text));
+  }
 }

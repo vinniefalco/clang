@@ -41,6 +41,9 @@ public:
   /// If given, the name of the target ABI to use.
   std::string ABI;
 
+  /// If given, the GCC installation version found by the driver.
+  std::string GCCVersion;
+
   /// The EABI version to use
   llvm::EABI EABIVersion;
 
