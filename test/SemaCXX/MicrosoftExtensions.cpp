@@ -1,8 +1,8 @@
-// RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fms-extensions -fexceptions -fcxx-exceptions -DTEST1
-// RUN: %clang_cc1 -std=c++98 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fms-extensions -fexceptions -fcxx-exceptions -DTEST1
-// RUN: %clang_cc1 -std=c++11 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fms-extensions -fexceptions -fcxx-exceptions -DTEST1
-// RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fexceptions -fcxx-exceptions -DTEST2
-// RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -std=c++11 -fms-compatibility -verify -DTEST3
+// RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fms-extensions -fexceptions -fcxx-exceptions -fno-sized-deallocation -DTEST1
+// RUN: %clang_cc1 -std=c++98 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fms-extensions -fexceptions -fcxx-exceptions -fno-sized-deallocation -DTEST1
+// RUN: %clang_cc1 -std=c++11 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fms-extensions -fexceptions -fcxx-exceptions -fno-sized-deallocation -DTEST1
+// RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fexceptions -fcxx-exceptions -fno-sized-deallocation -DTEST2
+// RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -std=c++11 -fms-compatibility -fno-sized-deallocation -verify -DTEST3
 
 #if TEST1
 

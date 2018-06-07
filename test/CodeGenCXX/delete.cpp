@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10 %s -emit-llvm -o - | FileCheck %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin10 -std=c++14 -fno-sized-deallocation %s -emit-llvm -o - | FileCheck %s
 
 void t1(int *a) {
   delete a;

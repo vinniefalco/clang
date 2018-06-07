@@ -3,10 +3,11 @@
 // RUN: %clang_cc1 -std=c++11 -fsized-deallocation %s -emit-llvm -triple x86_64-linux-gnu -o - | FileCheck %s
 // RUN: %clang_cc1 -std=c++14 -fsized-deallocation %s -emit-llvm -triple x86_64-linux-gnu -o - | FileCheck %s
 
-// Check that we don't used sized deallocation without -fsized-deallocation and
-// C++14.
+// Check that we don't used sized deallocation without C++14, or when
+// -fsized-deallocation-unavailable or -fno-sized-deallocation is specified.
 // RUN: %clang_cc1 -std=c++11 %s -emit-llvm -triple x86_64-linux-gnu -o - | FileCheck %s --check-prefix=CHECK-UNSIZED
-// RUN: %clang_cc1 -std=c++14 %s -emit-llvm -triple x86_64-linux-gnu -o - | FileCheck %s --check-prefix=CHECK-UNSIZED
+// RUN: %clang_cc1 -std=c++14 %s -emit-llvm -fsized-deallocation-unavailable -triple x86_64-linux-gnu -o - | FileCheck %s --check-prefix=CHECK-UNSIZED
+// RUN: %clang_cc1 -std=c++14 %s -emit-llvm -fno-sized-deallocation -triple x86_64-linux-gnu -o - | FileCheck %s --check-prefix=CHECK-UNSIZED
 
 // CHECK-UNSIZED-NOT: _ZdlPvm
 // CHECK-UNSIZED-NOT: _ZdaPvm

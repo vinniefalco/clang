@@ -2407,9 +2407,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       Args.hasArg(OPT_frelaxed_template_template_args);
   Opts.SizedDeallocation =
       Args.hasFlag(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
-                   Opts.SizedDeallocation);
-  if (Args.hasArg(OPT_sized_deallocation_unavailable))
-    Opts.SizedDeallocation = false;
+                   Opts.SizedDeallocation) && !Args.hasArg(OPT_sized_deallocation_unavailable);
   Opts.AlignedAllocation =
       Args.hasFlag(OPT_faligned_allocation, OPT_fno_aligned_allocation,
                    Opts.AlignedAllocation);
