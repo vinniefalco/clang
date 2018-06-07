@@ -329,10 +329,20 @@ protected:
                            StringRef TargetMultiarchTriple, Twine IncludeSuffix,
                            const llvm::opt::ArgList &DriverArgs) const;
 
+  /// Get the version of the libc++ installation from the first __libcpp_version
+  /// file found in the searched header paths.
+  ///
+  /// If -nostdinc and -nostdinc++ haven't been specified, the paths returned by
+  /// getLibCxxIncludePaths() are searched first. Then the remaining paths all
+  /// the paths in the IncludePath_Group are searched.
+  ///
+  /// \return 0 if __libcpp_version isn't found, otherwise the value it
+  /// contained.
+  int getLibcxxVersion(const llvm::opt::ArgList &Args) const;
+
   /// @}
 
 private:
-  int getLibcxxVersion(const llvm::opt::ArgList &Args) const;
   mutable std::unique_ptr<tools::gcc::Preprocessor> Preprocess;
   mutable std::unique_ptr<tools::gcc::Compiler> Compile;
 };
