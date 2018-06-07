@@ -4366,9 +4366,12 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("-fno-sized-deallocation");
     else
       CmdArgs.push_back("-fsized-deallocation");
-  } else if (!(getToolChain().getAvailableAllocationFunctions(Args) &
+  }
+#if 0
+  else if (!(getToolChain().getAvailableAllocationFunctions(Args) &
                ToolChain::AAK_SizedDeallocation))
     CmdArgs.push_back("-fsized-deallocation-unavailable");
+#endif
 
   // -faligned-allocation is on by default in C++17 onwards and otherwise off
   // by default.
@@ -4379,9 +4382,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("-fno-aligned-allocation");
     else
       CmdArgs.push_back("-faligned-allocation");
-  } else if (!(getToolChain().getAvailableAllocationFunctions(Args) &
+  }
+
+#if 0
+  else if (!(getToolChain().getAvailableAllocationFunctions(Args) &
                ToolChain::AAK_AlignedAllocation))
     CmdArgs.push_back("-faligned-allocation-unavailable");
+#endif
 
   // The default new alignment can be specified using a dedicated option or via
   // a GCC-compatible option that also turns on aligned allocation.

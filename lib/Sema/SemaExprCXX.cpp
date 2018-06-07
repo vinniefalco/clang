@@ -12,7 +12,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "clang/Sema/SemaInternal.h"
 #include "TreeTransform.h"
 #include "TypeLocBuilder.h"
 #include "clang/AST/ASTContext.h"
@@ -27,6 +26,8 @@
 #include "clang/Basic/AllocationAvailability.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Lex/HeaderSearch.h"
+#include "clang/Lex/HeaderSearchOptions.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/Initialization.h"
@@ -34,6 +35,7 @@
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/ScopeInfo.h"
+#include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/SemaLambda.h"
 #include "clang/Sema/TemplateDeduction.h"
 #include "llvm/ADT/APInt.h"
@@ -1684,8 +1686,6 @@ static bool isLegalArrayNewInitializer(CXXNewExpr::InitializationStyle Style,
 static void diagnoseUnavailableAlignedAllocation(const FunctionDecl &FD,
                                                  SourceLocation Loc, bool IsDelete,
                                                  Sema &S) {
-  if (!S.getLangOpts().AlignedAllocationUnavailable)
-    return;
 
   // Return if there is a definition.
   if (FD.isDefined())
@@ -1694,13 +1694,24 @@ static void diagnoseUnavailableAlignedAllocation(const FunctionDecl &FD,
   bool IsAligned = false;
   if (FD.isReplaceableGlobalAllocationFunction(&IsAligned) && IsAligned) {
     using llvm::Triple;
+
     const Triple &T = S.getASTContext().getTargetInfo().getTriple();
-    StringRef OSName = AvailabilityAttr::getPlatformNameSourceSpelling(
+    StringRef Name = AvailabilityAttr::getPlatformNameSourceSpelling(
         S.getASTContext().getTargetInfo().getPlatformName());
-    VersionTuple MinVer = alignedAllocMinVersion(T.getOS());
+
+    bool UseLibcxx = S.getPreprocessor()
+                         .getHeaderSearchInfo()
+                         .getHeaderSearchOpts()
+                         .UseLibcxx;
+    bool ReportUsingOSName = reportUnavailableUsingOsName(T.getOS());
+    if (!ReportUsingOSName)
+      Name = UseLibcxx ? "libc++" : "libstdc++";
+    if (!S.getLangOpts().AlignedAllocationUnavailable)
+      return;
+    VersionTuple MinVer = alignedAllocMinVersion(T.getOS(), UseLibcxx);
     S.Diag(Loc, diag::warn_aligned_allocation_unavailable)
-        << IsDelete << FD.getType().getAsString()
-        << /*KnowMinVer*/ !MinVer.empty() << OSName << MinVer.getAsString();
+        << IsDelete << FD.getType().getAsString() << ReportUsingOSName << Name
+        << MinVer.getAsString();
     S.Diag(Loc, diag::note_silence_unligned_allocation_unavailable);
   }
 }

@@ -299,6 +299,10 @@ public:
     SystemHeaderPrefixes.assign(P.begin(), P.end());
   }
 
+  const std::vector<DirectoryLookup> &getSearchDirs() const {
+    return SearchDirs;
+  }
+
   /// Checks whether the map exists or not.
   bool HasIncludeAliasMap() const { return (bool)IncludeAliases; }
 

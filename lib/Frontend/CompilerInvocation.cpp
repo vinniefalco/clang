@@ -9,6 +9,7 @@
 
 #include "clang/Frontend/CompilerInvocation.h"
 #include "TestModuleFileExtension.h"
+#include "clang/Basic/AllocationAvailability.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/CommentOptions.h"
@@ -2077,6 +2078,7 @@ static const StringRef GetInputKindName(InputKind IK) {
 static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
                           const TargetOptions &TargetOpts,
                           PreprocessorOptions &PPOpts,
+                          HeaderSearchOptions &HSOpts,
                           DiagnosticsEngine &Diags) {
   // FIXME: Cleanup per-file based stuff.
   LangStandard::Kind LangStd = LangStandard::lang_unspecified;
@@ -2405,14 +2407,49 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.NoMathBuiltin = Args.hasArg(OPT_fno_math_builtin);
   Opts.RelaxedTemplateTemplateArgs =
       Args.hasArg(OPT_frelaxed_template_template_args);
+
+  Opts.SizedDeallocationExplicitlySpecified =
+      Args.hasArg(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
+                  OPT_sized_deallocation_unavailable);
+
   Opts.SizedDeallocation =
       Args.hasFlag(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
                    Opts.SizedDeallocation) && !Args.hasArg(OPT_sized_deallocation_unavailable);
+
+  if (Opts.SizedDeallocation && !Opts.SizedDeallocationExplicitlySpecified) {
+    llvm::Triple Trip(TargetOpts.Triple);
+    if (reportUnavailableUsingOsName(Trip.getOS())) {
+      VersionTuple MinVer = alignedAllocMinVersion(Trip.getOS());
+      unsigned Maj, Min, Patch;
+      Trip.getOSVersion(Maj, Min, Patch);
+      VersionTuple Ver(Maj, Min, Patch);
+      if (Ver < MinVer)
+        Opts.SizedDeallocation = false;
+      Opts.SizedDeallocationExplicitlySpecified = true;
+    }
+  }
+
+  Opts.AlignedAllocationExplicitlySpecified =
+      Args.hasArg(OPT_faligned_allocation, OPT_fno_aligned_allocation,
+                  OPT_aligned_allocation_unavailable);
   Opts.AlignedAllocation =
       Args.hasFlag(OPT_faligned_allocation, OPT_fno_aligned_allocation,
                    Opts.AlignedAllocation);
   Opts.AlignedAllocationUnavailable =
-      Opts.AlignedAllocation && Args.hasArg(OPT_aligned_allocation_unavailable);
+      Args.hasArg(OPT_aligned_allocation_unavailable);
+  if (Opts.AlignedAllocation && !Opts.AlignedAllocationExplicitlySpecified) {
+    llvm::Triple Trip(TargetOpts.Triple);
+    if (reportUnavailableUsingOsName(Trip.getOS())) {
+      VersionTuple MinVer = alignedAllocMinVersion(Trip.getOS());
+      unsigned Maj, Min, Patch;
+      Trip.getOSVersion(Maj, Min, Patch);
+      VersionTuple Ver(Maj, Min, Patch);
+      if (Ver < MinVer)
+        Opts.AlignedAllocationUnavailable = true;
+      Opts.AlignedAllocationExplicitlySpecified = true;
+    }
+  }
+
   Opts.NewAlignOverride =
       getLastArgIntValue(Args, OPT_fnew_alignment_EQ, 0, Diags);
   if (Opts.NewAlignOverride && !llvm::isPowerOf2_32(Opts.NewAlignOverride)) {
@@ -3026,7 +3063,7 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
     // Other LangOpts are only initialzed when the input is not AST or LLVM IR.
     // FIXME: Should we really be calling this for an InputKind::Asm input?
     ParseLangArgs(LangOpts, Args, DashX, Res.getTargetOpts(),
-                  Res.getPreprocessorOpts(), Diags);
+                  Res.getPreprocessorOpts(), Res.getHeaderSearchOpts(), Diags);
     if (Res.getFrontendOpts().ProgramAction == frontend::RewriteObjC)
       LangOpts.ObjCExceptions = 1;
   }

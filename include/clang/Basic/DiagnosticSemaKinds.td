@@ -6421,7 +6421,7 @@ def warn_overaligned_type : Warning<
   InGroup<OveralignedType>, DefaultIgnore;
 def warn_aligned_allocation_unavailable :Warning<
   "aligned %select{allocation|deallocation}0 function of type '%1' is "
-  "%select{unavailable|only available on %3 %4 or newer}2">,
+  "only available %select{with|on}2 %3 %4 or newer">,
   InGroup<AlignedAllocationUnavailable>, DefaultError;
 def note_silence_unligned_allocation_unavailable : Note<
   "if you supply your own aligned allocation functions, use "

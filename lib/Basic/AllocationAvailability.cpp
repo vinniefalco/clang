@@ -28,8 +28,8 @@ VersionTuple alignedAllocMinVersion(llvm::Triple::OSType OS, bool IsLibcxx) {
   switch (OS) {
   default:
     if (IsLibcxx)
-      return VersionTuple(4, 0, 0);
-    return VersionTuple(7, 0, 0);
+      return VersionTuple(4, 0);
+    return VersionTuple(7, 0);
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX: // Earliest supporting version is 10.13.
     return VersionTuple(10U, 13U);
@@ -47,8 +47,8 @@ VersionTuple sizedDeallocMinVersion(llvm::Triple::OSType OS, bool IsLibcxx) {
   switch (OS) {
   default:
     if (IsLibcxx)
-      return VersionTuple(4, 0, 0);
-    return VersionTuple(5, 0, 0);
+      return VersionTuple(4, 0);
+    return VersionTuple(5, 0);
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX: // Earliest supporting version is 10.12.
     return VersionTuple(10U, 12U);

@@ -206,6 +206,9 @@ public:
   /// input is a header file (i.e. -x c-header).
   bool IsHeaderFile = false;
 
+  bool AlignedAllocationExplicitlySpecified = false;
+  bool SizedDeallocationExplicitlySpecified = false;
+
   LangOptions();
 
   // Define accessors/mutators for language options of enumeration type.

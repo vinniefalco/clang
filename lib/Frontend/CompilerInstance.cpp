@@ -11,6 +11,7 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
+#include "clang/Basic/AllocationAvailability.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/FileManager.h"
@@ -28,6 +29,7 @@
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/Frontend/VerifyDiagnosticConsumer.h"
+#include "clang/Lex/DirectoryLookup.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/PTHManager.h"
 #include "clang/Lex/Preprocessor.h"
@@ -39,6 +41,7 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/CrashRecoveryContext.h"
 #include "llvm/Support/Errc.h"
+#include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/LockFileManager.h"
@@ -48,10 +51,12 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
+#include <memory>
 #include <sys/stat.h>
 #include <system_error>
 #include <time.h>
 #include <utility>
+#include <vector>
 
 using namespace clang;
 
@@ -959,6 +964,36 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
   // FIXME: We shouldn't need to do this, the target should be immutable once
   // created. This complexity should be lifted elsewhere.
   getTarget().adjust(getLangOpts());
+
+  HeaderSearch &HSearch = PP->getHeaderSearchInfo();
+  const std::vector<DirectoryLookup> &SearchDirs = HSearch.getSearchDirs();
+  int LibcxxVersion = 0;
+  if (getHeaderSearchOpts().UseLibcxx) {
+    for (const DirectoryLookup &DL : SearchDirs) {
+      if (!DL.isNormalDir())
+        continue;
+      const DirectoryEntry *Dir = DL.getDir();
+      std::string Path = Dir->getName();
+      Path += "/__libcpp_version";
+      llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FOr =
+          getVirtualFileSystem().getBufferForFile(Path);
+      if (!FOr)
+        continue;
+      llvm::MemoryBuffer *Buff = FOr.get().get();
+      LibcxxVersion = std::stoi(Buff->getBufferStart());
+      llvm::errs() << "Found Version = " << LibcxxVersion << "\n";
+      break;
+    }
+  } else {
+  }
+
+  if (getHeaderSearchOpts().UseLibcxx) {
+    LangOptions &LOpts = getLangOpts();
+    if (LOpts.AlignedAllocation &&
+        !LOpts.AlignedAllocationExplicitlySpecified) {
+      if ()
+    }
+  }
 
   // Adjust target options based on codegen options.
   getTarget().adjustTargetOptions(getCodeGenOpts(), getTargetOpts());
