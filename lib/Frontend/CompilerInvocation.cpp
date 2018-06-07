@@ -2961,7 +2961,7 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
   Opts.FeaturesAsWritten = Args.getAllArgValues(OPT_target_feature);
   Opts.LinkerVersion = Args.getLastArgValue(OPT_target_linker_version);
   Opts.Triple = Args.getLastArgValue(OPT_triple);
-  Opts.GCCVersion = Args.getLangArgValue(OPT_target_gcc_version);
+  Opts.GCCVersion = Args.getLastArgValue(OPT_target_gcc_version);
   // Use the default target triple if unspecified.
   if (Opts.Triple.empty())
     Opts.Triple = llvm::sys::getDefaultTargetTriple();

@@ -998,7 +998,6 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
         !LOpts.AlignedAllocationExplicitlySpecified) {
       VersionTuple MinVer = alignedAllocMinVersion(Trip.getOS());
       if (Ver < MinVer) {
-        LOpts.AlignedAllocationExplicitlySpecified = true;
         LOpts.AlignedAllocationUnavailable = true;
       }
     }
@@ -1006,7 +1005,6 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
         !LOpts.SizedDeallocationExplicitlySpecified) {
       VersionTuple MinVer = sizedDeallocMinVersion(Trip.getOS());
       if (Ver < MinVer) {
-        LOpts.SizedDeallocationExplicitlySpecified = true;
         LOpts.SizedDeallocation = false;
       }
     }
@@ -1020,7 +1018,6 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
           alignedAllocMinVersion(Trip.getOS(), /*IsLibcxx*/ true);
       if (Ver < MinVer) {
         LOpts.AlignedAllocationUnavailable = true;
-        LOpts.AlignedAllocationExplicitlySpecified = true;
       }
     }
     if (LOpts.SizedDeallocation &&
@@ -1029,11 +1026,11 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
           sizedDeallocMinVersion(Trip.getOS(), /*IsLibcxx*/ true);
       if (Ver < MinVer) {
         LOpts.SizedDeallocation = false;
-        LOpts.SizedDeallocationExplicitlySpecified = true;
       }
     }
-  } else {
-    llvm::errs() << "Linker Ver = " << getTargetOpts().LinkerVersion << "\n";
+  } else if (!getTargetOpts().GCCVersion.empty()) {
+    llvm::errs() << "GCC Version = " << getTargetOpts().GCCVersion << "\n";
+
     // FIXME(EricWF): Determine if we're targeting libstdc++, and if so what
     // version. Use that to enable/disable it.
   }
