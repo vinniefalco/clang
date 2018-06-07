@@ -4359,8 +4359,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    options::OPT_fno_relaxed_template_template_args, false))
     CmdArgs.push_back("-frelaxed-template-template-args");
 
-  // -fsized-deallocation is on by default in C++14 onwards and otherwise off
-  // by default.
+  // -fsized-deallocation is on by default in C++14 onwards and off otherwise.
   if (Arg *A = Args.getLastArg(options::OPT_fsized_deallocation,
                                options::OPT_fno_sized_deallocation)) {
     if (A->getOption().matches(options::OPT_fno_sized_deallocation))

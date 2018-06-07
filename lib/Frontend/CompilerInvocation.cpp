@@ -2408,13 +2408,13 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.SizedDeallocation =
       Args.hasFlag(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
                    Opts.SizedDeallocation);
-  if (Args.hasArg(OPT_fsized_deallocation_unavailable))
+  if (Args.hasArg(OPT_sized_deallocation_unavailable))
     Opts.SizedDeallocation = false;
   Opts.AlignedAllocation =
       Args.hasFlag(OPT_faligned_allocation, OPT_fno_aligned_allocation,
                    Opts.AlignedAllocation);
   Opts.AlignedAllocationUnavailable =
-      Opts.AlignedAllocation && Args.hasArg(OPT_aligned_alloc_unavailable);
+      Opts.AlignedAllocation && Args.hasArg(OPT_aligned_allocation_unavailable);
   Opts.NewAlignOverride =
       getLastArgIntValue(Args, OPT_fnew_alignment_EQ, 0, Diags);
   if (Opts.NewAlignOverride && !llvm::isPowerOf2_32(Opts.NewAlignOverride)) {

@@ -1693,13 +1693,14 @@ static void diagnoseUnavailableAlignedAllocation(const FunctionDecl &FD,
 
   bool IsAligned = false;
   if (FD.isReplaceableGlobalAllocationFunction(&IsAligned) && IsAligned) {
-    const llvm::Triple &T = S.getASTContext().getTargetInfo().getTriple();
+    using llvm::Triple;
+    const Triple &T = S.getASTContext().getTargetInfo().getTriple();
     StringRef OSName = AvailabilityAttr::getPlatformNameSourceSpelling(
         S.getASTContext().getTargetInfo().getPlatformName());
-
+    VersionTuple MinVer = alignedAllocMinVersion(T.getOS());
     S.Diag(Loc, diag::warn_aligned_allocation_unavailable)
-         << IsDelete << FD.getType().getAsString() << OSName
-         << alignedAllocMinVersion(T.getOS()).getAsString();
+        << IsDelete << FD.getType().getAsString()
+        << /*KnowMinVer*/ !MinVer.empty() << OSName << MinVer.getAsString();
     S.Diag(Loc, diag::note_silence_unligned_allocation_unavailable);
   }
 }

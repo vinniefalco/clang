@@ -541,6 +541,10 @@ public:
   /// Return sanitizers which are enabled by default.
   virtual SanitizerMask getDefaultSanitizers() const { return 0; }
 
+  /// Returns a mask representing the C++ allocation function kinds supported
+  /// by the C++ standard library selected by this toolchain.
+  /// For example C++14 sized deallocation and C++17 aligned allocation.
+  /// By default all allocation functions are assumed to be supported.
   virtual AvailableAllocKinds
   getAvailableAllocationFunctions(const llvm::opt::ArgList &Args) const {
     return AAK_All;

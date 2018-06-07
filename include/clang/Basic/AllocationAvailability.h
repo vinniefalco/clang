@@ -26,7 +26,7 @@ namespace clang {
 inline VersionTuple alignedAllocMinVersion(llvm::Triple::OSType OS) {
   switch (OS) {
   default:
-    break;
+    return VersionTuple();
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX: // Earliest supporting version is 10.13.
     return VersionTuple(10U, 13U);
@@ -43,7 +43,7 @@ inline VersionTuple alignedAllocMinVersion(llvm::Triple::OSType OS) {
 inline VersionTuple sizedDeallocMinVersion(llvm::Triple::OSType OS) {
   switch (OS) {
   default:
-    break;
+    VersionTuple();
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX: // Earliest supporting version is 10.12.
     return VersionTuple(10U, 12U);
