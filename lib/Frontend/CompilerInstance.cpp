@@ -987,12 +987,55 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
   } else {
   }
 
-  if (getHeaderSearchOpts().UseLibcxx) {
+  llvm::Triple Trip(getTargetOpts().Triple);
+  bool UseOSVersion = reportUnavailableUsingOsName(Trip.getOS());
+  if (UseOSVersion) {
+    LangOptions &LOpts = getLangOpts();
+    unsigned Maj, Min, Patch;
+    Trip.getOSVersion(Maj, Min, Patch);
+    VersionTuple Ver(Maj, Min, Patch);
+    if (LOpts.AlignedAllocation &&
+        !LOpts.AlignedAllocationExplicitlySpecified) {
+      VersionTuple MinVer = alignedAllocMinVersion(Trip.getOS());
+      if (Ver < MinVer) {
+        LOpts.AlignedAllocationExplicitlySpecified = true;
+        LOpts.AlignedAllocationUnavailable = true;
+      }
+    }
+    if (LOpts.SizedDeallocation &&
+        !LOpts.SizedDeallocationExplicitlySpecified) {
+      VersionTuple MinVer = sizedDeallocMinVersion(Trip.getOS());
+      if (Ver < MinVer) {
+        LOpts.SizedDeallocationExplicitlySpecified = true;
+        LOpts.SizedDeallocation = false;
+      }
+    }
+  } else if (getHeaderSearchOpts().UseLibcxx) {
+    VersionTuple Ver(LibcxxVersion / 1000, 0);
     LangOptions &LOpts = getLangOpts();
     if (LOpts.AlignedAllocation &&
         !LOpts.AlignedAllocationExplicitlySpecified) {
-      if ()
+      assert(!LOpts.AlignedAllocationUnavailable);
+      VersionTuple MinVer =
+          alignedAllocMinVersion(Trip.getOS(), /*IsLibcxx*/ true);
+      if (Ver < MinVer) {
+        LOpts.AlignedAllocationUnavailable = true;
+        LOpts.AlignedAllocationExplicitlySpecified = true;
+      }
     }
+    if (LOpts.SizedDeallocation &&
+        !LOpts.SizedDeallocationExplicitlySpecified) {
+      VersionTuple MinVer =
+          sizedDeallocMinVersion(Trip.getOS(), /*IsLibcxx*/ true);
+      if (Ver < MinVer) {
+        LOpts.SizedDeallocation = false;
+        LOpts.SizedDeallocationExplicitlySpecified = true;
+      }
+    }
+  } else {
+    llvm::errs() << "Linker Ver = " << getTargetOpts().LinkerVersion << "\n";
+    // FIXME(EricWF): Determine if we're targeting libstdc++, and if so what
+    // version. Use that to enable/disable it.
   }
 
   // Adjust target options based on codegen options.
