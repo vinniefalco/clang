@@ -934,7 +934,26 @@ bool CompilerInstance::InitializeSourceManager(
 }
 
 // High-Level Operations
+static VersionTuple parseGCCVersion(StringRef VersionText) {
+  VersionTuple BadVersion;
+  std::pair<StringRef, StringRef> First = VersionText.split('.');
+  std::pair<StringRef, StringRef> Second = First.second.split('.');
 
+  int Major, Minor, Patch;
+  if (First.first.getAsInteger(10, Major) || Major < 0)
+    return BadVersion;
+  if (First.second.empty())
+    return VersionTuple(Major);
+  StringRef MinorStr = Second.first;
+  if (MinorStr.getAsInteger(10, Minor) || Minor < 0)
+    return BadVersion;
+  if (Second.second.empty())
+    return VersionTuple(Major, Minor);
+  StringRef PatchStr = Second.second;
+  if (PatchStr.getAsInteger(10, Patch) || Patch < 0)
+    return BadVersion;
+  return VersionTuple(Major, Minor, Patch);
+}
 bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
   assert(hasDiagnostics() && "Diagnostics engine is not initialized!");
   assert(!getFrontendOpts().ShowHelp && "Client must handle '-help'!");
@@ -965,10 +984,10 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
   // created. This complexity should be lifted elsewhere.
   getTarget().adjust(getLangOpts());
 
-  HeaderSearch &HSearch = PP->getHeaderSearchInfo();
-  const std::vector<DirectoryLookup> &SearchDirs = HSearch.getSearchDirs();
   int LibcxxVersion = 0;
   if (getHeaderSearchOpts().UseLibcxx) {
+    HeaderSearch &HSearch = PP->getHeaderSearchInfo();
+    const std::vector<DirectoryLookup> &SearchDirs = HSearch.getSearchDirs();
     for (const DirectoryLookup &DL : SearchDirs) {
       if (!DL.isNormalDir())
         continue;
@@ -988,49 +1007,37 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
   }
 
   llvm::Triple Trip(getTargetOpts().Triple);
-  bool UseOSVersion = reportUnavailableUsingOsName(Trip.getOS());
-  if (UseOSVersion) {
-    LangOptions &LOpts = getLangOpts();
-    unsigned Maj, Min, Patch;
-    Trip.getOSVersion(Maj, Min, Patch);
-    VersionTuple Ver(Maj, Min, Patch);
-    if (LOpts.AlignedAllocation &&
-        !LOpts.AlignedAllocationExplicitlySpecified) {
-      VersionTuple MinVer = alignedAllocMinVersion(Trip.getOS());
-      if (Ver < MinVer) {
-        LOpts.AlignedAllocationUnavailable = true;
-      }
-    }
-    if (LOpts.SizedDeallocation &&
-        !LOpts.SizedDeallocationExplicitlySpecified) {
-      VersionTuple MinVer = sizedDeallocMinVersion(Trip.getOS());
-      if (Ver < MinVer) {
-        LOpts.SizedDeallocation = false;
-      }
-    }
-  } else if (getHeaderSearchOpts().UseLibcxx) {
-    VersionTuple Ver(LibcxxVersion / 1000, 0);
+  auto setOpts = [&](VersionTuple Ver, bool UseLibcxx) {
     LangOptions &LOpts = getLangOpts();
     if (LOpts.AlignedAllocation &&
         !LOpts.AlignedAllocationExplicitlySpecified) {
       assert(!LOpts.AlignedAllocationUnavailable);
-      VersionTuple MinVer =
-          alignedAllocMinVersion(Trip.getOS(), /*IsLibcxx*/ true);
+      VersionTuple MinVer = alignedAllocMinVersion(Trip.getOS(), UseLibcxx);
       if (Ver < MinVer) {
         LOpts.AlignedAllocationUnavailable = true;
       }
     }
     if (LOpts.SizedDeallocation &&
         !LOpts.SizedDeallocationExplicitlySpecified) {
-      VersionTuple MinVer =
-          sizedDeallocMinVersion(Trip.getOS(), /*IsLibcxx*/ true);
+      VersionTuple MinVer = sizedDeallocMinVersion(Trip.getOS(), UseLibcxx);
       if (Ver < MinVer) {
         LOpts.SizedDeallocation = false;
       }
     }
-  } else if (!getTargetOpts().GCCVersion.empty()) {
-    llvm::errs() << "GCC Version = " << getTargetOpts().GCCVersion << "\n";
+  };
 
+  bool UseOSVersion = reportUnavailableUsingOsName(Trip.getOS());
+  if (UseOSVersion) {
+    unsigned Maj, Min, Patch;
+    Trip.getOSVersion(Maj, Min, Patch);
+    VersionTuple Ver(Maj, Min, Patch);
+    setOpts(Ver, false);
+  } else if (getHeaderSearchOpts().UseLibcxx) {
+    VersionTuple Ver(LibcxxVersion / 1000, 0);
+    setOpts(Ver, true);
+  } else if (!getTargetOpts().GCCVersion.empty()) {
+    VersionTuple Ver = parseGCCVersion(getTargetOpts().GCCVersion);
+    setOpts(Ver, false);
     // FIXME(EricWF): Determine if we're targeting libstdc++, and if so what
     // version. Use that to enable/disable it.
   }
