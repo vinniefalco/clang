@@ -45,6 +45,7 @@ else()
 endif()
 
 add_clang_library(clangBasic
+  AllocationAvailability.cpp
   Attributes.cpp
   Builtins.cpp
   CharInfo.cpp

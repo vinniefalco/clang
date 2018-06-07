@@ -23,39 +23,15 @@
 
 namespace clang {
 
-inline VersionTuple alignedAllocMinVersion(llvm::Triple::OSType OS) {
-  switch (OS) {
-  default:
-    return VersionTuple();
-  case llvm::Triple::Darwin:
-  case llvm::Triple::MacOSX: // Earliest supporting version is 10.13.
-    return VersionTuple(10U, 13U);
-  case llvm::Triple::IOS:
-  case llvm::Triple::TvOS: // Earliest supporting version is 11.0.0.
-    return VersionTuple(11U);
-  case llvm::Triple::WatchOS: // Earliest supporting version is 4.0.0.
-    return VersionTuple(4U);
-  }
+/// Returns true if the OS name should be used when issuing diagnostics about
+/// unavailable allocation functions. Otherwise the STL name is used.
+bool reportUnavailableUsingOsName(llvm::Triple::OSType OS);
 
-  llvm_unreachable("Unexpected OS");
-}
+VersionTuple alignedAllocMinVersion(llvm::Triple::OSType OS,
+                                    bool IsLibcxx = false);
 
-inline VersionTuple sizedDeallocMinVersion(llvm::Triple::OSType OS) {
-  switch (OS) {
-  default:
-    VersionTuple();
-  case llvm::Triple::Darwin:
-  case llvm::Triple::MacOSX: // Earliest supporting version is 10.12.
-    return VersionTuple(10U, 12U);
-  case llvm::Triple::IOS:
-  case llvm::Triple::TvOS: // Earliest supporting version is 11.0.0.
-    return VersionTuple(10U);
-  case llvm::Triple::WatchOS: // Earliest supporting version is 4.0.0.
-    return VersionTuple(3U);
-  }
-
-  llvm_unreachable("Unexpected OS");
-}
+VersionTuple sizedDeallocMinVersion(llvm::Triple::OSType OS,
+                                    bool IsLibcxx = false);
 
 } // end namespace clang
 
