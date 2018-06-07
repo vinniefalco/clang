@@ -2630,7 +2630,13 @@ void Generic_ELF::addClangTargetOptions(const ArgList &DriverArgs,
     CC1Args.push_back("-fuse-init-array");
 
   if (GCCInstallation.isValid()) {
-    CC1Args.push_back("-target-libstdcxx-version");
-    CC1Args.push_back(DriverArgs.MakeArgString(V.Text));
+    std::string VerString;
+    assert(V.Major > 0 && V.Minor >= 0);
+    VerString += std::to_string(V.Major);
+    VerString += "." + std::to_string(V.Minor);
+    if (V.Patch >= 0)
+      VerString += "." + std::to_string(V.Patch);
+    CC1Args.push_back("-target-gcc-version");
+    CC1Args.push_back(DriverArgs.MakeArgString(VerString));
   }
 }
