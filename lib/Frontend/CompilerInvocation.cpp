@@ -3035,15 +3035,18 @@ static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
     Trip.getOSVersion(Maj, Min, Patch);
     VersionTuple Ver(Maj, Min, Patch);
     setOpts(Ver, false);
-  } else if (Invocation.getHeaderSearchOpts().UseLibcxx) {
-    setOpts(getLibcxxVersionFromFile(Invocation, TInfoPtr.get(), Diags), true);
-  } else {
-    // FIXME(EricWF): Ensure we're actually targeting libstdc++ and not MSVC or
-    // some other lib.
-    VersionTuple Ver;
-    Ver.tryParse(Invocation.getTargetOpts().GCCVersion);
-    setOpts(Ver, false);
+    return;
   }
+
+  VersionTuple StdlibVer =
+      getLibcxxVersionFromFile(Invocation, TInfoPtr.get(), Diags);
+  bool UseLibcxx =
+      Invocation.getHeaderSearchOpts().UseLibcxx || !StdlibVer.empty();
+  // FIXME(EricWF): Ensure we're actually targeting libstdc++ and not MSVC or
+  // some other lib.
+  if (!UseLibcxx && !Invocation.getTargetOpts().GCCVersion.empty())
+    StdlibVer.tryParse(Invocation.getTargetOpts().GCCVersion);
+  setOpts(StdlibVer, UseLibcxx);
 }
 
 bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
@@ -3158,7 +3161,7 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
     Diags.Report(diag::warn_drv_fine_grained_bitfield_accesses_ignored);
   }
 
-  // Adjust the LangOpts now that we have an complete CompilerInvocation
+  // Adjust the LangOpts now that we have an complete CompilerInvocation.
   adjustLangOpts(LangOpts, Args, Res, Diags);
 
   return Success;
