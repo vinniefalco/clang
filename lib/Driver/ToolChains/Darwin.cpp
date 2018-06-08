@@ -1994,33 +1994,6 @@ void MachO::AddLinkRuntimeLibArgs(const ArgList &Args,
   AddLinkRuntimeLib(Args, CmdArgs, CompilerRT, RLO_IsEmbedded);
 }
 
-static llvm::Triple::OSType getOSType(const Darwin &TC) {
-  switch (TC.TargetPlatform) {
-  case Darwin::MacOS:
-    return llvm::Triple::MacOSX;
-  case Darwin::IPhoneOS:
-    return llvm::Triple::IOS;
-  case Darwin::TvOS:
-    return llvm::Triple::TvOS;
-  case Darwin::WatchOS:
-    return llvm::Triple::WatchOS;
-  }
-  llvm_unreachable("unhandled case");
-}
-
-bool Darwin::isAlignedAllocationUnavailable() const {
-  return TargetVersion < alignedAllocMinVersion(getOSType(*this));
-}
-
-bool Darwin::isSizedDeallocationUnavailable() const {
-  return TargetVersion < sizedDeallocMinVersion(getOSType(*this));
-}
-
-void Darwin::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                                   llvm::opt::ArgStringList &CC1Args,
-                                   Action::OffloadKind DeviceOffloadKind) const {
-}
-
 DerivedArgList *
 Darwin::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
                       Action::OffloadKind DeviceOffloadKind) const {

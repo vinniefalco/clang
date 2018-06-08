@@ -408,20 +408,6 @@ protected:
     return TargetVersion < VersionTuple(V0, V1, V2);
   }
 
-  /// Return true if c++17 aligned allocation/deallocation functions are not
-  /// implemented in the c++ standard library of the deployment target we are
-  /// targeting.
-  bool isAlignedAllocationUnavailable() const;
-
-  /// Return true if C++14 sized deallocation functions are not
-  /// implemented in the C++ standard library of the deployment target we are
-  /// targeting.
-  bool isSizedDeallocationUnavailable() const;
-
-  void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                             llvm::opt::ArgStringList &CC1Args,
-                             Action::OffloadKind DeviceOffloadKind) const override;
-
   StringRef getPlatformFamily() const;
   StringRef getOSLibraryNameSuffix() const;
 
