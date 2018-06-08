@@ -3029,8 +3029,9 @@ static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
       Opts.SizedDeallocation = false;
   };
 
-  bool UseOSVersion = reportUnavailableUsingOsName(Trip.getOS());
-  if (UseOSVersion) {
+  // On Darwin, the availability of allocation functions is determined using
+  // the OS version.
+  if (reportUnavailableUsingOsName(Trip.getOS())) {
     unsigned Maj, Min, Patch;
     Trip.getOSVersion(Maj, Min, Patch);
     VersionTuple Ver(Maj, Min, Patch);
@@ -3038,15 +3039,34 @@ static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
     return;
   }
 
+  // FIXME(EricWF): CC1 doesn't have enough information to determine what
+  // STL version is actually being used. For now we make a best effort
+  // to guess, but this admits plenty of exceptions.
+
+  // Assume if
+  if (Args.hasArg(options::OPT_nostdlib, options::OPT_nostdlibxx))
+    return;
+
+  // Attempt to determine if we have libc++ by looking for the __libcpp_version
+  // file.
   VersionTuple StdlibVer =
       getLibcxxVersionFromFile(Invocation, TInfoPtr.get(), Diags);
-  bool UseLibcxx =
-      Invocation.getHeaderSearchOpts().UseLibcxx || !StdlibVer.empty();
+
+  // Either -stdlib=libc++ was specified or we found a __libcpp_version file,
+  // Set the allocation function language options by comparing the found
+  // version against the required libc++ versions.
+  if (Invocation.getHeaderSearchOpts().UseLibcxx || !StdlibVer.empty()) {
+    setOpts(StdlibVer, /*UseLibcxx*/true);
+    return;
+  }
+
+  // Otherwise, if the driver passed -target-gcc-version assume we're
   // FIXME(EricWF): Ensure we're actually targeting libstdc++ and not MSVC or
   // some other lib.
-  if (!UseLibcxx && !Invocation.getTargetOpts().GCCVersion.empty())
+  if (!Invocation.getTargetOpts().GCCVersion.empty()) {
     StdlibVer.tryParse(Invocation.getTargetOpts().GCCVersion);
-  setOpts(StdlibVer, UseLibcxx);
+    setOpts(StdlibVer, /*UseLibcxx*/false);
+  }
 }
 
 bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
