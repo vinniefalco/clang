@@ -93,19 +93,18 @@ MipsLLVMToolChain::GetCXXStdlibType(const ArgList &Args) const {
   return ToolChain::CST_Libcxx;
 }
 
-ToolChain::path_list MipsLLVMToolChain::getLibCxxIncludePaths(
-    const llvm::opt::ArgList &DriverArgs) const {
-  path_list Result;
+void MipsLLVMToolChain::addLibCxxIncludePaths(
+    const llvm::opt::ArgList &DriverArgs,
+    llvm::opt::ArgStringList &CC1Args) const {
   if (const auto &Callback = Multilibs.includeDirsCallback()) {
     for (std::string Path : Callback(SelectedMultilib)) {
       Path = getDriver().getInstalledDir() + Path + "/c++/v1";
       if (llvm::sys::fs::exists(Path)) {
-        Result.push_back(Path);
-        return Result;
+        addSystemInclude(DriverArgs, CC1Args, Path);
+        return;
       }
     }
   }
-  return Result;
 }
 
 void MipsLLVMToolChain::AddCXXStdlibLibArgs(const ArgList &Args,

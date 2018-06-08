@@ -27,10 +27,12 @@ public:
     return getTriple().getArch() == llvm::Triple::x86_64;
   }
 
-  path_list
-  getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const override;
-  path_list
-  getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const override;
+  void addLibCxxIncludePaths(
+      const llvm::opt::ArgList &DriverArgs,
+      llvm::opt::ArgStringList &CC1Args) const override;
+  void addLibStdCxxIncludePaths(
+      const llvm::opt::ArgList &DriverArgs,
+      llvm::opt::ArgStringList &CC1Args) const override;
 };
 
 } // end namespace toolchains

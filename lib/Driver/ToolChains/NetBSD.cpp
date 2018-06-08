@@ -411,17 +411,16 @@ ToolChain::CXXStdlibType NetBSD::GetDefaultCXXStdlibType() const {
   return ToolChain::CST_Libstdcxx;
 }
 
-ToolChain::path_list
-NetBSD::getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
-  path_list Result;
-  Result.push_back(getDriver().SysRoot + "/usr/include/c++/");
-  return Result;
+void NetBSD::addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                   llvm::opt::ArgStringList &CC1Args) const {
+  addSystemInclude(DriverArgs, CC1Args,
+                   getDriver().SysRoot + "/usr/include/c++/");
 }
 
-ToolChain::path_list
-NetBSD::getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
-  return getLibStdCXXIncludePaths(getDriver().SysRoot, "/usr/include/g++", "",
-                                  "", "", "", DriverArgs);
+void NetBSD::addLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                      llvm::opt::ArgStringList &CC1Args) const {
+  addLibStdCXXIncludePaths(getDriver().SysRoot, "/usr/include/g++", "", "", "",
+                           "", DriverArgs, CC1Args);
 }
 
 llvm::ExceptionHandling NetBSD::GetExceptionModel(const ArgList &Args) const {

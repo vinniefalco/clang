@@ -800,9 +800,8 @@ static std::string DetectLibcxxIncludePath(StringRef base) {
   return MaxVersion ? (base + "/" + MaxVersionString).str() : "";
 }
 
-ToolChain::path_list
-Linux::getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
-  path_list Result;
+void Linux::addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                  llvm::opt::ArgStringList &CC1Args) const {
   const std::string& SysRoot = computeSysRoot();
   const std::string LibCXXIncludePathCandidates[] = {
       DetectLibcxxIncludePath(getDriver().Dir + "/../include/c++"),
@@ -815,19 +814,17 @@ Linux::getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
     if (IncludePath.empty() || !getVFS().exists(IncludePath))
       continue;
     // Use the first candidate that exists.
-    Result.push_back(IncludePath);
-    break;
+    addSystemInclude(DriverArgs, CC1Args, IncludePath);
+    return;
   }
-  return Result;
 }
 
-ToolChain::path_list
-Linux::getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
+void Linux::addLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                     llvm::opt::ArgStringList &CC1Args) const {
   // We need a detected GCC installation on Linux to provide libstdc++'s
   // headers.
-  path_list Result;
   if (!GCCInstallation.isValid())
-    return Result;
+    return;
 
   // By default, look for the C++ headers in an include directory adjacent to
   // the lib directory of the GCC installation. Note that this is expect to be
@@ -843,12 +840,11 @@ Linux::getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
   const GCCVersion &Version = GCCInstallation.getVersion();
 
   // The primary search for libstdc++ supports multiarch variants.
-  Result = getLibStdCXXIncludePaths(LibDir.str() + "/../include",
-                                    "/c++/" + Version.Text, TripleStr,
-                                    GCCMultiarchTriple, TargetMultiarchTriple,
-                                    Multilib.includeSuffix(), DriverArgs);
-  if (!Result.empty())
-    return Result;
+  if (addLibStdCXXIncludePaths(LibDir.str() + "/../include",
+                               "/c++/" + Version.Text, TripleStr,
+                               GCCMultiarchTriple, TargetMultiarchTriple,
+                               Multilib.includeSuffix(), DriverArgs, CC1Args))
+    return;
 
   // Otherwise, fall back on a bunch of options which don't use multiarch
   // layouts for simplicity.
@@ -867,14 +863,12 @@ Linux::getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
   };
 
   for (const auto &IncludePath : LibStdCXXIncludePathCandidates) {
-    Result = getLibStdCXXIncludePaths(IncludePath, /*Suffix*/ "", TripleStr,
-                                      /*GCCMultiarchTriple*/ "",
-                                      /*TargetMultiarchTriple*/ "",
-                                      Multilib.includeSuffix(), DriverArgs);
-    if (!Result.empty())
+    if (addLibStdCXXIncludePaths(IncludePath, /*Suffix*/ "", TripleStr,
+                                 /*GCCMultiarchTriple*/ "",
+                                 /*TargetMultiarchTriple*/ "",
+                                 Multilib.includeSuffix(), DriverArgs, CC1Args))
       break;
   }
-  return Result;
 }
 
 void Linux::AddCudaIncludeArgs(const ArgList &DriverArgs,

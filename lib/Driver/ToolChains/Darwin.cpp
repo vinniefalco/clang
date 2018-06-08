@@ -10,7 +10,7 @@
 #include "Darwin.h"
 #include "Arch/ARM.h"
 #include "CommonArgs.h"
-#include "clang/Basic/AllocationAvailability.h"
+#include "clang/Basic/AlignedAllocation.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/VirtualFileSystem.h"
 #include "clang/Driver/Compilation.h"
@@ -2235,24 +2235,6 @@ void Darwin::CheckObjCARC() const {
       (isTargetMacOS() && !isMacosxVersionLT(10, 6)))
     return;
   getDriver().Diag(diag::err_arc_unsupported_on_toolchain);
-}
-
-ToolChain::AvailableAllocKinds
-Darwin::getAvailableAllocationFunctions(const llvm::opt::ArgList &Args) const {
-  if (Args.hasArgNoClaim(options::OPT_nostdincxx))
-    return AAK_All;
-  switch (GetCXXStdlibType(Args)) {
-  case CST_Libstdcxx:
-    return AAK_All;
-  case CST_Libcxx:
-    AvailableAllocKinds Result = AAK_None;
-    if (!isAlignedAllocationUnavailable())
-      Result |= AAK_AlignedAllocation;
-    if (!isSizedDeallocationUnavailable())
-      Result |= AAK_SizedDeallocation;
-    return Result;
-  }
-  llvm_unreachable("unhandled case");
 }
 
 SanitizerMask Darwin::getSupportedSanitizers() const {

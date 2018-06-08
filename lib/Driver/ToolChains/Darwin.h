@@ -464,9 +464,6 @@ public:
   SanitizerMask getSupportedSanitizers() const override;
 
   void printVerboseInfo(raw_ostream &OS) const override;
-
-  AvailableAllocKinds getAvailableAllocationFunctions(
-      const llvm::opt::ArgList &Args) const override;
 };
 
 /// DarwinClang - The Darwin toolchain used by Clang.

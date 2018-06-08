@@ -2439,130 +2439,63 @@ void Generic_GCC::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
       DriverArgs.hasArg(options::OPT_nostdincxx))
     return;
 
-  path_list Result;
   switch (GetCXXStdlibType(DriverArgs)) {
   case ToolChain::CST_Libcxx:
-    Result = getLibCxxIncludePaths(DriverArgs);
+    addLibCxxIncludePaths(DriverArgs, CC1Args);
     break;
 
   case ToolChain::CST_Libstdcxx:
-    Result = getLibStdCxxIncludePaths(DriverArgs);
+    addLibStdCxxIncludePaths(DriverArgs, CC1Args);
     break;
   }
-  for (const std::string &P : Result)
-    addSystemInclude(DriverArgs, CC1Args, P);
 }
 
-ToolChain::path_list
-Generic_GCC::getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
+void
+Generic_GCC::addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                   llvm::opt::ArgStringList &CC1Args) const {
   // FIXME: The Linux behavior would probaby be a better approach here.
-  path_list Result;
-  Result.push_back(getDriver().SysRoot + "/usr/include/c++/v1");
-  return Result;
+  addSystemInclude(DriverArgs, CC1Args,
+                   getDriver().SysRoot + "/usr/include/c++/v1");
 }
 
-ToolChain::path_list Generic_GCC::getLibStdCxxIncludePaths(
-    const llvm::opt::ArgList &DriverArgs) const {
+void
+Generic_GCC::addLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                      llvm::opt::ArgStringList &CC1Args) const {
   // By default, we don't assume we know where libstdc++ might be installed.
   // FIXME: If we have a valid GCCInstallation, use it.
-  return {};
 }
 
 /// Helper to add the variant paths of a libstdc++ installation.
-
-ToolChain::path_list Generic_GCC::getLibStdCXXIncludePaths(
+bool Generic_GCC::addLibStdCXXIncludePaths(
     Twine Base, Twine Suffix, StringRef GCCTriple, StringRef GCCMultiarchTriple,
     StringRef TargetMultiarchTriple, Twine IncludeSuffix,
-    const ArgList &DriverArgs) const {
+    const ArgList &DriverArgs, ArgStringList &CC1Args) const {
   if (!getVFS().exists(Base + Suffix))
-    return {};
+    return false;
 
-  ToolChain::path_list Result;
-  Result.push_back((Base + Suffix).str());
+  addSystemInclude(DriverArgs, CC1Args, Base + Suffix);
 
   // The vanilla GCC layout of libstdc++ headers uses a triple subdirectory. If
   // that path exists or we have neither a GCC nor target multiarch triple, use
   // this vanilla search path.
   if ((GCCMultiarchTriple.empty() && TargetMultiarchTriple.empty()) ||
       getVFS().exists(Base + Suffix + "/" + GCCTriple + IncludeSuffix)) {
-    Result.push_back((Base + Suffix + "/" + GCCTriple + IncludeSuffix).str());
+    addSystemInclude(DriverArgs, CC1Args,
+                     Base + Suffix + "/" + GCCTriple + IncludeSuffix);
   } else {
     // Otherwise try to use multiarch naming schemes which have normalized the
     // triples and put the triple before the suffix.
     //
     // GCC surprisingly uses *both* the GCC triple with a multilib suffix and
     // the target triple, so we support that here.
-    Result.push_back(
-        (Base + "/" + GCCMultiarchTriple + Suffix + IncludeSuffix).str());
-    Result.push_back((Base + "/" + TargetMultiarchTriple + Suffix).str());
+    addSystemInclude(DriverArgs, CC1Args,
+                     Base + "/" + GCCMultiarchTriple + Suffix + IncludeSuffix);
+    addSystemInclude(DriverArgs, CC1Args,
+                     Base + "/" + TargetMultiarchTriple + Suffix);
   }
 
-  Result.push_back((Base + Suffix + "/backward").str());
-  return Result;
-}
-
-int Generic_GCC::getLibcxxVersion(const llvm::opt::ArgList &Args) const {
-  assert(GetCXXStdlibType(Args) == CST_Libcxx);
-  path_list LibcxxIncPaths;
-  if (!Args.hasArgNoClaim(options::OPT_nostdlibinc) &&
-      !Args.hasArgNoClaim(options::OPT_nostdincxx))
-    LibcxxIncPaths = getLibCxxIncludePaths(Args);
-
-  for (const Arg *A : Args.filtered(options::OPT_IncludePath_Group)) {
-    const SmallVectorImpl<const char *> &Values = A->getValues();
-    for (const char *P : Values)
-      LibcxxIncPaths.push_back(P);
-  }
-
-  if (LibcxxIncPaths.empty())
-    return 0;
-
-  for (const std::string &Path : LibcxxIncPaths) {
-    std::string VersionFile = Path + "/__libcpp_version";
-    if (!getVFS().exists(VersionFile))
-      continue;
-
-    llvm::ErrorOr<std::unique_ptr<vfs::File>> FileOr =
-        getVFS().openFileForRead(VersionFile);
-    if (!FileOr)
-      continue;
-
-    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> BuffOr =
-        FileOr.get()->getBuffer("");
-    assert(BuffOr && BuffOr->get());
-
-    return std::stoi(BuffOr->get()->getBufferStart());
-  }
-  return 0;
-}
-
-ToolChain::AvailableAllocKinds Generic_GCC::getAvailableAllocationFunctions(
-    const llvm::opt::ArgList &Args) const {
-  // FIXME(EricWF): Should we do something different when -nostdlib is passed?
-  // What about when -L<my-super-secret-path-to-libstdcxx>?
-  switch (GetCXXStdlibType(Args)) {
-  case CST_Libcxx: {
-    int Version = getLibcxxVersion(Args);
-    AvailableAllocKinds Result = AAK_None;
-    // The __libcpp_version header was added in 4.0 after support for both
-    // aligned allocation and sized deallocation were added.
-    if (Version >= 4000) {
-      Result |= AAK_AlignedAllocation;
-      Result |= AAK_SizedDeallocation;
-    }
-    return Result;
-  }
-  case CST_Libstdcxx:
-    AvailableAllocKinds Result = AAK_None;
-    // Support for sized deallocation was added in GCC 5.0
-    if (!GCCInstallation.getVersion().isOlderThan(5, -1, -1))
-      Result |= AAK_SizedDeallocation;
-    // Support for aligned allocation was added in GCC 7.0
-    if (!GCCInstallation.getVersion().isOlderThan(7, -1, -1))
-      Result |= AAK_AlignedAllocation;
-    return Result;
-  }
-  llvm_unreachable("unhandled case");
+  addSystemInclude(DriverArgs, CC1Args, Base + Suffix + "/backward");
+  return true;
 }
 
 llvm::opt::DerivedArgList *

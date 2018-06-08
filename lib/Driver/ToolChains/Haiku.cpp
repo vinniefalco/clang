@@ -22,16 +22,14 @@ Haiku::Haiku(const Driver &D, const llvm::Triple& Triple, const ArgList &Args)
 
 }
 
-ToolChain::path_list
-Haiku::getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
-  path_list Result;
-  Result.push_back(getDriver().SysRoot + "/system/develop/headers/c++/v1");
-  return Result;
+void Haiku::addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                  llvm::opt::ArgStringList &CC1Args) const {
+  addSystemInclude(DriverArgs, CC1Args,
+                   getDriver().SysRoot + "/system/develop/headers/c++/v1");
 }
 
-ToolChain::path_list
-Haiku::getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
-  return getLibStdCXXIncludePaths(getDriver().SysRoot,
-                                  "/system/develop/headers/c++",
-                                  getTriple().str(), "", "", "", DriverArgs);
+void Haiku::addLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                     llvm::opt::ArgStringList &CC1Args) const {
+  addLibStdCXXIncludePaths(getDriver().SysRoot, "/system/develop/headers/c++",
+                           getTriple().str(), "", "", "", DriverArgs, CC1Args);
 }

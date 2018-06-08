@@ -295,8 +295,6 @@ public:
   llvm::opt::DerivedArgList *
   TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
                 Action::OffloadKind DeviceOffloadKind) const override;
-  AvailableAllocKinds getAvailableAllocationFunctions(
-      const llvm::opt::ArgList &Args) const override;
 
 protected:
   Tool *getTool(Action::ActionClass AC) const override;
@@ -318,27 +316,19 @@ protected:
       const llvm::opt::ArgList &DriverArgs,
       llvm::opt::ArgStringList &CC1Args) const override;
 
-  virtual path_list
-  getLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const;
-  virtual path_list
-  getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const;
+  virtual void
+  addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                        llvm::opt::ArgStringList &CC1Args) const;
+  virtual void
+  addLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                           llvm::opt::ArgStringList &CC1Args) const;
 
-  path_list
-  getLibStdCXXIncludePaths(Twine Base, Twine Suffix, StringRef GCCTriple,
-                           StringRef GCCMultiarchTriple,
-                           StringRef TargetMultiarchTriple, Twine IncludeSuffix,
-                           const llvm::opt::ArgList &DriverArgs) const;
-
-  /// Get the version of the libc++ installation from the first __libcpp_version
-  /// file found in the searched header paths.
-  ///
-  /// If -nostdinc and -nostdinc++ haven't been specified, the paths returned by
-  /// getLibCxxIncludePaths() are searched first. Then the remaining paths all
-  /// the paths in the IncludePath_Group are searched.
-  ///
-  /// \return 0 if __libcpp_version isn't found, otherwise the value it
-  /// contained.
-  int getLibcxxVersion(const llvm::opt::ArgList &Args) const;
+  bool addLibStdCXXIncludePaths(Twine Base, Twine Suffix, StringRef GCCTriple,
+                                StringRef GCCMultiarchTriple,
+                                StringRef TargetMultiarchTriple,
+                                Twine IncludeSuffix,
+                                const llvm::opt::ArgList &DriverArgs,
+                                llvm::opt::ArgStringList &CC1Args) const;
 
   /// @}
 

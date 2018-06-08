@@ -338,10 +338,11 @@ ToolChain::CXXStdlibType FreeBSD::GetDefaultCXXStdlibType() const {
   return ToolChain::CST_Libstdcxx;
 }
 
-ToolChain::path_list
-FreeBSD::getLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs) const {
-  return getLibStdCXXIncludePaths(getDriver().SysRoot, "/usr/include/c++/4.2",
-                                  "", "", "", "", DriverArgs);
+void FreeBSD::addLibStdCxxIncludePaths(
+    const llvm::opt::ArgList &DriverArgs,
+    llvm::opt::ArgStringList &CC1Args) const {
+  addLibStdCXXIncludePaths(getDriver().SysRoot, "/usr/include/c++/4.2", "", "",
+                           "", "", DriverArgs, CC1Args);
 }
 
 void FreeBSD::AddCXXStdlibLibArgs(const ArgList &Args,
