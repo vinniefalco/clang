@@ -104,14 +104,6 @@ public:
     RM_Disabled,
   };
 
-  using AvailableAllocKinds = uint64_t;
-  enum {
-    AAK_None = 0,
-    AAK_AlignedAllocation = 1 << 0,
-    AAK_SizedDeallocation = 1 << 1,
-    AAK_All = AAK_AlignedAllocation | AAK_SizedDeallocation
-  };
-
 private:
   friend class RegisterEffectiveTriple;
 
@@ -540,15 +532,6 @@ public:
 
   /// Return sanitizers which are enabled by default.
   virtual SanitizerMask getDefaultSanitizers() const { return 0; }
-
-  /// Returns a mask representing the C++ allocation function kinds supported
-  /// by the C++ standard library selected by this toolchain.
-  /// For example C++14 sized deallocation and C++17 aligned allocation.
-  /// By default all allocation functions are assumed to be supported.
-  virtual AvailableAllocKinds
-  getAvailableAllocationFunctions(const llvm::opt::ArgList &Args) const {
-    return AAK_All;
-  }
 };
 
 /// Set a ToolChain's effective triple. Reset it when the registration object
