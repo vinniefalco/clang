@@ -16,12 +16,14 @@
 #include "clang/Basic/DebugInfoOptions.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticOptions.h"
+#include "clang/Basic/FileManager.h"
 #include "clang/Basic/FileSystemOptions.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/Sanitizers.h"
 #include "clang/Basic/SourceLocation.h"
+#include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
 #include "clang/Basic/Version.h"
 #include "clang/Basic/VersionTuple.h"
@@ -40,6 +42,7 @@
 #include "clang/Frontend/MigratorOptions.h"
 #include "clang/Frontend/PreprocessorOutputOptions.h"
 #include "clang/Frontend/Utils.h"
+#include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/HeaderSearchOptions.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Sema/CodeCompleteOptions.h"
@@ -2972,6 +2975,79 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
       options::OPT_fcuda_short_ptr, options::OPT_fno_cuda_short_ptr, false);
 }
 
+static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
+                           CompilerInvocation &Invocation,
+                           DiagnosticsEngine &Diags) {
+  HeaderSearchOptions &HSOpts = Invocation.getHeaderSearchOpts();
+
+  std::unique_ptr<TargetInfo> TInfoPtr(
+      TargetInfo::CreateTargetInfo(Diags, Invocation.TargetOpts));
+  llvm::Triple Trip = TInfoPtr->getTriple();
+  int LibcxxVersion = 0;
+  if (HSOpts.UseLibcxx) {
+    // FIXME(EricWF): We have to create a the file manager and source file
+    // manager in order to create a HeaderSearch object. What's the impact of
+    // this?
+    IntrusiveRefCntPtr<vfs::FileSystem> FS =
+        createVFSFromCompilerInvocation(Invocation, Diags);
+    std::unique_ptr<FileManager> FileManagerPtr(
+        new FileManager(Invocation.getFileSystemOpts(), FS));
+    std::unique_ptr<SourceManager> SourceManagerPtr(
+        new SourceManager(Diags, *FileManagerPtr));
+
+    std::unique_ptr<HeaderSearch> HSearchPtr(
+        new HeaderSearch(Invocation.HeaderSearchOpts, *SourceManagerPtr, Diags,
+                         Opts, TInfoPtr.get()));
+    HeaderSearch &HSearch = *HSearchPtr;
+    ApplyHeaderSearchOptions(HSearch, HSOpts, Opts, Trip);
+    const std::vector<DirectoryLookup> &SearchDirs = HSearch.getSearchDirs();
+    for (const DirectoryLookup &DL : SearchDirs) {
+      if (!DL.isNormalDir())
+        continue;
+      const DirectoryEntry *Dir = DL.getDir();
+      std::string Path = Dir->getName();
+      Path += "/__libcpp_version";
+      llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FOr =
+          FS->getBufferForFile(Path);
+      if (!FOr)
+        continue;
+      llvm::MemoryBuffer *Buff = FOr.get().get();
+      LibcxxVersion = std::stoi(Buff->getBufferStart());
+      break;
+    }
+  }
+
+  auto setOpts = [&](VersionTuple Ver, bool UseLibcxx) {
+    if (Opts.AlignedAllocation && !Opts.AlignedAllocationExplicitlySpecified &&
+        Ver < alignedAllocMinVersion(Trip.getOS(), UseLibcxx))
+      Opts.AlignedAllocationUnavailable = true;
+    if (Opts.SizedDeallocation && !Opts.SizedDeallocationExplicitlySpecified &&
+        Ver < sizedDeallocMinVersion(Trip.getOS(), UseLibcxx))
+      Opts.SizedDeallocation = false;
+  };
+
+  bool UseOSVersion = reportUnavailableUsingOsName(Trip.getOS());
+  if (UseOSVersion) {
+    unsigned Maj, Min, Patch;
+    Trip.getOSVersion(Maj, Min, Patch);
+    VersionTuple Ver(Maj, Min, Patch);
+    setOpts(Ver, false);
+  } else if (HSOpts.UseLibcxx) {
+    VersionTuple Ver(LibcxxVersion / 1000, 0);
+    setOpts(Ver, true);
+  } else {
+    // FIXME(EricWF): Ensure we're actually targeting libstdc++ and not MSVC or
+    // some other lib.
+    VersionTuple Ver;
+    if (Ver.tryParse(Invocation.getTargetOpts().GCCVersion))
+      Ver = VersionTuple(0, 0, 0);
+    setOpts(Ver, false);
+
+    // FIXME(EricWF): Determine if we're targeting libstdc++, and if so what
+    // version. Use that to enable/disable it.
+  }
+}
+
 bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
                                         const char *const *ArgBegin,
                                         const char *const *ArgEnd,
@@ -3083,6 +3159,10 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &Res,
     Res.getCodeGenOpts().FineGrainedBitfieldAccesses = false;
     Diags.Report(diag::warn_drv_fine_grained_bitfield_accesses_ignored);
   }
+
+  // Adjust the LangOpts now that we have an complete CompilerInvocation
+  adjustLangOpts(LangOpts, Args, Res, Diags);
+
   return Success;
 }
 

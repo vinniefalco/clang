@@ -954,6 +954,7 @@ static VersionTuple parseGCCVersion(StringRef VersionText) {
     return BadVersion;
   return VersionTuple(Major, Minor, Patch);
 }
+
 bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
   assert(hasDiagnostics() && "Diagnostics engine is not initialized!");
   assert(!getFrontendOpts().ShowHelp && "Client must handle '-help'!");
@@ -984,63 +985,6 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
   // created. This complexity should be lifted elsewhere.
   getTarget().adjust(getLangOpts());
 
-  int LibcxxVersion = 0;
-  if (getHeaderSearchOpts().UseLibcxx) {
-    HeaderSearch &HSearch = PP->getHeaderSearchInfo();
-    const std::vector<DirectoryLookup> &SearchDirs = HSearch.getSearchDirs();
-    for (const DirectoryLookup &DL : SearchDirs) {
-      if (!DL.isNormalDir())
-        continue;
-      const DirectoryEntry *Dir = DL.getDir();
-      std::string Path = Dir->getName();
-      Path += "/__libcpp_version";
-      llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FOr =
-          getVirtualFileSystem().getBufferForFile(Path);
-      if (!FOr)
-        continue;
-      llvm::MemoryBuffer *Buff = FOr.get().get();
-      LibcxxVersion = std::stoi(Buff->getBufferStart());
-      llvm::errs() << "Found Version = " << LibcxxVersion << "\n";
-      break;
-    }
-  } else {
-  }
-
-  llvm::Triple Trip(getTargetOpts().Triple);
-  auto setOpts = [&](VersionTuple Ver, bool UseLibcxx) {
-    LangOptions &LOpts = getLangOpts();
-    if (LOpts.AlignedAllocation &&
-        !LOpts.AlignedAllocationExplicitlySpecified) {
-      assert(!LOpts.AlignedAllocationUnavailable);
-      VersionTuple MinVer = alignedAllocMinVersion(Trip.getOS(), UseLibcxx);
-      if (Ver < MinVer) {
-        LOpts.AlignedAllocationUnavailable = true;
-      }
-    }
-    if (LOpts.SizedDeallocation &&
-        !LOpts.SizedDeallocationExplicitlySpecified) {
-      VersionTuple MinVer = sizedDeallocMinVersion(Trip.getOS(), UseLibcxx);
-      if (Ver < MinVer) {
-        LOpts.SizedDeallocation = false;
-      }
-    }
-  };
-
-  bool UseOSVersion = reportUnavailableUsingOsName(Trip.getOS());
-  if (UseOSVersion) {
-    unsigned Maj, Min, Patch;
-    Trip.getOSVersion(Maj, Min, Patch);
-    VersionTuple Ver(Maj, Min, Patch);
-    setOpts(Ver, false);
-  } else if (getHeaderSearchOpts().UseLibcxx) {
-    VersionTuple Ver(LibcxxVersion / 1000, 0);
-    setOpts(Ver, true);
-  } else if (!getTargetOpts().GCCVersion.empty()) {
-    VersionTuple Ver = parseGCCVersion(getTargetOpts().GCCVersion);
-    setOpts(Ver, false);
-    // FIXME(EricWF): Determine if we're targeting libstdc++, and if so what
-    // version. Use that to enable/disable it.
-  }
 
   // Adjust target options based on codegen options.
   getTarget().adjustTargetOptions(getCodeGenOpts(), getTargetOpts());
