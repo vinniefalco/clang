@@ -2972,6 +2972,41 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
       options::OPT_fcuda_short_ptr, options::OPT_fno_cuda_short_ptr, false);
 }
 
+static int getLibcxxVersionFromFile(CompilerInvocation &Invocation,
+                                    TargetInfo *TInfo,
+                                    DiagnosticsEngine &Diags) {
+  // FIXME(EricWF): We have to create a the file manager and source file
+  // manager in order to create a HeaderSearch object. What's the impact of
+  // this?
+  IntrusiveRefCntPtr<vfs::FileSystem> FS =
+      createVFSFromCompilerInvocation(Invocation, Diags);
+  std::unique_ptr<FileManager> FileManagerPtr(
+      new FileManager(Invocation.getFileSystemOpts(), FS));
+  std::unique_ptr<SourceManager> SourceManagerPtr(
+      new SourceManager(Diags, *FileManagerPtr));
+  std::unique_ptr<HeaderSearch> HSearchPtr(
+      new HeaderSearch(Invocation.HeaderSearchOpts, *SourceManagerPtr, Diags,
+                       *Invocation.getLangOpts(), TInfo));
+
+  ApplyHeaderSearchOptions(*HSearchPtr, Invocation.getHeaderSearchOpts(),
+                           *Invocation.getLangOpts(), TInfo->getTriple());
+  const std::vector<DirectoryLookup> &SearchDirs = HSearchPtr->getSearchDirs();
+  for (const DirectoryLookup &DL : SearchDirs) {
+    if (!DL.isNormalDir())
+      continue;
+    const DirectoryEntry *Dir = DL.getDir();
+    std::string Path = Dir->getName();
+    Path += "/__libcpp_version";
+    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FOr =
+        FS->getBufferForFile(Path);
+    if (!FOr)
+      continue;
+    llvm::MemoryBuffer *Buff = FOr.get().get();
+    return std::stoi(Buff->getBufferStart());
+  }
+  return 0;
+}
+
 static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
                            CompilerInvocation &Invocation,
                            DiagnosticsEngine &Diags) {
@@ -2979,42 +3014,6 @@ static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
   std::unique_ptr<TargetInfo> TInfoPtr(
       TargetInfo::CreateTargetInfo(Diags, Invocation.TargetOpts));
   llvm::Triple Trip = TInfoPtr->getTriple();
-
-  HeaderSearchOptions &HSOpts = Invocation.getHeaderSearchOpts();
-  int LibcxxVersion = 0;
-  if (Invocation.getHeaderSearchOpts().UseLibcxx) {
-    // FIXME(EricWF): We have to create a the file manager and source file
-    // manager in order to create a HeaderSearch object. What's the impact of
-    // this?
-    IntrusiveRefCntPtr<vfs::FileSystem> FS =
-        createVFSFromCompilerInvocation(Invocation, Diags);
-    std::unique_ptr<FileManager> FileManagerPtr(
-        new FileManager(Invocation.getFileSystemOpts(), FS));
-    std::unique_ptr<SourceManager> SourceManagerPtr(
-        new SourceManager(Diags, *FileManagerPtr));
-    std::unique_ptr<HeaderSearch> HSearchPtr(
-        new HeaderSearch(Invocation.HeaderSearchOpts, *SourceManagerPtr, Diags,
-                         Opts, TInfoPtr.get()));
-
-    ApplyHeaderSearchOptions(*HSearchPtr, Invocation.getHeaderSearchOpts(),
-                             Opts, Trip);
-    const std::vector<DirectoryLookup> &SearchDirs =
-        HSearchPtr->getSearchDirs();
-    for (const DirectoryLookup &DL : SearchDirs) {
-      if (!DL.isNormalDir())
-        continue;
-      const DirectoryEntry *Dir = DL.getDir();
-      std::string Path = Dir->getName();
-      Path += "/__libcpp_version";
-      llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FOr =
-          FS->getBufferForFile(Path);
-      if (!FOr)
-        continue;
-      llvm::MemoryBuffer *Buff = FOr.get().get();
-      LibcxxVersion = std::stoi(Buff->getBufferStart());
-      break;
-    }
-  }
 
   auto setOpts = [&](VersionTuple Ver, bool UseLibcxx) {
     bool AlignedAllocationExplicitlySpecified =
@@ -3038,8 +3037,9 @@ static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
     Trip.getOSVersion(Maj, Min, Patch);
     VersionTuple Ver(Maj, Min, Patch);
     setOpts(Ver, false);
-  } else if (HSOpts.UseLibcxx) {
-    VersionTuple Ver(LibcxxVersion / 1000, 0);
+  } else if (Invocation.getHeaderSearchOpts().UseLibcxx) {
+    VersionTuple Ver(
+        getLibcxxVersionFromFile(Invocation, TInfoPtr.get(), Diags) / 1000, 0);
     setOpts(Ver, true);
   } else {
     // FIXME(EricWF): Ensure we're actually targeting libstdc++ and not MSVC or
