@@ -2416,8 +2416,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   // adjustLangOpts.
   Opts.SizedDeallocation =
       Args.hasFlag(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
-                   Opts.SizedDeallocation) &&
-      !Args.hasArg(OPT_sized_deallocation_unavailable);
+                   Opts.SizedDeallocation);
 
   Opts.AlignedAllocation =
       Args.hasFlag(OPT_faligned_allocation, OPT_fno_aligned_allocation,
@@ -2972,9 +2971,9 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
       options::OPT_fcuda_short_ptr, options::OPT_fno_cuda_short_ptr, false);
 }
 
-static int getLibcxxVersionFromFile(CompilerInvocation &Invocation,
-                                    TargetInfo *TInfo,
-                                    DiagnosticsEngine &Diags) {
+static VersionTuple getLibcxxVersionFromFile(CompilerInvocation &Invocation,
+                                             TargetInfo *TInfo,
+                                             DiagnosticsEngine &Diags) {
   // FIXME(EricWF): We have to create a the file manager and source file
   // manager in order to create a HeaderSearch object. What's the impact of
   // this?
@@ -3001,9 +3000,11 @@ static int getLibcxxVersionFromFile(CompilerInvocation &Invocation,
     if (!FOr)
       continue;
     llvm::MemoryBuffer *Buff = FOr.get().get();
-    return std::stoi(Buff->getBufferStart());
+    int LibcxxVer = std::stoi(Buff->getBufferStart());
+    return VersionTuple(LibcxxVer / 1000, (LibcxxVer % 1000) / 100,
+                        LibcxxVer % 100);
   }
-  return 0;
+  return VersionTuple();
 }
 
 static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
@@ -3023,8 +3024,7 @@ static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
       Opts.AlignedAllocationUnavailable = true;
 
     bool SizedDeallocationExplicitlySpecified =
-        Args.hasArg(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
-                    OPT_sized_deallocation_unavailable);
+        Args.hasArg(OPT_fsized_deallocation, OPT_fno_sized_deallocation);
     if (Opts.SizedDeallocation && !SizedDeallocationExplicitlySpecified &&
         Ver < sizedDeallocMinVersion(Trip.getOS(), UseLibcxx))
       Opts.SizedDeallocation = false;
@@ -3037,19 +3037,13 @@ static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
     VersionTuple Ver(Maj, Min, Patch);
     setOpts(Ver, false);
   } else if (Invocation.getHeaderSearchOpts().UseLibcxx) {
-    VersionTuple Ver(
-        getLibcxxVersionFromFile(Invocation, TInfoPtr.get(), Diags) / 1000, 0);
-    setOpts(Ver, true);
+    setOpts(getLibcxxVersionFromFile(Invocation, TInfoPtr.get(), Diags), true);
   } else {
     // FIXME(EricWF): Ensure we're actually targeting libstdc++ and not MSVC or
     // some other lib.
     VersionTuple Ver;
-    if (Ver.tryParse(Invocation.getTargetOpts().GCCVersion))
-      Ver = VersionTuple(0, 0, 0);
+    Ver.tryParse(Invocation.getTargetOpts().GCCVersion);
     setOpts(Ver, false);
-
-    // FIXME(EricWF): Determine if we're targeting libstdc++, and if so what
-    // version. Use that to enable/disable it.
   }
 }
 
