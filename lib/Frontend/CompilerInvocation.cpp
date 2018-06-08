@@ -2411,17 +2411,14 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.RelaxedTemplateTemplateArgs =
       Args.hasArg(OPT_frelaxed_template_template_args);
 
-  Opts.SizedDeallocationExplicitlySpecified =
-      Args.hasArg(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
-                  OPT_sized_deallocation_unavailable);
+  // Set the sized deallocation and aligned allocation language options based
+  // on the specified flags. We'll adjust them later based on availability in
+  // adjustLangOpts.
   Opts.SizedDeallocation =
       Args.hasFlag(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
                    Opts.SizedDeallocation) &&
       !Args.hasArg(OPT_sized_deallocation_unavailable);
 
-  Opts.AlignedAllocationExplicitlySpecified =
-      Args.hasArg(OPT_faligned_allocation, OPT_fno_aligned_allocation,
-                  OPT_aligned_allocation_unavailable);
   Opts.AlignedAllocation =
       Args.hasFlag(OPT_faligned_allocation, OPT_fno_aligned_allocation,
                    Opts.AlignedAllocation);
@@ -2978,13 +2975,14 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
 static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
                            CompilerInvocation &Invocation,
                            DiagnosticsEngine &Diags) {
-  HeaderSearchOptions &HSOpts = Invocation.getHeaderSearchOpts();
 
   std::unique_ptr<TargetInfo> TInfoPtr(
       TargetInfo::CreateTargetInfo(Diags, Invocation.TargetOpts));
   llvm::Triple Trip = TInfoPtr->getTriple();
+
+  HeaderSearchOptions &HSOpts = Invocation.getHeaderSearchOpts();
   int LibcxxVersion = 0;
-  if (HSOpts.UseLibcxx) {
+  if (Invocation.getHeaderSearchOpts().UseLibcxx) {
     // FIXME(EricWF): We have to create a the file manager and source file
     // manager in order to create a HeaderSearch object. What's the impact of
     // this?
@@ -2994,13 +2992,14 @@ static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
         new FileManager(Invocation.getFileSystemOpts(), FS));
     std::unique_ptr<SourceManager> SourceManagerPtr(
         new SourceManager(Diags, *FileManagerPtr));
-
     std::unique_ptr<HeaderSearch> HSearchPtr(
         new HeaderSearch(Invocation.HeaderSearchOpts, *SourceManagerPtr, Diags,
                          Opts, TInfoPtr.get()));
-    HeaderSearch &HSearch = *HSearchPtr;
-    ApplyHeaderSearchOptions(HSearch, HSOpts, Opts, Trip);
-    const std::vector<DirectoryLookup> &SearchDirs = HSearch.getSearchDirs();
+
+    ApplyHeaderSearchOptions(*HSearchPtr, Invocation.getHeaderSearchOpts(),
+                             Opts, Trip);
+    const std::vector<DirectoryLookup> &SearchDirs =
+        HSearchPtr->getSearchDirs();
     for (const DirectoryLookup &DL : SearchDirs) {
       if (!DL.isNormalDir())
         continue;
@@ -3018,10 +3017,17 @@ static void adjustLangOpts(LangOptions &Opts, ArgList &Args,
   }
 
   auto setOpts = [&](VersionTuple Ver, bool UseLibcxx) {
-    if (Opts.AlignedAllocation && !Opts.AlignedAllocationExplicitlySpecified &&
+    bool AlignedAllocationExplicitlySpecified =
+        Args.hasArg(OPT_faligned_allocation, OPT_fno_aligned_allocation,
+                    OPT_aligned_allocation_unavailable);
+    if (Opts.AlignedAllocation && !AlignedAllocationExplicitlySpecified &&
         Ver < alignedAllocMinVersion(Trip.getOS(), UseLibcxx))
       Opts.AlignedAllocationUnavailable = true;
-    if (Opts.SizedDeallocation && !Opts.SizedDeallocationExplicitlySpecified &&
+
+    bool SizedDeallocationExplicitlySpecified =
+        Args.hasArg(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
+                    OPT_sized_deallocation_unavailable);
+    if (Opts.SizedDeallocation && !SizedDeallocationExplicitlySpecified &&
         Ver < sizedDeallocMinVersion(Trip.getOS(), UseLibcxx))
       Opts.SizedDeallocation = false;
   };
