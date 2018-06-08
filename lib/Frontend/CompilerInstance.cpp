@@ -11,7 +11,6 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
-#include "clang/Basic/AllocationAvailability.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/FileManager.h"
@@ -29,7 +28,6 @@
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/Frontend/VerifyDiagnosticConsumer.h"
-#include "clang/Lex/DirectoryLookup.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/PTHManager.h"
 #include "clang/Lex/Preprocessor.h"
@@ -41,7 +39,6 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/CrashRecoveryContext.h"
 #include "llvm/Support/Errc.h"
-#include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/LockFileManager.h"
@@ -51,12 +48,10 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
-#include <memory>
 #include <sys/stat.h>
 #include <system_error>
 #include <time.h>
 #include <utility>
-#include <vector>
 
 using namespace clang;
 
@@ -934,26 +929,6 @@ bool CompilerInstance::InitializeSourceManager(
 }
 
 // High-Level Operations
-static VersionTuple parseGCCVersion(StringRef VersionText) {
-  VersionTuple BadVersion;
-  std::pair<StringRef, StringRef> First = VersionText.split('.');
-  std::pair<StringRef, StringRef> Second = First.second.split('.');
-
-  int Major, Minor, Patch;
-  if (First.first.getAsInteger(10, Major) || Major < 0)
-    return BadVersion;
-  if (First.second.empty())
-    return VersionTuple(Major);
-  StringRef MinorStr = Second.first;
-  if (MinorStr.getAsInteger(10, Minor) || Minor < 0)
-    return BadVersion;
-  if (Second.second.empty())
-    return VersionTuple(Major, Minor);
-  StringRef PatchStr = Second.second;
-  if (PatchStr.getAsInteger(10, Patch) || Patch < 0)
-    return BadVersion;
-  return VersionTuple(Major, Minor, Patch);
-}
 
 bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
   assert(hasDiagnostics() && "Diagnostics engine is not initialized!");
@@ -984,7 +959,6 @@ bool CompilerInstance::ExecuteAction(FrontendAction &Act) {
   // FIXME: We shouldn't need to do this, the target should be immutable once
   // created. This complexity should be lifted elsewhere.
   getTarget().adjust(getLangOpts());
-
 
   // Adjust target options based on codegen options.
   getTarget().adjustTargetOptions(getCodeGenOpts(), getTargetOpts());
