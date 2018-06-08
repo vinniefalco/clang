@@ -2417,7 +2417,6 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.SizedDeallocation =
       Args.hasFlag(OPT_fsized_deallocation, OPT_fno_sized_deallocation,
                    Opts.SizedDeallocation);
-
   Opts.AlignedAllocation =
       Args.hasFlag(OPT_faligned_allocation, OPT_fno_aligned_allocation,
                    Opts.AlignedAllocation);
