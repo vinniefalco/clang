@@ -10,7 +10,6 @@
 #include "Darwin.h"
 #include "Arch/ARM.h"
 #include "CommonArgs.h"
-#include "clang/Basic/AlignedAllocation.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/VirtualFileSystem.h"
 #include "clang/Driver/Compilation.h"
