@@ -2987,7 +2987,6 @@ static int getLibcxxVersionFromFile(CompilerInvocation &Invocation,
   std::unique_ptr<HeaderSearch> HSearchPtr(
       new HeaderSearch(Invocation.HeaderSearchOpts, *SourceManagerPtr, Diags,
                        *Invocation.getLangOpts(), TInfo));
-
   ApplyHeaderSearchOptions(*HSearchPtr, Invocation.getHeaderSearchOpts(),
                            *Invocation.getLangOpts(), TInfo->getTriple());
   const std::vector<DirectoryLookup> &SearchDirs = HSearchPtr->getSearchDirs();
