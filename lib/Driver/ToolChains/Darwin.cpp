@@ -2022,8 +2022,7 @@ void Darwin::addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
   // enabled or disabled aligned allocations and hasn't specified a custom
   // standard library installation.
   if (!DriverArgs.hasArgNoClaim(options::OPT_faligned_allocation,
-                                options::OPT_fno_aligned_allocation,
-                                options::OPT_nostdincxx) &&
+                                options::OPT_fno_aligned_allocation) &&
       isAlignedAllocationUnavailable())
     CC1Args.push_back("-faligned-alloc-unavailable");
 }
