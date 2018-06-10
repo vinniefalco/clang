@@ -379,6 +379,9 @@ KEYWORD(co_await                    , KEYCOROUTINES)
 KEYWORD(co_return                   , KEYCOROUTINES)
 KEYWORD(co_yield                    , KEYCOROUTINES)
 
+// C++ resumable function proposal keywords (N4453)
+KEYWORD(resumable, KEYRESUMABLEFUNCS)
+
 // C++ modules TS keywords
 MODULES_KEYWORD(module)
 MODULES_KEYWORD(import)

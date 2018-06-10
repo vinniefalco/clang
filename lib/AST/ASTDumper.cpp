@@ -1066,10 +1066,12 @@ void ASTDumper::dumpDecl(const Decl *D) {
       OS << " referenced";
     if (D->isInvalidDecl())
       OS << " invalid";
-    if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D))
+    if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
       if (FD->isConstexpr())
         OS << " constexpr";
-
+      if (FD->isResumableSpecified())
+        OS << " resumable";
+    }
 
     ConstDeclVisitor<ASTDumper>::Visit(D);
 
@@ -1253,6 +1255,9 @@ void ASTDumper::VisitVarDecl(const VarDecl *D) {
     OS << " inline";
   if (D->isConstexpr())
     OS << " constexpr";
+  if (D->isResumableSpecified())
+    OS << " resumable";
+
   if (D->hasInit()) {
     switch (D->getInitStyle()) {
     case VarDecl::CInit: OS << " cinit"; break;

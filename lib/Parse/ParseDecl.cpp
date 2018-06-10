@@ -3515,6 +3515,11 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       isInvalid = DS.SetConstexprSpec(Loc, PrevSpec, DiagID);
       break;
 
+    // Resumable functions
+    case tok::kw_resumable:
+      isInvalid = DS.SetResumableSpec(Loc, PrevSpec, DiagID);
+      break;
+
     // type-specifier
     case tok::kw_short:
       isInvalid = DS.SetTypeSpecWidth(DeclSpec::TSW_short, Loc, PrevSpec,
@@ -4900,6 +4905,9 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
     // C++11 decltype and constexpr.
   case tok::annot_decltype:
   case tok::kw_constexpr:
+
+    // Resumable Functions
+  case tok::kw_resumable:
 
     // C11 _Atomic
   case tok::kw__Atomic:

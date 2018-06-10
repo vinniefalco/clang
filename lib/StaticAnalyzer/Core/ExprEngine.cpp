@@ -1215,6 +1215,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     // Cases that should never be evaluated simply because they shouldn't
     // appear in the CFG.
     case Stmt::BreakStmtClass:
+    case Stmt::BreakResumableStmtClass:
     case Stmt::CaseStmtClass:
     case Stmt::CompoundStmtClass:
     case Stmt::ContinueStmtClass:

@@ -903,11 +903,31 @@ static FunctionDecl *findDeleteForPromise(Sema &S, SourceLocation Loc,
 void Sema::CheckCompletedCoroutineBody(FunctionDecl *FD, Stmt *&Body) {
   FunctionScopeInfo *Fn = getCurFunction();
   assert(Fn && Fn->isCoroutine() && "not a coroutine");
+
+  // Ensure explicitly resumable functions are not allowed to be coroutines
+  if (FD && FD->isResumable()) {
+    Diag(FD->getLocation(), diag::err_resumable_func_is_coroutine) << FD;
+    Diag(Fn->FirstCoroutineStmtLoc, diag::note_declared_coroutine_here)
+        << Fn->getFirstCoroutineStmtKeyword();
+    FD->setInvalidDecl(true);
+    return;
+  }
+
   if (!Body) {
     assert(FD->isInvalidDecl() &&
            "a null body is only allowed for invalid declarations");
     return;
   }
+
+  if (!Fn->isFirstResumableStmtBreakResumable()) {
+    assert(FD && "cannot be null");
+    Diag(FD->getLocation(), diag::err_resumable_func_is_coroutine) << FD;
+    Diag(Fn->FirstCoroutineStmtLoc, diag::note_declared_coroutine_here)
+        << Fn->getFirstCoroutineStmtKeyword();
+    FD->setInvalidDecl(true);
+    return;
+  }
+
   // We have a function that uses coroutine keywords, but we failed to build
   // the promise type.
   if (!Fn->CoroutinePromise)

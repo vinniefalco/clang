@@ -975,6 +975,20 @@ bool DeclSpec::SetConstexprSpec(SourceLocation Loc, const char *&PrevSpec,
   return false;
 }
 
+bool DeclSpec::SetResumableSpec(SourceLocation Loc, const char *&PrevSpec,
+                                unsigned &DiagID) {
+  // 'constexpr constexpr' is ok, but warn as this is likely not what the user
+  // intended.
+  if (Resumable_specified) {
+    DiagID = diag::warn_duplicate_declspec;
+    PrevSpec = "resumable";
+    return true;
+  }
+  Resumable_specified = true;
+  ResumableLoc = Loc;
+  return false;
+}
+
 void DeclSpec::SaveWrittenBuiltinSpecs() {
   writtenBS.Sign = getTypeSpecSign();
   writtenBS.Width = getTypeSpecWidth();

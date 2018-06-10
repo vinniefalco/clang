@@ -298,6 +298,11 @@ void ASTStmtReader::VisitBreakStmt(BreakStmt *S) {
   S->setBreakLoc(ReadSourceLocation());
 }
 
+void ASTStmtReader::VisitBreakResumableStmt(BreakResumableStmt *S) {
+  VisitStmt(S);
+  S->setBreakLoc(ReadSourceLocation());
+}
+
 void ASTStmtReader::VisitReturnStmt(ReturnStmt *S) {
   VisitStmt(S);
   S->setRetValue(Record.readSubExpr());
@@ -3186,6 +3191,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case STMT_BREAK:
       S = new (Context) BreakStmt(Empty);
+      break;
+
+    case STMT_BREAKRESUMABLE:
+      S = new (Context) BreakResumableStmt(Empty);
       break;
 
     case STMT_RETURN:

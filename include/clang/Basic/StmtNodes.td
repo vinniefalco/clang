@@ -22,6 +22,7 @@ def GotoStmt : Stmt;
 def IndirectGotoStmt : Stmt;
 def ContinueStmt : Stmt;
 def BreakStmt : Stmt;
+def BreakResumableStmt : Stmt;
 def ReturnStmt : Stmt;
 def DeclStmt  : Stmt;
 def SwitchCase : Stmt<1>;

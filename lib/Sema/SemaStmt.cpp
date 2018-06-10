@@ -2836,19 +2836,32 @@ Sema::ActOnContinueStmt(SourceLocation ContinueLoc, Scope *CurScope) {
   return new (Context) ContinueStmt(ContinueLoc);
 }
 
-StmtResult
-Sema::ActOnBreakStmt(SourceLocation BreakLoc, Scope *CurScope) {
+StmtResult Sema::ActOnBreakStmt(SourceLocation BreakLoc, Scope *CurScope) {
   Scope *S = CurScope->getBreakParent();
   if (!S) {
     // C99 6.8.6.3p1: A break shall appear only in or as a switch/loop body.
     return StmtError(Diag(BreakLoc, diag::err_break_not_in_loop_or_switch));
   }
+
   if (S->isOpenMPLoopScope())
     return StmtError(Diag(BreakLoc, diag::err_omp_loop_cannot_use_stmt)
                      << "break");
+
   CheckJumpOutOfSEHFinally(*this, BreakLoc, *S);
 
   return new (Context) BreakStmt(BreakLoc);
+}
+
+StmtResult Sema::ActOnBreakResumableStmt(SourceLocation BreakLoc,
+                                         SourceLocation /*ResumableLoc*/,
+                                         Scope *CurScope) {
+  CheckJumpOutOfSEHFinally(*this, BreakLoc, *CurScope);
+
+  auto *S = new (Context) BreakResumableStmt(BreakLoc);
+
+  SetCurFunctionImplicitlyResumable(S);
+
+  return S;
 }
 
 /// Determine whether the given expression is a candidate for

@@ -560,6 +560,10 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
   if (LangOpts.CoroutinesTS)
     Builder.defineMacro("__cpp_coroutines", "201703L");
 
+  // C++ Resumable Functions proposal (N4453)
+  if (LangOpts.ResumableFunctions)
+    Builder.defineMacro("__cpp_resumable_functions", "1");
+
   // Potential future breaking changes.
   if (LangOpts.Char8)
     Builder.defineMacro("__cpp_char8_t", "201803");

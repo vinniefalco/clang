@@ -2139,6 +2139,7 @@ DEF_TRAVERSE_STMT(DeclStmt, {
 // These non-expr stmts (most of them), do not need any action except
 // iterating over the children.
 DEF_TRAVERSE_STMT(BreakStmt, {})
+DEF_TRAVERSE_STMT(BreakResumableStmt, {})
 DEF_TRAVERSE_STMT(CXXTryStmt, {})
 DEF_TRAVERSE_STMT(CaseStmt, {})
 DEF_TRAVERSE_STMT(CompoundStmt, {})

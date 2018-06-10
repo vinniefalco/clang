@@ -2457,30 +2457,22 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
                                            D->isInlineSpecified(),
                                            D->isImplicit());
   } else if (auto *FromConversion = dyn_cast<CXXConversionDecl>(D)) {
-    ToFunction = CXXConversionDecl::Create(Importer.getToContext(), 
-                                           cast<CXXRecordDecl>(DC),
-                                           InnerLocStart,
-                                           NameInfo, T, TInfo,
-                                           D->isInlineSpecified(),
-                                           FromConversion->isExplicit(),
-                                           D->isConstexpr(),
-                                           Importer.Import(D->getLocEnd()));
+    ToFunction = CXXConversionDecl::Create(
+        Importer.getToContext(), cast<CXXRecordDecl>(DC), InnerLocStart,
+        NameInfo, T, TInfo, D->isInlineSpecified(),
+        FromConversion->isExplicit(), D->isConstexpr(), D->isResumable(),
+        Importer.Import(D->getLocEnd()));
   } else if (auto *Method = dyn_cast<CXXMethodDecl>(D)) {
-    ToFunction = CXXMethodDecl::Create(Importer.getToContext(), 
-                                       cast<CXXRecordDecl>(DC),
-                                       InnerLocStart,
-                                       NameInfo, T, TInfo,
-                                       Method->getStorageClass(),
-                                       Method->isInlineSpecified(),
-                                       D->isConstexpr(),
-                                       Importer.Import(D->getLocEnd()));
+    ToFunction = CXXMethodDecl::Create(
+        Importer.getToContext(), cast<CXXRecordDecl>(DC), InnerLocStart,
+        NameInfo, T, TInfo, Method->getStorageClass(),
+        Method->isInlineSpecified(), D->isConstexpr(), D->isResumable(),
+        Importer.Import(D->getLocEnd()));
   } else {
-    ToFunction = FunctionDecl::Create(Importer.getToContext(), DC,
-                                      InnerLocStart,
-                                      NameInfo, T, TInfo, D->getStorageClass(),
-                                      D->isInlineSpecified(),
-                                      D->hasWrittenPrototype(),
-                                      D->isConstexpr());
+    ToFunction = FunctionDecl::Create(
+        Importer.getToContext(), DC, InnerLocStart, NameInfo, T, TInfo,
+        D->getStorageClass(), D->isInlineSpecified(), D->hasWrittenPrototype(),
+        D->isConstexpr(), D->isResumable());
   }
 
   // Import the qualifier, if any.

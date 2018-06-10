@@ -300,6 +300,10 @@ void StmtProfiler::VisitBreakStmt(const BreakStmt *S) {
   VisitStmt(S);
 }
 
+void StmtProfiler::VisitBreakResumableStmt(const BreakResumableStmt *S) {
+  VisitStmt(S);
+}
+
 void StmtProfiler::VisitReturnStmt(const ReturnStmt *S) {
   VisitStmt(S);
 }

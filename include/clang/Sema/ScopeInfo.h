@@ -163,6 +163,13 @@ public:
   /// (ex co_return, co_await, co_yield)
   SourceLocation FirstCoroutineStmtLoc;
 
+  /// First resumable expression location.
+  /// (ex 'break resumable' or a call to a resumable function)
+  SourceLocation FirstResumableStmtLoc;
+
+  SourceLocation FirstBreakResumableStmtLoc;
+  const FunctionDecl *FirstResumableCallee = nullptr;
+
   /// First 'return' statement in the current function.
   SourceLocation FirstReturnLoc;
 
@@ -462,6 +469,28 @@ public:
     NeedsCoroutineSuspends = false;
     CoroutineSuspends.first = Initial;
     CoroutineSuspends.second = Final;
+  }
+
+  void setFirstResumableStmt(const BreakResumableStmt *S) {
+    if (FirstResumableStmtLoc.isInvalid()) {
+      FirstResumableStmtLoc = S->getLocStart();
+      assert(FirstResumableCallee == nullptr && "Have resumable callee?");
+    }
+  }
+  void setFirstResumableStmt(const FunctionDecl *FD, SourceLocation Loc) {
+    assert(FD && "Callee cannot be null");
+    if (FirstResumableStmtLoc.isInvalid()) {
+      FirstResumableStmtLoc = Loc;
+      FirstResumableCallee = FD;
+    }
+  }
+
+  bool hasResumableStmt() const { return FirstResumableStmtLoc.isValid(); }
+  const FunctionDecl *getFirstResumableCallee() const {
+    return FirstResumableCallee;
+  }
+  bool isFirstResumableStmtBreakResumable() const {
+    return FirstResumableCallee == nullptr;
   }
 
   /// Clear out the information in this function scope, making it

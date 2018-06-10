@@ -578,6 +578,8 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
     if (D->isVirtualAsWritten()) Out << "virtual ";
     if (D->isModulePrivate())    Out << "__module_private__ ";
     if (D->isConstexpr() && !D->isExplicitlyDefaulted()) Out << "constexpr ";
+    if (D->isResumable())
+      Out << "resumable ";
     if ((CDecl && CDecl->isExplicitSpecified()) ||
         (ConversionDecl && ConversionDecl->isExplicitSpecified()) ||
         (GuideDecl && GuideDecl->isExplicitSpecified()))
@@ -827,6 +829,9 @@ void DeclPrinter::VisitVarDecl(VarDecl *D) {
       Out << "constexpr ";
       T.removeLocalConst();
     }
+
+    if (D->isResumableSpecified())
+      Out << "resumable ";
   }
 
   printDeclType(T, D->getName());

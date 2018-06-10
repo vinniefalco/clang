@@ -406,16 +406,13 @@ CXXMethodDecl *Sema::startLambdaDefinition(CXXRecordDecl *Class,
     = IntroducerRange.getBegin().getRawEncoding();
   MethodNameLoc.CXXOperatorName.EndOpNameLoc
     = IntroducerRange.getEnd().getRawEncoding();
-  CXXMethodDecl *Method
-    = CXXMethodDecl::Create(Context, Class, EndLoc,
-                            DeclarationNameInfo(MethodName, 
-                                                IntroducerRange.getBegin(),
-                                                MethodNameLoc),
-                            MethodType, MethodTypeInfo,
-                            SC_None,
-                            /*isInline=*/true,
-                            IsConstexprSpecified,
-                            EndLoc);
+  CXXMethodDecl *Method = CXXMethodDecl::Create(
+      Context, Class, EndLoc,
+      DeclarationNameInfo(MethodName, IntroducerRange.getBegin(),
+                          MethodNameLoc),
+      MethodType, MethodTypeInfo, SC_None,
+      /*isInline=*/true, IsConstexprSpecified,
+      /*isResumable=*/false, EndLoc);
   Method->setAccess(AS_public);
   
   // Temporarily set the lexical declaration context to the current
@@ -1287,15 +1284,12 @@ static void addFunctionPointerConversion(Sema &S,
     CallOpConvNameTL.setParam(I, From);
   }
 
-  CXXConversionDecl *Conversion 
-    = CXXConversionDecl::Create(S.Context, Class, Loc, 
-                                DeclarationNameInfo(ConversionName, 
-                                  Loc, ConvNameLoc),
-                                ConvTy, 
-                                ConvTSI,
-                                /*isInline=*/true, /*isExplicit=*/false,
-                                /*isConstexpr=*/S.getLangOpts().CPlusPlus17, 
-                                CallOperator->getBody()->getLocEnd());
+  CXXConversionDecl *Conversion = CXXConversionDecl::Create(
+      S.Context, Class, Loc,
+      DeclarationNameInfo(ConversionName, Loc, ConvNameLoc), ConvTy, ConvTSI,
+      /*isInline=*/true, /*isExplicit=*/false,
+      /*isConstexpr=*/S.getLangOpts().CPlusPlus17,
+      /*IsResumable=*/false, CallOperator->getBody()->getLocEnd());
   Conversion->setAccess(AS_public);
   Conversion->setImplicit(true);
 
@@ -1330,14 +1324,12 @@ static void addFunctionPointerConversion(Sema &S,
   // trailing return type of the invoker would require a visitor to rebuild
   // the trailing return type and adjusting all back DeclRefExpr's to refer
   // to the new static invoker parameters - not the call operator's.
-  CXXMethodDecl *Invoke
-    = CXXMethodDecl::Create(S.Context, Class, Loc, 
-                            DeclarationNameInfo(InvokerName, Loc), 
-                            InvokerFunctionTy,
-                            CallOperator->getTypeSourceInfo(), 
-                            SC_Static, /*IsInline=*/true,
-                            /*IsConstexpr=*/false, 
-                            CallOperator->getBody()->getLocEnd());
+  CXXMethodDecl *Invoke = CXXMethodDecl::Create(
+      S.Context, Class, Loc, DeclarationNameInfo(InvokerName, Loc),
+      InvokerFunctionTy, CallOperator->getTypeSourceInfo(), SC_Static,
+      /*IsInline=*/true,
+      /*IsConstexpr=*/false, /*IsResumable*/ false,
+      CallOperator->getBody()->getLocEnd());
   for (unsigned I = 0, N = CallOperator->getNumParams(); I != N; ++I)
     InvokerParams[I]->setOwningFunction(Invoke);
   Invoke->setParams(InvokerParams);
@@ -1379,14 +1371,12 @@ static void addBlockPointerConversion(Sema &S,
         S.Context.getCanonicalType(BlockPtrTy));
   DeclarationNameLoc NameLoc;
   NameLoc.NamedType.TInfo = S.Context.getTrivialTypeSourceInfo(BlockPtrTy, Loc);
-  CXXConversionDecl *Conversion 
-    = CXXConversionDecl::Create(S.Context, Class, Loc, 
-                                DeclarationNameInfo(Name, Loc, NameLoc),
-                                ConvTy, 
-                                S.Context.getTrivialTypeSourceInfo(ConvTy, Loc),
-                                /*isInline=*/true, /*isExplicit=*/false,
-                                /*isConstexpr=*/false, 
-                                CallOperator->getBody()->getLocEnd());
+  CXXConversionDecl *Conversion = CXXConversionDecl::Create(
+      S.Context, Class, Loc, DeclarationNameInfo(Name, Loc, NameLoc), ConvTy,
+      S.Context.getTrivialTypeSourceInfo(ConvTy, Loc),
+      /*isInline=*/true, /*isExplicit=*/false,
+      /*isConstexpr=*/false, /*isResumable*/ false,
+      CallOperator->getBody()->getLocEnd());
   Conversion->setAccess(AS_public);
   Conversion->setImplicit(true);
   Class->addDecl(Conversion);

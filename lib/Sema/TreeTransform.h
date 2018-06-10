@@ -6792,6 +6792,12 @@ TreeTransform<Derived>::TransformBreakStmt(BreakStmt *S) {
   return S;
 }
 
+template <class Derived>
+StmtResult
+TreeTransform<Derived>::TransformBreakResumableStmt(BreakResumableStmt *S) {
+  return S;
+}
+
 template<typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformReturnStmt(ReturnStmt *S) {

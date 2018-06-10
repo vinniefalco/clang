@@ -1332,6 +1332,9 @@ Parser::isCXXDeclarationSpecifier(Parser::TPResult BracedCastResult,
   case tok::kw_virtual:
   case tok::kw_explicit:
 
+    // Resumable function support
+  case tok::kw_resumable:
+
     // Modules
   case tok::kw___module_private__:
 

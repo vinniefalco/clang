@@ -213,6 +213,12 @@ void ASTStmtWriter::VisitBreakStmt(BreakStmt *S) {
   Code = serialization::STMT_BREAK;
 }
 
+void ASTStmtWriter::VisitBreakResumableStmt(BreakResumableStmt *S) {
+  VisitStmt(S);
+  Record.AddSourceLocation(S->getBreakLoc());
+  Code = serialization::STMT_BREAKRESUMABLE;
+}
+
 void ASTStmtWriter::VisitReturnStmt(ReturnStmt *S) {
   VisitStmt(S);
   Record.AddStmt(S->getRetValue());

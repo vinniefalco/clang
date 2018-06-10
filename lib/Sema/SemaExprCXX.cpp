@@ -7685,9 +7685,9 @@ Sema::CorrectDelayedTyposInExpr(Expr *E, VarDecl *InitDecl,
 }
 
 ExprResult Sema::ActOnFinishFullExpr(Expr *FE, SourceLocation CC,
-                                     bool DiscardedValue,
-                                     bool IsConstexpr,
-                                     bool IsLambdaInitCaptureInitializer) {
+                                     bool DiscardedValue, bool IsConstexpr,
+                                     bool IsLambdaInitCaptureInitializer,
+                                     bool IsResumable) {
   ExprResult FullExpr = FE;
 
   if (!FullExpr.get())

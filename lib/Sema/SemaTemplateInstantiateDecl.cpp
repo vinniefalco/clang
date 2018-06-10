@@ -1658,8 +1658,9 @@ Decl *TemplateDeclInstantiator::VisitFunctionDecl(FunctionDecl *D,
     Function = FunctionDecl::Create(
         SemaRef.Context, DC, D->getInnerLocStart(), NameInfo, T, TInfo,
         D->getCanonicalDecl()->getStorageClass(), D->isInlineSpecified(),
-        D->hasWrittenPrototype(), D->isConstexpr());
+        D->hasWrittenPrototype(), D->isConstexpr(), D->isResumableSpecified());
     Function->setRangeEnd(D->getSourceRange().getEnd());
+    Function->setImplicitlyResumable(D->isImplicitlyResumable());
   }
 
   if (D->isInlined())
@@ -1954,18 +1955,19 @@ TemplateDeclInstantiator::VisitCXXMethodDecl(CXXMethodDecl *D,
                                        false);
     Method->setRangeEnd(Destructor->getLocEnd());
   } else if (CXXConversionDecl *Conversion = dyn_cast<CXXConversionDecl>(D)) {
-    Method = CXXConversionDecl::Create(SemaRef.Context, Record,
-                                       StartLoc, NameInfo, T, TInfo,
-                                       Conversion->isInlineSpecified(),
-                                       Conversion->isExplicit(),
-                                       Conversion->isConstexpr(),
-                                       Conversion->getLocEnd());
+    Method = CXXConversionDecl::Create(
+        SemaRef.Context, Record, StartLoc, NameInfo, T, TInfo,
+        Conversion->isInlineSpecified(), Conversion->isExplicit(),
+        Conversion->isConstexpr(), Conversion->isResumableSpecified(),
+        Conversion->getLocEnd());
+    Method->setImplicitlyResumable(D->isImplicitlyResumable());
   } else {
     StorageClass SC = D->isStatic() ? SC_Static : SC_None;
-    Method = CXXMethodDecl::Create(SemaRef.Context, Record,
-                                   StartLoc, NameInfo, T, TInfo,
-                                   SC, D->isInlineSpecified(),
-                                   D->isConstexpr(), D->getLocEnd());
+    Method = CXXMethodDecl::Create(SemaRef.Context, Record, StartLoc, NameInfo,
+                                   T, TInfo, SC, D->isInlineSpecified(),
+                                   D->isConstexpr(), D->isResumableSpecified(),
+                                   D->getLocEnd());
+    Method->setImplicitlyResumable(D->isImplicitlyResumable());
   }
 
   if (D->isInlined())
@@ -4088,6 +4090,7 @@ void Sema::BuildVariableInstantiation(
   NewVar->setCXXForRangeDecl(OldVar->isCXXForRangeDecl());
   NewVar->setObjCForDecl(OldVar->isObjCForDecl());
   NewVar->setConstexpr(OldVar->isConstexpr());
+  NewVar->setResumableSpecified(OldVar->isResumableSpecified());
   NewVar->setInitCapture(OldVar->isInitCapture());
   NewVar->setPreviousDeclInSameBlockScope(
       OldVar->isPreviousDeclInSameBlockScope());

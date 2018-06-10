@@ -51,6 +51,8 @@
 using namespace clang;
 using namespace sema;
 
+enum InvalidResumableKind { IRK_ParmVar, IRK_Typedef };
+
 Sema::DeclGroupPtrTy Sema::ConvertDeclToDeclGroup(Decl *Ptr, Decl *OwnedType) {
   if (OwnedType) {
     Decl *Group[2] = { OwnedType, Ptr };
@@ -4262,6 +4264,18 @@ Sema::ParsedFreeStandingDeclSpec(Scope *S, AccessSpecifier AS, DeclSpec &DS,
     return TagD;
   }
 
+  if (DS.isResumableSpecified()) {
+    // resumable can only be applied to declarations
+    // and definitions of functions and variables.
+    if (Tag)
+      Diag(DS.getResumableSpecLoc(), diag::err_resumable_tag)
+          << GetDiagnosticTypeSpecifierID(DS.getTypeSpecType());
+    else
+      Diag(DS.getResumableSpecLoc(), diag::err_resumable_no_declarators);
+    // Don't emit warnings after this error.
+    return TagD;
+  }
+
   DiagnoseFunctionSpecifiers(DS);
 
   if (DS.isFriendSpecified()) {
@@ -5725,6 +5739,9 @@ Sema::ActOnTypedefDeclarator(Scope* S, Declarator& D, DeclContext* DC,
   if (D.getDeclSpec().isConstexprSpecified())
     Diag(D.getDeclSpec().getConstexprSpecLoc(), diag::err_invalid_constexpr)
       << 1;
+  if (D.getDeclSpec().isResumableSpecified())
+    Diag(D.getDeclSpec().getResumableSpecLoc(), diag::err_invalid_resumable)
+        << IRK_Typedef;
 
   if (D.getName().Kind != UnqualifiedIdKind::IK_Identifier) {
     if (D.getName().Kind == UnqualifiedIdKind::IK_DeductionGuideName)
@@ -6263,6 +6280,14 @@ static bool isDeclExternC(const Decl *D) {
   llvm_unreachable("Unknown type of decl!");
 }
 
+enum InvalidResumableVarDeclSelect {
+  IRV_Static,
+  IRV_ThreadLocal,
+  IRV_Extern,
+  IRV_Constexpr,
+  IRV_None = -1,
+};
+
 NamedDecl *Sema::ActOnVariableDeclarator(
     Scope *S, Declarator &D, DeclContext *DC, TypeSourceInfo *TInfo,
     LookupResult &Previous, MultiTemplateParamsArg TemplateParamLists,
@@ -6594,6 +6619,26 @@ NamedDecl *Sema::ActOnVariableDeclarator(
       //   implicitly an inline variable.
       if (NewVD->isStaticDataMember() && getLangOpts().CPlusPlus17)
         NewVD->setImplicitlyInline();
+    }
+
+    if (D.getDeclSpec().isResumableSpecified()) {
+      NewVD->setResumableSpecified(true);
+      auto DoDiag = [&](InvalidResumableVarDeclSelect Select,
+                        SourceLocation Loc) {
+        Diag(Loc, diag::err_resumable_var_decl_spec_invalid)
+            << NewVD << ((int)Select);
+        NewVD->setInvalidDecl();
+      };
+      if (D.getDeclSpec().isConstexprSpecified())
+        DoDiag(IRV_Constexpr, D.getDeclSpec().getConstexprSpecLoc());
+      if (D.getDeclSpec().isExternInLinkageSpec())
+        DoDiag(IRV_Extern, D.getDeclSpec().getStorageClassSpecLoc());
+      // FIXME(EricWF): Probably allow static locals and data members?
+      if (SC == SC_Static &&
+          (NewVD->isStaticLocal() || NewVD->isStaticDataMember()))
+        DoDiag(IRV_Static, D.getDeclSpec().getStorageClassSpecLoc());
+      if (DeclSpec::TSCS TSCS = D.getDeclSpec().getThreadStorageClassSpec())
+        DoDiag(IRV_ThreadLocal, D.getDeclSpec().getThreadStorageClassSpecLoc());
     }
   }
 
@@ -7297,6 +7342,13 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
 
   QualType T = NewVD->getType();
 
+  if (NewVD->isResumableSpecified() && !T->getAs<AutoType>()) {
+    Diag(NewVD->getLocation(), diag::err_resumable_var_decl_type)
+        << T << NewVD->getTypeSpecStartLoc();
+    NewVD->setInvalidDecl(true);
+    return;
+  }
+
   // Defer checking an 'auto' type until its initializer is attached.
   if (T->isUndeducedType())
     return;
@@ -7922,6 +7974,7 @@ static FunctionDecl* CreateNewFunctionDecl(Sema &SemaRef, Declarator &D,
 
   bool isExplicit = D.getDeclSpec().isExplicitSpecified();
   bool isConstexpr = D.getDeclSpec().isConstexprSpecified();
+  bool isResumable = D.getDeclSpec().isResumableSpecified();
 
   // Check that the return type is not an abstract class type.
   // For record types, this is done by the AbstractClassUsageDiagnoser once
@@ -7973,11 +8026,10 @@ static FunctionDecl* CreateNewFunctionDecl(Sema &SemaRef, Declarator &D,
 
       // Create a FunctionDecl to satisfy the function definition parsing
       // code path.
-      return FunctionDecl::Create(SemaRef.Context, DC,
-                                  D.getLocStart(),
-                                  D.getIdentifierLoc(), Name, R, TInfo,
-                                  SC, isInline,
-                                  /*hasPrototype=*/true, isConstexpr);
+      return FunctionDecl::Create(
+          SemaRef.Context, DC, D.getLocStart(), D.getIdentifierLoc(), Name, R,
+          TInfo, SC, isInline,
+          /*hasPrototype=*/true, isConstexpr, isResumable);
     }
 
   } else if (Name.getNameKind() == DeclarationName::CXXConversionFunctionName) {
@@ -7990,9 +8042,9 @@ static FunctionDecl* CreateNewFunctionDecl(Sema &SemaRef, Declarator &D,
     SemaRef.CheckConversionDeclarator(D, R, SC);
     IsVirtualOkay = true;
     return CXXConversionDecl::Create(SemaRef.Context, cast<CXXRecordDecl>(DC),
-                                     D.getLocStart(), NameInfo,
-                                     R, TInfo, isInline, isExplicit,
-                                     isConstexpr, SourceLocation());
+                                     D.getLocStart(), NameInfo, R, TInfo,
+                                     isInline, isExplicit, isConstexpr,
+                                     isResumable, SourceLocation());
 
   } else if (Name.getNameKind() == DeclarationName::CXXDeductionGuideName) {
     SemaRef.CheckDeductionGuideDeclarator(D, R, SC);
@@ -8014,11 +8066,9 @@ static FunctionDecl* CreateNewFunctionDecl(Sema &SemaRef, Declarator &D,
     }
 
     // This is a C++ method declaration.
-    CXXMethodDecl *Ret = CXXMethodDecl::Create(SemaRef.Context,
-                                               cast<CXXRecordDecl>(DC),
-                                               D.getLocStart(), NameInfo, R,
-                                               TInfo, SC, isInline,
-                                               isConstexpr, SourceLocation());
+    CXXMethodDecl *Ret = CXXMethodDecl::Create(
+        SemaRef.Context, cast<CXXRecordDecl>(DC), D.getLocStart(), NameInfo, R,
+        TInfo, SC, isInline, isConstexpr, isResumable, SourceLocation());
     IsVirtualOkay = !Ret->isStatic();
     return Ret;
   } else {
@@ -8030,10 +8080,9 @@ static FunctionDecl* CreateNewFunctionDecl(Sema &SemaRef, Declarator &D,
     // Determine whether the function was written with a
     // prototype. This true when:
     //   - we're in C++ (where every function has a prototype),
-    return FunctionDecl::Create(SemaRef.Context, DC,
-                                D.getLocStart(),
-                                NameInfo, R, TInfo, SC, isInline,
-                                true/*HasPrototype*/, isConstexpr);
+    return FunctionDecl::Create(SemaRef.Context, DC, D.getLocStart(), NameInfo,
+                                R, TInfo, SC, isInline, true /*HasPrototype*/,
+                                isConstexpr, isResumable);
   }
 }
 
@@ -8303,6 +8352,8 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     bool isVirtual = D.getDeclSpec().isVirtualSpecified();
     bool isExplicit = D.getDeclSpec().isExplicitSpecified();
     bool isConstexpr = D.getDeclSpec().isConstexprSpecified();
+    bool isResumable = D.getDeclSpec().isResumableSpecified();
+
     isFriend = D.getDeclSpec().isFriendSpecified();
     if (isFriend && !isInline && D.isFunctionDefinition()) {
       // C++ [class.friend]p5
@@ -8512,6 +8563,28 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
       // destructors cannot be declared constexpr.
       if (isa<CXXDestructorDecl>(NewFD))
         Diag(D.getDeclSpec().getConstexprSpecLoc(), diag::err_constexpr_dtor);
+    }
+
+    if (isResumable) {
+      NewFD->setImplicitlyInline();
+
+      int SelectType = -1;
+      if (isa<CXXConstructorDecl>(NewFD))
+        SelectType = 0;
+      else if (isa<CXXDestructorDecl>(NewFD))
+        SelectType = 1;
+      else if (NewFD->getOverloadedOperator() == OO_Equal)
+        SelectType = 2;
+
+      if (SelectType != -1)
+        Diag(D.getDeclSpec().getResumableSpecLoc(),
+             diag::err_special_member_declared_resumable)
+            << SelectType;
+
+      if (isConstexpr)
+        Diag(D.getDeclSpec().getResumableSpecLoc(),
+             diag::err_resumable_function_decl_constexpr)
+            << NewFD << D.getDeclSpec().getConstexprSpecLoc();
     }
 
     // If __module_private__ was specified, mark the function accordingly.
@@ -9258,8 +9331,9 @@ static bool CheckMultiVersionAdditionalRules(Sema &S, const FunctionDecl *OldFD,
     ReturnType = 1,
     ConstexprSpec = 2,
     InlineSpec = 3,
-    StorageClass = 4,
-    Linkage = 5
+    ResumableSpec = 4,
+    StorageClass = 5,
+    Linkage = 6
   };
 
   // For now, disallow all other attributes.  These should be opt-in, but
@@ -9339,6 +9413,10 @@ static bool CheckMultiVersionAdditionalRules(Sema &S, const FunctionDecl *OldFD,
     if (OldFD->isInlineSpecified() != NewFD->isInlineSpecified())
       return S.Diag(NewFD->getLocation(), diag::err_multiversion_diff)
              << InlineSpec;
+
+    if (OldFD->isResumable() != NewFD->isResumable())
+      return S.Diag(NewFD->getLocation(), diag::err_multiversion_diff)
+             << ResumableSpec;
 
     if (OldFD->getStorageClass() != NewFD->getStorageClass())
       return S.Diag(NewFD->getLocation(), diag::err_multiversion_diff)
@@ -9918,6 +9996,11 @@ void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
     Diag(DS.getConstexprSpecLoc(), diag::err_constexpr_main)
       << FixItHint::CreateRemoval(DS.getConstexprSpecLoc());
     FD->setConstexpr(false);
+  }
+  if (FD->isResumableSpecified()) {
+    Diag(DS.getResumableSpecLoc(), diag::err_resumable_main)
+        << FixItHint::CreateRemoval(DS.getResumableSpecLoc());
+    FD->setResumableSpecified(false);
   }
 
   if (getLangOpts().OpenCL) {
@@ -10618,8 +10701,9 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
     return;
   }
 
-  // C++11 [decl.spec.auto]p6. Deduce the type which 'auto' stands in for.
-  if (VDecl->getType()->isUndeducedType()) {
+  bool CorrectTyposEarly =
+      VDecl->getType()->isUndeducedType() || VDecl->isResumableSpecified();
+  if (CorrectTyposEarly) {
     // Attempt typo correction early so that the type of the init expression can
     // be deduced based on the chosen correction if the original init contains a
     // TypoExpr.
@@ -10629,7 +10713,19 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
       return;
     }
     Init = Res.get();
+  }
 
+  if (VDecl->isResumableSpecified()) {
+    if (CheckResumableVarDeclInit(VDecl, Init)) {
+      RealDecl->setInvalidDecl();
+      return;
+    }
+  }
+
+  // C++11 [decl.spec.auto]p6. Deduce the type which 'auto' stands in for.
+  if (VDecl->getType()->isUndeducedType()) {
+    // FIXME(EricWF): Correctly deduce the resumable object type if we have a
+    // resumable expression.
     if (DeduceVariableDeclarationType(VDecl, DirectInit, Init))
       return;
   }
@@ -10894,8 +10990,9 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
     // type. We separately check that every constexpr variable is of literal
     // type.
     } else if (VDecl->isConstexpr()) {
+      // FIXME(EricWF): Do something here
 
-    // Require constness.
+      // Require constness.
     } else if (!DclT.isConstQualified()) {
       Diag(VDecl->getLocation(), diag::err_in_class_initializer_non_const)
         << Init->getSourceRange();
@@ -11061,6 +11158,13 @@ void Sema::ActOnUninitializedDecl(Decl *RealDecl) {
     // C++1z [dcl.dcl]p1 grammar implies that an initializer is mandatory.
     if (isa<DecompositionDecl>(RealDecl)) {
       Diag(Var->getLocation(), diag::err_decomp_decl_requires_init) << Var;
+      Var->setInvalidDecl();
+      return;
+    }
+
+    if (Var->isResumableSpecified()) {
+      Diag(Var->getLocation(), diag::err_resumable_var_decl_requires_init)
+          << Var;
       Var->setInvalidDecl();
       return;
     }
@@ -11965,6 +12069,8 @@ Decl *Sema::ActOnParamDeclarator(Scope *S, Declarator &D) {
   if (DS.isConstexprSpecified())
     Diag(DS.getConstexprSpecLoc(), diag::err_invalid_constexpr)
       << 0;
+  if (DS.isResumableSpecified())
+    Diag(DS.getResumableSpecLoc(), diag::err_invalid_resumable) << IRK_ParmVar;
 
   DiagnoseFunctionSpecifiers(DS);
 
@@ -12883,6 +12989,12 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
       // enabled.
       ActivePolicy = &WP;
     }
+
+    if (FD && FD->isResumable() && !FD->isInvalidDecl() &&
+        CheckResumableFunctionDecl(FD, getCurFunction(), IsInstantiation))
+      FD->setInvalidDecl();
+    if (FD && FD->isResumable() && !FD->isInvalidDecl())
+      CheckCompletedResumableFunctionBody(FD, Body, getCurFunction());
 
     if (!IsInstantiation && FD && FD->isConstexpr() && !FD->isInvalidDecl() &&
         (!CheckConstexprFunctionDecl(FD) ||

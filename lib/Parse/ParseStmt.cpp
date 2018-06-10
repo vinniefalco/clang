@@ -1875,11 +1875,17 @@ StmtResult Parser::ParseContinueStatement() {
 /// ParseBreakStatement
 ///       jump-statement:
 ///         'break' ';'
+///         'break' 'resumable' ';'
 ///
 /// Note: this lets the caller parse the end ';'.
 ///
 StmtResult Parser::ParseBreakStatement() {
   SourceLocation BreakLoc = ConsumeToken();  // eat the 'break'.
+  if (Tok.is(tok::kw_resumable)) {
+    SourceLocation ResumableLoc = ConsumeToken();
+    return Actions.ActOnBreakResumableStmt(BreakLoc, ResumableLoc,
+                                           getCurScope());
+  }
   return Actions.ActOnBreakStmt(BreakLoc, getCurScope());
 }
 

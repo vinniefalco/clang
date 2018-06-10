@@ -1984,7 +1984,7 @@ private:
                         QualType T, TypeSourceInfo *TInfo,
                         SourceLocation EndLocation)
       : FunctionDecl(CXXDeductionGuide, C, DC, StartLoc, NameInfo, T, TInfo,
-                     SC_None, false, false) {
+                     SC_None, false, false, false) {
     if (EndLocation.isValid())
       setRangeEnd(EndLocation);
     IsExplicitSpecified = IsExplicit;
@@ -2034,11 +2034,11 @@ class CXXMethodDecl : public FunctionDecl {
 protected:
   CXXMethodDecl(Kind DK, ASTContext &C, CXXRecordDecl *RD,
                 SourceLocation StartLoc, const DeclarationNameInfo &NameInfo,
-                QualType T, TypeSourceInfo *TInfo,
-                StorageClass SC, bool isInline,
-                bool isConstexpr, SourceLocation EndLocation)
-    : FunctionDecl(DK, C, RD, StartLoc, NameInfo, T, TInfo,
-                   SC, isInline, isConstexpr) {
+                QualType T, TypeSourceInfo *TInfo, StorageClass SC,
+                bool isInline, bool isConstexpr, bool isResumable,
+                SourceLocation EndLocation)
+      : FunctionDecl(DK, C, RD, StartLoc, NameInfo, T, TInfo, SC, isInline,
+                     isConstexpr, isResumable) {
     if (EndLocation.isValid())
       setRangeEnd(EndLocation);
   }
@@ -2046,12 +2046,10 @@ protected:
 public:
   static CXXMethodDecl *Create(ASTContext &C, CXXRecordDecl *RD,
                                SourceLocation StartLoc,
-                               const DeclarationNameInfo &NameInfo,
-                               QualType T, TypeSourceInfo *TInfo,
-                               StorageClass SC,
-                               bool isInline,
-                               bool isConstexpr,
-                               SourceLocation EndLocation);
+                               const DeclarationNameInfo &NameInfo, QualType T,
+                               TypeSourceInfo *TInfo, StorageClass SC,
+                               bool isInline, bool isConstexpr,
+                               bool isResumable, SourceLocation EndLocation);
 
   static CXXMethodDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 
@@ -2475,14 +2473,14 @@ class CXXConstructorDecl final
   unsigned IsInheritingConstructor : 1;
 
   CXXConstructorDecl(ASTContext &C, CXXRecordDecl *RD, SourceLocation StartLoc,
-                     const DeclarationNameInfo &NameInfo,
-                     QualType T, TypeSourceInfo *TInfo,
-                     bool isExplicitSpecified, bool isInline,
-                     bool isImplicitlyDeclared, bool isConstexpr,
+                     const DeclarationNameInfo &NameInfo, QualType T,
+                     TypeSourceInfo *TInfo, bool isExplicitSpecified,
+                     bool isInline, bool isImplicitlyDeclared, bool isConstexpr,
                      InheritedConstructor Inherited)
-    : CXXMethodDecl(CXXConstructor, C, RD, StartLoc, NameInfo, T, TInfo,
-                    SC_None, isInline, isConstexpr, SourceLocation()),
-      NumCtorInitializers(0), IsInheritingConstructor((bool)Inherited) {
+      : CXXMethodDecl(CXXConstructor, C, RD, StartLoc, NameInfo, T, TInfo,
+                      SC_None, isInline, isConstexpr, /*isResumable=*/false,
+                      SourceLocation()),
+        NumCtorInitializers(0), IsInheritingConstructor((bool)Inherited) {
     setImplicit(isImplicitlyDeclared);
     if (Inherited)
       *getTrailingObjects<InheritedConstructor>() = Inherited;
@@ -2693,12 +2691,12 @@ class CXXDestructorDecl : public CXXMethodDecl {
   Expr *OperatorDeleteThisArg = nullptr;
 
   CXXDestructorDecl(ASTContext &C, CXXRecordDecl *RD, SourceLocation StartLoc,
-                    const DeclarationNameInfo &NameInfo,
-                    QualType T, TypeSourceInfo *TInfo,
-                    bool isInline, bool isImplicitlyDeclared)
-    : CXXMethodDecl(CXXDestructor, C, RD, StartLoc, NameInfo, T, TInfo,
-                    SC_None, isInline, /*isConstexpr=*/false, SourceLocation())
-  {
+                    const DeclarationNameInfo &NameInfo, QualType T,
+                    TypeSourceInfo *TInfo, bool isInline,
+                    bool isImplicitlyDeclared)
+      : CXXMethodDecl(CXXDestructor, C, RD, StartLoc, NameInfo, T, TInfo,
+                      SC_None, isInline, /*isConstexpr=*/false,
+                      /*isResumable=*/false, SourceLocation()) {
     setImplicit(isImplicitlyDeclared);
   }
 
@@ -2750,9 +2748,10 @@ class CXXConversionDecl : public CXXMethodDecl {
                     const DeclarationNameInfo &NameInfo, QualType T,
                     TypeSourceInfo *TInfo, bool isInline,
                     bool isExplicitSpecified, bool isConstexpr,
-                    SourceLocation EndLocation)
+                    bool isResumable, SourceLocation EndLocation)
       : CXXMethodDecl(CXXConversion, C, RD, StartLoc, NameInfo, T, TInfo,
-                      SC_None, isInline, isConstexpr, EndLocation) {
+                      SC_None, isInline, isConstexpr, isResumable,
+                      EndLocation) {
     IsExplicitSpecified = isExplicitSpecified;
   }
 
@@ -2762,13 +2761,11 @@ public:
   friend class ASTDeclReader;
   friend class ASTDeclWriter;
 
-  static CXXConversionDecl *Create(ASTContext &C, CXXRecordDecl *RD,
-                                   SourceLocation StartLoc,
-                                   const DeclarationNameInfo &NameInfo,
-                                   QualType T, TypeSourceInfo *TInfo,
-                                   bool isInline, bool isExplicit,
-                                   bool isConstexpr,
-                                   SourceLocation EndLocation);
+  static CXXConversionDecl *
+  Create(ASTContext &C, CXXRecordDecl *RD, SourceLocation StartLoc,
+         const DeclarationNameInfo &NameInfo, QualType T, TypeSourceInfo *TInfo,
+         bool isInline, bool isExplicit, bool isConstexpr, bool isResumable,
+         SourceLocation EndLocation);
   static CXXConversionDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 
   /// Whether this function is marked as explicit explicitly.

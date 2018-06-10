@@ -1422,6 +1422,36 @@ public:
   }
 };
 
+/// BreakStmt - This represents a break.
+class BreakResumableStmt : public Stmt {
+  SourceLocation Loc;
+
+public:
+  BreakResumableStmt(SourceLocation BL)
+      : Stmt(BreakResumableStmtClass), Loc(BL) {
+    static_assert(sizeof(BreakResumableStmt) == 2 * sizeof(SourceLocation),
+                  "BreakStmt too large");
+  }
+
+  /// Build an empty break statement.
+  explicit BreakResumableStmt(EmptyShell Empty) : Stmt(BreakStmtClass, Empty) {}
+
+  SourceLocation getBreakLoc() const { return Loc; }
+  void setBreakLoc(SourceLocation L) { Loc = L; }
+
+  SourceLocation getLocStart() const LLVM_READONLY { return Loc; }
+  SourceLocation getLocEnd() const LLVM_READONLY { return Loc; }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == BreakResumableStmtClass;
+  }
+
+  // Iterators
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+};
+
 /// ReturnStmt - This represents a return, optionally of an expression:
 ///   return;
 ///   return 4;

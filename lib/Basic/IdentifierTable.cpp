@@ -98,43 +98,44 @@ IdentifierTable::IdentifierTable(const LangOptions &LangOpts,
 // Constants for TokenKinds.def
 namespace {
 
-  enum {
-    KEYC99 = 0x1,
-    KEYCXX = 0x2,
-    KEYCXX11 = 0x4,
-    KEYGNU = 0x8,
-    KEYMS = 0x10,
-    BOOLSUPPORT = 0x20,
-    KEYALTIVEC = 0x40,
-    KEYNOCXX = 0x80,
-    KEYBORLAND = 0x100,
-    KEYOPENCLC = 0x200,
-    KEYC11 = 0x400,
-    KEYARC = 0x800,
-    KEYNOMS18 = 0x01000,
-    KEYNOOPENCL = 0x02000,
-    WCHARSUPPORT = 0x04000,
-    HALFSUPPORT = 0x08000,
-    CHAR8SUPPORT = 0x10000,
-    KEYCONCEPTS = 0x20000,
-    KEYOBJC2    = 0x40000,
-    KEYZVECTOR  = 0x80000,
-    KEYCOROUTINES = 0x100000,
-    KEYMODULES = 0x200000,
-    KEYCXX2A = 0x400000,
-    KEYOPENCLCXX = 0x800000,
-    KEYALLCXX = KEYCXX | KEYCXX11 | KEYCXX2A,
-    KEYALL = (0xffffff & ~KEYNOMS18 &
-              ~KEYNOOPENCL) // KEYNOMS18 and KEYNOOPENCL are used to exclude.
-  };
+enum {
+  KEYC99 = 0x1,
+  KEYCXX = 0x2,
+  KEYCXX11 = 0x4,
+  KEYGNU = 0x8,
+  KEYMS = 0x10,
+  BOOLSUPPORT = 0x20,
+  KEYALTIVEC = 0x40,
+  KEYNOCXX = 0x80,
+  KEYBORLAND = 0x100,
+  KEYOPENCLC = 0x200,
+  KEYC11 = 0x400,
+  KEYARC = 0x800,
+  KEYNOMS18 = 0x01000,
+  KEYNOOPENCL = 0x02000,
+  WCHARSUPPORT = 0x04000,
+  HALFSUPPORT = 0x08000,
+  CHAR8SUPPORT = 0x10000,
+  KEYCONCEPTS = 0x20000,
+  KEYOBJC2 = 0x40000,
+  KEYZVECTOR = 0x80000,
+  KEYCOROUTINES = 0x100000,
+  KEYMODULES = 0x200000,
+  KEYCXX2A = 0x400000,
+  KEYOPENCLCXX = 0x800000,
+  KEYRESUMABLEFUNCS = 0x1000000,
+  KEYALLCXX = KEYCXX | KEYCXX11 | KEYCXX2A,
+  KEYALL = (0xffffff & ~KEYNOMS18 &
+            ~KEYNOOPENCL) // KEYNOMS18 and KEYNOOPENCL are used to exclude.
+};
 
-  /// How a keyword is treated in the selected standard.
-  enum KeywordStatus {
-    KS_Disabled,    // Disabled
-    KS_Extension,   // Is an extension
-    KS_Enabled,     // Enabled
-    KS_Future       // Is a keyword in future standard
-  };
+/// How a keyword is treated in the selected standard.
+enum KeywordStatus {
+  KS_Disabled,  // Disabled
+  KS_Extension, // Is an extension
+  KS_Enabled,   // Enabled
+  KS_Future     // Is a keyword in future standard
+};
 
 } // namespace
 
@@ -167,6 +168,8 @@ static KeywordStatus getKeywordStatus(const LangOptions &LangOpts,
   if (LangOpts.ConceptsTS && (Flags & KEYCONCEPTS)) return KS_Enabled;
   if (LangOpts.CoroutinesTS && (Flags & KEYCOROUTINES)) return KS_Enabled;
   if (LangOpts.ModulesTS && (Flags & KEYMODULES)) return KS_Enabled;
+  if (LangOpts.ResumableFunctions && (Flags & KEYRESUMABLEFUNCS))
+    return KS_Enabled;
   if (LangOpts.CPlusPlus && (Flags & KEYALLCXX)) return KS_Future;
   return KS_Disabled;
 }

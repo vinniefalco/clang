@@ -278,6 +278,7 @@ public:
   void VisitVarDecl(const VarDecl *D) {
     Hash.AddBoolean(D->isStaticLocal());
     Hash.AddBoolean(D->isConstexpr());
+    Hash.AddBoolean(D->isResumableSpecified());
     const bool HasInit = D->hasInit();
     Hash.AddBoolean(HasInit);
     if (HasInit) {

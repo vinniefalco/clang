@@ -398,6 +398,12 @@ void StmtPrinter::VisitBreakStmt(BreakStmt *Node) {
   if (Policy.IncludeNewlines) OS << "\n";
 }
 
+void StmtPrinter::VisitBreakResumableStmt(BreakResumableStmt *Node) {
+  Indent() << "break resumable;";
+  if (Policy.IncludeNewlines)
+    OS << "\n";
+}
+
 void StmtPrinter::VisitReturnStmt(ReturnStmt *Node) {
   Indent() << "return";
   if (Node->getRetValue()) {

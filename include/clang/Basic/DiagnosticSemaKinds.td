@@ -686,6 +686,8 @@ def ext_noreturn_main : ExtWarn<
 def note_main_remove_noreturn : Note<"remove '_Noreturn'">;
 def err_constexpr_main : Error<
   "'main' is not allowed to be declared constexpr">;
+def err_resumable_main : Error<
+  "'main' is not allowed to be declared resumable">;
 def err_deleted_main : Error<"'main' is not allowed to be deleted">;
 def err_mainlike_template_decl : Error<"%0 cannot be a template">;
 def err_main_returns_nonint : Error<"'main' must return 'int'">;
@@ -2393,6 +2395,64 @@ def warn_private_extern : Warning<
   "private to the linkage unit and is deprecated">, InGroup<PrivateExtern>;
 def note_private_extern : Note<
   "use __attribute__((visibility(\"hidden\"))) attribute instead">;
+
+// C++ Resumable functions
+def err_special_member_declared_resumable : Error<
+  "%select{constructor|destructor|assignment operator}0 cannot be declared "
+  "resumable">;
+def err_special_member_implicitly_resumable : Error<
+  "%select{constructor|destructor|assignment operator}0 cannot be a resumable "
+  "function">;
+def err_resumable_function_not_defined : Error<
+  "resumable function %0 is not defined before it is used">;
+def err_implicitly_resumable_not_inline : Error<
+  "implicitly resumable function %0 not declared inline">;
+def err_invalid_resumable : Error<
+  "%select{function parameter|typedef}0 cannot be resumable">;
+def err_resumable_tag : Error<
+  "%select{class|struct|interface|union|enum}0 cannot be marked resumable">;
+def err_resumable_no_declarators : Error<
+  "resumable can only be used in variable and function declarations">;
+def err_invalid_resumable_var_decl : Error<
+  "resumable variable declaration must be a definition">;
+def err_resumable_redecl_mismatch : Error<
+  "%select{non-resumable declaration of %0 follows resumable declaration"
+  "|resumable declaration of %0 follows non-resumable declaration}1">;
+def err_resumable_virtual : Error<"virtual function cannot be resumable">;
+def err_resumable_var_decl_spec_invalid : Error<
+  "%select{static|thread_local|extern|constexpr}1 variable %0 cannot be declared "
+  "resumable">;
+def err_resumable_var_decl_type : Error<
+  "resumable variable cannot be declared with type %0; "
+  "declared type must be 'auto'">;
+def err_resumable_function_decl_constexpr : Error<
+  "resumable function %0 declared constexpr">;
+def err_resumable_var_decl_requires_init : Error<
+  "resumable variable declaration %0 requires an initializer">;
+def err_resumable_func_is_coroutine : Error<
+  "resumable function %0 cannot be a coroutine">;
+def err_resumable_var_decl_init_not_call_expr : Error<
+  "initializer for the resumable variable declaration %0 must be a call to a "
+  "resumable function">;
+def err_resumable_var_decl_init_not_resumable_expr : Error<
+  "initializer for resumable variable declaration %0 calls a non-resumable "
+  "function">;
+def note_function_declared_here : Note<
+  "function declared here">;
+def note_declared_resumable_here : Note<
+  "function declared resumable here">;
+def note_made_resumable_here : Note<
+  "function made resumable by %select{'break resumable' statement"
+  "|call to resumable function %1}0 here">;
+def err_addrof_resumable_fn : Error<
+    "cannot take address of resumable function %0">;
+def note_addrof_ovl_candidate_resumable_fn : Note<
+    "candidate function address cannot be taken because the function is resumable">;
+def err_explicit_instantiation_of_resumable_function : Error<
+    "explicit instantiation %select{declaration|definition}0 of resumable "
+    "function %1">;
+def note_explicit_instantiation_declaration_here : Note<
+    "explicit instantiation declaration is here">;
 
 // C++ Concepts TS
 def err_concept_wrong_decl_kind : Error<
@@ -7922,6 +7982,8 @@ def err_continue_not_in_loop : Error<
   "'continue' statement not in loop statement">;
 def err_break_not_in_loop_or_switch : Error<
   "'break' statement not in loop or switch statement">;
+def err_break_resumable_not_in_resumable_function : Error<
+  "'break resumable' statement not in a resumable function">;
 def warn_loop_ctrl_binds_to_inner : Warning<
   "'%0' is bound to current loop, GCC binds it to the enclosing loop">,
   InGroup<GccCompat>;
@@ -9287,8 +9349,8 @@ def err_multiversion_no_other_attrs : Error<
   "attributes">;
 def err_multiversion_diff : Error<
   "multiversioned function declaration has a different %select{calling convention"
-  "|return type|constexpr specification|inline specification|storage class|"
-  "linkage}0">;
+  "|return type|constexpr specification|inline specification"
+  "|resumable specification|storage class|linkage}0">;
 def err_multiversion_doesnt_support : Error<
   "multiversioned functions do not yet support %select{function templates|"
   "virtual functions|deduced return types|constructors|destructors|"

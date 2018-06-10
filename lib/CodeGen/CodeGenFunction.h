@@ -2700,6 +2700,7 @@ public:
   void EmitReturnStmt(const ReturnStmt &S);
   void EmitDeclStmt(const DeclStmt &S);
   void EmitBreakStmt(const BreakStmt &S);
+  void EmitBreakResumableStmt(const BreakResumableStmt &S);
   void EmitContinueStmt(const ContinueStmt &S);
   void EmitSwitchStmt(const SwitchStmt &S);
   void EmitDefaultStmt(const DefaultStmt &S);

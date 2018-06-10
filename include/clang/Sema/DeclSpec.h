@@ -364,6 +364,9 @@ private:
   // constexpr-specifier
   unsigned Constexpr_specified : 1;
 
+  // resumable-specifier
+  unsigned Resumable_specified : 1;
+
   union {
     UnionParsedType TypeRep;
     Decl *DeclRep;
@@ -393,7 +396,7 @@ private:
       TQ_unalignedLoc;
   SourceLocation FS_inlineLoc, FS_virtualLoc, FS_explicitLoc, FS_noreturnLoc;
   SourceLocation FS_forceinlineLoc;
-  SourceLocation FriendLoc, ModulePrivateLoc, ConstexprLoc;
+  SourceLocation FriendLoc, ModulePrivateLoc, ConstexprLoc, ResumableLoc;
   SourceLocation TQ_pipeLoc;
 
   WrittenBuiltinSpecs writtenBS;
@@ -419,30 +422,18 @@ public:
   }
 
   DeclSpec(AttributeFactory &attrFactory)
-    : StorageClassSpec(SCS_unspecified),
-      ThreadStorageClassSpec(TSCS_unspecified),
-      SCS_extern_in_linkage_spec(false),
-      TypeSpecWidth(TSW_unspecified),
-      TypeSpecComplex(TSC_unspecified),
-      TypeSpecSign(TSS_unspecified),
-      TypeSpecType(TST_unspecified),
-      TypeAltiVecVector(false),
-      TypeAltiVecPixel(false),
-      TypeAltiVecBool(false),
-      TypeSpecOwned(false),
-      TypeSpecPipe(false),
-      TypeQualifiers(TQ_unspecified),
-      FS_inline_specified(false),
-      FS_forceinline_specified(false),
-      FS_virtual_specified(false),
-      FS_explicit_specified(false),
-      FS_noreturn_specified(false),
-      Friend_specified(false),
-      Constexpr_specified(false),
-      Attrs(attrFactory),
-      writtenBS(),
-      ObjCQualifiers(nullptr) {
-  }
+      : StorageClassSpec(SCS_unspecified),
+        ThreadStorageClassSpec(TSCS_unspecified),
+        SCS_extern_in_linkage_spec(false), TypeSpecWidth(TSW_unspecified),
+        TypeSpecComplex(TSC_unspecified), TypeSpecSign(TSS_unspecified),
+        TypeSpecType(TST_unspecified), TypeAltiVecVector(false),
+        TypeAltiVecPixel(false), TypeAltiVecBool(false), TypeSpecOwned(false),
+        TypeSpecPipe(false), TypeQualifiers(TQ_unspecified),
+        FS_inline_specified(false), FS_forceinline_specified(false),
+        FS_virtual_specified(false), FS_explicit_specified(false),
+        FS_noreturn_specified(false), Friend_specified(false),
+        Constexpr_specified(false), Resumable_specified(false),
+        Attrs(attrFactory), writtenBS(), ObjCQualifiers(nullptr) {}
 
   // storage-class-specifier
   SCS getStorageClassSpec() const { return (SCS)StorageClassSpec; }
@@ -696,6 +687,8 @@ public:
                             unsigned &DiagID);
   bool SetConstexprSpec(SourceLocation Loc, const char *&PrevSpec,
                         unsigned &DiagID);
+  bool SetResumableSpec(SourceLocation Loc, const char *&PrevSpec,
+                        unsigned &DiagID);
 
   bool isFriendSpecified() const { return Friend_specified; }
   SourceLocation getFriendSpecLoc() const { return FriendLoc; }
@@ -705,6 +698,9 @@ public:
   
   bool isConstexprSpecified() const { return Constexpr_specified; }
   SourceLocation getConstexprSpecLoc() const { return ConstexprLoc; }
+
+  bool isResumableSpecified() const { return Resumable_specified; }
+  SourceLocation getResumableSpecLoc() const { return ResumableLoc; }
 
   void ClearConstexprSpec() {
     Constexpr_specified = false;

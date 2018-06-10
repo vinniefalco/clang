@@ -48,6 +48,10 @@ void FunctionScopeInfo::Clear() {
   CoroutineSuspends.first = nullptr;
   CoroutineSuspends.second = nullptr;
 
+  // Resumable function state
+  FirstResumableStmtLoc = SourceLocation();
+  FirstResumableCallee = nullptr;
+
   SwitchStack.clear();
   Returns.clear();
   ErrorTrap.reset();

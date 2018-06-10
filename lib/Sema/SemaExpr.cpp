@@ -222,10 +222,13 @@ bool Sema::DiagnoseUseOfDecl(NamedDecl *D, ArrayRef<SourceLocation> Locs,
       Pos->second.clear();
     }
 
+    const FunctionDecl *FD = cast<FunctionDecl>(D);
     // C++ [basic.start.main]p3:
     //   The function 'main' shall not be used within a program.
-    if (cast<FunctionDecl>(D)->isMain())
+    if (FD->isMain())
       Diag(Loc, diag::ext_main_used);
+    if (FD->isResumable())
+      DiagnoseUseOfResumableFunction(FD, Loc);
   }
 
   // See if this is an auto-typed variable whose initializer we are parsing.
@@ -5431,6 +5434,9 @@ Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
     Diag(Fn->getExprLoc(), diag::err_anyx86_interrupt_called);
     return ExprError();
   }
+
+  if (FDecl && FDecl->isResumable())
+    SetCurFunctionImplicitlyResumable(FDecl, Fn->getExprLoc());
 
   // Interrupt handlers don't save off the VFP regs automatically on ARM,
   // so there's some risk when calling out to non-interrupt handler functions

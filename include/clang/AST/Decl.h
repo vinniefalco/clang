@@ -953,6 +953,9 @@ protected:
     /// Whether this variable is (C++0x) constexpr.
     unsigned IsConstexpr : 1;
 
+    /// Whether this variable is a suspension point for a resumable expression.
+    unsigned IsResumable : 1;
+
     /// Whether this variable is the implicit variable for a lambda
     /// init-capture.
     unsigned IsInitCapture : 1;
@@ -1386,6 +1389,15 @@ public:
     NonParmVarDeclBits.IsConstexpr = IC;
   }
 
+  /// Wheither this variable is specified with the 'resumable' keyword.
+  bool isResumableSpecified() const {
+    return isa<ParmVarDecl>(this) ? false : NonParmVarDeclBits.IsResumable;
+  }
+  void setResumableSpecified(bool IR) {
+    assert(!isa<ParmVarDecl>(this));
+    NonParmVarDeclBits.IsResumable = IR;
+  }
+
   /// Whether this variable is the implicit variable for a lambda init-capture.
   bool isInitCapture() const {
     return isa<ParmVarDecl>(this) ? false : NonParmVarDeclBits.IsInitCapture;
@@ -1760,6 +1772,8 @@ private:
   unsigned HasImplicitReturnZero : 1;
   unsigned IsLateTemplateParsed : 1;
   unsigned IsConstexpr : 1;
+  unsigned IsResumableSpecified : 1;
+  unsigned IsImplicitlyResumable : 1;
   unsigned InstantiationIsPending : 1;
 
   /// Indicates if the function uses __try.
@@ -1862,7 +1876,7 @@ protected:
   FunctionDecl(Kind DK, ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
                const DeclarationNameInfo &NameInfo, QualType T,
                TypeSourceInfo *TInfo, StorageClass S, bool isInlineSpecified,
-               bool isConstexprSpecified)
+               bool isConstexprSpecified, bool isResumableSpecified)
       : DeclaratorDecl(DK, DC, NameInfo.getLoc(), NameInfo.getName(), T, TInfo,
                        StartLoc),
         DeclContext(DK), redeclarable_base(C), SClass(S),
@@ -1870,13 +1884,15 @@ protected:
         IsExplicitSpecified(false), IsVirtualAsWritten(false), IsPure(false),
         HasInheritedPrototype(false), HasWrittenPrototype(true),
         IsDeleted(false), IsTrivial(false), IsTrivialForCall(false),
-        IsDefaulted(false),
-        IsExplicitlyDefaulted(false), HasImplicitReturnZero(false),
-        IsLateTemplateParsed(false), IsConstexpr(isConstexprSpecified),
-        InstantiationIsPending(false), UsesSEHTry(false), HasSkippedBody(false),
-        WillHaveBody(false), IsMultiVersion(false),
-        IsCopyDeductionCandidate(false), HasODRHash(false), ODRHash(0),
-        EndRangeLoc(NameInfo.getEndLoc()), DNLoc(NameInfo.getInfo()) {}
+        IsDefaulted(false), IsExplicitlyDefaulted(false),
+        HasImplicitReturnZero(false), IsLateTemplateParsed(false),
+        IsConstexpr(isConstexprSpecified),
+        IsResumableSpecified(isResumableSpecified),
+        IsImplicitlyResumable(false), InstantiationIsPending(false),
+        UsesSEHTry(false), HasSkippedBody(false), WillHaveBody(false),
+        IsMultiVersion(false), IsCopyDeductionCandidate(false),
+        HasODRHash(false), ODRHash(0), EndRangeLoc(NameInfo.getEndLoc()),
+        DNLoc(NameInfo.getInfo()) {}
 
   using redeclarable_base = Redeclarable<FunctionDecl>;
 
@@ -1906,29 +1922,23 @@ public:
   using redeclarable_base::getMostRecentDecl;
   using redeclarable_base::isFirstDecl;
 
-  static FunctionDecl *Create(ASTContext &C, DeclContext *DC,
-                              SourceLocation StartLoc, SourceLocation NLoc,
-                              DeclarationName N, QualType T,
-                              TypeSourceInfo *TInfo,
-                              StorageClass SC,
-                              bool isInlineSpecified = false,
-                              bool hasWrittenPrototype = true,
-                              bool isConstexprSpecified = false) {
+  static FunctionDecl *
+  Create(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
+         SourceLocation NLoc, DeclarationName N, QualType T,
+         TypeSourceInfo *TInfo, StorageClass SC, bool isInlineSpecified = false,
+         bool hasWrittenPrototype = true, bool isConstexprSpecified = false,
+         bool isResumableSpecified = false) {
     DeclarationNameInfo NameInfo(N, NLoc);
-    return FunctionDecl::Create(C, DC, StartLoc, NameInfo, T, TInfo,
-                                SC,
+    return FunctionDecl::Create(C, DC, StartLoc, NameInfo, T, TInfo, SC,
                                 isInlineSpecified, hasWrittenPrototype,
-                                isConstexprSpecified);
+                                isConstexprSpecified, isResumableSpecified);
   }
 
-  static FunctionDecl *Create(ASTContext &C, DeclContext *DC,
-                              SourceLocation StartLoc,
-                              const DeclarationNameInfo &NameInfo,
-                              QualType T, TypeSourceInfo *TInfo,
-                              StorageClass SC,
-                              bool isInlineSpecified,
-                              bool hasWrittenPrototype,
-                              bool isConstexprSpecified = false);
+  static FunctionDecl *
+  Create(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
+         const DeclarationNameInfo &NameInfo, QualType T, TypeSourceInfo *TInfo,
+         StorageClass SC, bool isInlineSpecified, bool hasWrittenPrototype,
+         bool isConstexprSpecified = false, bool isResumableSpecified = false);
 
   static FunctionDecl *CreateDeserialized(ASTContext &C, unsigned ID);
                        
@@ -2087,6 +2097,16 @@ public:
   /// Whether this is a (C++11) constexpr function or constexpr constructor.
   bool isConstexpr() const { return IsConstexpr; }
   void setConstexpr(bool IC) { IsConstexpr = IC; }
+
+  bool isResumable() const {
+    return IsResumableSpecified || IsImplicitlyResumable;
+  }
+
+  bool isResumableSpecified() const { return IsResumableSpecified; }
+  void setResumableSpecified(bool IR) { IsResumableSpecified = IR; }
+
+  bool isImplicitlyResumable() const { return IsImplicitlyResumable; }
+  void setImplicitlyResumable(bool IR) { IsImplicitlyResumable = IR; }
 
   /// Whether the instantiation of this function is pending.
   /// This bit is set when the decision to instantiate this function is made

@@ -539,6 +539,8 @@ void ASTDeclWriter::VisitFunctionDecl(FunctionDecl *D) {
   Record.push_back(D->IsExplicitlyDefaulted);
   Record.push_back(D->HasImplicitReturnZero);
   Record.push_back(D->IsConstexpr);
+  Record.push_back(D->IsResumableSpecified);
+  Record.push_back(D->IsImplicitlyResumable);
   Record.push_back(D->UsesSEHTry);
   Record.push_back(D->HasSkippedBody);
   Record.push_back(D->IsMultiVersion);
@@ -925,6 +927,7 @@ void ASTDeclWriter::VisitVarDecl(VarDecl *D) {
     Record.push_back(D->isInline());
     Record.push_back(D->isInlineSpecified());
     Record.push_back(D->isConstexpr());
+    Record.push_back(D->isResumableSpecified());
     Record.push_back(D->isInitCapture());
     Record.push_back(D->isPreviousDeclInSameBlockScope());
     if (const auto *IPD = dyn_cast<ImplicitParamDecl>(D))

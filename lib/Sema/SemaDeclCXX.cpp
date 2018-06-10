@@ -45,6 +45,7 @@
 #include <set>
 
 using namespace clang;
+using namespace clang::sema;
 
 //===----------------------------------------------------------------------===//
 // CheckDefaultArgumentVisitor
@@ -642,6 +643,11 @@ bool Sema::MergeCXXFunctionDecl(FunctionDecl *New, FunctionDecl *Old,
   if (New->isConstexpr() != Old->isConstexpr()) {
     Diag(New->getLocation(), diag::err_constexpr_redecl_mismatch)
       << New << New->isConstexpr();
+    Diag(Old->getLocation(), diag::note_previous_declaration);
+    Invalid = true;
+  } else if (New->isResumable() != Old->isResumable()) {
+    Diag(New->getLocation(), diag::err_resumable_redecl_mismatch)
+        << New << New->isResumable();
     Diag(Old->getLocation(), diag::note_previous_declaration);
     Invalid = true;
   } else if (!Old->getMostRecentDecl()->isInlined() && New->isInlined() &&
@@ -11681,10 +11687,10 @@ CXXMethodDecl *Sema::DeclareImplicitCopyAssignment(CXXRecordDecl *ClassDecl) {
   DeclarationName Name = Context.DeclarationNames.getCXXOperatorName(OO_Equal);
   SourceLocation ClassLoc = ClassDecl->getLocation();
   DeclarationNameInfo NameInfo(Name, ClassLoc);
-  CXXMethodDecl *CopyAssignment =
-      CXXMethodDecl::Create(Context, ClassDecl, ClassLoc, NameInfo, QualType(),
-                            /*TInfo=*/nullptr, /*StorageClass=*/SC_None,
-                            /*isInline=*/true, Constexpr, SourceLocation());
+  CXXMethodDecl *CopyAssignment = CXXMethodDecl::Create(
+      Context, ClassDecl, ClassLoc, NameInfo, QualType(),
+      /*TInfo=*/nullptr, /*StorageClass=*/SC_None,
+      /*isInline=*/true, Constexpr, /*isResumable=*/false, SourceLocation());
   CopyAssignment->setAccess(AS_public);
   CopyAssignment->setDefaulted();
   CopyAssignment->setImplicit();
@@ -12002,10 +12008,10 @@ CXXMethodDecl *Sema::DeclareImplicitMoveAssignment(CXXRecordDecl *ClassDecl) {
   DeclarationName Name = Context.DeclarationNames.getCXXOperatorName(OO_Equal);
   SourceLocation ClassLoc = ClassDecl->getLocation();
   DeclarationNameInfo NameInfo(Name, ClassLoc);
-  CXXMethodDecl *MoveAssignment =
-      CXXMethodDecl::Create(Context, ClassDecl, ClassLoc, NameInfo, QualType(),
-                            /*TInfo=*/nullptr, /*StorageClass=*/SC_None,
-                            /*isInline=*/true, Constexpr, SourceLocation());
+  CXXMethodDecl *MoveAssignment = CXXMethodDecl::Create(
+      Context, ClassDecl, ClassLoc, NameInfo, QualType(),
+      /*TInfo=*/nullptr, /*StorageClass=*/SC_None,
+      /*isInline=*/true, Constexpr, /*isResumable=*/false, SourceLocation());
   MoveAssignment->setAccess(AS_public);
   MoveAssignment->setDefaulted();
   MoveAssignment->setImplicit();
@@ -14730,7 +14736,17 @@ static bool isNonlocalVariable(const Decl *D) {
 /// been created and passed in for this purpose. Otherwise, S will be null.
 void Sema::ActOnCXXEnterDeclInitializer(Scope *S, Decl *D) {
   // If there is no declaration, there was an error parsing it.
-  if (!D || D->isInvalidDecl())
+  if (!D)
+    return;
+
+  if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
+    if (VD->isResumableSpecified()) {
+      assert(!ResumableContext);
+      ResumableContext.EvaluatingDecl = VD;
+    }
+  }
+
+  if (D->isInvalidDecl())
     return;
 
   // We will always have a nested name specifier here, but this declaration
@@ -14751,7 +14767,17 @@ void Sema::ActOnCXXEnterDeclInitializer(Scope *S, Decl *D) {
 /// Invoked after we are finished parsing an initializer for the declaration D.
 void Sema::ActOnCXXExitDeclInitializer(Scope *S, Decl *D) {
   // If there is no declaration, there was an error parsing it.
-  if (!D || D->isInvalidDecl())
+  if (!D)
+    return;
+
+  if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
+    if (VD->isResumableSpecified()) {
+      assert(ResumableContext && ResumableContext.EvaluatingDecl == VD);
+      ResumableContext.clear();
+    }
+  }
+
+  if (D->isInvalidDecl())
     return;
 
   if (isNonlocalVariable(D))

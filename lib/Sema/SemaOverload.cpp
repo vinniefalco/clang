@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Sema/Overload.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/DeclObjC.h"
@@ -25,6 +24,8 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Sema/Initialization.h"
 #include "clang/Sema/Lookup.h"
+#include "clang/Sema/Overload.h"
+#include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
@@ -9445,6 +9446,16 @@ static bool checkAddressOfFunctionIsAvailable(Sema &S, const FunctionDecl *FD,
     return false;
   }
 
+  if (FD->isResumable()) {
+    if (Complain) {
+      if (InOverloadResolution)
+        S.Diag(FD->getLocStart(), diag::note_addrof_ovl_candidate_resumable_fn);
+      else
+        S.Diag(Loc, diag::err_addrof_resumable_fn) << FD;
+    }
+    return false;
+  }
+
   auto I = llvm::find_if(FD->parameters(), [](const ParmVarDecl *P) {
     return P->hasAttr<PassObjectSizeAttr>();
   });
@@ -12907,6 +12918,9 @@ Sema::BuildCallToMemberFunction(Scope *S, Expr *MemExprE,
   ExprValueKind VK = Expr::getValueKindForType(ResultType);
   ResultType = ResultType.getNonLValueExprType(Context);
 
+  if (Method->isResumable())
+    SetCurFunctionImplicitlyResumable(Method, LParenLoc);
+
   assert(Method && "Member call to something that isn't a method?");
   CXXMemberCallExpr *TheCall =
     new (Context) CXXMemberCallExpr(Context, MemExprE, Args,
@@ -13263,6 +13277,9 @@ Sema::BuildCallToObjectOfClassType(Scope *S, Expr *Obj,
   }
 
   if (IsError) return true;
+
+  if (Method->isResumable())
+    SetCurFunctionImplicitlyResumable(Method, LParenLoc);
 
   DiagnoseSentinelCalls(Method, LParenLoc, Args);
 

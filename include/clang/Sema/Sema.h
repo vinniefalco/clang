@@ -1005,6 +1005,20 @@ public:
   /// A stack of expression evaluation contexts.
   SmallVector<ExpressionEvaluationContextRecord, 8> ExprEvalContexts;
 
+  /// The resumable variable declaration currently being initialized;
+  struct ResumableContextRecord {
+    VarDecl *EvaluatingDecl;
+    SmallVector<FunctionDecl *, 3> TopLevelCallees;
+    SmallVector<FunctionDecl *, 6> OtherCallees;
+    void clear() {
+      EvaluatingDecl = nullptr;
+      TopLevelCallees.clear();
+      OtherCallees.clear();
+    }
+    explicit operator bool() const { return EvaluatingDecl; }
+  };
+  ResumableContextRecord ResumableContext;
+
   /// Compute the mangling number context for a lambda expression or
   /// block literal.
   ///
@@ -1921,6 +1935,22 @@ public:
 
   bool CheckConstexprFunctionDecl(const FunctionDecl *FD);
   bool CheckConstexprFunctionBody(const FunctionDecl *FD, Stmt *Body);
+
+  /// Check whether a function declaration satisfies the requirements
+  /// of a resumable function. return true on error, and false otherwise.
+  bool CheckResumableFunctionDecl(const FunctionDecl *FD,
+                                  sema::FunctionScopeInfo *FnScope,
+                                  bool IsInstantiation);
+  void CheckCompletedResumableFunctionBody(FunctionDecl *FD, Stmt *Body,
+                                           sema::FunctionScopeInfo *FnScope);
+
+  bool CheckResumableVarDeclInit(VarDecl *VD, Expr *Init);
+
+  void SetCurFunctionImplicitlyResumable(const BreakResumableStmt *S);
+  void SetCurFunctionImplicitlyResumable(const FunctionDecl *D,
+                                         SourceLocation CallLoc);
+  void DiagnoseUseOfResumableFunction(const FunctionDecl *FD,
+                                      SourceLocation Loc);
 
   void DiagnoseHiddenVirtualMethods(CXXMethodDecl *MD);
   void FindHiddenVirtualMethods(CXXMethodDecl *MD,
@@ -3786,6 +3816,9 @@ public:
                                    Expr *DestExp);
   StmtResult ActOnContinueStmt(SourceLocation ContinueLoc, Scope *CurScope);
   StmtResult ActOnBreakStmt(SourceLocation BreakLoc, Scope *CurScope);
+  StmtResult ActOnBreakResumableStmt(SourceLocation BreakLoc,
+                                     SourceLocation ResumableLoc,
+                                     Scope *CurScope);
 
   void ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
                                 CapturedRegionKind Kind, unsigned NumParams);
@@ -5302,7 +5335,8 @@ public:
   ExprResult ActOnFinishFullExpr(Expr *Expr, SourceLocation CC,
                                  bool DiscardedValue = false,
                                  bool IsConstexpr = false,
-                                 bool IsLambdaInitCaptureInitializer = false);
+                                 bool IsLambdaInitCaptureInitializer = false,
+                                 bool IsResumable = false);
   StmtResult ActOnFinishFullStmt(Stmt *Stmt);
 
   // Marks SS invalid if it represents an incomplete type.
