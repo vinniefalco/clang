@@ -707,10 +707,8 @@ void CXXNameMangler::mangleFunctionEncodingBareType(const FunctionDecl *FD) {
   if (FD->hasAttr<EnableIfAttr>()) {
     FunctionTypeDepthState Saved = FunctionTypeDepth.push();
     Out << "Ua9enable_ifI";
-    // FIXME: specific_attr_iterator iterates in reverse order. Fix that and use
-    // it here.
-    for (AttrVec::const_reverse_iterator I = FD->getAttrs().rbegin(),
-                                         E = FD->getAttrs().rend();
+    for (AttrVec::const_iterator I = FD->getAttrs().begin(),
+                                 E = FD->getAttrs().end();
          I != E; ++I) {
       EnableIfAttr *EIA = dyn_cast<EnableIfAttr>(*I);
       if (!EIA)
@@ -2558,6 +2556,24 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
   case BuiltinType::UShortAccum:
   case BuiltinType::UAccum:
   case BuiltinType::ULongAccum:
+  case BuiltinType::ShortFract:
+  case BuiltinType::Fract:
+  case BuiltinType::LongFract:
+  case BuiltinType::UShortFract:
+  case BuiltinType::UFract:
+  case BuiltinType::ULongFract:
+  case BuiltinType::SatShortAccum:
+  case BuiltinType::SatAccum:
+  case BuiltinType::SatLongAccum:
+  case BuiltinType::SatUShortAccum:
+  case BuiltinType::SatUAccum:
+  case BuiltinType::SatULongAccum:
+  case BuiltinType::SatShortFract:
+  case BuiltinType::SatFract:
+  case BuiltinType::SatLongFract:
+  case BuiltinType::SatUShortFract:
+  case BuiltinType::SatUFract:
+  case BuiltinType::SatULongFract:
     llvm_unreachable("Fixed point types are disabled for c++");
   case BuiltinType::Half:
     Out << "Dh";
@@ -3485,6 +3501,7 @@ recurse:
   case Expr::AsTypeExprClass:
   case Expr::PseudoObjectExprClass:
   case Expr::AtomicExprClass:
+  case Expr::FixedPointLiteralClass:
   {
     if (!NullOut) {
       // As bad as this diagnostic is, it's better than crashing.

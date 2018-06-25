@@ -18,11 +18,11 @@
 #include "clang/Basic/AttrSubjectMatchRules.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/TargetInfo.h"
-#include "clang/Basic/VersionTuple.h"
 #include "clang/Sema/Ownership.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/VersionTuple.h"
 #include <cassert>
 #include <cstddef>
 #include <cstring>
@@ -764,8 +764,11 @@ public:
   void add(AttributeList *newAttr) {
     assert(newAttr);
     assert(newAttr->getNext() == nullptr);
-    newAttr->setNext(list);
-    list = newAttr;
+
+    // FIXME: AttributeList is a singly linked list, i.e. appending to the end
+    // requires walking to the last element. For adding n attributes, this
+    // requires O(n^2) time. However, AttributeLists should be very short.
+    addAllAtEnd(newAttr);
   }
 
   void addAll(AttributeList *newList) {

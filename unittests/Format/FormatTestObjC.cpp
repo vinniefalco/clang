@@ -1218,6 +1218,26 @@ TEST_F(FormatTestObjC, BreaksCallStatementWhereSemiJustOverTheLimit) {
                "}");
 }
 
+TEST_F(FormatTestObjC, AlwaysBreakBeforeMultilineStrings) {
+  Style = getGoogleStyle(FormatStyle::LK_ObjC);
+  Style.ColumnLimit = 40;
+  verifyFormat("aaaa = @\"bbbb\"\n"
+               "       @\"cccc\";");
+  verifyFormat("aaaa(@\"bbbb\"\n"
+               "     @\"cccc\");");
+  verifyFormat("aaaa(qqq, @\"bbbb\"\n"
+               "          @\"cccc\");");
+  verifyFormat("[aaaa qqqq:@\"bbbb\"\n"
+               "           @\"cccc\"];");
+  verifyFormat("aaaa = [aaaa qqqq:@\"bbbb\"\n"
+               "                  @\"cccc\"];");
+  verifyFormat("[aaaa qqqq:@\"bbbb\"\n"
+               "           @\"cccc\"\n"
+               "        rr:42\n"
+               "    ssssss:@\"ee\"\n"
+               "           @\"fffff\"];");
+}
+
 } // end namespace
 } // end namespace format
 } // end namespace clang
