@@ -71,7 +71,8 @@ public:
 /// location and context as used by the source location builtins
 /// (ex. __builtin_LINE).
 class SourceLocExprScopeGuard {
-  bool ShouldEnable() const;
+  static bool ShouldEnable(CurrentSourceLocExprScope const &CurrentScope,
+                           CurrentSourceLocExprScope const &NewScope);
 
   SourceLocExprScopeGuard(CurrentSourceLocExprScope NewScope,
                           CurrentSourceLocExprScope &Current);

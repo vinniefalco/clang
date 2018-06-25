@@ -63,18 +63,22 @@ const Expr *CurrentSourceLocExprScope::getDefaultExpr() const {
 SourceLocExprScopeGuard::SourceLocExprScopeGuard(
     CurrentSourceLocExprScope NewScope, CurrentSourceLocExprScope &Current)
     : Current(Current), OldVal(Current), Enable(false) {
-  if ((Enable = ShouldEnable()))
+  if ((Enable = ShouldEnable(Current, NewScope)))
     Current = NewScope;
 }
 
-bool SourceLocExprScopeGuard::ShouldEnable() const {
+bool SourceLocExprScopeGuard::ShouldEnable(
+    CurrentSourceLocExprScope const &CurrentScope,
+    CurrentSourceLocExprScope const &NewScope) {
   // Only update the default argument scope if we've entered a new
   // evaluation context, and not when it's nested within another default
   // argument. Example:
   //    int bar(int x = __builtin_LINE()) { return x; }
   //    int foo(int x = bar())  { return x; }
   //    static_assert(foo() == __LINE__);
-  return !OldVal || !OldVal.isInSameContext(Current.EvalContextID);
+  return CurrentScope.empty() ||
+         !CurrentScope.isInSameContext(NewScope.EvalContextID) ||
+         CurrentScope.CurrentKind != NewScope.CurrentKind;
 }
 
 SourceLocExprScopeGuard::~SourceLocExprScopeGuard() {
