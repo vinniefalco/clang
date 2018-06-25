@@ -473,3 +473,18 @@ static_assert(is_equal("test_file.c", SL::current().file()));
 static_assert(is_equal("test_file.c", SLF::test_function().file()));
 static_assert(is_equal(SLF::FILE, SLF::test_function_indirect().file()));
 } // end namespace test_pragma_line
+
+namespace test_out_of_line_init {
+#line 1
+
+struct A {
+  int n = __builtin_LINE();
+};
+struct B {
+  A a = {};
+};
+#line 42
+constexpr B b = {};
+Printer<b.a.n> p;
+static_assert(b.a.n == 42, "");
+} // end namespace test_out_of_line_init

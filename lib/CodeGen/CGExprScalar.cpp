@@ -585,10 +585,10 @@ public:
     auto &Ctx = CGF.getContext();
     SourceLocation Loc = SLE->getLocation();
     const DeclContext *DC = SLE->getParentContext();
-    if (auto *S = (CGF.CurCXXDefaultInitScope ? CGF.CurCXXDefaultInitScope
+    if (auto &S = (CGF.CurCXXDefaultInitScope ? CGF.CurCXXDefaultInitScope
                                               : CGF.CurCXXDefaultArgScope)) {
-      Loc = S->getLoc();
-      DC = S->getContext();
+      Loc = S.getLoc();
+      DC = S.getContext();
     }
 
     if (SLE->isLineOrColumn()) {

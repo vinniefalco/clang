@@ -15,66 +15,54 @@
 #ifndef LLVM_CLANG_AST_SOURCE_LOC_EXPR_SCOPE_H
 #define LLVM_CLANG_AST_SOURCE_LOC_EXPR_SCOPE_H
 
-#include "clang/AST/APValue.h"
-#include "clang/AST/ASTVector.h"
-#include "clang/AST/Decl.h"
-#include "clang/AST/Expr.h"
-#include "clang/AST/ExprCXX.h"
-#include "clang/AST/Stmt.h"
-#include "clang/AST/TemplateBase.h"
-#include "clang/AST/Type.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
-
 namespace clang {
+class SourceLocation;
+class Expr;
+class DeclContext;
 
-template <class EvalContextType> class SourceLocExprScopeBase {
-  bool ShouldEnable() const {
-    // Only update the default argument scope if we've entered a new
-    // evaluation context, and not when it's nested within another default
-    // argument. Example:
-    //    int bar(int x = __builtin_LINE()) { return x; }
-    //    int foo(int x = bar())  { return x; }
-    //    static_assert(foo() == __LINE__);
-    return OldVal == nullptr || isa<CXXDefaultInitExpr>(DefaultExpr) ||
-           !OldVal->isInSameContext(EvalContext);
-  }
+class SourceLocExprScope;
+
+class CurrentSourceLocExprScope {
+  friend class ScopeLocExprScope;
+  const Expr *DefaultExpr = nullptr;
+  const void *EvalContextID = nullptr;
 
 public:
-  SourceLocExprScopeBase(const Expr *DefaultExpr, SourceLocExprScopeBase **Dest,
-                         EvalContextType *EvalContext)
-      : DefaultExpr(DefaultExpr), Dest(Dest), OldVal(*Dest),
-        EvalContext(EvalContext), Enable(false) {
-    if ((Enable = ShouldEnable()))
-      *Dest = this;
-  }
+  CurrentSourceLocExprScope() = default;
+  CurrentSourceLocExprScope(const Expr *DefaultExpr, const void *EvalContextID)
+      : DefaultExpr(DefaultExpr), EvalContextID(EvalContextID) {}
 
-  ~SourceLocExprScopeBase() {
-    if (Enable)
-      *Dest = OldVal;
-  }
+  explicit operator bool() const { return DefaultExpr; }
 
+  template <class EvalContextType>
   bool isInSameContext(EvalContextType *CurEvalContext) const {
-    return EvalContext == CurEvalContext;
+    return EvalContextID == static_cast<const void *>(CurEvalContext);
   }
 
-  SourceLocation getLoc() const {
-    if (const auto *DAE = dyn_cast<CXXDefaultArgExpr>(DefaultExpr))
-      return DAE->getUsedLocation();
-    return dyn_cast<CXXDefaultInitExpr>(DefaultExpr)->getUsedLocation();
-  }
+  SourceLocation getLoc() const;
+  const DeclContext *getContext() const;
+};
 
-  const DeclContext *getContext() const {
-    if (const auto *DAE = dyn_cast<CXXDefaultArgExpr>(DefaultExpr))
-      return DAE->getUsedContext();
-    return dyn_cast<CXXDefaultInitExpr>(DefaultExpr)->getUsedContext();
-  }
+class SourceLocExprScope {
+  bool ShouldEnable() const;
+
+  SourceLocExprScope(const Expr *DefaultExpr,
+                     CurrentSourceLocExprScope &Current,
+                     const void *EvalContext);
+
+public:
+  template <class EvalContextType>
+  SourceLocExprScope(const Expr *DefaultExpr,
+                     CurrentSourceLocExprScope &Current,
+                     EvalContextType *EvalContext)
+      : SourceLocExprScope(DefaultExpr, Current,
+                           static_cast<const void *>(EvalContext)) {}
+
+  ~SourceLocExprScope();
 
 private:
-  const Expr *DefaultExpr;
-  SourceLocExprScopeBase **Dest;
-  SourceLocExprScopeBase *OldVal;
-  EvalContextType *EvalContext;
+  CurrentSourceLocExprScope &Current;
+  CurrentSourceLocExprScope OldVal;
   bool Enable;
 };
 

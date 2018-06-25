@@ -55,6 +55,7 @@ add_clang_library(clangAST
   RecordLayout.cpp
   RecordLayoutBuilder.cpp
   SelectorLocationsKind.cpp
+  SourceLocExprScope.cpp
   Stmt.cpp
   StmtCXX.cpp
   StmtIterator.cpp

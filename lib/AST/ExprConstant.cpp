@@ -61,7 +61,6 @@ namespace {
   struct LValue;
   struct CallStackFrame;
   struct EvalInfo;
-  using SourceLocExprScope = SourceLocExprScopeBase<CallStackFrame>;
 
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
@@ -697,11 +696,11 @@ namespace {
 
     /// Source location information about the default argument expression we're
     /// evaluating, if any.
-    SourceLocExprScope *CurCXXDefaultArgScope = nullptr;
+    CurrentSourceLocExprScope CurCXXDefaultArgScope;
 
     /// Source location information about the default member initializer we're
     /// evaluating, if any.
-    SourceLocExprScope *CurCXXDefaultInitScope = nullptr;
+    CurrentSourceLocExprScope CurCXXDefaultInitScope;
 
     enum EvaluationMode {
       /// Evaluate as a constant expression. Stop if we find that the expression
@@ -4700,7 +4699,7 @@ public:
     { return StmtVisitorTy::Visit(E->getReplacement()); }
   bool VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *E) {
     TempVersionRAII RAII(*Info.CurrentCall);
-    SourceLocExprScope Guard(E, &Info.CurCXXDefaultArgScope, Info.CurrentCall);
+    SourceLocExprScope Guard(E, Info.CurCXXDefaultArgScope, Info.CurrentCall);
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *E) {
@@ -4708,7 +4707,7 @@ public:
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
       return Error(E);
-    SourceLocExprScope Guard(E, &Info.CurCXXDefaultInitScope, Info.CurrentCall);
+    SourceLocExprScope Guard(E, Info.CurCXXDefaultInitScope, Info.CurrentCall);
     return StmtVisitorTy::Visit(E->getExpr());
   }
 
@@ -5764,12 +5763,12 @@ public:
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
     assert(E && !E->isLineOrColumn());
     Expr *Value = nullptr;
-    SourceLocExprScope *ArgCtx = Info.CurCXXDefaultInitScope;
+    CurrentSourceLocExprScope ArgCtx = Info.CurCXXDefaultInitScope;
     if (!ArgCtx && Info.CurCXXDefaultArgScope &&
-        Info.CurCXXDefaultArgScope->isInSameContext(Info.CurrentCall))
+        Info.CurCXXDefaultArgScope.isInSameContext(Info.CurrentCall))
       ArgCtx = Info.CurCXXDefaultArgScope;
     if (ArgCtx) {
-      Value = E->getValue(Info.Ctx, ArgCtx->getLoc(), ArgCtx->getContext());
+      Value = E->getValue(Info.Ctx, ArgCtx.getLoc(), ArgCtx.getContext());
     } else
       Value = E->getValue(Info.Ctx);
 
