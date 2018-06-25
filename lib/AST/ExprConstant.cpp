@@ -7359,18 +7359,20 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
   Result = Val.getInt();
   return true;
 }
+
 bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
-    assert(E && E->isLineOrColumn());
-    llvm::APInt Result;
-    SourceLocation Loc = E->getLocStart();
-    if (Info.CurCXXDefaultInitScope)
-      Loc = Info.CurCXXDefaultInitScope->getLoc();
-    else if (Info.CurCXXDefaultArgScope &&
-             Info.CurCXXDefaultArgScope->isInSameContext(Info.CurrentCall))
-      Loc = Info.CurCXXDefaultArgScope->getLoc();
-    Result = E->getIntValue(Info.Ctx, Loc);
-    return Success(Result, E);
+  assert(E && E->isLineOrColumn());
+  llvm::APInt Result;
+  SourceLocation Loc = E->getLocStart();
+  if (Info.CurCXXDefaultInitScope)
+    Loc = Info.CurCXXDefaultInitScope->getLoc();
+  else if (Info.CurCXXDefaultArgScope &&
+           Info.CurCXXDefaultArgScope->isInSameContext(Info.CurrentCall))
+    Loc = Info.CurCXXDefaultArgScope->getLoc();
+  Result = E->getIntValue(Info.Ctx, Loc);
+  return Success(Result, E);
 }
+
 /// Check whether the given declaration can be directly converted to an integral
 /// rvalue. If not, no diagnostic is produced; there are other things we can
 /// try.

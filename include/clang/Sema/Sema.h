@@ -4460,7 +4460,7 @@ public:
                                 SourceLocation BuiltinLoc,
                                 SourceLocation RPLoc);
 
-  /// \brief build a potentially resolved SourceLocExpr.
+  /// Build a potentially resolved SourceLocExpr.
   ///
   /// \param SubExpr - null when the SourceLocExpr is unresolved, otherwise
   /// SubExpr will be a literal expression representing the value of the
