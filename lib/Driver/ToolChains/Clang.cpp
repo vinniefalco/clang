@@ -1084,6 +1084,10 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString(Twine("-find-pch-source=") +
                                          Inputs[0].second->getValue()));
   }
+  if (YcIndex != -1 && JA.getKind() >= Action::PrecompileJobClass &&
+      JA.getKind() <= Action::AssembleJobClass) {
+    CmdArgs.push_back(Args.MakeArgString("-building-pch-with-obj"));
+  }
 
   bool RenderedImplicitInclude = false;
   int AI = -1;
@@ -1473,10 +1477,20 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
       CmdArgs.push_back("-aarch64-enable-global-merge=true");
   }
 
-  if (!Args.hasArg(options::OPT_mno_outline) &&
-       Args.getLastArg(options::OPT_moutline)) {
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-enable-machine-outliner");
+  if (Arg *A = Args.getLastArg(options::OPT_moutline,
+                               options::OPT_mno_outline)) {
+    if (A->getOption().matches(options::OPT_moutline)) {
+      CmdArgs.push_back("-mllvm");
+      CmdArgs.push_back("-enable-machine-outliner");
+
+      // The outliner shouldn't compete with linkers that dedupe linkonceodr
+      // functions in LTO. Enable that behaviour by default when compiling with
+      // LTO.
+      if (getToolChain().getDriver().isUsingLTO()) {
+        CmdArgs.push_back("-mllvm");
+        CmdArgs.push_back("-enable-linkonceodr-outlining");
+      }
+    }
   }
 }
 
@@ -3472,6 +3486,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    options::OPT_fno_strict_vtable_pointers,
                    false))
     CmdArgs.push_back("-fstrict-vtable-pointers");
+  if (Args.hasFlag(options::OPT_fforce_emit_vtables,
+                   options::OPT_fno_force_emit_vtables,
+                   false))
+    CmdArgs.push_back("-fforce-emit-vtables");
   if (!Args.hasFlag(options::OPT_foptimize_sibling_calls,
                     options::OPT_fno_optimize_sibling_calls))
     CmdArgs.push_back("-mdisable-tail-calls");
@@ -3497,8 +3515,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       Args.hasArg(options::OPT_dA))
     CmdArgs.push_back("-masm-verbose");
 
-  if (!Args.hasFlag(options::OPT_fintegrated_as, options::OPT_fno_integrated_as,
-                    IsIntegratedAssemblerDefault))
+  if (!getToolChain().useIntegratedAs())
     CmdArgs.push_back("-no-integrated-as");
 
   if (Args.hasArg(options::OPT_fdebug_pass_structure)) {
@@ -3687,9 +3704,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (auto *ABICompatArg = Args.getLastArg(options::OPT_fclang_abi_compat_EQ))
     ABICompatArg->render(Args, CmdArgs);
 
-  // Add runtime flag for PS4 when PGO or Coverage are enabled.
-  if (RawTriple.isPS4CPU())
+  // Add runtime flag for PS4 when PGO, coverage, or sanitizers are enabled.
+  if (RawTriple.isPS4CPU()) {
     PS4cpu::addProfileRTArgs(getToolChain(), Args, CmdArgs);
+    PS4cpu::addSanitizerArgs(getToolChain(), CmdArgs);
+  }
 
   // Pass options for controlling the default header search paths.
   if (Args.hasArg(options::OPT_nostdinc)) {
@@ -3755,6 +3774,16 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-pedantic");
   Args.AddLastArg(CmdArgs, options::OPT_pedantic_errors);
   Args.AddLastArg(CmdArgs, options::OPT_w);
+
+  // Fixed point flags
+  if (Args.hasFlag(options::OPT_ffixed_point, options::OPT_fno_fixed_point,
+                   /*Default=*/false))
+    Args.AddLastArg(CmdArgs, options::OPT_ffixed_point);
+
+  if (Args.hasFlag(options::OPT_fsame_fbits,
+                   options::OPT_fno_same_fbits,
+                   /*Default=*/false))
+    Args.AddLastArg(CmdArgs, options::OPT_fsame_fbits);
 
   // Handle -{std, ansi, trigraphs} -- take the last of -{std, ansi}
   // (-ansi is equivalent to -std=c89 or -std=c++98).
@@ -4783,6 +4812,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     if (A->getOption().matches(options::OPT_fforce_enable_int128))
       CmdArgs.push_back("-fforce-enable-int128");
   }
+
+  if (Args.hasFlag(options::OPT_fcomplete_member_pointers,
+                   options::OPT_fno_complete_member_pointers, false))
+    CmdArgs.push_back("-fcomplete-member-pointers");
 
   // Finally add the compile command to the compilation.
   if (Args.hasArg(options::OPT__SLASH_fallback) &&

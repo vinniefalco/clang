@@ -4999,6 +4999,9 @@ public:
                                           SourceLocation NameLoc,
                                           IdentifierInfo &Name);
 
+  ParsedType getConstructorName(IdentifierInfo &II, SourceLocation NameLoc,
+                                Scope *S, CXXScopeSpec &SS,
+                                bool EnteringContext);
   ParsedType getDestructorName(SourceLocation TildeLoc,
                                IdentifierInfo &II, SourceLocation NameLoc,
                                Scope *S, CXXScopeSpec &SS,
@@ -5719,6 +5722,7 @@ public:
   //===--------------------------------------------------------------------===//
   // C++ Classes
   //
+  CXXRecordDecl *getCurrentClass(Scope *S, const CXXScopeSpec *SS);
   bool isCurrentClassName(const IdentifierInfo &II, Scope *S,
                           const CXXScopeSpec *SS = nullptr);
   bool isCurrentClassNameTypo(IdentifierInfo *&II, const CXXScopeSpec *SS);
@@ -10181,6 +10185,16 @@ public:
   bool isEmptyCudaConstructor(SourceLocation Loc, CXXConstructorDecl *CD);
   bool isEmptyCudaDestructor(SourceLocation Loc, CXXDestructorDecl *CD);
 
+  // \brief Checks that initializers of \p Var satisfy CUDA restrictions. In
+  // case of error emits appropriate diagnostic and invalidates \p Var.
+  //
+  // \details CUDA allows only empty constructors as initializers for global
+  // variables (see E.2.3.1, CUDA 7.5). The same restriction also applies to all
+  // __shared__ variables whether they are local or not (they all are implicitly
+  // static in CUDA). One exception is that CUDA allows constant initializers
+  // for __constant__ and __device__ variables.
+  void checkAllowedCUDAInitializer(VarDecl *VD);
+
   /// Check whether NewFD is a valid overload for CUDA. Emits
   /// diagnostics and invalidates NewFD if not.
   void checkCUDATargetOverload(FunctionDecl *NewFD,
@@ -10433,8 +10447,8 @@ private:
                                                     bool IsDelete);
   bool SemaBuiltinConstantArg(CallExpr *TheCall, int ArgNum,
                               llvm::APSInt &Result);
-  bool SemaBuiltinConstantArgRange(CallExpr *TheCall, int ArgNum,
-                                   int Low, int High);
+  bool SemaBuiltinConstantArgRange(CallExpr *TheCall, int ArgNum, int Low,
+                                   int High, bool RangeIsError = true);
   bool SemaBuiltinConstantArgMultiple(CallExpr *TheCall, int ArgNum,
                                       unsigned Multiple);
   bool SemaBuiltinARMSpecialReg(unsigned BuiltinID, CallExpr *TheCall,

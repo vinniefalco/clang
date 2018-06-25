@@ -100,6 +100,12 @@ void fuchsia::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   ToolChain.AddFilePathLibArgs(Args, CmdArgs);
 
+  if (D.isUsingLTO()) {
+    assert(!Inputs.empty() && "Must have at least one input.");
+    AddGoldPlugin(ToolChain, Args, CmdArgs, Output, Inputs[0],
+                  D.getLTOMode() == LTOK_Thin);
+  }
+
   addSanitizerRuntimes(ToolChain, Args, CmdArgs);
 
   AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA);
@@ -109,8 +115,15 @@ void fuchsia::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("-Bdynamic");
 
     if (D.CCCIsCXX()) {
-      if (ToolChain.ShouldLinkCXXStdlib(Args))
+      if (ToolChain.ShouldLinkCXXStdlib(Args)) {
+        bool OnlyLibstdcxxStatic = Args.hasArg(options::OPT_static_libstdcxx) &&
+                                   !Args.hasArg(options::OPT_static);
+        if (OnlyLibstdcxxStatic)
+          CmdArgs.push_back("-Bstatic");
         ToolChain.AddCXXStdlibLibArgs(Args, CmdArgs);
+        if (OnlyLibstdcxxStatic)
+          CmdArgs.push_back("-Bdynamic");
+      }
       CmdArgs.push_back("-lm");
     }
 

@@ -5061,6 +5061,8 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("VariableRef");
   case CXCursor_IntegerLiteral:
       return cxstring::createRef("IntegerLiteral");
+  case CXCursor_FixedPointLiteral:
+      return cxstring::createRef("FixedPointLiteral");
   case CXCursor_FloatingLiteral:
       return cxstring::createRef("FloatingLiteral");
   case CXCursor_ImaginaryLiteral:
@@ -6650,6 +6652,42 @@ static void getTokens(ASTUnit *CXXUnit, SourceRange Range,
     CXTokens.push_back(CXTok);
     previousWasAt = Tok.is(tok::at);
   } while (Lex.getBufferLocation() < EffectiveBufferEnd);
+}
+
+CXToken *clang_getToken(CXTranslationUnit TU, CXSourceLocation Location) {
+  LOG_FUNC_SECTION {
+    *Log << TU << ' ' << Location;
+  }
+
+  if (isNotUsableTU(TU)) {
+    LOG_BAD_TU(TU);
+    return NULL;
+  }
+
+  ASTUnit *CXXUnit = cxtu::getASTUnit(TU);
+  if (!CXXUnit)
+    return NULL;
+
+  SourceLocation Begin = cxloc::translateSourceLocation(Location);
+  if (Begin.isInvalid())
+    return NULL;
+  SourceManager &SM = CXXUnit->getSourceManager();
+  std::pair<FileID, unsigned> DecomposedEnd = SM.getDecomposedLoc(Begin);
+  DecomposedEnd.second += Lexer::MeasureTokenLength(Begin, SM, CXXUnit->getLangOpts());
+
+  SourceLocation End = SM.getComposedLoc(DecomposedEnd.first, DecomposedEnd.second);
+
+  SmallVector<CXToken, 32> CXTokens;
+  getTokens(CXXUnit, SourceRange(Begin, End), CXTokens);
+
+  if (CXTokens.empty())
+    return NULL;
+
+  CXTokens.resize(1);
+  CXToken *Token = static_cast<CXToken *>(llvm::safe_malloc(sizeof(CXToken)));
+
+  memmove(Token, CXTokens.data(), sizeof(CXToken));
+  return Token;
 }
 
 void clang_tokenize(CXTranslationUnit TU, CXSourceRange Range,

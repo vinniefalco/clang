@@ -621,6 +621,8 @@
 // RUN: %clang -target x86_64-scei-ps4 -fsanitize=address %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-ASAN-PS4
 // Make sure there are no *.{o,bc} or -l passed before the ASan library.
 // CHECK-ASAN-PS4-NOT: {{(\.(o|bc)"? |-l).*-lSceDbgAddressSanitizer_stub_weak}}
+// CHECK-ASAN-PS4: --dependent-lib=libSceDbgAddressSanitizer_stub_weak.a
+// CHECK-ASAN-PS4-NOT: {{(\.(o|bc)"? |-l).*-lSceDbgAddressSanitizer_stub_weak}}
 // CHECK-ASAN-PS4: -lSceDbgAddressSanitizer_stub_weak
 
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=address -fsanitize-minimal-runtime %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-ASAN-MINIMAL
@@ -671,6 +673,14 @@
 
 // RUN: %clang -target x86_64-linux-gnu -fsanitize=scudo,undefined %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SCUDO-UBSAN
 // CHECK-SCUDO-UBSAN: "-fsanitize={{.*}}scudo"
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=scudo -fsanitize-minimal-runtime %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SCUDO-MINIMAL
+// CHECK-SCUDO-MINIMAL: "-fsanitize=scudo"
+// CHECK-SCUDO-MINIMAL: "-fsanitize-minimal-runtime"
+
+// RUN: %clang -target x86_64-linux-gnu -fsanitize=undefined,scudo -fsanitize-minimal-runtime %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-SCUDO-UBSAN-MINIMAL
+// CHECK-SCUDO-UBSAN-MINIMAL: "-fsanitize={{.*}}scudo"
+// CHECK-SCUDO-UBSAN-MINIMAL: "-fsanitize-minimal-runtime"
 
 // RUN: %clang -target powerpc-unknown-linux -fsanitize=scudo %s -### 2>&1 | FileCheck %s --check-prefix=CHECK-NO-SCUDO
 // CHECK-NO-SCUDO: unsupported option

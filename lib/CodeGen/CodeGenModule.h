@@ -1089,6 +1089,10 @@ public:
   /// It's up to you to ensure that this is safe.
   void AddDefaultFnAttrs(llvm::Function &F);
 
+  /// Parses the target attributes passed in, and returns only the ones that are
+  /// valid feature names.
+  TargetAttr::ParsedTargetAttr filterFunctionTargetAttrs(const TargetAttr *TD);
+
   // Fills in the supplied string map with the set of target features for the
   // passed in function.
   void getFunctionFeatureMap(llvm::StringMap<bool> &FeatureMap,
@@ -1189,7 +1193,6 @@ public:
   /// are emitted lazily.
   void EmitGlobal(GlobalDecl D);
 
-  bool TryEmitDefinitionAsAlias(GlobalDecl Alias, GlobalDecl Target);
   bool TryEmitBaseDestructorAsAlias(const CXXDestructorDecl *D);
 
   llvm::GlobalValue *GetGlobalValue(StringRef Ref);

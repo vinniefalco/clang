@@ -583,6 +583,10 @@ if (CLANG_ENABLE_BOOTSTRAP)
     endif()
   endif()
 
+  if(CLANG_BOOTSTRAP_EXTRA_DEPS)
+    add_dependencies(clang-bootstrap-deps ${CLANG_BOOTSTRAP_EXTRA_DEPS})
+  endif()
+
   add_custom_target(${NEXT_CLANG_STAGE}-clear
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${NEXT_CLANG_STAGE}-cleared
     )
@@ -749,6 +753,7 @@ endif()
 if (LLVM_ADD_NATIVE_VISUALIZERS_TO_SOLUTION)
   add_subdirectory(utils/ClangVisualizers)
 endif()
+add_subdirectory(utils/hmaptool)
 
 configure_file(
   ${CLANG_SOURCE_DIR}/include/clang/Config/config.h.cmake

@@ -747,6 +747,15 @@ class WebAssemblyTargetCodeGenInfo final : public TargetCodeGenInfo {
 public:
   explicit WebAssemblyTargetCodeGenInfo(CodeGen::CodeGenTypes &CGT)
       : TargetCodeGenInfo(new WebAssemblyABIInfo(CGT)) {}
+
+  void setTargetAttributes(const Decl *D, llvm::GlobalValue *GV,
+                           CodeGen::CodeGenModule &CGM) const override {
+    if (auto *FD = dyn_cast_or_null<FunctionDecl>(D)) {
+      llvm::Function *Fn = cast<llvm::Function>(GV);
+      if (!FD->doesThisDeclarationHaveABody() && !FD->hasPrototype())
+        Fn->addFnAttr("no-prototype");
+    }
+  }
 };
 
 /// Classify argument of given type \p Ty.
@@ -7646,7 +7655,7 @@ public:
                             llvm::Function *BlockInvokeFunc,
                             llvm::Value *BlockLiteral) const override;
   bool shouldEmitStaticExternCAliases() const override;
-  void setCUDAKernelCallingConvention(llvm::Function *F) const override;
+  void setCUDAKernelCallingConvention(const FunctionType *&FT) const override;
 };
 }
 
@@ -7783,8 +7792,9 @@ bool AMDGPUTargetCodeGenInfo::shouldEmitStaticExternCAliases() const {
 }
 
 void AMDGPUTargetCodeGenInfo::setCUDAKernelCallingConvention(
-    llvm::Function *F) const {
-  F->setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
+    const FunctionType *&FT) const {
+  FT = getABIInfo().getContext().adjustFunctionType(
+      FT, FT->getExtInfo().withCallingConv(CC_OpenCLKernel));
 }
 
 //===----------------------------------------------------------------------===//

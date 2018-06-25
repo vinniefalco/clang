@@ -563,6 +563,8 @@ def rewrite_macros : Flag<["-"], "rewrite-macros">,
   HelpText<"Expand macros without full preprocessing">;
 def migrate : Flag<["-"], "migrate">,
   HelpText<"Migrate source code">;
+def compiler_options_dump : Flag<["-"], "compiler-options-dump">,
+  HelpText<"Dump the compiler configuration options">;
 }
 
 def emit_llvm_uselists : Flag<["-"], "emit-llvm-uselists">,
@@ -607,7 +609,9 @@ def find_pch_source_EQ : Joined<["-"], "find-pch-source=">,
            "to this flag.">;
 def fno_pch_timestamp : Flag<["-"], "fno-pch-timestamp">,
   HelpText<"Disable inclusion of timestamp in precompiled headers">;
-  
+def building_pch_with_obj : Flag<["-"], "building-pch-with-obj">,
+  HelpText<"This compilation is part of building a PCH with corresponding object file.">;
+
 def aligned_alloc_unavailable : Flag<["-"], "faligned-alloc-unavailable">,
   HelpText<"Aligned allocation/deallocation functions are unavailable">;
 

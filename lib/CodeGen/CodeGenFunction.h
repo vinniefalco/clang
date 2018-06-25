@@ -879,7 +879,8 @@ public:
 
   llvm::BasicBlock *getEHResumeBlock(bool isCleanup);
   llvm::BasicBlock *getEHDispatchBlock(EHScopeStack::stable_iterator scope);
-  llvm::BasicBlock *getMSVCDispatchBlock(EHScopeStack::stable_iterator scope);
+  llvm::BasicBlock *
+  getFuncletEHDispatchBlock(EHScopeStack::stable_iterator scope);
 
   /// An object to manage conditionally-evaluated expressions.
   class ConditionalEvaluation {
@@ -2042,18 +2043,20 @@ public:
   /// to the stack.
   ///
   /// Because the address of a temporary is often exposed to the program in
-  /// various ways, this function will perform the cast by default. The cast
-  /// may be avoided by passing false as \p CastToDefaultAddrSpace; this is
+  /// various ways, this function will perform the cast. The original alloca
+  /// instruction is returned through \p Alloca if it is not nullptr.
+  ///
+  /// The cast is not performaed in CreateTempAllocaWithoutCast. This is
   /// more efficient if the caller knows that the address will not be exposed.
-  /// The original alloca instruction is returned through \p Alloca if it is
-  /// not nullptr.
   llvm::AllocaInst *CreateTempAlloca(llvm::Type *Ty, const Twine &Name = "tmp",
                                      llvm::Value *ArraySize = nullptr);
   Address CreateTempAlloca(llvm::Type *Ty, CharUnits align,
                            const Twine &Name = "tmp",
                            llvm::Value *ArraySize = nullptr,
-                           Address *Alloca = nullptr,
-                           bool CastToDefaultAddrSpace = true);
+                           Address *Alloca = nullptr);
+  Address CreateTempAllocaWithoutCast(llvm::Type *Ty, CharUnits align,
+                                      const Twine &Name = "tmp",
+                                      llvm::Value *ArraySize = nullptr);
 
   /// CreateDefaultAlignedTempAlloca - This creates an alloca with the
   /// default ABI alignment of the given LLVM type.
@@ -2088,15 +2091,18 @@ public:
   Address CreateIRTemp(QualType T, const Twine &Name = "tmp");
 
   /// CreateMemTemp - Create a temporary memory object of the given type, with
-  /// appropriate alignment. Cast it to the default address space if
-  /// \p CastToDefaultAddrSpace is true. Returns the original alloca
-  /// instruction by \p Alloca if it is not nullptr.
+  /// appropriate alignmen and cast it to the default address space. Returns
+  /// the original alloca instruction by \p Alloca if it is not nullptr.
   Address CreateMemTemp(QualType T, const Twine &Name = "tmp",
-                        Address *Alloca = nullptr,
-                        bool CastToDefaultAddrSpace = true);
+                        Address *Alloca = nullptr);
   Address CreateMemTemp(QualType T, CharUnits Align, const Twine &Name = "tmp",
-                        Address *Alloca = nullptr,
-                        bool CastToDefaultAddrSpace = true);
+                        Address *Alloca = nullptr);
+
+  /// CreateMemTemp - Create a temporary memory object of the given type, with
+  /// appropriate alignmen without casting it to the default address space.
+  Address CreateMemTempWithoutCast(QualType T, const Twine &Name = "tmp");
+  Address CreateMemTempWithoutCast(QualType T, CharUnits Align,
+                                   const Twine &Name = "tmp");
 
   /// CreateAggTemp - Create a temporary memory object for the given
   /// aggregate type.
@@ -2378,7 +2384,8 @@ public:
   void EmitCXXConstructorCall(const CXXConstructorDecl *D, CXXCtorType Type,
                               bool ForVirtualBase, bool Delegating,
                               Address This, CallArgList &Args,
-                              AggValueSlot::Overlap_t Overlap);
+                              AggValueSlot::Overlap_t Overlap,
+                              SourceLocation Loc);
 
   /// Emit assumption load for all bases. Requires to be be called only on
   /// most-derived class and not under construction of the object.
@@ -3563,6 +3570,10 @@ public:
                                          SmallVectorImpl<llvm::Value *> &Ops,
                                          Address PtrOp0, Address PtrOp1,
                                          llvm::Triple::ArchType Arch);
+
+  llvm::Value *EmitISOVolatileLoad(const CallExpr *E);
+  llvm::Value *EmitISOVolatileStore(const CallExpr *E);
+
   llvm::Function *LookupNeonLLVMIntrinsic(unsigned IntrinsicID,
                                           unsigned Modifier, llvm::Type *ArgTy,
                                           const CallExpr *E);
