@@ -18,6 +18,8 @@
 namespace clang {
 class SourceLocation;
 class Expr;
+class CXXDefaultInitExpr;
+class CXXDefaultArgExpr;
 class DeclContext;
 
 class SourceLocExprScopeGuard;
@@ -26,16 +28,35 @@ class SourceLocExprScopeGuard;
 /// value of the source location builtins (ex. __builtin_LINE), including the
 /// context of default argument and default initializer expressions,
 class CurrentSourceLocExprScope {
-  friend class ScopeLocExprScopeGuard;
-  const Expr *DefaultExpr = nullptr;
+  friend class SourceLocExprScopeGuard;
+
+  enum CurrentContextKind { CCK_None, CCK_DefaultArg, CCK_DefaultInit };
+
+  CurrentContextKind CurrentKind = CCK_None;
+  const CXXDefaultArgExpr *DefaultArg = nullptr;
+  const CXXDefaultInitExpr *DefaultInit = nullptr;
+
   const void *EvalContextID = nullptr;
 
 public:
   CurrentSourceLocExprScope() = default;
-  CurrentSourceLocExprScope(const Expr *DefaultExpr, const void *EvalContextID)
-      : DefaultExpr(DefaultExpr), EvalContextID(EvalContextID) {}
+  CurrentSourceLocExprScope(const CXXDefaultArgExpr *DefaultExpr,
+                            const void *EvalContextID,
+                            CurrentSourceLocExprScope const &LastScope)
+      : CurrentKind(CCK_DefaultArg), DefaultArg(DefaultExpr),
+        EvalContextID(EvalContextID), DefaultInit(LastScope.DefaultInit) {}
 
-  explicit operator bool() const { return DefaultExpr; }
+  CurrentSourceLocExprScope(const CXXDefaultInitExpr *DefaultExpr,
+                            const void *EvalContextID,
+                            CurrentSourceLocExprScope const &LastScope)
+      : CurrentKind(CCK_DefaultInit), DefaultArg(LastScope.DefaultArg),
+        DefaultInit(DefaultExpr), EvalContextID(EvalContextID) {}
+
+  bool empty() const { return CurrentKind == CCK_None; }
+  explicit operator bool() const { return !empty(); }
+  bool isDefaultArgScope() const { return CurrentKind == CCK_DefaultArg; }
+  bool isDefaultInitScope() const { return CurrentKind == CCK_DefaultInit; }
+  const Expr *getDefaultExpr() const;
 
   template <class EvalContextType>
   bool isInSameContext(EvalContextType *CurEvalContext) const {
@@ -52,17 +73,25 @@ public:
 class SourceLocExprScopeGuard {
   bool ShouldEnable() const;
 
-  SourceLocExprScopeGuard(const Expr *DefaultExpr,
-                          CurrentSourceLocExprScope &Current,
-                          const void *EvalContext);
+  SourceLocExprScopeGuard(CurrentSourceLocExprScope NewScope,
+                          CurrentSourceLocExprScope &Current);
 
 public:
   template <class EvalContextType>
-  SourceLocExprScopeGuard(const Expr *DefaultExpr,
+  SourceLocExprScopeGuard(const CXXDefaultArgExpr *DefaultExpr,
                           CurrentSourceLocExprScope &Current,
                           EvalContextType *EvalContext)
-      : SourceLocExprScopeGuard(DefaultExpr, Current,
-                                static_cast<const void *>(EvalContext)) {}
+      : SourceLocExprScopeGuard(
+            CurrentSourceLocExprScope(DefaultExpr, EvalContext, Current),
+            Current) {}
+
+  template <class EvalContextType>
+  SourceLocExprScopeGuard(const CXXDefaultInitExpr *DefaultExpr,
+                          CurrentSourceLocExprScope &Current,
+                          EvalContextType *EvalContext)
+      : SourceLocExprScopeGuard(
+            CurrentSourceLocExprScope(DefaultExpr, EvalContext, Current),
+            Current) {}
 
   ~SourceLocExprScopeGuard();
 

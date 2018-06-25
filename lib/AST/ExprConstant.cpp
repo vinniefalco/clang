@@ -7366,10 +7366,10 @@ bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
   llvm::APInt Result;
   SourceLocation Loc = E->getLocStart();
   if (Info.CurCXXDefaultInitScope)
-    Loc = Info.CurCXXDefaultInitScope->getLoc();
+    Loc = Info.CurCXXDefaultInitScope.getLoc();
   else if (Info.CurCXXDefaultArgScope &&
-           Info.CurCXXDefaultArgScope->isInSameContext(Info.CurrentCall))
-    Loc = Info.CurCXXDefaultArgScope->getLoc();
+           Info.CurCXXDefaultArgScope.isInSameContext(Info.CurrentCall))
+    Loc = Info.CurCXXDefaultArgScope.getLoc();
   Result = E->getIntValue(Info.Ctx, Loc);
   return Success(Result, E);
 }

@@ -22,23 +22,49 @@
 using namespace clang;
 
 SourceLocation CurrentSourceLocExprScope::getLoc() const {
-  if (const auto *DAE = dyn_cast<CXXDefaultArgExpr>(DefaultExpr))
-    return DAE->getUsedLocation();
-  return dyn_cast<CXXDefaultInitExpr>(DefaultExpr)->getUsedLocation();
+  switch (CurrentKind) {
+  case CCK_DefaultArg:
+    return DefaultArg->getUsedLocation();
+  case CCK_DefaultInit:
+    return DefaultInit->getUsedLocation();
+  case CCK_None:
+    break;
+  }
+
+  llvm_unreachable("no current source location scope");
 }
 
 const DeclContext *CurrentSourceLocExprScope::getContext() const {
-  if (const auto *DAE = dyn_cast<CXXDefaultArgExpr>(DefaultExpr))
-    return DAE->getUsedContext();
-  return dyn_cast<CXXDefaultInitExpr>(DefaultExpr)->getUsedContext();
+  switch (CurrentKind) {
+  case CCK_DefaultArg:
+    return DefaultArg->getUsedContext();
+  case CCK_DefaultInit:
+    return DefaultInit->getUsedContext();
+  case CCK_None:
+    break;
+  }
+
+  llvm_unreachable("no current source location scope");
+}
+
+const Expr *CurrentSourceLocExprScope::getDefaultExpr() const {
+  switch (CurrentKind) {
+  case CCK_DefaultArg:
+    return DefaultArg;
+  case CCK_DefaultInit:
+    return DefaultInit;
+  case CCK_None:
+    return nullptr;
+  }
+
+  llvm_unreachable("unhandled case");
 }
 
 SourceLocExprScopeGuard::SourceLocExprScopeGuard(
-    const Expr *DefaultExpr, CurrentSourceLocExprScope &Current,
-    const void *EvalContext)
+    CurrentSourceLocExprScope NewScope, CurrentSourceLocExprScope &Current)
     : Current(Current), OldVal(Current), Enable(false) {
   if ((Enable = ShouldEnable()))
-    Current = CurrentSourceLocExprScope(DefaultExpr, EvalContext);
+    Current = NewScope;
 }
 
 bool SourceLocExprScopeGuard::ShouldEnable() const {
