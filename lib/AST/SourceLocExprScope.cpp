@@ -21,6 +21,20 @@
 
 using namespace clang;
 
+CurrentSourceLocExprScope::CurrentSourceLocExprScope(
+    const CXXDefaultArgExpr *DefaultExpr, const void *EvalContextID,
+    CurrentSourceLocExprScope const &LastScope)
+    : CurrentKind(CCK_DefaultArg), DefaultExpr(DefaultExpr),
+      DefaultArg(DefaultExpr), DefaultInit(LastScope.DefaultInit),
+      EvalContextID(EvalContextID) {}
+
+CurrentSourceLocExprScope::CurrentSourceLocExprScope(
+    const CXXDefaultInitExpr *DefaultExpr, const void *EvalContextID,
+    CurrentSourceLocExprScope const &LastScope)
+    : CurrentKind(CCK_DefaultInit), DefaultExpr(DefaultExpr),
+      DefaultArg(LastScope.DefaultArg), DefaultInit(DefaultExpr),
+      EvalContextID(EvalContextID) {}
+
 SourceLocation CurrentSourceLocExprScope::getLoc() const {
   switch (CurrentKind) {
   case CCK_DefaultArg:
@@ -48,6 +62,9 @@ const DeclContext *CurrentSourceLocExprScope::getContext() const {
 }
 
 const Expr *CurrentSourceLocExprScope::getDefaultExpr() const {
+  // FIXME(EricWF)
+  return DefaultExpr;
+
   switch (CurrentKind) {
   case CCK_DefaultArg:
     return DefaultArg;

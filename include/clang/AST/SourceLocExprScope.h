@@ -15,6 +15,8 @@
 #ifndef LLVM_CLANG_AST_SOURCE_LOC_EXPR_SCOPE_H
 #define LLVM_CLANG_AST_SOURCE_LOC_EXPR_SCOPE_H
 
+#include <type_traits>
+
 namespace clang {
 class SourceLocation;
 class Expr;
@@ -28,11 +30,20 @@ class SourceLocExprScopeGuard;
 /// value of the source location builtins (ex. __builtin_LINE), including the
 /// context of default argument and default initializer expressions,
 class CurrentSourceLocExprScope {
+public:
+  template <class DefaultExprType> struct SourceLocScope {
+    const DefaultExprType *DefaultExpr = nullptr;
+    const void *EvalContextID = nullptr;
+
+    explicit operator bool() const { return DefaultExpr; }
+  };
+
   friend class SourceLocExprScopeGuard;
 
   enum CurrentContextKind { CCK_None, CCK_DefaultArg, CCK_DefaultInit };
 
   CurrentContextKind CurrentKind = CCK_None;
+  const Expr *DefaultExpr = nullptr;
   const CXXDefaultArgExpr *DefaultArg = nullptr;
   const CXXDefaultInitExpr *DefaultInit = nullptr;
 
@@ -42,15 +53,11 @@ public:
   CurrentSourceLocExprScope() = default;
   CurrentSourceLocExprScope(const CXXDefaultArgExpr *DefaultExpr,
                             const void *EvalContextID,
-                            CurrentSourceLocExprScope const &LastScope)
-      : CurrentKind(CCK_DefaultArg), DefaultArg(DefaultExpr),
-        EvalContextID(EvalContextID), DefaultInit(LastScope.DefaultInit) {}
+                            CurrentSourceLocExprScope const &LastScope);
 
   CurrentSourceLocExprScope(const CXXDefaultInitExpr *DefaultExpr,
                             const void *EvalContextID,
-                            CurrentSourceLocExprScope const &LastScope)
-      : CurrentKind(CCK_DefaultInit), DefaultArg(LastScope.DefaultArg),
-        DefaultInit(DefaultExpr), EvalContextID(EvalContextID) {}
+                            CurrentSourceLocExprScope const &LastScope);
 
   bool empty() const { return CurrentKind == CCK_None; }
   explicit operator bool() const { return !empty(); }
@@ -58,8 +65,15 @@ public:
   bool isDefaultInitScope() const { return CurrentKind == CCK_DefaultInit; }
   const Expr *getDefaultExpr() const;
 
+  bool isInSameContext(CurrentSourceLocExprScope const &Other) const {
+    return EvalContextID == Other.EvalContextID;
+  }
+
   template <class EvalContextType>
   bool isInSameContext(EvalContextType *CurEvalContext) const {
+    static_assert(!std::is_same<typename std::decay<EvalContextType>::type,
+                                CurrentSourceLocExprScope>::value,
+                  "incorrect overload selected");
     return EvalContextID == static_cast<const void *>(CurEvalContext);
   }
 
