@@ -3921,11 +3921,10 @@ public:
   SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
                 QualType Ty, DeclContext *Context);
 
-  /// \brief Build an empty call expression.
+  /// Build an empty call expression.
   explicit SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
 
-  /// \brief Return a string representing the name of the specific builtin
-  /// function.
+  /// Return a string representing the name of the specific builtin function.
   StringRef getBuiltinStr() const LLVM_READONLY;
 
   IdentType getIdentType() const LLVM_READONLY {
@@ -3952,7 +3951,7 @@ public:
     return getValue(Ctx, BuiltinLoc, ParentContext);
   }
 
-  /// \brief If the SourceLocExpr has been resolved return the subexpression
+  /// If the SourceLocExpr has been resolved return the subexpression
   /// representing the resolved value. Otherwise return null.
   const DeclContext *getParentContext() const { return ParentContext; }
   DeclContext *getParentContext() { return ParentContext; }

@@ -695,12 +695,12 @@ namespace {
     /// Whether or not we're currently speculatively evaluating.
     bool IsSpeculativelyEvaluating;
 
-    /// \brief Source location information about the default argument expression
-    /// we're evaluating, if any.
+    /// Source location information about the default argument expression we're
+    /// evaluating, if any.
     SourceLocExprScope *CurCXXDefaultArgScope = nullptr;
 
-    /// \brief Source location information about the default member initializer
-    /// we're evaluating, if any.
+    /// Source location information about the default member initializer we're
+    /// evaluating, if any.
     SourceLocExprScope *CurCXXDefaultInitScope = nullptr;
 
     enum EvaluationMode {

@@ -1285,12 +1285,12 @@ private:
 
 public:
 
-  /// \brief Source location information about the default argument expression
-  /// we're evaluating, if any.
+  /// Source location information about the default argument expression we're
+  /// evaluating, if any.
   SourceLocExprScope *CurCXXDefaultArgScope = nullptr;
 
-  /// \brief Source location information about the default member initializer
-  /// we're evaluating, if any.
+  /// Source location information about the default member initializer we're
+  // evaluating, if any.
   SourceLocExprScope *CurCXXDefaultInitScope = nullptr;
 
   /// A scope within which we are constructing the fields of an object which
