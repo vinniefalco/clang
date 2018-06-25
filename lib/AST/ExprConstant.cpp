@@ -4699,7 +4699,8 @@ public:
     { return StmtVisitorTy::Visit(E->getReplacement()); }
   bool VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *E) {
     TempVersionRAII RAII(*Info.CurrentCall);
-    SourceLocExprScope Guard(E, Info.CurCXXDefaultArgScope, Info.CurrentCall);
+    SourceLocExprScopeGuard Guard(E, Info.CurCXXDefaultArgScope,
+                                  Info.CurrentCall);
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *E) {
@@ -4707,7 +4708,8 @@ public:
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
       return Error(E);
-    SourceLocExprScope Guard(E, Info.CurCXXDefaultInitScope, Info.CurrentCall);
+    SourceLocExprScopeGuard Guard(E, Info.CurCXXDefaultInitScope,
+                                  Info.CurrentCall);
     return StmtVisitorTy::Visit(E->getExpr());
   }
 

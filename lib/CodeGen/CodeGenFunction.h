@@ -97,7 +97,6 @@ class RegionCodeGenTy;
 class TargetCodeGenInfo;
 struct OMPTaskDataTy;
 struct CGCoroData;
-using SourceLocExprScope = SourceLocExprScopeBase<const Decl>;
 
 /// The kind of evaluation to perform on values of a particular
 /// type.  Basically, is the code in CGExprScalar, CGExprComplex, or
@@ -1331,12 +1330,12 @@ public:
     CodeGenFunction &CGF;
     llvm::Value *OldCXXThisValue;
     CharUnits OldCXXThisAlignment;
-    SourceLocExprScope SourceLocScope;
+    SourceLocExprScopeGuard SourceLocScope;
   };
 
   /// The scope of a CXXDefaultArgExpr.
-  class CXXDefaultArgExprScope : public SourceLocExprScope {
-    using Base = SourceLocExprScope;
+  class CXXDefaultArgExprScope : public SourceLocExprScopeGuard {
+    using Base = SourceLocExprScopeGuard;
 
   public:
     CXXDefaultArgExprScope(CodeGenFunction &CGF, const CXXDefaultArgExpr *E)

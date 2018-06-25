@@ -33,15 +33,15 @@ const DeclContext *CurrentSourceLocExprScope::getContext() const {
   return dyn_cast<CXXDefaultInitExpr>(DefaultExpr)->getUsedContext();
 }
 
-SourceLocExprScope::SourceLocExprScope(const Expr *DefaultExpr,
-                                       CurrentSourceLocExprScope &Current,
-                                       const void *EvalContext)
+SourceLocExprScopeGuard::SourceLocExprScopeGuard(
+    const Expr *DefaultExpr, CurrentSourceLocExprScope &Current,
+    const void *EvalContext)
     : Current(Current), OldVal(Current), Enable(false) {
   if ((Enable = ShouldEnable()))
     Current = CurrentSourceLocExprScope(DefaultExpr, EvalContext);
 }
 
-bool SourceLocExprScope::ShouldEnable() const {
+bool SourceLocExprScopeGuard::ShouldEnable() const {
   // Only update the default argument scope if we've entered a new
   // evaluation context, and not when it's nested within another default
   // argument. Example:
@@ -51,7 +51,7 @@ bool SourceLocExprScope::ShouldEnable() const {
   return !OldVal || !OldVal.isInSameContext(Current.EvalContextID);
 }
 
-SourceLocExprScope::~SourceLocExprScope() {
+SourceLocExprScopeGuard::~SourceLocExprScopeGuard() {
   if (Enable)
     Current = OldVal;
 }

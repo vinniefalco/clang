@@ -20,10 +20,13 @@ class SourceLocation;
 class Expr;
 class DeclContext;
 
-class SourceLocExprScope;
+class SourceLocExprScopeGuard;
 
+/// Represents the current source location and context used to determine the
+/// value of the source location builtins (ex. __builtin_LINE), including the
+/// context of default argument and default initializer expressions,
 class CurrentSourceLocExprScope {
-  friend class ScopeLocExprScope;
+  friend class ScopeLocExprScopeGuard;
   const Expr *DefaultExpr = nullptr;
   const void *EvalContextID = nullptr;
 
@@ -43,22 +46,25 @@ public:
   const DeclContext *getContext() const;
 };
 
-class SourceLocExprScope {
+/// A RAII style scope gaurd used for updating and tracking the current source
+/// location and context as used by the source location builtins
+/// (ex. __builtin_LINE).
+class SourceLocExprScopeGuard {
   bool ShouldEnable() const;
 
-  SourceLocExprScope(const Expr *DefaultExpr,
-                     CurrentSourceLocExprScope &Current,
-                     const void *EvalContext);
+  SourceLocExprScopeGuard(const Expr *DefaultExpr,
+                          CurrentSourceLocExprScope &Current,
+                          const void *EvalContext);
 
 public:
   template <class EvalContextType>
-  SourceLocExprScope(const Expr *DefaultExpr,
-                     CurrentSourceLocExprScope &Current,
-                     EvalContextType *EvalContext)
-      : SourceLocExprScope(DefaultExpr, Current,
-                           static_cast<const void *>(EvalContext)) {}
+  SourceLocExprScopeGuard(const Expr *DefaultExpr,
+                          CurrentSourceLocExprScope &Current,
+                          EvalContextType *EvalContext)
+      : SourceLocExprScopeGuard(DefaultExpr, Current,
+                                static_cast<const void *>(EvalContext)) {}
 
-  ~SourceLocExprScope();
+  ~SourceLocExprScopeGuard();
 
 private:
   CurrentSourceLocExprScope &Current;
