@@ -1896,16 +1896,13 @@ bool BinaryOperator::isNullPointerArithmeticExtension(ASTContext &Ctx,
   return true;
 }
 
-
-SourceLocExpr::SourceLocExpr(IdentType Type, SourceLocation BLoc,
-                             SourceLocation RParenLoc, QualType Ty,
+SourceLocExpr::SourceLocExpr(const ASTContext &Ctx, IdentType Type,
+                             SourceLocation BLoc, SourceLocation RParenLoc,
                              DeclContext *ParentContext)
-    : Expr(SourceLocExprClass, Ty, VK_RValue, OK_Ordinary, false, false, false,
-           false),
+    : Expr(SourceLocExprClass, BuildDependentSourceLocExprType(Ctx, Type),
+           VK_RValue, OK_Ordinary, false, false, false, false),
       BuiltinLoc(BLoc), RParenLoc(RParenLoc), ParentContext(ParentContext) {
   SourceLocExprBits.Type = Type;
-  assert(!Ty->isDependentType() && "Type should never be dependent");
-  assert(!Ty->isArrayType() && "Type should never be an array");
 }
 
 StringRef SourceLocExpr::getBuiltinStr() const {
@@ -1947,47 +1944,59 @@ llvm::APInt SourceLocExpr::getIntValue(const ASTContext &Ctx,
   return llvm::APInt(MaxWidth, Value);
 }
 
-StringLiteral *
+std::string
 SourceLocExpr::getStringValue(const ASTContext &Ctx, SourceLocation Loc,
-                              const DeclContext *CurContext) const {
-  auto PLoc = getPresumedSourceLoc(Ctx, Loc);
-  auto CreateString = [&](StringRef SVal) {
-    QualType StrTy = BuildSourceLocExprType(Ctx, getIdentType(),
-                                            /*IsArray*/ true, SVal.size() + 1);
-    StringLiteral *Lit = StringLiteral::Create(Ctx, SVal, StringLiteral::Ascii,
-                                               /*Pascal*/ false, StrTy, Loc);
-    assert(Lit && "should not be null");
-    return Lit;
-  };
+                              const DeclContext *UsedContext) const {
   switch (getIdentType()) {
   default:
     llvm_unreachable("should not be here");
   case SourceLocExpr::File:
-    return CreateString(PLoc.getFilename());
+    return getPresumedSourceLoc(Ctx, Loc).getFilename();
   case SourceLocExpr::Function: {
-    DeclarationName Name;
-    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(CurContext))
-      Name = FD->getDeclName();
-    return CreateString(Name ? Name.getAsString() : "");
+    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(UsedContext)) {
+      if (DeclarationName Name = FD->getDeclName())
+        return Name.getAsString();
+    }
+    return "";
   }
   }
 }
 
-QualType SourceLocExpr::BuildSourceLocExprType(const ASTContext &Ctx,
-                                               IdentType Type, bool MakeArray,
-                                               int ArraySize) {
-  assert(MakeArray == (ArraySize != -1));
-  bool IsIntType = Type == SourceLocExpr::Line || Type == SourceLocExpr::Column;
-  assert(!IsIntType || (IsIntType && !MakeArray));
-  if (IsIntType)
+StringLiteral *SourceLocExpr::MakeStringLiteral(const ASTContext &Ctx,
+                                                StringRef SVal) {
+  StringLiteral *Lit = StringLiteral::Create(
+      Ctx, SVal, StringLiteral::Ascii,
+      /*Pascal*/ false, BuildTypeForString(Ctx, SVal), SourceLocation());
+  assert(Lit && "should not be null");
+  return Lit;
+}
+
+QualType SourceLocExpr::BuildDependentSourceLocExprType(const ASTContext &Ctx,
+                                                        IdentType Type) {
+  switch (Type) {
+  case File:
+  case Function: {
+    QualType Ty = Ctx.CharTy;
+    // A C++ string literal has a const-qualified element type (C++ 2.13.4p1).
+    if (Ctx.getLangOpts().CPlusPlus || Ctx.getLangOpts().ConstStrings)
+      Ty = Ty.withConst();
+    return Ctx.getPointerType(Ty);
+  }
+  case Line:
+  case Column:
     return Ctx.UnsignedIntTy;
+  }
+  llvm_unreachable("unhandled case");
+}
+
+QualType SourceLocExpr::BuildTypeForString(const ASTContext &Ctx,
+                                           StringRef SVal) {
   QualType Ty = Ctx.CharTy;
   // A C++ string literal has a const-qualified element type (C++ 2.13.4p1).
   if (Ctx.getLangOpts().CPlusPlus || Ctx.getLangOpts().ConstStrings)
     Ty = Ty.withConst();
-  if (!MakeArray)
-    return Ctx.getPointerType(Ty);
-  return Ctx.getConstantArrayType(Ty, llvm::APInt(32, ArraySize),
+
+  return Ctx.getConstantArrayType(Ty, llvm::APInt(32, SVal.size() + 1),
                                   ArrayType::Normal, 0);
 }
 
@@ -1996,7 +2005,7 @@ Expr *SourceLocExpr::getValue(const ASTContext &Ctx, SourceLocation Loc,
   if (isLineOrColumn())
     return IntegerLiteral::Create(Ctx, getIntValue(Ctx, Loc), Ctx.UnsignedIntTy,
                                   Loc);
-  return getStringValue(Ctx, Loc, CurContext);
+  return MakeStringLiteral(Ctx, getStringValue(Ctx, Loc, CurContext));
 }
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,

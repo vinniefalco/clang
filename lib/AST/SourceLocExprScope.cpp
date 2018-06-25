@@ -21,60 +21,37 @@
 
 using namespace clang;
 
-CurrentSourceLocExprScope::CurrentSourceLocExprScope(
-    const CXXDefaultArgExpr *DefaultExpr, const void *EvalContextID,
-    CurrentSourceLocExprScope const &LastScope)
-    : CurrentKind(CCK_DefaultArg), DefaultExpr(DefaultExpr),
-      DefaultArg(DefaultExpr), DefaultInit(LastScope.DefaultInit),
-      EvalContextID(EvalContextID) {}
-
-CurrentSourceLocExprScope::CurrentSourceLocExprScope(
-    const CXXDefaultInitExpr *DefaultExpr, const void *EvalContextID,
-    CurrentSourceLocExprScope const &LastScope)
-    : CurrentKind(CCK_DefaultInit), DefaultExpr(DefaultExpr),
-      DefaultArg(LastScope.DefaultArg), DefaultInit(DefaultExpr),
-      EvalContextID(EvalContextID) {}
-
-SourceLocation CurrentSourceLocExprScope::getLoc() const {
-  switch (CurrentKind) {
-  case CCK_DefaultArg:
-    return DefaultArg->getUsedLocation();
-  case CCK_DefaultInit:
-    return DefaultInit->getUsedLocation();
-  case CCK_None:
-    break;
-  }
-
-  llvm_unreachable("no current source location scope");
+CurrentSourceLocExprScope::CurrentSourceLocExprScope(const Expr *DefaultExpr,
+                                                     const void *EvalContextID)
+    : DefaultExpr(DefaultExpr), EvalContextID(EvalContextID) {
+  assert(DefaultExpr && "expression cannot be null");
+  assert(EvalContextID && "context pointer cannot be null");
+  assert((isa<CXXDefaultArgExpr>(DefaultExpr) ||
+          isa<CXXDefaultInitExpr>(DefaultExpr)) &&
+         "expression must be either a default argument or initializer");
 }
 
-const DeclContext *CurrentSourceLocExprScope::getContext() const {
-  switch (CurrentKind) {
-  case CCK_DefaultArg:
-    return DefaultArg->getUsedContext();
-  case CCK_DefaultInit:
-    return DefaultInit->getUsedContext();
-  case CCK_None:
-    break;
+SourceLocation CurrentSourceLocExprScope::getLoc(const SourceLocExpr *E,
+                                                 const void *ContextID) const {
+  if (auto *DIE = dyn_cast_or_null<CXXDefaultInitExpr>(DefaultExpr))
+    return DIE->getUsedLocation();
+  if (auto *DAE = dyn_cast_or_null<CXXDefaultArgExpr>(DefaultExpr)) {
+    if (isInSameContext(ContextID))
+      return DAE->getUsedLocation();
   }
-
-  llvm_unreachable("no current source location scope");
+  return E->getExprLoc();
 }
 
-const Expr *CurrentSourceLocExprScope::getDefaultExpr() const {
-  // FIXME(EricWF)
-  return DefaultExpr;
-
-  switch (CurrentKind) {
-  case CCK_DefaultArg:
-    return DefaultArg;
-  case CCK_DefaultInit:
-    return DefaultInit;
-  case CCK_None:
-    return nullptr;
+const DeclContext *
+CurrentSourceLocExprScope::getContext(const SourceLocExpr *E,
+                                      const void *ContextID) const {
+  if (auto *DIE = dyn_cast_or_null<CXXDefaultInitExpr>(DefaultExpr))
+    return DIE->getUsedContext();
+  if (auto *DAE = dyn_cast_or_null<CXXDefaultArgExpr>(DefaultExpr)) {
+    if (isInSameContext(ContextID))
+      return DAE->getUsedContext();
   }
-
-  llvm_unreachable("unhandled case");
+  return E->getParentContext();
 }
 
 SourceLocExprScopeGuard::SourceLocExprScopeGuard(
@@ -87,15 +64,14 @@ SourceLocExprScopeGuard::SourceLocExprScopeGuard(
 bool SourceLocExprScopeGuard::ShouldEnable(
     CurrentSourceLocExprScope const &CurrentScope,
     CurrentSourceLocExprScope const &NewScope) {
+  assert(!NewScope.empty() && "the new scope should not be empty");
   // Only update the default argument scope if we've entered a new
   // evaluation context, and not when it's nested within another default
   // argument. Example:
   //    int bar(int x = __builtin_LINE()) { return x; }
   //    int foo(int x = bar())  { return x; }
   //    static_assert(foo() == __LINE__);
-  return CurrentScope.empty() ||
-         !CurrentScope.isInSameContext(NewScope.EvalContextID) ||
-         CurrentScope.CurrentKind != NewScope.CurrentKind;
+  return CurrentScope.empty() || !CurrentScope.isInSameContext(NewScope);
 }
 
 SourceLocExprScopeGuard::~SourceLocExprScopeGuard() {

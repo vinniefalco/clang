@@ -3914,12 +3914,14 @@ private:
   SourceLocation BuiltinLoc, RParenLoc;
   DeclContext *ParentContext;
 
+  static QualType BuildDependentSourceLocExprType(const ASTContext &Ctx,
+                                                  IdentType Type);
+
 public:
-  static QualType BuildSourceLocExprType(const ASTContext &Ctx, IdentType Type,
-                                         bool MakeArray = false,
-                                         int ArraySize = -1);
-  SourceLocExpr(IdentType Type, SourceLocation BLoc, SourceLocation RParenLoc,
-                QualType Ty, DeclContext *Context);
+  static QualType BuildTypeForString(const ASTContext &Ctx, StringRef Str);
+
+  SourceLocExpr(const ASTContext &Ctx, IdentType Type, SourceLocation BLoc,
+                SourceLocation RParenLoc, DeclContext *Context);
 
   /// Build an empty call expression.
   explicit SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
@@ -3940,11 +3942,14 @@ public:
     return getIntValue(Ctx, BuiltinLoc);
   }
 
-  StringLiteral *getStringValue(const ASTContext &Ctx, SourceLocation Loc,
-                                const DeclContext *UsedContext) const;
-  StringLiteral *getStringValue(const ASTContext &Ctx) const {
+  std::string getStringValue(const ASTContext &Ctx, SourceLocation Loc,
+                             const DeclContext *UsedContext) const;
+  std::string getStringValue(const ASTContext &Ctx) const {
     return getStringValue(Ctx, BuiltinLoc, ParentContext);
   }
+
+  static StringLiteral *MakeStringLiteral(const ASTContext &Ctx, StringRef Val);
+
   Expr *getValue(const ASTContext &Ctx, SourceLocation Loc,
                  const DeclContext *UsedContext) const;
   Expr *getValue(const ASTContext &Ctx) const {

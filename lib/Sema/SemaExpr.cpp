@@ -13604,10 +13604,8 @@ ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc,
                                     DeclContext *ParentContext) {
-
-  return new (Context) SourceLocExpr(
-      Type, BuiltinLoc, RPLoc,
-      SourceLocExpr::BuildSourceLocExprType(Context, Type), ParentContext);
+  return new (Context)
+      SourceLocExpr(Context, Type, BuiltinLoc, RPLoc, ParentContext);
 }
 
 bool Sema::ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&Exp,

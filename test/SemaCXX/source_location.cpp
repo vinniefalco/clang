@@ -5,6 +5,9 @@
 #define CURRENT_FROM_MACRO() SL::current()
 #define FORWARD(...) __VA_ARGS__
 
+template <unsigned long long>
+struct Printer;
+
 namespace std {
 namespace experimental {
 struct source_location {
@@ -476,7 +479,6 @@ static_assert(is_equal(SLF::FILE, SLF::test_function_indirect().file()));
 
 namespace test_out_of_line_init {
 #line 1
-
 struct A {
   int n = __builtin_LINE();
 };
@@ -485,6 +487,5 @@ struct B {
 };
 #line 42
 constexpr B b = {};
-Printer<b.a.n> p;
 static_assert(b.a.n == 42, "");
 } // end namespace test_out_of_line_init

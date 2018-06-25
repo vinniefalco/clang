@@ -583,23 +583,18 @@ public:
   }
   Value *VisitSourceLocExpr(SourceLocExpr *SLE) {
     auto &Ctx = CGF.getContext();
-    SourceLocation Loc = SLE->getLocation();
-    const DeclContext *DC = SLE->getParentContext();
-    if (auto &S = (CGF.CurCXXDefaultInitScope ? CGF.CurCXXDefaultInitScope
-                                              : CGF.CurCXXDefaultArgScope)) {
-      Loc = S.getLoc();
-      DC = S.getContext();
-    }
+    std::pair<SourceLocation, const DeclContext *> ScopeInfo =
+        CGF.CurSourceLocExprScope.getLocationContextPair(SLE, CGF.CurCodeDecl);
 
-    if (SLE->isLineOrColumn()) {
-      auto Val = SLE->getIntValue(Ctx, Loc);
-      return Builder.getInt(Val);
-    } else {
-      StringLiteral *Str = SLE->getStringValue(Ctx, Loc, DC);
-      return CGF.EmitArrayToPointerDecay(Str).getPointer();
-    }
-    llvm_unreachable("missing return");
+    if (SLE->isLineOrColumn())
+      return Builder.getInt(SLE->getIntValue(Ctx, ScopeInfo.first));
+
+    // else, we're building a string literal
+    StringLiteral *Str = SourceLocExpr::MakeStringValue(
+        Ctx, SLE->getString(Ctx, ScopeInfo.first, ScopeInfo.second));
+    return CGF.EmitArrayToPointerDecay(Str).getPointer();
   }
+
   Value *VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE) {
     CodeGenFunction::CXXDefaultArgExprScope Scope(CGF, DAE);
     return Visit(DAE->getExpr());

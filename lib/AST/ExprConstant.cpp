@@ -694,13 +694,9 @@ namespace {
     /// Whether or not we're currently speculatively evaluating.
     bool IsSpeculativelyEvaluating;
 
-    /// Source location information about the default argument expression we're
-    /// evaluating, if any.
-    CurrentSourceLocExprScope CurCXXDefaultArgScope;
-
-    /// Source location information about the default member initializer we're
-    /// evaluating, if any.
-    CurrentSourceLocExprScope CurCXXDefaultInitScope;
+    /// Source location information about the default argument or default
+    /// initializer expression we're evaluating, if any.
+    CurrentSourceLocExprScope CurSourceLocExprScope;
 
     enum EvaluationMode {
       /// Evaluate as a constant expression. Stop if we find that the expression
@@ -2596,6 +2592,16 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
     Info.Ctx.getObjCEncodingForType(ObjCEnc->getEncodedType(), Str);
     assert(Index <= Str.size() && "Index too large");
     return APSInt::getUnsigned(Str.c_str()[Index]);
+  }
+
+  if (const auto *SLE = dyn_cast<SourceLocExpr>(Lit)) {
+    std::pair<SourceLocation, const DeclContext *> ScopeInfo =
+        Info.CurSourceLocExprScope.getLocationContextPair(SLE,
+                                                          Info.CurrentCall);
+    StringRef Str =
+        SLE->getStringValue(Info.Ctx, ScopeInfo.first, ScopeInfo.second);
+    assert(Index <= Str.size() && "Index too large");
+    return APSInt::getUnsigned(Str.data()[Index]);
   }
 
   if (auto PE = dyn_cast<PredefinedExpr>(Lit))
@@ -4699,7 +4705,7 @@ public:
     { return StmtVisitorTy::Visit(E->getReplacement()); }
   bool VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *E) {
     TempVersionRAII RAII(*Info.CurrentCall);
-    SourceLocExprScopeGuard Guard(E, Info.CurCXXDefaultArgScope,
+    SourceLocExprScopeGuard Guard(E, Info.CurSourceLocExprScope,
                                   Info.CurrentCall);
     return StmtVisitorTy::Visit(E->getExpr());
   }
@@ -4708,7 +4714,7 @@ public:
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
       return Error(E);
-    SourceLocExprScopeGuard Guard(E, Info.CurCXXDefaultInitScope,
+    SourceLocExprScopeGuard Guard(E, Info.CurSourceLocExprScope,
                                   Info.CurrentCall);
     return StmtVisitorTy::Visit(E->getExpr());
   }
@@ -5764,15 +5770,10 @@ public:
 
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
     assert(E && !E->isLineOrColumn());
-    Expr *Value = nullptr;
-    CurrentSourceLocExprScope ArgCtx = Info.CurCXXDefaultInitScope;
-    if (!ArgCtx && Info.CurCXXDefaultArgScope &&
-        Info.CurCXXDefaultArgScope.isInSameContext(Info.CurrentCall))
-      ArgCtx = Info.CurCXXDefaultArgScope;
-    if (ArgCtx) {
-      Value = E->getValue(Info.Ctx, ArgCtx.getLoc(), ArgCtx.getContext());
-    } else
-      Value = E->getValue(Info.Ctx);
+
+    std::pair<SourceLocation, const DeclContext *> ArgCtx =
+        Info.CurSourceLocExprScope.getLocationContextPair(E, Info.CurrentCall);
+    Expr *Value = E->getValue(Info.Ctx, ArgCtx.first, ArgCtx.second);
 
     if (!Value)
       return Error(E);
@@ -7363,14 +7364,8 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
 
 bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
   assert(E && E->isLineOrColumn());
-  llvm::APInt Result;
-  SourceLocation Loc = E->getLocStart();
-  if (Info.CurCXXDefaultInitScope)
-    Loc = Info.CurCXXDefaultInitScope.getLoc();
-  else if (Info.CurCXXDefaultArgScope &&
-           Info.CurCXXDefaultArgScope.isInSameContext(Info.CurrentCall))
-    Loc = Info.CurCXXDefaultArgScope.getLoc();
-  Result = E->getIntValue(Info.Ctx, Loc);
+  llvm::APInt Result = E->getIntValue(
+      Info.Ctx, Info.CurSourceLocExprScope.getLoc(E, Info.CurrentCall));
   return Success(Result, E);
 }
 

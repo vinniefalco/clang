@@ -15,55 +15,45 @@
 #ifndef LLVM_CLANG_AST_SOURCE_LOC_EXPR_SCOPE_H
 #define LLVM_CLANG_AST_SOURCE_LOC_EXPR_SCOPE_H
 
+#include "clang/Basic/SourceLocation.h"
 #include <type_traits>
+#include <utility>
 
 namespace clang {
-class SourceLocation;
 class Expr;
-class CXXDefaultInitExpr;
-class CXXDefaultArgExpr;
 class DeclContext;
+class SourceLocExpr;
 
 class SourceLocExprScopeGuard;
 
 /// Represents the current source location and context used to determine the
 /// value of the source location builtins (ex. __builtin_LINE), including the
-/// context of default argument and default initializer expressions,
+/// context of default argument and default initializer expressions.
 class CurrentSourceLocExprScope {
-public:
-  template <class DefaultExprType> struct SourceLocScope {
-    const DefaultExprType *DefaultExpr = nullptr;
-    const void *EvalContextID = nullptr;
-
-    explicit operator bool() const { return DefaultExpr; }
-  };
-
   friend class SourceLocExprScopeGuard;
 
-  enum CurrentContextKind { CCK_None, CCK_DefaultArg, CCK_DefaultInit };
-
-  CurrentContextKind CurrentKind = CCK_None;
+  /// The CXXDefaultArgExpr or CXXDefaultInitExpr we're currently evaluating.
   const Expr *DefaultExpr = nullptr;
-  const CXXDefaultArgExpr *DefaultArg = nullptr;
-  const CXXDefaultInitExpr *DefaultInit = nullptr;
 
+  /// A pointer representing the current evaluation context. It is used to
+  /// determine context equality.
+  // FIXME: using 'void*' is a type-unsafe hack used to avoid making the type
+  // a class template.
   const void *EvalContextID = nullptr;
+
+private:
+  CurrentSourceLocExprScope(CurrentSourceLocExprScope const &) = default;
+  CurrentSourceLocExprScope &
+  operator=(CurrentSourceLocExprScope const &) = default;
 
 public:
   CurrentSourceLocExprScope() = default;
-  CurrentSourceLocExprScope(const CXXDefaultArgExpr *DefaultExpr,
-                            const void *EvalContextID,
-                            CurrentSourceLocExprScope const &LastScope);
+  CurrentSourceLocExprScope(const Expr *DefaultExpr, const void *EvalContextID);
 
-  CurrentSourceLocExprScope(const CXXDefaultInitExpr *DefaultExpr,
-                            const void *EvalContextID,
-                            CurrentSourceLocExprScope const &LastScope);
-
-  bool empty() const { return CurrentKind == CCK_None; }
+  bool empty() const { return DefaultExpr == nullptr; }
   explicit operator bool() const { return !empty(); }
-  bool isDefaultArgScope() const { return CurrentKind == CCK_DefaultArg; }
-  bool isDefaultInitScope() const { return CurrentKind == CCK_DefaultInit; }
-  const Expr *getDefaultExpr() const;
+
+  const Expr *getDefaultExpr() const { return DefaultExpr; }
 
   bool isInSameContext(CurrentSourceLocExprScope const &Other) const {
     return EvalContextID == Other.EvalContextID;
@@ -77,8 +67,20 @@ public:
     return EvalContextID == static_cast<const void *>(CurEvalContext);
   }
 
-  SourceLocation getLoc() const;
-  const DeclContext *getContext() const;
+  /// Return the correct SourceLocation for a SourceLocExpr being evaluated
+  /// in the current source location expression scope.
+  SourceLocation getLoc(const SourceLocExpr *E,
+                        const void *CurrentContextID) const;
+
+  /// Return the correct DeclContext for a SourceLocExpr being evaluated in
+  /// the current source location expression scope.
+  const DeclContext *getContext(const SourceLocExpr *E,
+                                const void *ContextID) const;
+
+  std::pair<SourceLocation, const DeclContext *>
+  getLocationContextPair(const SourceLocExpr *E, const void *ContextID) const {
+    return {getLoc(E, ContextID), getContext(E, ContextID)};
+  }
 };
 
 /// A RAII style scope gaurd used for updating and tracking the current source
@@ -93,24 +95,22 @@ class SourceLocExprScopeGuard {
 
 public:
   template <class EvalContextType>
-  SourceLocExprScopeGuard(const CXXDefaultArgExpr *DefaultExpr,
+  SourceLocExprScopeGuard(const Expr *DefaultExpr,
                           CurrentSourceLocExprScope &Current,
                           EvalContextType *EvalContext)
       : SourceLocExprScopeGuard(
-            CurrentSourceLocExprScope(DefaultExpr, EvalContext, Current),
-            Current) {}
-
-  template <class EvalContextType>
-  SourceLocExprScopeGuard(const CXXDefaultInitExpr *DefaultExpr,
-                          CurrentSourceLocExprScope &Current,
-                          EvalContextType *EvalContext)
-      : SourceLocExprScopeGuard(
-            CurrentSourceLocExprScope(DefaultExpr, EvalContext, Current),
-            Current) {}
+            CurrentSourceLocExprScope(DefaultExpr, EvalContext), Current) {
+    static_assert(!std::is_same<typename std::decay<EvalContextType>::type,
+                                CurrentSourceLocExprScope>::value,
+                  "incorrect overload selected");
+  }
 
   ~SourceLocExprScopeGuard();
 
 private:
+  SourceLocExprScopeGuard(SourceLocExprScopeGuard const &) = delete;
+  SourceLocExprScopeGuard &operator=(SourceLocExprScopeGuard const &) = delete;
+
   CurrentSourceLocExprScope &Current;
   CurrentSourceLocExprScope OldVal;
   bool Enable;
