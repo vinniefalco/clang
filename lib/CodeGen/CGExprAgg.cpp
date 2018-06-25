@@ -187,18 +187,18 @@ public:
     }
 
     CGF.EmitPseudoObjectRValue(E, EnsureSlot(E->getType()));
-    }
+  }
 
-    void VisitVAArgExpr(VAArgExpr * E);
+  void VisitVAArgExpr(VAArgExpr *E);
 
-    void EmitInitializationToLValue(Expr * E, LValue Address);
-    void EmitNullInitializationToLValue(LValue Address);
-    //  case Expr::ChooseExprClass:
-    void VisitCXXThrowExpr(const CXXThrowExpr *E) { CGF.EmitCXXThrowExpr(E); }
-    void VisitAtomicExpr(AtomicExpr * E) {
-      RValue Res = CGF.EmitAtomicExpr(E);
-      EmitFinalDestCopy(E->getType(), Res);
-    }
+  void EmitInitializationToLValue(Expr *E, LValue Address);
+  void EmitNullInitializationToLValue(LValue Address);
+  //  case Expr::ChooseExprClass:
+  void VisitCXXThrowExpr(const CXXThrowExpr *E) { CGF.EmitCXXThrowExpr(E); }
+  void VisitAtomicExpr(AtomicExpr *E) {
+    RValue Res = CGF.EmitAtomicExpr(E);
+    EmitFinalDestCopy(E->getType(), Res);
+  }
 };
 }  // end anonymous namespace.
 
