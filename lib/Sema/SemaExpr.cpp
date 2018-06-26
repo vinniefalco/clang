@@ -13600,10 +13600,13 @@ ExprResult Sema::ActOnSourceLocExpr(SourceLocExpr::IdentType Type,
   return BuildSourceLocExpr(Type, BuiltinLoc, RPLoc, CurContext);
 }
 
+extern SourceManager *MySM;
+
 ExprResult Sema::BuildSourceLocExpr(SourceLocExpr::IdentType Type,
                                     SourceLocation BuiltinLoc,
                                     SourceLocation RPLoc,
                                     DeclContext *ParentContext) {
+  MySM = &SourceMgr;
   return new (Context)
       SourceLocExpr(Context, Type, BuiltinLoc, RPLoc, ParentContext);
 }

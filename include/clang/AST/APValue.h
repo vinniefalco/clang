@@ -24,12 +24,14 @@ namespace clang {
   class AddrLabelExpr;
   class ASTContext;
   class CharUnits;
+  class DeclContext;
   class DiagnosticBuilder;
   class Expr;
   class FieldDecl;
   class Decl;
   class ValueDecl;
   class CXXRecordDecl;
+  class SourceLocation;
   class QualType;
 
 /// APValue - This class implements a discriminated union of [uninitialized]
@@ -58,11 +60,39 @@ public:
   public:
     typedef llvm::PointerUnion<const ValueDecl *, const Expr *> PtrTy;
 
-    LValueBase() : CallIndex(0), Version(0), OptType(nullptr) {}
+    struct SourceLocContext {
+    private:
+      friend struct llvm::DenseMapInfo<SourceLocContext>;
+
+      const void *Type = nullptr;
+      const void *Loc = nullptr;
+
+    public:
+      const DeclContext *Context = nullptr;
+      QualType getType() const;
+      SourceLocation getLocation() const;
+
+      explicit operator bool() const { return Type; }
+
+      SourceLocContext() = default;
+      SourceLocContext(QualType const &Ty, SourceLocation const &L,
+                       const DeclContext *Ctx);
+
+      bool operator==(SourceLocContext const &Other) const {
+        Type == Other.Type &&Loc == Other.Loc &&Context == Other.Context;
+      }
+
+    private:
+      SourceLocContext(const void *Ty, const void *L, const DeclContext *DC)
+          : Type(Ty), Loc(L), Context(DC) {}
+    };
+
+    LValueBase() : CallIndex(0), Version(0) {}
 
     template <class T>
-    LValueBase(T P, unsigned I = 0, unsigned V = 0)
-        : Ptr(P), CallIndex(I), Version(V), OptType(nullptr) {}
+    LValueBase(T P, unsigned I = 0, unsigned V = 0,
+               SourceLocContext LocContext = SourceLocContext{})
+        : Ptr(P), CallIndex(I), Version(V), LocContext(LocContext) {}
 
     template <class T>
     bool is() const { return Ptr.is<T>(); }
@@ -73,10 +103,9 @@ public:
     template <class T>
     T dyn_cast() const { return Ptr.dyn_cast<T>(); }
 
-    bool hasType() const { return OptType; }
-    QualType getType() const;
-    // Pass by reference to avoid needing a complete definition of QualType.
-    void setType(const QualType &Ty);
+    bool hasSourceLocContext() const { return bool(LocContext); }
+    SourceLocContext getSourceLocContext() const { return LocContext; }
+    void setSourceLocContext(SourceLocContext Other) { LocContext = Other; }
 
     void *getOpaqueValue() const;
 
@@ -102,13 +131,13 @@ public:
 
     bool operator==(const LValueBase &Other) const {
       return Ptr == Other.Ptr && CallIndex == Other.CallIndex &&
-             Version == Other.Version && OptType == Other.OptType;
+             Version == Other.Version && LocContext == Other.LocContext;
     }
 
   private:
     PtrTy Ptr;
     unsigned CallIndex, Version;
-    const void *OptType;
+    SourceLocContext LocContext;
   };
 
   typedef llvm::PointerIntPair<const Decl *, 1, bool> BaseOrMemberType;
@@ -516,6 +545,13 @@ template<> struct DenseMapInfo<clang::APValue::LValueBase> {
   static unsigned getHashValue(const clang::APValue::LValueBase &Base);
   static bool isEqual(const clang::APValue::LValueBase &LHS,
                       const clang::APValue::LValueBase &RHS);
+};
+template <> struct DenseMapInfo<clang::APValue::LValueBase::SourceLocContext> {
+  using KeyType = clang::APValue::LValueBase::SourceLocContext;
+  static KeyType getEmptyKey();
+  static KeyType getTombstoneKey();
+  static unsigned getHashValue(const KeyType &Val);
+  static bool isEqual(const KeyType &LHS, const KeyType &RHS);
 };
 }
 

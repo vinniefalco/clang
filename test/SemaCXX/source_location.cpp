@@ -51,6 +51,7 @@ constexpr bool is_equal(const char *LHS, const char *RHS) {
   return *LHS == 0 && *RHS == 0;
 }
 
+#if 0
 template <class T>
 constexpr T identity(T t) {
   return t;
@@ -287,11 +288,13 @@ struct ClassAggDer : AggBase {
 static_assert(ClassAggDer{}.x == 100, "");
 
 } // namespace test_line
+#endif
 
 //===----------------------------------------------------------------------===//
 //                            __builtin_FILE()
 //===----------------------------------------------------------------------===//
 
+#if 0
 namespace test_file {
 constexpr const char *test_file_simple(const char *__f = __builtin_FILE()) {
   return __f;
@@ -308,17 +311,21 @@ void test_function() {
   static_assert(test_file_simple() != nullptr);
   static_assert(!is_equal(test_file_simple(), "source_location.cpp"));
 }
+#endif
+
 void test_class() {
-#line 316
+#line 313
   using SLF::TestClass;
   constexpr TestClass Default;
-  constexpr TestClass InParam{42};
-  constexpr TestClass Template{42, 42};
+  // constexpr TestClass InParam{42};
+  // constexpr TestClass Template{42, 42};
+  constexpr auto *F = Default.info.file();
+  constexpr auto Char = F[0];
   static_assert(is_equal(Default.info.file(), SLF::FILE), "");
-  static_assert(is_equal(InParam.info.file(), SLF::FILE), "");
-  static_assert(is_equal(InParam.ctor_info.file(), __FILE__), "");
+  //static_assert(is_equal(InParam.info.file(), SLF::FILE), "");
+  //static_assert(is_equal(InParam.ctor_info.file(), __FILE__), "");
 }
-
+#if 0
 void test_aggr_class() {
   using Agg = SLF::AggrClass<>;
   constexpr Agg Default{};
@@ -328,7 +335,8 @@ void test_aggr_class() {
 }
 
 } // namespace test_file
-
+#endif
+#if 0
 //===----------------------------------------------------------------------===//
 //                            __builtin_FUNCTION()
 //===----------------------------------------------------------------------===//
@@ -499,3 +507,4 @@ constexpr bool test() {
 }
 static_assert(test());
 } // end namespace test_same_pointer
+#endif

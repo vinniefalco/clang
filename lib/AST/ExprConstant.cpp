@@ -64,8 +64,10 @@ namespace {
 
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
-    if (B.hasType())
-      return B.getType();
+
+    if (B.hasSourceLocContext())
+      return B.getSourceLocContext().getType();
+
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>()) {
       // FIXME: It's unclear where we're supposed to take the type from, and
       // this actually matters for arrays of unknown bound. Eg:
@@ -1348,7 +1350,7 @@ namespace {
       }
     }
     void setFrom(ASTContext &Ctx, const APValue &V) {
-      assert(V.isLValue() && "Setting LValue from a non-LValue?");
+      //      assert(V.isLValue() && "Setting LValue from a non-LValue?");
       Base = V.getLValueBase();
       Offset = V.getLValueOffset();
       InvalidBase = false;
@@ -1695,7 +1697,7 @@ static bool IsGlobalLValue(APValue::LValueBase B) {
     return true;
 
   case Expr::SourceLocExprClass:
-    return !dyn_cast<SourceLocExpr>(E)->isLineOrColumn();
+    return !cast<SourceLocExpr>(E)->isLineOrColumn();
 
   case Expr::CallExprClass:
     return IsStringLiteralCall(cast<CallExpr>(E));
@@ -2609,7 +2611,6 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
     const auto *StrTy = cast<ConstantArrayType>(
         SourceLocExpr::BuildTypeForString(Info.Ctx, Str));
     QualType ElemTy = StrTy->getElementType();
-    assert(Index <= Str.size() && "Index too large");
     auto Width = Info.Ctx.getCharWidth();
     APSInt Res(Width, ElemTy->isUnsignedIntegerType());
     if (Index <= Str.size()) {
@@ -5701,6 +5702,25 @@ static bool evaluateLValueAsAllocSize(EvalInfo &Info, APValue::LValueBase Base,
   return true;
 }
 
+// Expand a string literal into an array of characters.
+static void expandStringToArray(EvalInfo &Info, const SourceLocExpr *S,
+                                StringRef Val, QualType Type, APValue &Result) {
+  const ConstantArrayType *CAT = Info.Ctx.getAsConstantArrayType(Type);
+  assert(CAT && "string literal isn't an array");
+  QualType CharType = CAT->getElementType();
+  assert(CharType->isIntegerType() && "unexpected character type");
+
+  unsigned Elts = CAT->getSize().getZExtValue();
+  Result = APValue(APValue::UninitArray(), Elts, Elts);
+  APSInt Value(Info.Ctx.getCharWidth(), CharType->isUnsignedIntegerType());
+  if (Result.hasArrayFiller())
+    Result.getArrayFiller() = APValue(Value);
+  for (unsigned I = 0, N = Result.getArrayInitializedElts(); I != N; ++I) {
+    Value = static_cast<uint32_t>(Val.data()[N]);
+    Result.getArrayInitializedElt(I) = APValue(Value);
+  }
+}
+
 namespace {
 class PointerExprEvaluator
   : public ExprEvaluatorBase<PointerExprEvaluator> {
@@ -5800,7 +5820,7 @@ public:
     QualType StrTy = SourceLocExpr::BuildTypeForString(Info.Ctx, Val);
 
     Result.set(E);
-    Result.Base.setType(StrTy);
+    Result.Base.setSourceLocContext({StrTy, ArgCtx.first, ArgCtx.second});
     Result.addArray(Info, E, Info.Ctx.getAsConstantArrayType(StrTy));
     return true;
   }
