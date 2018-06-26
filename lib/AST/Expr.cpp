@@ -1918,59 +1918,6 @@ StringRef SourceLocExpr::getBuiltinStr() const {
   }
 }
 
-static PresumedLoc getPresumedSourceLoc(const ASTContext &Ctx,
-                                        SourceLocation Loc) {
-  auto &SourceMgr = Ctx.getSourceManager();
-  PresumedLoc PLoc =
-      SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(Loc).getEnd());
-  assert(PLoc.isValid()); // FIXME: Learn how to handle this.
-  return PLoc;
-}
-
-llvm::APInt SourceLocExpr::getIntValue(const ASTContext &Ctx,
-                                       SourceLocation Loc) const {
-  auto PLoc = getPresumedSourceLoc(Ctx, Loc);
-  unsigned Value = [&]() {
-    switch (getIdentType()) {
-    default:
-      llvm_unreachable("should not be here");
-    case Line:
-      return PLoc.getLine();
-    case Column:
-      return PLoc.getColumn();
-    }
-  }();
-  unsigned MaxWidth = Ctx.getTargetInfo().getIntWidth();
-  return llvm::APInt(MaxWidth, Value);
-}
-
-std::string
-SourceLocExpr::getStringValue(const ASTContext &Ctx, SourceLocation Loc,
-                              const DeclContext *UsedContext) const {
-  switch (getIdentType()) {
-  default:
-    llvm_unreachable("should not be here");
-  case SourceLocExpr::File:
-    return getPresumedSourceLoc(Ctx, Loc).getFilename();
-  case SourceLocExpr::Function: {
-    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(UsedContext)) {
-      if (DeclarationName Name = FD->getDeclName())
-        return Name.getAsString();
-    }
-    return "";
-  }
-  }
-}
-
-StringLiteral *SourceLocExpr::MakeStringLiteral(const ASTContext &Ctx,
-                                                StringRef SVal) {
-  StringLiteral *Lit = StringLiteral::Create(
-      Ctx, SVal, StringLiteral::Ascii,
-      /*Pascal*/ false, BuildTypeForString(Ctx, SVal), SourceLocation());
-  assert(Lit && "should not be null");
-  return Lit;
-}
-
 QualType SourceLocExpr::BuildDependentSourceLocExprType(const ASTContext &Ctx,
                                                         IdentType Type) {
   switch (Type) {
@@ -1989,23 +1936,15 @@ QualType SourceLocExpr::BuildDependentSourceLocExprType(const ASTContext &Ctx,
   llvm_unreachable("unhandled case");
 }
 
-QualType SourceLocExpr::BuildTypeForString(const ASTContext &Ctx,
-                                           StringRef SVal) {
+QualType SourceLocExpr::BuildStringArrayType(const ASTContext &Ctx,
+                                             unsigned Size) {
   QualType Ty = Ctx.CharTy;
   // A C++ string literal has a const-qualified element type (C++ 2.13.4p1).
   if (Ctx.getLangOpts().CPlusPlus || Ctx.getLangOpts().ConstStrings)
     Ty = Ty.withConst();
 
-  return Ctx.getConstantArrayType(Ty, llvm::APInt(32, SVal.size() + 1),
-                                  ArrayType::Normal, 0);
-}
-
-Expr *SourceLocExpr::getValue(const ASTContext &Ctx, SourceLocation Loc,
-                              const DeclContext *CurContext) const {
-  if (isLineOrColumn())
-    return IntegerLiteral::Create(Ctx, getIntValue(Ctx, Loc), Ctx.UnsignedIntTy,
-                                  Loc);
-  return MakeStringLiteral(Ctx, getStringValue(Ctx, Loc, CurContext));
+  return Ctx.getConstantArrayType(Ty, llvm::APInt(32, Size), ArrayType::Normal,
+                                  0);
 }
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,

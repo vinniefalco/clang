@@ -1350,7 +1350,7 @@ namespace {
       }
     }
     void setFrom(ASTContext &Ctx, const APValue &V) {
-      //      assert(V.isLValue() && "Setting LValue from a non-LValue?");
+      assert(V.isLValue() && "Setting LValue from a non-LValue?");
       Base = V.getLValueBase();
       Offset = V.getLValueOffset();
       InvalidBase = false;
@@ -1697,7 +1697,7 @@ static bool IsGlobalLValue(APValue::LValueBase B) {
     return true;
 
   case Expr::SourceLocExprClass:
-    return !cast<SourceLocExpr>(E)->isLineOrColumn();
+    return cast<SourceLocExpr>(E)->isStringType();
 
   case Expr::CallExprClass:
     return IsStringLiteralCall(cast<CallExpr>(E));
@@ -2592,8 +2592,10 @@ static unsigned getBaseIndex(const CXXRecordDecl *Derived,
 }
 
 /// Extract the value of a character from a string literal.
-static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
+static APSInt extractStringLiteralCharacter(EvalInfo &Info,
+                                            APValue::LValueBase const &Base,
                                             uint64_t Index) {
+  const Expr *Lit = Base.get<const Expr *>();
   // FIXME: Support MakeStringConstant
   if (const auto *ObjCEnc = dyn_cast<ObjCEncodeExpr>(Lit)) {
     std::string Str;
@@ -2603,11 +2605,11 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
   }
 
   if (const auto *SLE = dyn_cast<SourceLocExpr>(Lit)) {
-    std::pair<SourceLocation, const DeclContext *> ScopeInfo =
-        Info.CurSourceLocExprScope.getLocationContextPair(SLE,
-                                                          Info.CurrentCall);
-    std::string Str =
-        SLE->getStringValue(Info.Ctx, ScopeInfo.first, ScopeInfo.second);
+    assert(Base.hasSourceLocContext());
+    APValue::LValueBase::SourceLocContext LocContext =
+        Base.getSourceLocContext();
+    std::string Str = SLE->getStringValue(Info.Ctx, LocContext.getLocation(),
+                                          LocContext.Context);
     const auto *StrTy = cast<ConstantArrayType>(
         SourceLocExpr::BuildTypeForString(Info.Ctx, Str));
     QualType ElemTy = StrTy->getElementType();
@@ -2968,8 +2970,8 @@ struct ExtractSubobjectHandler {
     return true;
   }
   bool foundString(APValue &Subobj, QualType SubobjType, uint64_t Character) {
-    Result = APValue(extractStringLiteralCharacter(
-        Info, Subobj.getLValueBase().get<const Expr *>(), Character));
+    Result = APValue(
+        extractStringLiteralCharacter(Info, Subobj.getLValueBase(), Character));
     return true;
   }
 };

@@ -15,16 +15,69 @@
 #ifndef LLVM_CLANG_AST_SOURCE_LOC_EXPR_SCOPE_H
 #define LLVM_CLANG_AST_SOURCE_LOC_EXPR_SCOPE_H
 
+#include "clang/AST/APValue.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/Type.h"
 #include "clang/Basic/SourceLocation.h"
+#include <string>
 #include <type_traits>
 #include <utility>
 
 namespace clang {
+class ASTContext;
 class Expr;
 class DeclContext;
 class SourceLocExpr;
 
 class SourceLocExprScopeGuard;
+
+struct EvaluatedSourceLocInfoBase {
+  const SourceLocExpr *E = nullptr;
+  QualType Type;
+  SourceLocation Loc;
+  const DeclContext *Context = nullptr;
+};
+
+struct EvaluatedSourceLocInfo : EvaluatedSourceLocInfoBase {
+private:
+  std::string SValue;
+
+public:
+  APValue Result;
+
+  std::string const &getStringValue() const {
+    assert(E->isStringType() &&
+           "cannot set string value for non-string expression");
+    return SValue;
+  }
+  void setStringValue(std::string Other) {
+    assert(E->isStringType() &&
+           "cannot set string value for non-string expression");
+    SValue = std::move(Other);
+  }
+
+  uint32_t getIntValue() const {
+    assert(E->isIntType() && "cannot get int value from non-int expression");
+    assert(Result.isInt() && "non-int APValue result");
+    return Result.getInt().getZExtValue();
+  }
+
+  StringLiteral *CreateStringLiteral(const ASTContext &Ctx) const;
+  IntegerLiteral *CreateIntegerLiteral(const ASTContext &Ctx) const;
+  Expr *CreateLiteral(const ASTContext &Ctx) {
+    if (E->isStringType())
+      return CreateStringLiteral(Ctx);
+    return CreateIntegerLiteral(Ctx);
+  }
+
+  EvaluatedSourceLocInfo() = default;
+  EvaluatedSourceLocInfo(EvaluatedSourceLocInfo const &) = default;
+
+  EvaluatedSourceLocInfo(EvaluatedSourceLocInfoBase Base)
+      : EvaluatedSourceLocInfoBase(Base) {}
+
+  friend struct CurrentSourceLocExprScope;
+};
 
 /// Represents the current source location and context used to determine the
 /// value of the source location builtins (ex. __builtin_LINE), including the
@@ -41,14 +94,18 @@ class CurrentSourceLocExprScope {
   // a class template.
   const void *EvalContextID = nullptr;
 
-private:
-  CurrentSourceLocExprScope(CurrentSourceLocExprScope const &) = default;
-  CurrentSourceLocExprScope &
-  operator=(CurrentSourceLocExprScope const &) = default;
-
 public:
   CurrentSourceLocExprScope() = default;
   CurrentSourceLocExprScope(const Expr *DefaultExpr, const void *EvalContextID);
+
+  EvaluatedSourceLocInfoBase getEvaluatedInfoBase(const ASTContext &Ctx,
+                                                  const SourceLocExpr *E) const;
+  EvaluatedSourceLocInfo getEvaluatedInfo(const ASTContext &Ctx,
+                                          const SourceLocExpr *E) const;
+
+  static EvaluatedSourceLocInfo
+  getEvaluatedInfoFromBase(const ASTContext &Ctx,
+                           EvaluatedSourceLocInfoBase Base);
 
   bool empty() const { return DefaultExpr == nullptr; }
   explicit operator bool() const { return !empty(); }
@@ -67,20 +124,10 @@ public:
     return EvalContextID == static_cast<const void *>(CurEvalContext);
   }
 
-  /// Return the correct SourceLocation for a SourceLocExpr being evaluated
-  /// in the current source location expression scope.
-  SourceLocation getLoc(const SourceLocExpr *E,
-                        const void *CurrentContextID) const;
-
-  /// Return the correct DeclContext for a SourceLocExpr being evaluated in
-  /// the current source location expression scope.
-  const DeclContext *getContext(const SourceLocExpr *E,
-                                const void *ContextID) const;
-
-  std::pair<SourceLocation, const DeclContext *>
-  getLocationContextPair(const SourceLocExpr *E, const void *ContextID) const {
-    return {getLoc(E, ContextID), getContext(E, ContextID)};
-  }
+private:
+  CurrentSourceLocExprScope(CurrentSourceLocExprScope const &) = default;
+  CurrentSourceLocExprScope &
+  operator=(CurrentSourceLocExprScope const &) = default;
 };
 
 /// A RAII style scope gaurd used for updating and tracking the current source

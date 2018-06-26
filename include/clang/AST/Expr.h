@@ -3908,7 +3908,7 @@ public:
 /// __builtin_FUNCTION(), or __builtin_FILE()
 class SourceLocExpr final : public Expr {
 public:
-  enum IdentType { Function, File, Line, Column };
+  enum IdentType { Function, File, Line, Column, IT_End = Column };
 
 private:
   SourceLocation BuiltinLoc, RParenLoc;
@@ -3918,7 +3918,7 @@ private:
                                                   IdentType Type);
 
 public:
-  static QualType BuildTypeForString(const ASTContext &Ctx, StringRef Str);
+  static QualType BuildStringArrayType(const ASTContext &Ctx, unsigned Size);
 
   SourceLocExpr(const ASTContext &Ctx, IdentType Type, SourceLocation BLoc,
                 SourceLocation RParenLoc, DeclContext *Context);
@@ -3933,28 +3933,17 @@ public:
     return static_cast<IdentType>(SourceLocExprBits.Type);
   }
 
-  bool isLineOrColumn() const LLVM_READONLY {
-    return getIdentType() == Line || getIdentType() == Column;
+  bool isStringType() const LLVM_READONLY {
+    switch (getIdentType()) {
+    case File:
+    case Function:
+      return true;
+    case Line:
+    case Column:
+      return false;
+    }
   }
-
-  llvm::APInt getIntValue(const ASTContext &Ctx, SourceLocation Loc) const;
-  llvm::APInt getIntValue(const ASTContext &Ctx) const {
-    return getIntValue(Ctx, BuiltinLoc);
-  }
-
-  std::string getStringValue(const ASTContext &Ctx, SourceLocation Loc,
-                             const DeclContext *UsedContext) const;
-  std::string getStringValue(const ASTContext &Ctx) const {
-    return getStringValue(Ctx, BuiltinLoc, ParentContext);
-  }
-
-  static StringLiteral *MakeStringLiteral(const ASTContext &Ctx, StringRef Val);
-
-  Expr *getValue(const ASTContext &Ctx, SourceLocation Loc,
-                 const DeclContext *UsedContext) const;
-  Expr *getValue(const ASTContext &Ctx) const {
-    return getValue(Ctx, BuiltinLoc, ParentContext);
-  }
+  bool isIntType() const LLVM_READONLY { return !isStringType(); }
 
   /// If the SourceLocExpr has been resolved return the subexpression
   /// representing the resolved value. Otherwise return null.
