@@ -111,15 +111,16 @@ static std::string getStringValue(const ASTContext &Ctx, const SourceLocExpr *E,
 
 StringLiteral *
 EvaluatedSourceLocScope::CreateStringLiteral(const ASTContext &Ctx) const {
-  assert(E && E->isStringType() && !Type.isNull());
+  assert(E && E->isStringType() && !empty());
   return StringLiteral::Create(Ctx, getStringValue(), StringLiteral::Ascii,
-                               /*Pascal*/ false, Type, SourceLocation());
+                               /*Pascal*/ false, getType(), getLocation());
 }
 
 IntegerLiteral *
 EvaluatedSourceLocScope::CreateIntegerLiteral(const ASTContext &Ctx) const {
   assert(E && E->isIntType() && Result.isInt());
-  return IntegerLiteral::Create(Ctx, Result.getInt(), Ctx.UnsignedIntTy, Loc);
+  return IntegerLiteral::Create(Ctx, Result.getInt(), Ctx.UnsignedIntTy,
+                                getLocation());
 }
 
 EvaluatedSourceLocScopeBase
@@ -162,7 +163,7 @@ EvaluatedSourceLocScope::Create(ASTContext const &Ctx, const SourceLocExpr *E,
   case SourceLocExpr::File:
   case SourceLocExpr::Function: {
     std::string Val =
-        getStringValue(Ctx, E, Info.getLocation(), Info.getContext());
+        ::getStringValue(Ctx, E, Info.getLocation(), Info.getContext());
     Info.setStringValue(std::move(Val));
 
     APValue::LValueBase LVBase(E);
