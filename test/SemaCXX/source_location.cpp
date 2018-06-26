@@ -489,3 +489,16 @@ struct B {
 constexpr B b = {};
 static_assert(b.a.n == 42, "");
 } // end namespace test_out_of_line_init
+
+namespace test_same_pointer {
+#line 495
+constexpr bool test() {
+  constexpr auto *x = "abc";
+  constexpr auto *y = "def";
+  constexpr bool b = x == y;
+  return true;
+
+  //return true;
+}
+static_assert(test());
+} // end namespace test_same_pointer

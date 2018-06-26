@@ -1,10 +1,10 @@
 
-struct InMemInit {
-
-  int info = __builtin_LINE();
-  InMemInit() = default;
-  constexpr InMemInit(int) {}
-};
-//static_assert(InMemInit{}.check(__LINE__ - 3), "");
-//static_assert(InMemInit{42}.check(__LINE__ - 3), "");
-InMemInit i = {};
+template <int>
+struct Printer;
+constexpr bool test() {
+  constexpr auto *n = __builtin_FUNCTION();
+  constexpr char c = n[0];
+  constexpr int x = c == 't';
+  return x;
+}
+static_assert(test());

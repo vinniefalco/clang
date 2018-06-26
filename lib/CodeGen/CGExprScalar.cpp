@@ -590,8 +590,8 @@ public:
       return Builder.getInt(SLE->getIntValue(Ctx, ScopeInfo.first));
 
     // else, we're building a string literal
-    StringLiteral *Str = SourceLocExpr::MakeStringValue(
-        Ctx, SLE->getString(Ctx, ScopeInfo.first, ScopeInfo.second));
+    StringLiteral *Str = SourceLocExpr::MakeStringLiteral(
+        Ctx, SLE->getStringValue(Ctx, ScopeInfo.first, ScopeInfo.second));
     return CGF.EmitArrayToPointerDecay(Str).getPointer();
   }
 

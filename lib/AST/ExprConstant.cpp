@@ -82,6 +82,8 @@ namespace {
     }
 
     const Expr *Base = B.get<const Expr*>();
+    if (Base)
+      assert(!isa<SourceLocExpr>(Base) && "FIXME(EricWF)");
 
     // For a materialized temporary, the type of the temporary we materialized
     // may not be the type of the expression.
@@ -113,12 +115,12 @@ namespace {
   /// Get an LValue path entry, which is known to not be an array index, as a
   /// field declaration.
   static const FieldDecl *getAsField(APValue::LValuePathEntry E) {
-    return dyn_cast<FieldDecl>(getAsBaseOrMember(E).getPointer());
+    return dyn_cast_or_null<FieldDecl>(getAsBaseOrMember(E).getPointer());
   }
   /// Get an LValue path entry, which is known to not be an array index, as a
   /// base class declaration.
   static const CXXRecordDecl *getAsBaseClass(APValue::LValuePathEntry E) {
-    return dyn_cast<CXXRecordDecl>(getAsBaseOrMember(E).getPointer());
+    return dyn_cast_or_null<CXXRecordDecl>(getAsBaseOrMember(E).getPointer());
   }
   /// Determine whether this LValue path entry for a base class names a virtual
   /// base class.
@@ -1691,6 +1693,10 @@ static bool IsGlobalLValue(APValue::LValueBase B) {
   case Expr::CXXTypeidExprClass:
   case Expr::CXXUuidofExprClass:
     return true;
+
+  case Expr::SourceLocExprClass:
+    return !dyn_cast<SourceLocExpr>(E)->isLineOrColumn();
+
   case Expr::CallExprClass:
     return IsStringLiteralCall(cast<CallExpr>(E));
   // For GCC compatibility, &&label has static storage duration.
@@ -2598,10 +2604,16 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
     std::pair<SourceLocation, const DeclContext *> ScopeInfo =
         Info.CurSourceLocExprScope.getLocationContextPair(SLE,
                                                           Info.CurrentCall);
-    StringRef Str =
+    std::string Str =
         SLE->getStringValue(Info.Ctx, ScopeInfo.first, ScopeInfo.second);
+    const auto *StrTy = cast<ConstantArrayType>(
+        SourceLocExpr::BuildTypeForString(Info.Ctx, Str));
+    QualType ElemTy = StrTy->getElementType();
     assert(Index <= Str.size() && "Index too large");
-    return APSInt::getUnsigned(Str.data()[Index]);
+    llvm::APInt IntVal(Info.Ctx.getCharWidth(), Str.c_str()[Index]);
+    APSInt Res(IntVal, ElemTy->isUnsignedIntegerType());
+
+    return Res;
   }
 
   if (auto PE = dyn_cast<PredefinedExpr>(Lit))
@@ -2828,6 +2840,7 @@ findSubobject(EvalInfo &Info, const Expr *E, const CompleteObject &Obj,
       // An array object is represented as either an Array APValue or as an
       // LValue which refers to a string literal.
       if (O->isLValue()) {
+        assert(!isa<SourceLocExpr>(E));
         assert(I == N - 1 && "extracting subobject of character?");
         assert(!O->hasLValuePath() || O->getLValuePath().empty());
         if (handler.AccessKind != AK_Read)
@@ -3332,6 +3345,16 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       // FIXME: Support ObjCEncodeExpr, MakeStringConstant
       APValue Str(Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
       CompleteObject StrObj(&Str, Base->getType(), false);
+      return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
+    } else if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(Base)) {
+      APValue Str(Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
+      std::pair<SourceLocation, const DeclContext *> ScopeInfo =
+          Info.CurSourceLocExprScope.getLocationContextPair(SLE,
+                                                            Info.CurrentCall);
+      std::string Val =
+          SLE->getStringValue(Info.Ctx, ScopeInfo.first, ScopeInfo.second);
+      QualType StrTy = SourceLocExpr::BuildTypeForString(Info.Ctx, Val);
+      CompleteObject StrObj(&Str, StrTy, false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     }
   }
@@ -5773,24 +5796,11 @@ public:
 
     std::pair<SourceLocation, const DeclContext *> ArgCtx =
         Info.CurSourceLocExprScope.getLocationContextPair(E, Info.CurrentCall);
-    Expr *Value = E->getValue(Info.Ctx, ArgCtx.first, ArgCtx.second);
+    std::string Val = E->getStringValue(Info.Ctx, ArgCtx.first, ArgCtx.second);
+    QualType StrTy = SourceLocExpr::BuildTypeForString(Info.Ctx, Val);
 
-    if (!Value)
-      return Error(E);
-
-    LValue Obj;
-    assert(Value->isGLValue());
-
-    if (!evaluateLValue(Value, Result))
-      return Error(E);
-    // The result is a pointer to the first element of the array.
-    if (const ConstantArrayType *CAT
-          = Info.Ctx.getAsConstantArrayType(Value->getType()))
-      Result.addArray(Info, Value, CAT);
-    else
-      Result.Designator.setInvalid();
-
-    assert(Result.Designator.Invalid == false);
+    Result.set(E);
+    Result.addArray(Info, E, Info.Ctx.getAsConstantArrayType(StrTy));
     return true;
   }
 
@@ -7142,6 +7152,7 @@ public:
            "Invalid evaluation result.");
     assert(SI.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
            "Invalid evaluation result.");
+
     Result = APValue(SI);
     return true;
   }

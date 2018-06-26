@@ -499,7 +499,14 @@ void APValue::printPretty(raw_ostream &Out, ASTContext &Ctx, QualType Ty) const{
       } else {
         // The lvalue must refer to an array.
         Out << '[' << Path[I].ArrayIndex << ']';
-        ElemTy = Ctx.getAsArrayType(ElemTy)->getElementType();
+        // FIXME: Unless the source expression is a SourceLocExpr, then the
+        // type refers to a decayed pointer.
+        if (ElemTy->isArrayType())
+          ElemTy = Ctx.getAsArrayType(ElemTy)->getElementType();
+        else {
+          assert(ElemTy->isPointerType());
+          ElemTy = ElemTy->getPointeeType();
+        }
       }
     }
 
