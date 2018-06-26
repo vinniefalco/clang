@@ -16,6 +16,7 @@
 #define LLVM_CLANG_AST_SOURCE_LOC_EXPR_SCOPE_H
 
 #include "clang/AST/APValue.h"
+#include "clang/AST/EvaluatedSourceLocScope.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/SourceLocation.h"
@@ -31,18 +32,12 @@ class SourceLocExpr;
 
 class SourceLocExprScopeGuard;
 
-struct EvaluatedSourceLocInfoBase {
-  const SourceLocExpr *E = nullptr;
-  QualType Type;
-  SourceLocation Loc;
-  const DeclContext *Context = nullptr;
-};
-
-struct EvaluatedSourceLocInfo : EvaluatedSourceLocInfoBase {
+struct EvaluatedSourceLocScope : public EvaluatedSourceLocScopeBase {
 private:
   std::string SValue;
 
 public:
+  const SourceLocExpr *E = nullptr;
   APValue Result;
 
   std::string const &getStringValue() const {
@@ -70,11 +65,17 @@ public:
     return CreateIntegerLiteral(Ctx);
   }
 
-  EvaluatedSourceLocInfo() = default;
-  EvaluatedSourceLocInfo(EvaluatedSourceLocInfo const &) = default;
+  EvaluatedSourceLocScope() = default;
+  EvaluatedSourceLocScope(EvaluatedSourceLocScope const &) = default;
 
-  EvaluatedSourceLocInfo(EvaluatedSourceLocInfoBase Base)
-      : EvaluatedSourceLocInfoBase(Base) {}
+  static EvaluatedSourceLocScope Create(const ASTContext &Ctx,
+                                        const SourceLocExpr *E,
+                                        EvaluatedSourceLocScopeBase Base);
+
+private:
+  EvaluatedSourceLocScope(EvaluatedSourceLocScopeBase Base,
+                          const SourceLocExpr *E)
+      : EvaluatedSourceLocScopeBase(Base), E(E) {}
 
   friend struct CurrentSourceLocExprScope;
 };
@@ -98,14 +99,10 @@ public:
   CurrentSourceLocExprScope() = default;
   CurrentSourceLocExprScope(const Expr *DefaultExpr, const void *EvalContextID);
 
-  EvaluatedSourceLocInfoBase getEvaluatedInfoBase(const ASTContext &Ctx,
-                                                  const SourceLocExpr *E) const;
-  EvaluatedSourceLocInfo getEvaluatedInfo(const ASTContext &Ctx,
-                                          const SourceLocExpr *E) const;
-
-  static EvaluatedSourceLocInfo
-  getEvaluatedInfoFromBase(const ASTContext &Ctx,
-                           EvaluatedSourceLocInfoBase Base);
+  EvaluatedSourceLocScopeBase
+  getEvaluatedInfoBase(const ASTContext &Ctx, const SourceLocExpr *E) const;
+  EvaluatedSourceLocScope getEvaluatedInfo(const ASTContext &Ctx,
+                                           const SourceLocExpr *E) const;
 
   bool empty() const { return DefaultExpr == nullptr; }
   explicit operator bool() const { return !empty(); }

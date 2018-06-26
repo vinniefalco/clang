@@ -14,6 +14,7 @@
 #ifndef LLVM_CLANG_AST_APVALUE_H
 #define LLVM_CLANG_AST_APVALUE_H
 
+#include "clang/AST/EvaluatedSourceLocScope.h"
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APSInt.h"
@@ -60,42 +61,13 @@ public:
   public:
     typedef llvm::PointerUnion<const ValueDecl *, const Expr *> PtrTy;
 
-    struct SourceLocContext {
-    private:
-      friend struct llvm::DenseMapInfo<SourceLocContext>;
-
-      const void *Type = nullptr;
-      const void *Loc = nullptr;
-
-    public:
-      const DeclContext *Context = nullptr;
-      QualType getType() const;
-      SourceLocation getLocation() const;
-
-      explicit operator bool() const { return Type; }
-
-      SourceLocContext() = default;
-      SourceLocContext(QualType const &Ty, SourceLocation const &L,
-                       const DeclContext *Ctx);
-
-      bool operator==(SourceLocContext const &Other) const {
-        Type == Other.Type &&Loc == Other.Loc &&Context == Other.Context;
-      }
-
-    private:
-      SourceLocContext(const void *Ty, const void *L, const DeclContext *DC)
-          : Type(Ty), Loc(L), Context(DC) {}
-    };
 
     LValueBase() : CallIndex(0), Version(0) {}
 
     template <class T>
-    LValueBase(T P, unsigned I = 0, unsigned V = 0)
-        : Ptr(P), CallIndex(I), Version(V) {}
-
-    template <class T>
-    LValueBase(T P, unsigned I, unsigned V, SourceLocContext Ctx)
-        : Ptr(P), CallIndex(I), Version(V), LocContext(Ctx) {}
+    LValueBase(T P, unsigned I = 0, unsigned V = 0,
+               EvaluatedSourceLocScopeBase BaseScope = {})
+        : Ptr(P), CallIndex(I), Version(V), LocContext(BaseScope) {}
 
     template <class T>
     bool is() const { return Ptr.is<T>(); }
@@ -106,9 +78,13 @@ public:
     template <class T>
     T dyn_cast() const { return Ptr.dyn_cast<T>(); }
 
-    bool hasSourceLocContext() const { return bool(LocContext); }
-    SourceLocContext getSourceLocContext() const { return LocContext; }
-    void setSourceLocContext(SourceLocContext Other) { LocContext = Other; }
+    bool hasEvaluatedSourceLocScope() const { return bool(LocContext); }
+    EvaluatedSourceLocScopeBase getEvaluatedSourceLocScope() const {
+      return LocContext;
+    }
+    void setEvaluatedSourceLocScope(EvaluatedSourceLocScopeBase Other) {
+      LocContext = Other;
+    }
 
     void *getOpaqueValue() const;
 
@@ -140,7 +116,7 @@ public:
   private:
     PtrTy Ptr;
     unsigned CallIndex, Version;
-    SourceLocContext LocContext;
+    EvaluatedSourceLocScopeBase LocContext;
   };
 
   typedef llvm::PointerIntPair<const Decl *, 1, bool> BaseOrMemberType;
@@ -548,13 +524,6 @@ template<> struct DenseMapInfo<clang::APValue::LValueBase> {
   static unsigned getHashValue(const clang::APValue::LValueBase &Base);
   static bool isEqual(const clang::APValue::LValueBase &LHS,
                       const clang::APValue::LValueBase &RHS);
-};
-template <> struct DenseMapInfo<clang::APValue::LValueBase::SourceLocContext> {
-  using KeyType = clang::APValue::LValueBase::SourceLocContext;
-  static KeyType getEmptyKey();
-  static KeyType getTombstoneKey();
-  static unsigned getHashValue(const KeyType &Val);
-  static bool isEqual(const KeyType &LHS, const KeyType &RHS);
 };
 }
 

@@ -21,9 +21,56 @@
 
 using namespace clang;
 
-int Depth = -1;
+QualType EvaluatedSourceLocScopeBase::getType() const {
+  if (!Type)
+    return QualType();
+  return QualType::getFromOpaquePtr(Type);
+}
 
-SourceManager *MySM;
+SourceLocation EvaluatedSourceLocScopeBase::getLocation() const {
+  if (!Loc)
+    return SourceLocation();
+  return SourceLocation::getFromPtrEncoding(Loc);
+}
+
+const DeclContext *EvaluatedSourceLocScopeBase::getContext() const {
+  return Context;
+}
+
+EvaluatedSourceLocScopeBase::EvaluatedSourceLocScopeBase(
+    QualType const &Ty, SourceLocation const &L, const DeclContext *Ctx)
+    : Type(Ty.getAsOpaquePtr()), Loc(L.getPtrEncoding()), Context(Ctx) {}
+
+EvaluatedSourceLocScopeBase
+llvm::DenseMapInfo<EvaluatedSourceLocScopeBase>::getEmptyKey() {
+  return EvaluatedSourceLocScopeBase(
+      DenseMapInfo<const void *>::getEmptyKey(),
+      DenseMapInfo<const void *>::getEmptyKey(),
+      DenseMapInfo<const DeclContext *>::getEmptyKey());
+}
+
+EvaluatedSourceLocScopeBase
+llvm::DenseMapInfo<EvaluatedSourceLocScopeBase>::getTombstoneKey() {
+  return EvaluatedSourceLocScopeBase(
+      DenseMapInfo<const void *>::getTombstoneKey(),
+      DenseMapInfo<const void *>::getTombstoneKey(),
+      DenseMapInfo<const DeclContext *>::getTombstoneKey());
+}
+
+unsigned llvm::DenseMapInfo<EvaluatedSourceLocScopeBase>::getHashValue(
+    EvaluatedSourceLocScopeBase const &Val) {
+  llvm::FoldingSetNodeID ID;
+  ID.AddPointer(Val.Type);
+  ID.AddPointer(Val.Loc);
+  ID.AddPointer(Val.Context);
+  return ID.ComputeHash();
+}
+
+bool llvm::DenseMapInfo<EvaluatedSourceLocScopeBase>::isEqual(
+    EvaluatedSourceLocScopeBase const &LHS,
+    EvaluatedSourceLocScopeBase const &RHS) {
+  return LHS == RHS;
+}
 
 CurrentSourceLocExprScope::CurrentSourceLocExprScope(const Expr *DefaultExpr,
                                                      const void *EvalContextID)
@@ -44,13 +91,14 @@ static PresumedLoc getPresumedSourceLoc(const ASTContext &Ctx,
   return PLoc;
 }
 
-static std::string getStringValue(const ASTContext &Ctx,
-                                  EvaluatedSourceLocInfoBase &Info) {
-  switch (Info.E->getIdentType()) {
+static std::string getStringValue(const ASTContext &Ctx, const SourceLocExpr *E,
+                                  SourceLocation Loc,
+                                  const DeclContext *Context) {
+  switch (E->getIdentType()) {
   case SourceLocExpr::File:
-    return getPresumedSourceLoc(Ctx, Info.Loc).getFilename();
+    return getPresumedSourceLoc(Ctx, Loc).getFilename();
   case SourceLocExpr::Function:
-    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(Info.Context)) {
+    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(Context)) {
       if (DeclarationName Name = FD->getDeclName())
         return Name.getAsString();
     }
@@ -62,60 +110,63 @@ static std::string getStringValue(const ASTContext &Ctx,
 }
 
 StringLiteral *
-EvaluatedSourceLocInfo::CreateStringLiteral(const ASTContext &Ctx) const {
+EvaluatedSourceLocScope::CreateStringLiteral(const ASTContext &Ctx) const {
   assert(E && E->isStringType() && !Type.isNull());
   return StringLiteral::Create(Ctx, getStringValue(), StringLiteral::Ascii,
                                /*Pascal*/ false, Type, SourceLocation());
 }
 
 IntegerLiteral *
-EvaluatedSourceLocInfo::CreateIntegerLiteral(const ASTContext &Ctx) const {
+EvaluatedSourceLocScope::CreateIntegerLiteral(const ASTContext &Ctx) const {
   assert(E && E->isIntType() && Result.isInt());
   return IntegerLiteral::Create(Ctx, Result.getInt(), Ctx.UnsignedIntTy, Loc);
 }
 
-EvaluatedSourceLocInfoBase
+EvaluatedSourceLocScopeBase
 CurrentSourceLocExprScope::getEvaluatedInfoBase(ASTContext const &Ctx,
                                                 SourceLocExpr const *E) const {
-  EvaluatedSourceLocInfoBase Info;
-  Info.E = E;
+  QualType Type;
+  SourceLocation Loc;
+  const DeclContext *Context;
+
   if (auto *DIE = dyn_cast_or_null<CXXDefaultInitExpr>(DefaultExpr)) {
-    Info.Loc = DIE->getUsedLocation();
-    Info.Context = DIE->getUsedContext();
+    Loc = DIE->getUsedLocation();
+    Context = DIE->getUsedContext();
   } else if (auto *DAE = dyn_cast_or_null<CXXDefaultArgExpr>(DefaultExpr)) {
-    Info.Loc = DIE->getUsedLocation();
-    Info.Context = DIE->getUsedContext();
+    Loc = DIE->getUsedLocation();
+    Context = DIE->getUsedContext();
   } else {
-    Info.Loc = E->getLocation();
-    Info.Context = E->getParentContext();
+    Loc = E->getLocation();
+    Context = E->getParentContext();
   }
 
   if (E->isStringType()) {
-    Info.Type = SourceLocExpr::BuildStringArrayType(
-        Ctx, getStringValue(Ctx, Info).size() + 1);
+    Type = SourceLocExpr::BuildStringArrayType(
+        Ctx, getStringValue(Ctx, E, Loc, Context).size() + 1);
   } else {
-    Info.Type = Ctx.UnsignedIntTy;
+    Type = Ctx.UnsignedIntTy;
   }
 
-  return Info;
+  return EvaluatedSourceLocScopeBase(Type, Loc, Context);
 }
 
-EvaluatedSourceLocInfo CurrentSourceLocExprScope::getEvaluatedInfoFromBase(
-    ASTContext const &Ctx, clang::EvaluatedSourceLocInfoBase Base) {
-  EvaluatedSourceLocInfo Info{Base};
-  const SourceLocExpr *E = Info.E;
+EvaluatedSourceLocScope
+EvaluatedSourceLocScope::Create(ASTContext const &Ctx, const SourceLocExpr *E,
+                                EvaluatedSourceLocScopeBase Base) {
+  EvaluatedSourceLocScope Info{Base, E};
 
-  PresumedLoc PLoc = getPresumedSourceLoc(Ctx, Info.Loc);
+  PresumedLoc PLoc = getPresumedSourceLoc(Ctx, Info.getLocation());
   assert(PLoc.isValid());
 
   switch (E->getIdentType()) {
   case SourceLocExpr::File:
   case SourceLocExpr::Function: {
-    std::string Val = getStringValue(Ctx, Info);
+    std::string Val =
+        getStringValue(Ctx, E, Info.getLocation(), Info.getContext());
     Info.setStringValue(std::move(Val));
 
     APValue::LValueBase LVBase(E);
-    LVBase.setSourceLocContext({Info.Type, Info.Loc, Info.Context});
+    LVBase.setEvaluatedSourceLocScope(Base);
     APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
     Info.Result.swap(StrVal);
   } break;
@@ -132,55 +183,17 @@ EvaluatedSourceLocInfo CurrentSourceLocExprScope::getEvaluatedInfoFromBase(
   return Info;
 }
 
-EvaluatedSourceLocInfo
+EvaluatedSourceLocScope
 CurrentSourceLocExprScope::getEvaluatedInfo(ASTContext const &Ctx,
                                             SourceLocExpr const *E) const {
-  EvaluatedSourceLocInfo Info{getEvaluatedInfoBase(Ctx, E)};
-}
-
-static const DeclContext *getUsedContext(const Expr *E) {
-  if (!E)
-    return nullptr;
-  if (auto *DAE = dyn_cast<CXXDefaultArgExpr>(E))
-    return DAE->getUsedContext();
-  if (auto *DIE = dyn_cast<CXXDefaultInitExpr>(E))
-    return DIE->getUsedContext();
-  llvm_unreachable("unhandled expression kind");
-}
-
-static SourceLocation getUsedLoc(const Expr *E) {
-  if (!E)
-    return SourceLocation();
-  if (auto *DAE = dyn_cast<CXXDefaultArgExpr>(E))
-    return DAE->getUsedLocation();
-  if (auto *DIE = dyn_cast<CXXDefaultInitExpr>(E))
-    return DIE->getUsedLocation();
-  llvm_unreachable("unhandled expression kind");
+  return EvaluatedSourceLocScope::Create(Ctx, E, getEvaluatedInfoBase(Ctx, E));
 }
 
 SourceLocExprScopeGuard::SourceLocExprScopeGuard(
     CurrentSourceLocExprScope NewScope, CurrentSourceLocExprScope &Current)
     : Current(Current), OldVal(Current), Enable(false) {
-  if ((Enable = ShouldEnable(Current, NewScope))) {
-    auto PrintLoc = [&]() {
-      SourceLocation Loc = getUsedLoc(NewScope.DefaultExpr);
-      assert(MySM);
-      Loc.dump(*MySM);
-      llvm::errs() << " ";
-    };
-
-    llvm::errs() << "#" << std::to_string(++Depth) << " Pushing ";
-    if (auto *DAE = dyn_cast<CXXDefaultArgExpr>(NewScope.DefaultExpr)) {
-      llvm::errs() << "Default Arg " << DAE->getParam()->getName();
-      PrintLoc();
-    } else if (auto *DIE = dyn_cast<CXXDefaultInitExpr>(NewScope.DefaultExpr)) {
-      llvm::errs() << "Default Init " << DIE->getField()->getName();
-      PrintLoc();
-      DIE->getExpr()->dumpColor();
-    }
-    llvm::errs() << "\n";
+  if ((Enable = ShouldEnable(Current, NewScope)))
     Current = NewScope;
-  }
 }
 
 bool SourceLocExprScopeGuard::ShouldEnable(
@@ -202,10 +215,6 @@ bool SourceLocExprScopeGuard::ShouldEnable(
 }
 
 SourceLocExprScopeGuard::~SourceLocExprScopeGuard() {
-  if (Enable) {
-    llvm::errs() << "#" << std::to_string(Depth--) << " Popping";
-
-    llvm::errs() << "\n";
+  if (Enable)
     Current = OldVal;
-  }
 }

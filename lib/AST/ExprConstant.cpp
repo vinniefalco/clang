@@ -2613,7 +2613,7 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info,
         CurrentSourceLocExprScope::getEvaluatedInfoFromBase(
             Info.Ctx, EvaluatedSourceLocInfoBase{SLE, LocContext.getType(),
                                                  LocContext.getLocation(),
-                                                 LocContext.Context});
+                                                 LocContext.getContext()});
     std::string const &Str = FullInfo.getStringValue();
 
     const auto *StrTy = Info.Ctx.getAsConstantArrayType(FullInfo.Type);

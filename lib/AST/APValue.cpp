@@ -31,23 +31,6 @@ namespace {
   };
 }
 
-QualType APValue::LValueBase::SourceLocContext::getType() const {
-  if (!Type)
-    return QualType();
-  return QualType::getFromOpaquePtr(Type);
-}
-
-SourceLocation APValue::LValueBase::SourceLocContext::getLocation() const {
-  if (!Loc)
-    return SourceLocation();
-  return SourceLocation::getFromPtrEncoding(Loc);
-}
-
-APValue::LValueBase::SourceLocContext::SourceLocContext(QualType const &Ty,
-                                                        SourceLocation const &L,
-                                                        const DeclContext *Ctx)
-    : Type(Ty.getAsOpaquePtr()), Loc(L.getPtrEncoding()), Context(Ctx) {}
-
 void *APValue::LValueBase::getOpaqueValue() const {
   return Ptr.getOpaqueValue();
 }
@@ -60,35 +43,6 @@ APValue::LValueBase::operator bool () const {
   return static_cast<bool>(Ptr);
 }
 
-using BaseSourceLocContext = clang::APValue::LValueBase::SourceLocContext;
-
-BaseSourceLocContext llvm::DenseMapInfo<BaseSourceLocContext>::getEmptyKey() {
-  return BaseSourceLocContext(DenseMapInfo<const void *>::getEmptyKey(),
-                              DenseMapInfo<const void *>::getEmptyKey(),
-                              DenseMapInfo<const DeclContext *>::getEmptyKey());
-}
-
-BaseSourceLocContext
-llvm::DenseMapInfo<BaseSourceLocContext>::getTombstoneKey() {
-  return BaseSourceLocContext(
-      DenseMapInfo<const void *>::getTombstoneKey(),
-      DenseMapInfo<const void *>::getTombstoneKey(),
-      DenseMapInfo<const DeclContext *>::getTombstoneKey());
-}
-
-unsigned llvm::DenseMapInfo<BaseSourceLocContext>::getHashValue(
-    BaseSourceLocContext const &Val) {
-  llvm::FoldingSetNodeID ID;
-  ID.AddPointer(Val.Type);
-  ID.AddPointer(Val.Loc);
-  ID.AddPointer(Val.Context);
-  return ID.ComputeHash();
-}
-
-bool llvm::DenseMapInfo<BaseSourceLocContext>::isEqual(
-    BaseSourceLocContext const &LHS, BaseSourceLocContext const &RHS) {
-  return LHS == RHS;
-}
 
 clang::APValue::LValueBase
 llvm::DenseMapInfo<clang::APValue::LValueBase>::getEmptyKey() {
@@ -96,7 +50,7 @@ llvm::DenseMapInfo<clang::APValue::LValueBase>::getEmptyKey() {
       DenseMapInfo<clang::APValue::LValueBase::PtrTy>::getEmptyKey(),
       DenseMapInfo<unsigned>::getEmptyKey(),
       DenseMapInfo<unsigned>::getEmptyKey(),
-      DenseMapInfo<BaseSourceLocContext>::getEmptyKey());
+      DenseMapInfo<EvaluatedSourceLocScopeBase>::getEmptyKey());
 }
 
 clang::APValue::LValueBase
@@ -105,7 +59,7 @@ llvm::DenseMapInfo<clang::APValue::LValueBase>::getTombstoneKey() {
       DenseMapInfo<clang::APValue::LValueBase::PtrTy>::getTombstoneKey(),
       DenseMapInfo<unsigned>::getTombstoneKey(),
       DenseMapInfo<unsigned>::getTombstoneKey(),
-      DenseMapInfo<BaseSourceLocContext>::getTombstoneKey());
+      DenseMapInfo<EvaluatedSourceLocScopeBase>::getTombstoneKey());
 }
 
 unsigned llvm::DenseMapInfo<clang::APValue::LValueBase>::getHashValue(
@@ -114,8 +68,8 @@ unsigned llvm::DenseMapInfo<clang::APValue::LValueBase>::getHashValue(
   ID.AddPointer(Base.getOpaqueValue());
   ID.AddInteger(Base.getCallIndex());
   ID.AddInteger(Base.getVersion());
-  ID.AddInteger(
-      DenseMapInfo<SourceLocContext>::getHashValue(Base.getSourceLocContext()));
+  ID.AddInteger(DenseMapInfo<EvaluatedSourceLocScopeBase>::getHashValue(
+      Base.getEvaluatedSourceLocScope()));
   return ID.ComputeHash();
 }
 
