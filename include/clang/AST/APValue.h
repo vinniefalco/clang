@@ -90,9 +90,12 @@ public:
     LValueBase() : CallIndex(0), Version(0) {}
 
     template <class T>
-    LValueBase(T P, unsigned I = 0, unsigned V = 0,
-               SourceLocContext LocContext = SourceLocContext{})
-        : Ptr(P), CallIndex(I), Version(V), LocContext(LocContext) {}
+    LValueBase(T P, unsigned I = 0, unsigned V = 0)
+        : Ptr(P), CallIndex(I), Version(V) {}
+
+    template <class T>
+    LValueBase(T P, unsigned I, unsigned V, SourceLocContext Ctx)
+        : Ptr(P), CallIndex(I), Version(V), LocContext(Ctx) {}
 
     template <class T>
     bool is() const { return Ptr.is<T>(); }
