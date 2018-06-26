@@ -2608,13 +2608,19 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info,
     assert(Base.hasSourceLocContext());
     APValue::LValueBase::SourceLocContext LocContext =
         Base.getSourceLocContext();
-    std::string Str = SLE->getStringValue(Info.Ctx, LocContext.getLocation(),
-                                          LocContext.Context);
-    const auto *StrTy = cast<ConstantArrayType>(
-        SourceLocExpr::BuildTypeForString(Info.Ctx, Str));
-    QualType ElemTy = StrTy->getElementType();
+
+    EvaluatedSourceLocInfo FullInfo =
+        CurrentSourceLocExprScope::getEvaluatedInfoFromBase(
+            Info.Ctx, EvaluatedSourceLocInfoBase{SLE, LocContext.getType(),
+                                                 LocContext.getLocation(),
+                                                 LocContext.Context});
+    std::string const &Str = FullInfo.getStringValue();
+
+    const auto *StrTy = Info.Ctx.getAsConstantArrayType(FullInfo.Type);
+    assert(StrTy && (StrTy->getSize().getZExtValue() == Str.size() + 1));
+
     auto Width = Info.Ctx.getCharWidth();
-    APSInt Res(Width, ElemTy->isUnsignedIntegerType());
+    APSInt Res(Width, StrTy->getElementType()->isUnsignedIntegerType());
     if (Index <= Str.size()) {
       llvm::APInt IntVal(Width, Str.c_str()[Index]);
       Res = IntVal;
