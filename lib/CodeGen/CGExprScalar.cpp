@@ -583,15 +583,19 @@ public:
   }
   Value *VisitSourceLocExpr(SourceLocExpr *SLE) {
     auto &Ctx = CGF.getContext();
-    std::pair<SourceLocation, const DeclContext *> ScopeInfo =
-        CGF.CurSourceLocExprScope.getLocationContextPair(SLE, CGF.CurCodeDecl);
+    EvaluatedSourceLocScope LocScope =
+        CGF.CurSourceLocExprScope.getEvaluatedInfo(Ctx, SLE);
 
-    if (SLE->isLineOrColumn())
-      return Builder.getInt(SLE->getIntValue(Ctx, ScopeInfo.first));
+    if (SLE->isIntType())
+      return Builder.getInt(LocScope.Result.getInt());
 
     // else, we're building a string literal
-    StringLiteral *Str = SourceLocExpr::MakeStringLiteral(
-        Ctx, SLE->getStringValue(Ctx, ScopeInfo.first, ScopeInfo.second));
+    LValue LV = CGF.EmitSourceLocExprLValue(SLE);
+    return CGF.EmitArrayToPointerDecay(SLE, LocScope.getType(), LV)
+        .getPointer();
+    // return LV.getPointer();
+
+    StringLiteral *Str = LocScope.CreateStringLiteral(Ctx);
     return CGF.EmitArrayToPointerDecay(Str).getPointer();
   }
 

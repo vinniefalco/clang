@@ -3335,6 +3335,7 @@ public:
   LValue EmitStringLiteralLValue(const StringLiteral *E);
   LValue EmitObjCEncodeExprLValue(const ObjCEncodeExpr *E);
   LValue EmitPredefinedLValue(const PredefinedExpr *E);
+  LValue EmitSourceLocExprLValue(const SourceLocExpr *E);
   LValue EmitUnaryOpLValue(const UnaryOperator *E);
   LValue EmitArraySubscriptExpr(const ArraySubscriptExpr *E,
                                 bool Accessed = false);
@@ -3355,6 +3356,9 @@ public:
   RValue EmitRValueForField(LValue LV, const FieldDecl *FD, SourceLocation Loc);
 
   Address EmitArrayToPointerDecay(const Expr *Array,
+                                  LValueBaseInfo *BaseInfo = nullptr,
+                                  TBAAAccessInfo *TBAAInfo = nullptr);
+  Address EmitArrayToPointerDecay(const Expr *E, QualType Ty, LValue LV,
                                   LValueBaseInfo *BaseInfo = nullptr,
                                   TBAAAccessInfo *TBAAInfo = nullptr);
 

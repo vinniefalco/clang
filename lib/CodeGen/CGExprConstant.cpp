@@ -1063,6 +1063,15 @@ public:
     return CGM.GetConstantArrayFromStringLiteral(E);
   }
 
+  llvm::Constant *VisitSourceLocExpr(SourceLocExpr *E, QualType T) {
+    T.dump();
+    EvaluatedSourceLocScope LocScope =
+        Emitter.CGF->CurSourceLocExprScope.getEvaluatedInfo(CGM.getContext(),
+                                                            E);
+    return llvm::ConstantDataArray::getString(VMContext,
+                                              LocScope.getStringValue(), false);
+  }
+
   llvm::Constant *VisitObjCEncodeExpr(ObjCEncodeExpr *E, QualType T) {
     // This must be an @encode initializing an array in a static initializer.
     // Don't emit it as the address of the string, emit the string data itself
@@ -1590,6 +1599,7 @@ private:
   ConstantLValue VisitStmt(const Stmt *S) { return nullptr; }
   ConstantLValue VisitCompoundLiteralExpr(const CompoundLiteralExpr *E);
   ConstantLValue VisitStringLiteral(const StringLiteral *E);
+  ConstantLValue VisitSourceLocExpr(const SourceLocExpr *E);
   ConstantLValue VisitObjCEncodeExpr(const ObjCEncodeExpr *E);
   ConstantLValue VisitObjCStringLiteral(const ObjCStringLiteral *E);
   ConstantLValue VisitPredefinedExpr(const PredefinedExpr *E);
@@ -1750,6 +1760,16 @@ ConstantLValueEmitter::VisitCompoundLiteralExpr(const CompoundLiteralExpr *E) {
 ConstantLValue
 ConstantLValueEmitter::VisitStringLiteral(const StringLiteral *E) {
   return CGM.GetAddrOfConstantStringFromLiteral(E);
+}
+
+ConstantLValue
+ConstantLValueEmitter::VisitSourceLocExpr(const SourceLocExpr *E) {
+  if (auto CGF = Emitter.CGF) {
+    LValue Res = CGF->EmitSourceLocExprLValue(E);
+    return cast<ConstantAddress>(Res.getAddress());
+  }
+  auto LocScope = EvaluatedSourceLocScope::Create(CGM.getContext(), E, nullptr);
+  return CGM.GetAddrOfConstantStringFromSourceLocExpr(E, LocScope);
 }
 
 ConstantLValue

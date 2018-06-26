@@ -72,12 +72,19 @@ public:
                                         const SourceLocExpr *E,
                                         EvaluatedSourceLocScopeBase Base);
 
+  static EvaluatedSourceLocScope Create(const ASTContext &Ctx,
+                                        const SourceLocExpr *E,
+                                        const Expr *DefaultExpr) {
+    return Create(Ctx, E,
+                  EvaluatedSourceLocScopeBase::Create(Ctx, E, DefaultExpr));
+  }
+
 private:
   EvaluatedSourceLocScope(EvaluatedSourceLocScopeBase Base,
                           const SourceLocExpr *E)
       : EvaluatedSourceLocScopeBase(Base), E(E) {}
 
-  friend struct CurrentSourceLocExprScope;
+  friend class CurrentSourceLocExprScope;
 };
 
 /// Represents the current source location and context used to determine the
@@ -99,10 +106,10 @@ public:
   CurrentSourceLocExprScope() = default;
   CurrentSourceLocExprScope(const Expr *DefaultExpr, const void *EvalContextID);
 
-  EvaluatedSourceLocScopeBase
-  getEvaluatedInfoBase(const ASTContext &Ctx, const SourceLocExpr *E) const;
   EvaluatedSourceLocScope getEvaluatedInfo(const ASTContext &Ctx,
-                                           const SourceLocExpr *E) const;
+                                           const SourceLocExpr *E) const {
+    return EvaluatedSourceLocScope::Create(Ctx, E, DefaultExpr);
+  }
 
   bool empty() const { return DefaultExpr == nullptr; }
   explicit operator bool() const { return !empty(); }

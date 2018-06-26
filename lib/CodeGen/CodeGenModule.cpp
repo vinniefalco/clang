@@ -4148,6 +4148,12 @@ CodeGenModule::GetAddrOfConstantStringFromObjCEncode(const ObjCEncodeExpr *E) {
   return GetAddrOfConstantCString(Str);
 }
 
+ConstantAddress CodeGenModule::GetAddrOfConstantStringFromSourceLocExpr(
+    const SourceLocExpr *E, const EvaluatedSourceLocScope &LocInfo) {
+  std::string Str = LocInfo.getStringValue();
+  return GetAddrOfConstantCString(Str);
+}
+
 /// GetAddrOfConstantCString - Returns a pointer to a character array containing
 /// the literal and a terminating '\0' character.
 /// The result has pointer to array type.

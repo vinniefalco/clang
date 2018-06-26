@@ -65,8 +65,8 @@ namespace {
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
 
-    if (B.hasSourceLocContext())
-      return B.getSourceLocContext().getType();
+    if (B.hasEvaluatedSourceLocScope())
+      return B.getEvaluatedSourceLocScope().getType();
 
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>()) {
       // FIXME: It's unclear where we're supposed to take the type from, and
@@ -2605,18 +2605,14 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info,
   }
 
   if (const auto *SLE = dyn_cast<SourceLocExpr>(Lit)) {
-    assert(Base.hasSourceLocContext());
-    APValue::LValueBase::SourceLocContext LocContext =
-        Base.getSourceLocContext();
+    assert(Base.hasEvaluatedSourceLocScope());
 
-    EvaluatedSourceLocInfo FullInfo =
-        CurrentSourceLocExprScope::getEvaluatedInfoFromBase(
-            Info.Ctx, EvaluatedSourceLocInfoBase{SLE, LocContext.getType(),
-                                                 LocContext.getLocation(),
-                                                 LocContext.getContext()});
+    auto FullInfo = EvaluatedSourceLocScope::Create(
+        Info.Ctx, SLE, Base.getEvaluatedSourceLocScope());
+
     std::string const &Str = FullInfo.getStringValue();
 
-    const auto *StrTy = Info.Ctx.getAsConstantArrayType(FullInfo.Type);
+    const auto *StrTy = Info.Ctx.getAsConstantArrayType(FullInfo.getType());
     assert(StrTy && (StrTy->getSize().getZExtValue() == Str.size() + 1));
 
     auto Width = Info.Ctx.getCharWidth();
@@ -3360,10 +3356,13 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       CompleteObject StrObj(&Str, Base->getType(), false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     } else if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(Base)) {
-      APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
-      assert(LVal.Base.hasType() &&
+      // APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
+      assert(LVal.Base.hasEvaluatedSourceLocScope() &&
              "the type of a SourceLocExpr must be explicitly specified");
-      CompleteObject StrObj(&Str, LVal.Base.getType(), false);
+      EvaluatedSourceLocScope LocScope = EvaluatedSourceLocScope::Create(
+          Info.Ctx, SLE, LVal.Base.getEvaluatedSourceLocScope());
+
+      CompleteObject StrObj(&LocScope.Result, LocScope.getType(), false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     }
   }
@@ -5710,25 +5709,6 @@ static bool evaluateLValueAsAllocSize(EvalInfo &Info, APValue::LValueBase Base,
   return true;
 }
 
-// Expand a string literal into an array of characters.
-static void expandStringToArray(EvalInfo &Info, const SourceLocExpr *S,
-                                StringRef Val, QualType Type, APValue &Result) {
-  const ConstantArrayType *CAT = Info.Ctx.getAsConstantArrayType(Type);
-  assert(CAT && "string literal isn't an array");
-  QualType CharType = CAT->getElementType();
-  assert(CharType->isIntegerType() && "unexpected character type");
-
-  unsigned Elts = CAT->getSize().getZExtValue();
-  Result = APValue(APValue::UninitArray(), Elts, Elts);
-  APSInt Value(Info.Ctx.getCharWidth(), CharType->isUnsignedIntegerType());
-  if (Result.hasArrayFiller())
-    Result.getArrayFiller() = APValue(Value);
-  for (unsigned I = 0, N = Result.getArrayInitializedElts(); I != N; ++I) {
-    Value = static_cast<uint32_t>(Val.data()[N]);
-    Result.getArrayInitializedElt(I) = APValue(Value);
-  }
-}
-
 namespace {
 class PointerExprEvaluator
   : public ExprEvaluatorBase<PointerExprEvaluator> {
@@ -5820,16 +5800,12 @@ public:
   }
 
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
-    assert(E && !E->isLineOrColumn());
-
-    std::pair<SourceLocation, const DeclContext *> ArgCtx =
-        Info.CurSourceLocExprScope.getLocationContextPair(E, Info.CurrentCall);
-    std::string Val = E->getStringValue(Info.Ctx, ArgCtx.first, ArgCtx.second);
-    QualType StrTy = SourceLocExpr::BuildTypeForString(Info.Ctx, Val);
-
-    Result.set(E);
-    Result.Base.setSourceLocContext({StrTy, ArgCtx.first, ArgCtx.second});
-    Result.addArray(Info, E, Info.Ctx.getAsConstantArrayType(StrTy));
+    assert(E && E->isStringType());
+    EvaluatedSourceLocScope LocScope =
+        Info.CurSourceLocExprScope.getEvaluatedInfo(Info.Ctx, E);
+    Result.set(LocScope.Result.getLValueBase());
+    Result.addArray(Info, E,
+                    Info.Ctx.getAsConstantArrayType(LocScope.getType()));
     return true;
   }
 
@@ -7403,10 +7379,10 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
 }
 
 bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
-  assert(E && E->isLineOrColumn());
-  llvm::APInt Result = E->getIntValue(
-      Info.Ctx, Info.CurSourceLocExprScope.getLoc(E, Info.CurrentCall));
-  return Success(Result, E);
+  assert(E && E->isIntType());
+  EvaluatedSourceLocScope LocScope =
+      Info.CurSourceLocExprScope.getEvaluatedInfo(Info.Ctx, E);
+  return Success(LocScope.getIntValue(), E);
 }
 
 /// Check whether the given declaration can be directly converted to an integral

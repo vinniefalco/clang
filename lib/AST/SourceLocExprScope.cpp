@@ -27,14 +27,18 @@ QualType EvaluatedSourceLocScopeBase::getType() const {
   return QualType::getFromOpaquePtr(Type);
 }
 
+void EvaluatedSourceLocScopeBase::setType(const QualType &T) {
+  Type = T.getAsOpaquePtr();
+}
+
 SourceLocation EvaluatedSourceLocScopeBase::getLocation() const {
   if (!Loc)
     return SourceLocation();
   return SourceLocation::getFromPtrEncoding(Loc);
 }
 
-const DeclContext *EvaluatedSourceLocScopeBase::getContext() const {
-  return Context;
+void EvaluatedSourceLocScopeBase::setLocation(const SourceLocation &L) {
+  Loc = L.getPtrEncoding();
 }
 
 EvaluatedSourceLocScopeBase::EvaluatedSourceLocScopeBase(
@@ -123,32 +127,30 @@ EvaluatedSourceLocScope::CreateIntegerLiteral(const ASTContext &Ctx) const {
                                 getLocation());
 }
 
-EvaluatedSourceLocScopeBase
-CurrentSourceLocExprScope::getEvaluatedInfoBase(ASTContext const &Ctx,
-                                                SourceLocExpr const *E) const {
-  QualType Type;
-  SourceLocation Loc;
-  const DeclContext *Context;
+EvaluatedSourceLocScopeBase EvaluatedSourceLocScopeBase::Create(
+    const ASTContext &Ctx, const SourceLocExpr *E, const Expr *DefaultExpr) {
+  EvaluatedSourceLocScopeBase Base;
 
   if (auto *DIE = dyn_cast_or_null<CXXDefaultInitExpr>(DefaultExpr)) {
-    Loc = DIE->getUsedLocation();
-    Context = DIE->getUsedContext();
+    Base.setLocation(DIE->getUsedLocation());
+    Base.setContext(DIE->getUsedContext());
   } else if (auto *DAE = dyn_cast_or_null<CXXDefaultArgExpr>(DefaultExpr)) {
-    Loc = DIE->getUsedLocation();
-    Context = DIE->getUsedContext();
+    Base.setLocation(DAE->getUsedLocation());
+    Base.setContext(DAE->getUsedContext());
   } else {
-    Loc = E->getLocation();
-    Context = E->getParentContext();
+    Base.setLocation(E->getLocation());
+    Base.setContext(E->getParentContext());
   }
 
-  if (E->isStringType()) {
-    Type = SourceLocExpr::BuildStringArrayType(
-        Ctx, getStringValue(Ctx, E, Loc, Context).size() + 1);
-  } else {
-    Type = Ctx.UnsignedIntTy;
-  }
+  if (E->isStringType())
+    Base.setType(SourceLocExpr::BuildStringArrayType(
+        Ctx,
+        getStringValue(Ctx, E, Base.getLocation(), Base.getContext()).size() +
+            1));
+  else
+    Base.setType(Ctx.UnsignedIntTy);
 
-  return EvaluatedSourceLocScopeBase(Type, Loc, Context);
+  return Base;
 }
 
 EvaluatedSourceLocScope
@@ -176,18 +178,12 @@ EvaluatedSourceLocScope::Create(ASTContext const &Ctx, const SourceLocExpr *E,
     auto Val = E->getIdentType() == SourceLocExpr::Line ? PLoc.getLine()
                                                         : PLoc.getColumn();
 
-    llvm::APSInt TmpRes(llvm::APInt(Val, Ctx.getTargetInfo().getIntWidth()));
+    llvm::APSInt TmpRes(llvm::APInt(Ctx.getTargetInfo().getIntWidth(), Val));
     APValue NewVal(TmpRes);
     Info.Result.swap(NewVal);
   } break;
   }
   return Info;
-}
-
-EvaluatedSourceLocScope
-CurrentSourceLocExprScope::getEvaluatedInfo(ASTContext const &Ctx,
-                                            SourceLocExpr const *E) const {
-  return EvaluatedSourceLocScope::Create(Ctx, E, getEvaluatedInfoBase(Ctx, E));
 }
 
 SourceLocExprScopeGuard::SourceLocExprScopeGuard(

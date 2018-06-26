@@ -2629,6 +2629,14 @@ LValue CodeGenFunction::EmitObjCEncodeExprLValue(const ObjCEncodeExpr *E) {
                         E->getType(), AlignmentSource::Decl);
 }
 
+LValue CodeGenFunction::EmitSourceLocExprLValue(const SourceLocExpr *E) {
+  EvaluatedSourceLocScope LocScope =
+      CurSourceLocExprScope.getEvaluatedInfo(getContext(), E);
+  return MakeAddrLValue(
+      CGM.GetAddrOfConstantStringFromSourceLocExpr(E, LocScope),
+      LocScope.getType(), AlignmentSource::Decl);
+}
+
 LValue CodeGenFunction::EmitPredefinedLValue(const PredefinedExpr *E) {
   auto SL = E->getFunctionName();
   assert(SL != nullptr && "No StringLiteral name in PredefinedExpr");
@@ -3188,21 +3196,28 @@ llvm::CallInst *CodeGenFunction::EmitTrapCall(llvm::Intrinsic::ID IntrID) {
 Address CodeGenFunction::EmitArrayToPointerDecay(const Expr *E,
                                                  LValueBaseInfo *BaseInfo,
                                                  TBAAAccessInfo *TBAAInfo) {
-  assert(E->getType()->isArrayType() &&
+  LValue LV = EmitLValue(E);
+  return EmitArrayToPointerDecay(E, E->getType(), LV, BaseInfo, TBAAInfo);
+}
+
+Address CodeGenFunction::EmitArrayToPointerDecay(const Expr *E, QualType Ty,
+                                                 LValue LV,
+                                                 LValueBaseInfo *BaseInfo,
+                                                 TBAAAccessInfo *TBAAInfo) {
+  assert(Ty->isArrayType() &&
          "Array to pointer decay must have array source type!");
 
   // Expressions of array type can't be bitfields or vector elements.
-  LValue LV = EmitLValue(E);
   Address Addr = LV.getAddress();
 
   // If the array type was an incomplete type, we need to make sure
   // the decay ends up being the right type.
-  llvm::Type *NewTy = ConvertType(E->getType());
+  llvm::Type *NewTy = ConvertType(Ty);
   Addr = Builder.CreateElementBitCast(Addr, NewTy);
 
   // Note that VLA pointers are always decayed, so we don't need to do
   // anything here.
-  if (!E->getType()->isVariableArrayType()) {
+  if (!Ty->isVariableArrayType()) {
     assert(isa<llvm::ArrayType>(Addr.getElementType()) &&
            "Expected pointer to array");
     Addr = Builder.CreateStructGEP(Addr, 0, CharUnits::Zero(), "arraydecay");
@@ -3213,7 +3228,7 @@ Address CodeGenFunction::EmitArrayToPointerDecay(const Expr *E,
   // accesses to elements of member arrays, we conservatively represent accesses
   // to the pointee object as if it had no any base lvalue specified.
   // TODO: Support TBAA for member arrays.
-  QualType EltType = E->getType()->castAsArrayTypeUnsafe()->getElementType();
+  QualType EltType = Ty->castAsArrayTypeUnsafe()->getElementType();
   if (BaseInfo) *BaseInfo = LV.getBaseInfo();
   if (TBAAInfo) *TBAAInfo = CGM.getTBAAAccessInfo(EltType);
 

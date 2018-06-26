@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++1z -fblocks %s -triple %itanium_abi_triple -emit-llvm -o - | FileCheck %s
+// RUN: %clang_cc1 -std=c++2a -fblocks %s -triple %itanium_abi_triple -emit-llvm -o - | FileCheck %s
 
 namespace test_func {
 

@@ -5,6 +5,9 @@
 #define CURRENT_FROM_MACRO() SL::current()
 #define FORWARD(...) __VA_ARGS__
 
+template <unsigned>
+struct Printer;
+
 namespace std {
 namespace experimental {
 struct source_location {
@@ -51,7 +54,6 @@ constexpr bool is_equal(const char *LHS, const char *RHS) {
   return *LHS == 0 && *RHS == 0;
 }
 
-#if 0
 template <class T>
 constexpr T identity(T t) {
   return t;
@@ -85,7 +87,6 @@ static_assert(noexcept(__builtin_FUNCTION()));
 //===----------------------------------------------------------------------===//
 
 namespace test_line {
-
 static_assert(SL::current().line() == __LINE__);
 static_assert(SL::current().line() == CURRENT_FROM_MACRO().line());
 
@@ -288,13 +289,11 @@ struct ClassAggDer : AggBase {
 static_assert(ClassAggDer{}.x == 100, "");
 
 } // namespace test_line
-#endif
 
 //===----------------------------------------------------------------------===//
 //                            __builtin_FILE()
 //===----------------------------------------------------------------------===//
 
-#if 0
 namespace test_file {
 constexpr const char *test_file_simple(const char *__f = __builtin_FILE()) {
   return __f;
@@ -311,7 +310,6 @@ void test_function() {
   static_assert(test_file_simple() != nullptr);
   static_assert(!is_equal(test_file_simple(), "source_location.cpp"));
 }
-#endif
 
 void test_class() {
 #line 313
@@ -325,7 +323,7 @@ void test_class() {
   //static_assert(is_equal(InParam.info.file(), SLF::FILE), "");
   //static_assert(is_equal(InParam.ctor_info.file(), __FILE__), "");
 }
-#if 0
+
 void test_aggr_class() {
   using Agg = SLF::AggrClass<>;
   constexpr Agg Default{};
@@ -335,8 +333,7 @@ void test_aggr_class() {
 }
 
 } // namespace test_file
-#endif
-#if 0
+
 //===----------------------------------------------------------------------===//
 //                            __builtin_FUNCTION()
 //===----------------------------------------------------------------------===//
@@ -483,28 +480,15 @@ static_assert(is_equal(SLF::FILE, SLF::test_function_indirect().file()));
 } // end namespace test_pragma_line
 
 namespace test_out_of_line_init {
-#line 1
+#line 4000
 struct A {
   int n = __builtin_LINE();
 };
 struct B {
   A a = {};
 };
-#line 42
+#line 4100
 constexpr B b = {};
-static_assert(b.a.n == 42, "");
+static_assert(b.a.n == 4100, "");
 } // end namespace test_out_of_line_init
 
-namespace test_same_pointer {
-#line 495
-constexpr bool test() {
-  constexpr auto *x = __builtin_FILE();
-  constexpr auto *y = __builtin_FILE();
-  constexpr bool b = x == y;
-  return true;
-
-  //return true;
-}
-static_assert(test());
-} // end namespace test_same_pointer
-#endif

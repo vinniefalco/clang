@@ -16,9 +16,13 @@
 #define LLVM_CLANG_AST_EVALUATED_SOURCE_LOC_SCOPE_H
 
 #include "clang/Basic/LLVM.h"
+#include "llvm/ADT/DenseMapInfo.h"
 
 namespace clang {
+class ASTContext;
 class DeclContext;
+class Expr;
+class SourceLocExpr;
 class SourceLocation;
 class QualType;
 
@@ -39,12 +43,21 @@ public:
   EvaluatedSourceLocScopeBase(QualType const &Ty, SourceLocation const &Loc,
                               const DeclContext *Ctx);
 
+  static EvaluatedSourceLocScopeBase Create(const ASTContext &Ctx,
+                                            const SourceLocExpr *E,
+                                            const Expr *DefaultExpr);
+
   bool empty() const { return Type == nullptr; }
   explicit operator bool() const { return !empty(); }
 
   QualType getType() const;
+  void setType(const QualType &T);
+
   SourceLocation getLocation() const;
+  void setLocation(const SourceLocation &L);
+
   const DeclContext *getContext() const { return Context; }
+  void setContext(const DeclContext *C) { Context = C; }
 
   friend inline bool operator==(EvaluatedSourceLocScopeBase const &LHS,
                                 EvaluatedSourceLocScopeBase const &RHS) {
