@@ -5,9 +5,6 @@
 #define CURRENT_FROM_MACRO() SL::current()
 #define FORWARD(...) __VA_ARGS__
 
-template <unsigned long long>
-struct Printer;
-
 namespace std {
 namespace experimental {
 struct source_location {
@@ -312,7 +309,7 @@ void test_function() {
   static_assert(!is_equal(test_file_simple(), "source_location.cpp"));
 }
 void test_class() {
-#line 313
+#line 316
   using SLF::TestClass;
   constexpr TestClass Default;
   constexpr TestClass InParam{42};
@@ -493,8 +490,8 @@ static_assert(b.a.n == 42, "");
 namespace test_same_pointer {
 #line 495
 constexpr bool test() {
-  constexpr auto *x = "abc";
-  constexpr auto *y = "def";
+  constexpr auto *x = __builtin_FILE();
+  constexpr auto *y = __builtin_FILE();
   constexpr bool b = x == y;
   return true;
 

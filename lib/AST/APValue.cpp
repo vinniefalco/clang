@@ -35,6 +35,16 @@ void *APValue::LValueBase::getOpaqueValue() const {
   return Ptr.getOpaqueValue();
 }
 
+QualType APValue::LValueBase::getType() const {
+  if (OptType)
+    return QualType::getFromOpaquePtr(OptType);
+  return QualType();
+}
+
+void APValue::LValueBase::setType(const QualType &Ty) {
+  OptType = Ty.getAsOpaquePtr();
+}
+
 bool APValue::LValueBase::isNull() const {
   return Ptr.isNull();
 }

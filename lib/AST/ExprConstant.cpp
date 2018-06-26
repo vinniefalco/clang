@@ -64,6 +64,8 @@ namespace {
 
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
+    if (B.hasType())
+      return B.getType();
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>()) {
       // FIXME: It's unclear where we're supposed to take the type from, and
       // this actually matters for arrays of unknown bound. Eg:
@@ -2608,9 +2610,12 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info, const Expr *Lit,
         SourceLocExpr::BuildTypeForString(Info.Ctx, Str));
     QualType ElemTy = StrTy->getElementType();
     assert(Index <= Str.size() && "Index too large");
-    llvm::APInt IntVal(Info.Ctx.getCharWidth(), Str.c_str()[Index]);
-    APSInt Res(IntVal, ElemTy->isUnsignedIntegerType());
-
+    auto Width = Info.Ctx.getCharWidth();
+    APSInt Res(Width, ElemTy->isUnsignedIntegerType());
+    if (Index <= Str.size()) {
+      llvm::APInt IntVal(Width, Str.c_str()[Index]);
+      Res = IntVal;
+    }
     return Res;
   }
 
@@ -2796,6 +2801,7 @@ findSubobject(EvalInfo &Info, const Expr *E, const CompleteObject &Obj,
     }
 
     if (I == N) {
+      assert(!ObjType.isNull());
       // If we are reading an object of class type, there may still be more
       // things we need to check: if there are any mutable subobjects, we
       // cannot perform this read. (This only happens when performing a trivial
@@ -3345,14 +3351,10 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       CompleteObject StrObj(&Str, Base->getType(), false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     } else if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(Base)) {
-      APValue Str(Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
-      std::pair<SourceLocation, const DeclContext *> ScopeInfo =
-          Info.CurSourceLocExprScope.getLocationContextPair(SLE,
-                                                            Info.CurrentCall);
-      std::string Val =
-          SLE->getStringValue(Info.Ctx, ScopeInfo.first, ScopeInfo.second);
-      QualType StrTy = SourceLocExpr::BuildTypeForString(Info.Ctx, Val);
-      CompleteObject StrObj(&Str, StrTy, false);
+      APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
+      assert(LVal.Base.hasType() &&
+             "the type of a SourceLocExpr must be explicitly specified");
+      CompleteObject StrObj(&Str, LVal.Base.getType(), false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     }
   }
@@ -5798,6 +5800,7 @@ public:
     QualType StrTy = SourceLocExpr::BuildTypeForString(Info.Ctx, Val);
 
     Result.set(E);
+    Result.Base.setType(StrTy);
     Result.addArray(Info, E, Info.Ctx.getAsConstantArrayType(StrTy));
     return true;
   }

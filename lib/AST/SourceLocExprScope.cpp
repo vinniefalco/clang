@@ -35,10 +35,11 @@ SourceLocation CurrentSourceLocExprScope::getLoc(const SourceLocExpr *E,
                                                  const void *ContextID) const {
   if (auto *DIE = dyn_cast_or_null<CXXDefaultInitExpr>(DefaultExpr))
     return DIE->getUsedLocation();
-  if (auto *DAE = dyn_cast_or_null<CXXDefaultArgExpr>(DefaultExpr)) {
+  else if (auto *DAE = dyn_cast_or_null<CXXDefaultArgExpr>(DefaultExpr)) {
     if (isInSameContext(ContextID))
       return DAE->getUsedLocation();
-  }
+  } else
+    assert(DefaultExpr == nullptr && "unexpected default expression type");
   return E->getExprLoc();
 }
 
@@ -59,6 +60,16 @@ SourceLocExprScopeGuard::SourceLocExprScopeGuard(
     : Current(Current), OldVal(Current), Enable(false) {
   if ((Enable = ShouldEnable(Current, NewScope)))
     Current = NewScope;
+}
+
+static const DeclContext *getUsedContext(const Expr *E) {
+  if (!E)
+    return nullptr;
+  if (auto *DAE = dyn_cast<CXXDefaultArgExpr>(E))
+    return DAE->getUsedContext();
+  if (auto *DIE = dyn_cast<CXXDefaultInitExpr>(E))
+    return DIE->getUsedContext();
+  llvm_unreachable("unhandled expression kind");
 }
 
 bool SourceLocExprScopeGuard::ShouldEnable(

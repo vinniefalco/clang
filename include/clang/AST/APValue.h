@@ -58,11 +58,11 @@ public:
   public:
     typedef llvm::PointerUnion<const ValueDecl *, const Expr *> PtrTy;
 
-    LValueBase() : CallIndex(0), Version(0) {}
+    LValueBase() : CallIndex(0), Version(0), OptType(nullptr) {}
 
     template <class T>
     LValueBase(T P, unsigned I = 0, unsigned V = 0)
-        : Ptr(P), CallIndex(I), Version(V) {}
+        : Ptr(P), CallIndex(I), Version(V), OptType(nullptr) {}
 
     template <class T>
     bool is() const { return Ptr.is<T>(); }
@@ -72,6 +72,11 @@ public:
 
     template <class T>
     T dyn_cast() const { return Ptr.dyn_cast<T>(); }
+
+    bool hasType() const { return OptType; }
+    QualType getType() const;
+    // Pass by reference to avoid needing a complete definition of QualType.
+    void setType(const QualType &Ty);
 
     void *getOpaqueValue() const;
 
@@ -97,12 +102,13 @@ public:
 
     bool operator==(const LValueBase &Other) const {
       return Ptr == Other.Ptr && CallIndex == Other.CallIndex &&
-             Version == Other.Version;
+             Version == Other.Version && OptType == Other.OptType;
     }
 
   private:
     PtrTy Ptr;
     unsigned CallIndex, Version;
+    const void *OptType;
   };
 
   typedef llvm::PointerIntPair<const Decl *, 1, bool> BaseOrMemberType;

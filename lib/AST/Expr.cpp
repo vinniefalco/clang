@@ -1950,9 +1950,8 @@ SourceLocExpr::getStringValue(const ASTContext &Ctx, SourceLocation Loc,
   switch (getIdentType()) {
   default:
     llvm_unreachable("should not be here");
-  case SourceLocExpr::File: {
+  case SourceLocExpr::File:
     return getPresumedSourceLoc(Ctx, Loc).getFilename();
-  }
   case SourceLocExpr::Function: {
     if (const auto *FD = dyn_cast_or_null<FunctionDecl>(UsedContext)) {
       if (DeclarationName Name = FD->getDeclName())

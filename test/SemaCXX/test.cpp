@@ -3,7 +3,7 @@ template <int>
 struct Printer;
 constexpr bool test() {
   constexpr auto *n = __builtin_FUNCTION();
-  constexpr char c = n[0];
+  constexpr char c = *n;
   constexpr int x = c == 't';
   return x;
 }
