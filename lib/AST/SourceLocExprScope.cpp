@@ -113,20 +113,6 @@ static std::string getStringValue(const ASTContext &Ctx, const SourceLocExpr *E,
   }
 }
 
-StringLiteral *
-EvaluatedSourceLocScope::CreateStringLiteral(const ASTContext &Ctx) const {
-  assert(E && E->isStringType() && !empty());
-  return StringLiteral::Create(Ctx, getStringValue(), StringLiteral::Ascii,
-                               /*Pascal*/ false, getType(), getLocation());
-}
-
-IntegerLiteral *
-EvaluatedSourceLocScope::CreateIntegerLiteral(const ASTContext &Ctx) const {
-  assert(E && E->isIntType() && Result.isInt());
-  return IntegerLiteral::Create(Ctx, Result.getInt(), Ctx.UnsignedIntTy,
-                                getLocation());
-}
-
 EvaluatedSourceLocScopeBase EvaluatedSourceLocScopeBase::Create(
     const ASTContext &Ctx, const SourceLocExpr *E, const Expr *DefaultExpr) {
   EvaluatedSourceLocScopeBase Base;

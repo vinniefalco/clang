@@ -57,14 +57,6 @@ public:
     return Result.getInt().getZExtValue();
   }
 
-  StringLiteral *CreateStringLiteral(const ASTContext &Ctx) const;
-  IntegerLiteral *CreateIntegerLiteral(const ASTContext &Ctx) const;
-  Expr *CreateLiteral(const ASTContext &Ctx) {
-    if (E->isStringType())
-      return CreateStringLiteral(Ctx);
-    return CreateIntegerLiteral(Ctx);
-  }
-
   EvaluatedSourceLocScope() = default;
   EvaluatedSourceLocScope(EvaluatedSourceLocScope const &) = default;
 

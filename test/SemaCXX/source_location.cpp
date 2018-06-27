@@ -315,13 +315,13 @@ void test_class() {
 #line 313
   using SLF::TestClass;
   constexpr TestClass Default;
-  // constexpr TestClass InParam{42};
-  // constexpr TestClass Template{42, 42};
+  constexpr TestClass InParam{42};
+  constexpr TestClass Template{42, 42};
   constexpr auto *F = Default.info.file();
   constexpr auto Char = F[0];
   static_assert(is_equal(Default.info.file(), SLF::FILE), "");
-  //static_assert(is_equal(InParam.info.file(), SLF::FILE), "");
-  //static_assert(is_equal(InParam.ctor_info.file(), __FILE__), "");
+  static_assert(is_equal(InParam.info.file(), SLF::FILE), "");
+  static_assert(is_equal(InParam.ctor_info.file(), __FILE__), "");
 }
 
 void test_aggr_class() {
