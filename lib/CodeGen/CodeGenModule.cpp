@@ -4151,7 +4151,14 @@ CodeGenModule::GetAddrOfConstantStringFromObjCEncode(const ObjCEncodeExpr *E) {
 ConstantAddress CodeGenModule::GetAddrOfConstantStringFromSourceLocExpr(
     const SourceLocExpr *E, const EvaluatedSourceLocScope &LocInfo) {
   std::string Str = LocInfo.getStringValue();
-  return GetAddrOfConstantCString(Str);
+  StringRef GlobalName = [&]() -> StringRef {
+    if (Str.empty())
+      return ".str.empty";
+    if (E->getIdentType() == SourceLocExpr::File)
+      return ".str.file";
+    return ".str.func";
+  }();
+  return GetAddrOfConstantCString(Str, GlobalName.data());
 }
 
 /// GetAddrOfConstantCString - Returns a pointer to a character array containing

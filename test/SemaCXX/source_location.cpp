@@ -480,15 +480,85 @@ static_assert(is_equal(SLF::FILE, SLF::test_function_indirect().file()));
 } // end namespace test_pragma_line
 
 namespace test_out_of_line_init {
-#line 4000
+#line 4000 "test_out_of_line_init.cpp"
+constexpr unsigned get_line(unsigned n = __builtin_LINE()) { return n; }
+constexpr const char *get_file(const char *f = __builtin_FILE()) { return f; }
+constexpr const char *get_func(const char *f = __builtin_FUNCTION()) { return f; }
+#line 4100 "A.cpp"
 struct A {
   int n = __builtin_LINE();
+  int n2 = get_line();
+  const char *f = __builtin_FILE();
+  const char *f2 = get_file();
+  const char *func = __builtin_FUNCTION();
+  const char *func2 = get_func();
+  SL info = SL::current();
 };
+#line 4200 "B.cpp"
 struct B {
   A a = {};
 };
-#line 4100
+#line 4300 "test_passed.cpp"
 constexpr B b = {};
-static_assert(b.a.n == 4100, "");
+static_assert(b.a.n == 4300, "");
+static_assert(b.a.n2 == 4300, "");
+static_assert(b.a.info.line() == 4300, "");
+static_assert(is_equal(b.a.f, "test_passed.cpp"));
+static_assert(is_equal(b.a.f2, "test_passed.cpp"));
+static_assert(is_equal(b.a.info.file(), "test_passed.cpp"));
+static_assert(is_equal(b.a.func, ""));
+static_assert(is_equal(b.a.func2, ""));
+static_assert(is_equal(b.a.info.function(), ""));
+
+constexpr bool test_in_func() {
+#line 4400 "test_func_passed.cpp"
+  constexpr B b = {};
+  static_assert(b.a.n == 4400, "");
+  static_assert(b.a.n2 == 4400, "");
+  static_assert(b.a.info.line() == 4400, "");
+  static_assert(is_equal(b.a.f, "test_func_passed.cpp"));
+  static_assert(is_equal(b.a.f2, "test_func_passed.cpp"));
+  static_assert(is_equal(b.a.info.file(), "test_func_passed.cpp"));
+  static_assert(is_equal(b.a.func, "test_in_func"));
+  static_assert(is_equal(b.a.func2, "test_in_func"));
+  static_assert(is_equal(b.a.info.function(), "test_in_func"));
+  return true;
+}
+static_assert(test_in_func());
+
 } // end namespace test_out_of_line_init
 
+namespace test_global_scope {
+#line 5000 "test_global_scope.cpp"
+constexpr unsigned get_line(unsigned n = __builtin_LINE()) { return n; }
+constexpr const char *get_file(const char *f = __builtin_FILE()) { return f; }
+constexpr const char *get_func(const char *f = __builtin_FUNCTION()) { return f; }
+#line 5100
+struct InInit {
+  unsigned l = get_line();
+  const char *f = get_file();
+  const char *func = get_func();
+
+#line 5200 "in_init.cpp"
+  constexpr InInit() {}
+};
+#line 5300
+constexpr InInit II;
+
+static_assert(II.l == 5200, "");
+static_assert(is_equal(II.f, "in_init.cpp"));
+static_assert(is_equal(II.func, "InInit"));
+
+#line 5400
+struct AggInit {
+  unsigned l = get_line();
+  const char *f = get_file();
+  const char *func = get_func();
+};
+#line 5500 "brace_init.cpp"
+constexpr AggInit AI = {};
+static_assert(AI.l == 5500);
+static_assert(is_equal(AI.f, "brace_init.cpp"));
+static_assert(is_equal(AI.func, ""));
+
+} // namespace test_global_scope
