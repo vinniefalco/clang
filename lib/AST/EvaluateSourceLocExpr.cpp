@@ -189,7 +189,7 @@ SourceLocExprScopeGuard::SourceLocExprScopeGuard(
     CurrentSourceLocExprScope NewScope, CurrentSourceLocExprScope &Current)
     : Current(Current), OldVal(Current), Enable(false) {
 
-  if ((Enable = ShouldEnable(Current, NewScope))
+  if ((Enable = ShouldEnable(Current, NewScope)))
     Current = NewScope;
 }
 

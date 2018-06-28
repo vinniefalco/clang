@@ -5801,7 +5801,7 @@ public:
     assert(E && E->isStringType());
     auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
         Info.Ctx, E, Info.CurSourceLocExprScope.getDefaultExpr());
-    Result.set(EvaluatedLoc.Result.getLValueBase());
+    Result.setFrom(Info.Ctx, EvaluatedLoc.Result);
     Result.addArray(Info, E,
                     Info.Ctx.getAsConstantArrayType(EvaluatedLoc.getType()));
     return true;
