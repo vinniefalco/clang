@@ -38,9 +38,9 @@
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/CharUnits.h"
+#include "clang/AST/EvaluateSourceLocExpr.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/RecordLayout.h"
-#include "clang/AST/SourceLocExprScope.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/Builtins.h"
@@ -65,8 +65,8 @@ namespace {
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
 
-    if (B.hasEvaluatedSourceLocScope())
-      return B.getEvaluatedSourceLocScope().getType();
+    if (B.hasSourceLocExprContext())
+      return B.getSourceLocExprContext().getType();
 
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>()) {
       // FIXME: It's unclear where we're supposed to take the type from, and
@@ -2605,13 +2605,11 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info,
   }
 
   if (const auto *SLE = dyn_cast<SourceLocExpr>(Lit)) {
-    assert(Base.hasEvaluatedSourceLocScope());
+    assert(Base.hasSourceLocExprContext());
 
-    auto FullInfo = EvaluatedSourceLocScope::Create(
-        Info.Ctx, SLE, Base.getEvaluatedSourceLocScope());
-
-    std::string const &Str = FullInfo.getStringValue();
-
+    auto FullInfo = EvaluatedSourceLocExpr::Create(
+        Info.Ctx, SLE, Base.getSourceLocExprContext());
+    std::string Str = FullInfo.getStringValue();
     const auto *StrTy = Info.Ctx.getAsConstantArrayType(FullInfo.getType());
     assert(StrTy && (StrTy->getSize().getZExtValue() == Str.size() + 1));
 
@@ -2849,7 +2847,6 @@ findSubobject(EvalInfo &Info, const Expr *E, const CompleteObject &Obj,
       // An array object is represented as either an Array APValue or as an
       // LValue which refers to a string literal.
       if (O->isLValue()) {
-        assert(!isa<SourceLocExpr>(E));
         assert(I == N - 1 && "extracting subobject of character?");
         assert(!O->hasLValuePath() || O->getLValuePath().empty());
         if (handler.AccessKind != AK_Read)
@@ -3357,12 +3354,13 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     } else if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(Base)) {
       // APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
-      assert(LVal.Base.hasEvaluatedSourceLocScope() &&
+      assert(LVal.Base.hasSourceLocExprContext() &&
              "the type of a SourceLocExpr must be explicitly specified");
-      EvaluatedSourceLocScope LocScope = EvaluatedSourceLocScope::Create(
-          Info.Ctx, SLE, LVal.Base.getEvaluatedSourceLocScope());
+      auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
+          Info.Ctx, SLE, LVal.Base.getSourceLocExprContext());
 
-      CompleteObject StrObj(&LocScope.Result, LocScope.getType(), false);
+      CompleteObject StrObj(&EvaluatedLoc.Result, EvaluatedLoc.getType(),
+                            false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     }
   }
@@ -5801,11 +5799,11 @@ public:
 
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
     assert(E && E->isStringType());
-    EvaluatedSourceLocScope LocScope =
-        Info.CurSourceLocExprScope.getEvaluatedInfo(Info.Ctx, E);
-    Result.set(LocScope.Result.getLValueBase());
+    auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
+        Info.Ctx, E, Info.CurSourceLocExprScope.getDefaultExpr());
+    Result.set(EvaluatedLoc.Result.getLValueBase());
     Result.addArray(Info, E,
-                    Info.Ctx.getAsConstantArrayType(LocScope.getType()));
+                    Info.Ctx.getAsConstantArrayType(EvaluatedLoc.getType()));
     return true;
   }
 
@@ -7380,9 +7378,9 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
 
 bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
   assert(E && E->isIntType());
-  EvaluatedSourceLocScope LocScope =
-      Info.CurSourceLocExprScope.getEvaluatedInfo(Info.Ctx, E);
-  return Success(LocScope.getIntValue(), E);
+  auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
+      Info.Ctx, E, Info.CurSourceLocExprScope.getDefaultExpr());
+  return Success(EvaluatedLoc.getIntValue(), E);
 }
 
 /// Check whether the given declaration can be directly converted to an integral

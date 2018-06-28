@@ -39,6 +39,7 @@ add_clang_library(clangAST
   ExprObjC.cpp
   ExternalASTMerger.cpp
   ExternalASTSource.cpp
+  EvaluateSourceLocExpr.cpp
   InheritViz.cpp
   ItaniumCXXABI.cpp
   ItaniumMangle.cpp
@@ -55,7 +56,6 @@ add_clang_library(clangAST
   RecordLayout.cpp
   RecordLayoutBuilder.cpp
   SelectorLocationsKind.cpp
-  SourceLocExprScope.cpp
   Stmt.cpp
   StmtCXX.cpp
   StmtIterator.cpp

@@ -2632,11 +2632,12 @@ LValue CodeGenFunction::EmitObjCEncodeExprLValue(const ObjCEncodeExpr *E) {
 }
 
 LValue CodeGenFunction::EmitSourceLocExprLValue(const SourceLocExpr *E) {
-  EvaluatedSourceLocScope LocScope =
-      CurSourceLocExprScope.getEvaluatedInfo(getContext(), E);
+  assert(E->isStringType());
+  auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
+      getContext(), E, CurSourceLocExprScope.getDefaultExpr());
   return MakeAddrLValue(
-      CGM.GetAddrOfConstantStringFromSourceLocExpr(E, LocScope),
-      LocScope.getType(), AlignmentSource::Decl);
+      CGM.GetAddrOfConstantStringFromSourceLocExpr(E, EvaluatedLoc),
+      EvaluatedLoc.getType(), AlignmentSource::Decl);
 }
 
 LValue CodeGenFunction::EmitPredefinedLValue(const PredefinedExpr *E) {

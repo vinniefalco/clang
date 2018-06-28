@@ -1,10 +1,10 @@
-// RUN: %clang_cc1 -std=c++2a -fblocks %s -triple %itanium_abi_triple -emit-llvm -o %s.ll
-// RUN: FileCheck --input-file %s.ll %s --check-prefix=CHECK-BASIC-GLOBAL
-// RUN: FileCheck --input-file %s.ll %s --check-prefix=CHECK-BASIC-LOCAL
-// RUN: FileCheck --input-file %s.ll %s --check-prefix=CHECK-INIT
-//     | FileCheck %s -check-prefix=
+// RUN: %clang_cc1 -std=c++2a -fblocks %s -triple %itanium_abi_triple -emit-llvm -o %t.ll
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-BASIC-GLOBAL
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-LOCAL
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-INIT
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-INIT-FUNC
 
-#line 4 "builtin-source-location.cpp"
+#line 8 "builtin-source-location.cpp"
 
 extern "C" {
 struct source_location {
@@ -52,7 +52,7 @@ using SL = source_location;
 
 template <class T>
 T launder(T val) { return val; }
-extern "C" void sink(...);
+extern "C" int sink(...);
 
 constexpr SL forward(SL sl = current()) {
   return sl;
@@ -72,16 +72,17 @@ SL forward_bad(SL sl = bad_current()) {
 SL basic_global = current();
 
 // CHECK-BASIC-GLOBAL-DAG: @basic_global_bad = global %struct.source_location zeroinitializer, align 8
-// CHECK-BASIC-GLOBAL-DAG: @[[BAD_FILE:.*]] = private unnamed_addr constant {{.*}}c"test_basic.cpp\00", align 1
+// CHECK-BASIC-GLOBAL-DAG: @[[BAD_FILE:.*]] = private unnamed_addr constant {{.*}}c"test_basic_bad.cpp\00", align 1
+// CHECK-BASIC-GLOBAL: @bad_current_marker
 // CHECK-BASIC-GLOBAL: define internal void @__cxx_global_var_init
 // CHECK-BASIC-GLOBAL-NEXT: entry:
 // CHECK-BASIC-GLOBAL-NEXT: call void @_Z11bad_currentPKcS0_jj(%struct.source_location* sret @basic_global_bad,
 // CHECK-BASIC-GLOBAL-SAME: {{.*}} i8* getelementptr inbounds ({{.*}}@[[BAD_FILE]],
 // CHECK-BASIC-GLOBAL-SAME: {{.*}} i8* getelementptr inbounds ({{.*}}@.str.empty,
-// CHECK-BASIC-GLOBAL-SAME: {{.*}}), i32 1004, i32 {{[0-9]+}}
+// CHECK-BASIC-GLOBAL-SAME: {{.*}}), i32 1101, i32 {{[0-9]+}}
 // CHECK-BASIC-GLOBAL-NEXT: ret void
 #line 1100 "test_basic_bad.cpp"
-extern "C" void before_use_globals() {}
+extern "C" void bad_current_marker() {}
 SL basic_global_bad = bad_current();
 
 extern "C" void basic_use_globals() {
@@ -89,10 +90,22 @@ extern "C" void basic_use_globals() {
   sink(basic_global_bad);
 }
 
+// CHECK-LOCAL-DAG: @[[GOOD_FILE:.*]] = private unnamed_addr constant [17 x i8] c"test_current.cpp\00", align 1
+// CHECK-LOCAL-DAG: @[[BAD_FILE:.*]] = private unnamed_addr constant [21 x i8] c"test_bad_current.cpp\00", align 1
+// CHECK-LOCAL-DAG: @[[FUNC_NAME:.*]] = private unnamed_addr constant [14 x i8] c"test_function\00"
+// CHECK-LOCAL: define void @test_function()
 #line 2000 "test_function.cpp"
 extern "C" void test_function() {
+  // CHECK-LOCAL: call void @_Z7currentPKcS0_jj(%struct.source_location* sret %local,
+  // CHECK-LOCAL-SAME:{{.*}}@[[GOOD_FILE]]
+  // CHECK-LOCAL-SAME:{{.*}}@[[FUNC_NAME]]
+  // CHECK-LOCAL-SAME:{{.*}}, i32 2100, i32 {{[0-9]+}}
 #line 2100 "test_current.cpp"
   SL local = current();
+  // CHECK-LOCAL: call void @_Z11bad_currentPKcS0_jj(%struct.source_location* sret %bad_local,
+  // CHECK-LOCAL-SAME:{{.*}}@[[BAD_FILE]]
+  // CHECK-LOCAL-SAME:{{.*}}@[[FUNC_NAME]]
+  // CHECK-LOCAL-SAME:{{.*}}, i32 2200, i32 {{[0-9]+}}
 #line 2200 "test_bad_current.cpp"
   SL bad_local = bad_current();
 #line 2300 "test_over.cpp"
@@ -100,6 +113,9 @@ extern "C" void test_function() {
   sink(bad_local);
 }
 
+// CHECK-INIT-DAG: @GlobalInitDefault = global %struct.TestInit zeroinitializer, align 8
+// CHECK-INIT-DAG: @GlobalInitVal = global %struct.TestInit zeroinitializer, align 8
+// CHECK-INIT-DAG: @[[INIT_FILE:.*]] = private unnamed_addr constant [13 x i8] c"TestInit.cpp\00", align 1
 #line 3000 "test_default_init.cpp"
 extern "C" struct TestInit {
   SL info = current();
@@ -114,15 +130,38 @@ extern "C" struct TestInit {
   TestInit(int, SL arg_info = current(),
            SL bad_arg_info = bad_current()) : arg_info(arg_info), bad_arg_info(bad_arg_info) {}
 };
+// CHECK-INIT: define void @global_init_marker()
+extern "C" void global_init_marker() {}
+
+// CHECK-INIT: define internal void @__cxx_global_var_init
+// CHECK-INIT-NEXT: entry:
+// CHECK-INIT-NEXT: call void @_ZN8TestInitC1Ev(%struct.TestInit* @GlobalInitDefault)
 #line 3300 "GlobalInitDefault.cpp"
 TestInit GlobalInitDefault;
+int sink_global_init_default = sink(GlobalInitDefault);
+
+// CHECK-INIT: define internal void @__cxx_global_var_init
+//
+// CHECK-INIT: call void @_Z7currentPKcS0_jj
+// CHECK-INIT-SAME:{{.*}}@[[INIT_FILE]]
+// CHECK-INIT-SAME:{{.*}}@.str.empty
+// CHECK-INIT-SAME:{{.*}}, i32 3200, i32 {{[0-9]+}}
+//
+// CHECK-INIT: call void @_Z11bad_currentPKcS0_jj
+// CHECK-INIT-SAME:{{.*}}@[[INIT_FILE]]
+// CHECK-INIT-SAME:{{.*}}@.str.empty
+// CHECK-INIT-SAME:{{.*}}, i32 3201, i32 {{[0-9]+}}
+//
+// CHECK-INIT: call void @_ZN8TestInitC1Ei15source_locationS0_(%struct.TestInit* @GlobalInitVal,
+// CHECK-INIT-NEXT: ret void
+#line 3400 "GlobalInitVal.cpp"
 TestInit GlobalInitVal(42);
+int sink_global_init_val = sink(GlobalInitVal);
+
 extern "C" void test_init_function() {
-#line 3400 "LocalInitDefault.cpp"
+#line 3500 "LocalInitDefault.cpp"
   TestInit InitDefault;
   TestInit InitVal(42);
-  sink(GlobalInitDefault);
-  sink(GlobalInitVal);
   sink(InitDefault);
   sink(InitVal);
 }
@@ -131,15 +170,16 @@ extern "C" void test_init_function() {
 extern "C" struct TestInitConstexpr {
   SL info = current();
   SL arg_info;
-#line 4100 "TestInitConstexpr"
+#line 4100 "TestInitConstexpr1.cpp"
   TestInitConstexpr() = default;
+#line 4200 "TestInitConstexpr2.cpp"
   constexpr TestInitConstexpr(int, SL arg_info = current()) : arg_info(arg_info) {}
 };
-#line 4200 "TestInitConstexprGlobal.cpp"
+#line 4300 "TestInitConstexprGlobal.cpp"
 TestInitConstexpr GlobalInitDefaultConstexpr;
 TestInitConstexpr GlobalInitValConstexpr(42);
 extern "C" void test_init_function_constexpr() {
-#line 4300 "TestInitConstexprFunc.cpp"
+#line 4400 "TestInitConstexprFunc.cpp"
   TestInitConstexpr InitDefaultConstexpr;
   TestInit InitValConstexpr(42);
   sink(GlobalInitDefaultConstexpr);

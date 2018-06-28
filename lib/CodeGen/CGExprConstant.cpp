@@ -1063,15 +1063,6 @@ public:
     return CGM.GetConstantArrayFromStringLiteral(E);
   }
 
-  llvm::Constant *VisitSourceLocExpr(SourceLocExpr *E, QualType T) {
-    T.dump();
-    EvaluatedSourceLocScope LocScope =
-        Emitter.CGF->CurSourceLocExprScope.getEvaluatedInfo(CGM.getContext(),
-                                                            E);
-    return llvm::ConstantDataArray::getString(VMContext,
-                                              LocScope.getStringValue(), false);
-  }
-
   llvm::Constant *VisitObjCEncodeExpr(ObjCEncodeExpr *E, QualType T) {
     // This must be an @encode initializing an array in a static initializer.
     // Don't emit it as the address of the string, emit the string data itself
@@ -1453,9 +1444,8 @@ llvm::Constant *ConstantEmitter::tryEmitPrivateForVarInit(const VarDecl &D) {
 
   // Try to emit the initializer.  Note that this can allow some things that
   // are not allowed by tryEmitPrivateForMemory alone.
-  if (auto value = D.evaluateValue()) {
+  if (auto value = D.evaluateValue())
     return tryEmitPrivateForMemory(*value, destType);
-  }
 
   // FIXME: Implement C++11 [basic.start.init]p2: if the initializer of a
   // reference is a constant expression, and the reference binds to a temporary,
@@ -1764,12 +1754,14 @@ ConstantLValueEmitter::VisitStringLiteral(const StringLiteral *E) {
 
 ConstantLValue
 ConstantLValueEmitter::VisitSourceLocExpr(const SourceLocExpr *E) {
+  assert(E->isStringType());
   if (auto CGF = Emitter.CGF) {
     LValue Res = CGF->EmitSourceLocExprLValue(E);
     return cast<ConstantAddress>(Res.getAddress());
   }
-  auto LocScope = EvaluatedSourceLocScope::Create(CGM.getContext(), E, nullptr);
-  return CGM.GetAddrOfConstantStringFromSourceLocExpr(E, LocScope);
+  auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(CGM.getContext(), E,
+                                                     /*DefaultExpr*/ nullptr);
+  return CGM.GetAddrOfConstantStringFromSourceLocExpr(E, EvaluatedLoc);
 }
 
 ConstantLValue

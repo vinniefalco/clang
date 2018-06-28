@@ -1896,10 +1896,28 @@ bool BinaryOperator::isNullPointerArithmeticExtension(ASTContext &Ctx,
   return true;
 }
 
+static QualType getDecayedSourceLocExprType(const ASTContext &Ctx,
+                                            SourceLocExpr::IdentType Type) {
+  switch (Type) {
+  case SourceLocExpr::File:
+  case SourceLocExpr::Function: {
+    QualType Ty = Ctx.CharTy;
+    // A C++ string literal has a const-qualified element type (C++ 2.13.4p1).
+    if (Ctx.getLangOpts().CPlusPlus || Ctx.getLangOpts().ConstStrings)
+      Ty = Ty.withConst();
+    return Ctx.getPointerType(Ty);
+  }
+  case SourceLocExpr::Line:
+  case SourceLocExpr::Column:
+    return Ctx.UnsignedIntTy;
+  }
+  llvm_unreachable("unhandled case");
+}
+
 SourceLocExpr::SourceLocExpr(const ASTContext &Ctx, IdentType Type,
                              SourceLocation BLoc, SourceLocation RParenLoc,
                              DeclContext *ParentContext)
-    : Expr(SourceLocExprClass, BuildDependentSourceLocExprType(Ctx, Type),
+    : Expr(SourceLocExprClass, getDecayedSourceLocExprType(Ctx, Type),
            VK_RValue, OK_Ordinary, false, false, false, false),
       BuiltinLoc(BLoc), RParenLoc(RParenLoc), ParentContext(ParentContext) {
   SourceLocExprBits.Type = Type;
@@ -1916,24 +1934,6 @@ StringRef SourceLocExpr::getBuiltinStr() const {
   case Column:
     return "__builtin_COLUMN";
   }
-}
-
-QualType SourceLocExpr::BuildDependentSourceLocExprType(const ASTContext &Ctx,
-                                                        IdentType Type) {
-  switch (Type) {
-  case File:
-  case Function: {
-    QualType Ty = Ctx.CharTy;
-    // A C++ string literal has a const-qualified element type (C++ 2.13.4p1).
-    if (Ctx.getLangOpts().CPlusPlus || Ctx.getLangOpts().ConstStrings)
-      Ty = Ty.withConst();
-    return Ctx.getPointerType(Ty);
-  }
-  case Line:
-  case Column:
-    return Ctx.UnsignedIntTy;
-  }
-  llvm_unreachable("unhandled case");
 }
 
 QualType SourceLocExpr::BuildStringArrayType(const ASTContext &Ctx,

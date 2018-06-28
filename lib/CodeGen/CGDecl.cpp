@@ -747,8 +747,12 @@ void CodeGenFunction::EmitScalarInit(const Expr *init, const ValueDecl *D,
     return;
   }
 
-  if (const CXXDefaultInitExpr *DIE = dyn_cast<CXXDefaultInitExpr>(init))
+  std::unique_ptr<SourceLocExprScopeGuard> Guard;
+  if (const CXXDefaultInitExpr *DIE = dyn_cast<CXXDefaultInitExpr>(init)) {
+    Guard.reset(
+        new SourceLocExprScopeGuard(init, CurSourceLocExprScope, CurCodeDecl));
     init = DIE->getExpr();
+  }
 
   // If we're emitting a value with lifetime, we have to do the
   // initialization *before* we leave the cleanup scopes.

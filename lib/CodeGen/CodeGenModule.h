@@ -22,9 +22,9 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclOpenMP.h"
+#include "clang/AST/EvaluateSourceLocExpr.h"
 #include "clang/AST/GlobalDecl.h"
 #include "clang/AST/Mangle.h"
-#include "clang/AST/SourceLocExprScope.h"
 #include "clang/Basic/ABI.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/Module.h"
@@ -889,7 +889,7 @@ public:
   /// Return a pointer to a constant array for the given SourceLocExpr node
   /// when evaluated in the current environment.
   ConstantAddress GetAddrOfConstantStringFromSourceLocExpr(
-      const SourceLocExpr *E, const EvaluatedSourceLocScope &LocInfo);
+      const SourceLocExpr *E, const EvaluatedSourceLocExpr &EvaluatedLoc);
 
   /// Returns a pointer to a character array containing the literal and a
   /// terminating '\0' character. The result has pointer to array type.

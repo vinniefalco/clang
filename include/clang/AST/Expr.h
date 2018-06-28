@@ -3908,14 +3908,11 @@ public:
 /// __builtin_FUNCTION(), or __builtin_FILE()
 class SourceLocExpr final : public Expr {
 public:
-  enum IdentType { Function, File, Line, Column, IT_End = Column };
+  enum IdentType { Function, File, Line, Column };
 
 private:
   SourceLocation BuiltinLoc, RParenLoc;
   DeclContext *ParentContext;
-
-  static QualType BuildDependentSourceLocExprType(const ASTContext &Ctx,
-                                                  IdentType Type);
 
 public:
   static QualType BuildStringArrayType(const ASTContext &Ctx, unsigned Size);

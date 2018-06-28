@@ -14,7 +14,7 @@
 #ifndef LLVM_CLANG_AST_APVALUE_H
 #define LLVM_CLANG_AST_APVALUE_H
 
-#include "clang/AST/EvaluatedSourceLocScope.h"
+#include "clang/AST/SourceLocExprContext.h"
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APSInt.h"
@@ -61,13 +61,12 @@ public:
   public:
     typedef llvm::PointerUnion<const ValueDecl *, const Expr *> PtrTy;
 
-
     LValueBase() : CallIndex(0), Version(0) {}
 
     template <class T>
     LValueBase(T P, unsigned I = 0, unsigned V = 0,
-               EvaluatedSourceLocScopeBase BaseScope = {})
-        : Ptr(P), CallIndex(I), Version(V), LocContext(BaseScope) {}
+               SourceLocExprContext BaseCtx = {})
+        : Ptr(P), CallIndex(I), Version(V), LocContext(BaseCtx) {}
 
     template <class T>
     bool is() const { return Ptr.is<T>(); }
@@ -78,11 +77,9 @@ public:
     template <class T>
     T dyn_cast() const { return Ptr.dyn_cast<T>(); }
 
-    bool hasEvaluatedSourceLocScope() const { return bool(LocContext); }
-    EvaluatedSourceLocScopeBase getEvaluatedSourceLocScope() const {
-      return LocContext;
-    }
-    void setEvaluatedSourceLocScope(EvaluatedSourceLocScopeBase Other) {
+    bool hasSourceLocExprContext() const { return bool(LocContext); }
+    SourceLocExprContext getSourceLocExprContext() const { return LocContext; }
+    void setSourceLocExprContext(SourceLocExprContext Other) {
       LocContext = Other;
     }
 
@@ -116,7 +113,7 @@ public:
   private:
     PtrTy Ptr;
     unsigned CallIndex, Version;
-    EvaluatedSourceLocScopeBase LocContext;
+    SourceLocExprContext LocContext;
   };
 
   typedef llvm::PointerIntPair<const Decl *, 1, bool> BaseOrMemberType;

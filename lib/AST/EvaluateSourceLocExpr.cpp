@@ -1,5 +1,4 @@
-//===--- SourceLocExprScope.cpp - Mangle C++ Names --------------------------*-
-// C++ -*-===//
+//===--- EvaluateSourceLocExpr.cpp - ----------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -8,61 +7,61 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines the SourceLocExprScope utility for tracking the current
-//  context a source location builtin should be evaluated in.
+//  This file defines two basic utilities needed to fully evaluate a
+//  SourceLocExpr within a particular context and to track said context.
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/AST/SourceLocExprScope.h"
+#include "clang/AST/EvaluateSourceLocExpr.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
+#include "clang/AST/SourceLocExprContext.h"
 #include "clang/Basic/SourceLocation.h"
 
 using namespace clang;
 
-QualType EvaluatedSourceLocScopeBase::getType() const {
+QualType SourceLocExprContext::getType() const {
   if (!Type)
     return QualType();
   return QualType::getFromOpaquePtr(Type);
 }
 
-void EvaluatedSourceLocScopeBase::setType(const QualType &T) {
+void SourceLocExprContext::setType(const QualType &T) {
   Type = T.getAsOpaquePtr();
 }
 
-SourceLocation EvaluatedSourceLocScopeBase::getLocation() const {
+SourceLocation SourceLocExprContext::getLocation() const {
   if (!Loc)
     return SourceLocation();
   return SourceLocation::getFromPtrEncoding(Loc);
 }
 
-void EvaluatedSourceLocScopeBase::setLocation(const SourceLocation &L) {
+void SourceLocExprContext::setLocation(const SourceLocation &L) {
   Loc = L.getPtrEncoding();
 }
 
-EvaluatedSourceLocScopeBase::EvaluatedSourceLocScopeBase(
-    QualType const &Ty, SourceLocation const &L, const DeclContext *Ctx)
+SourceLocExprContext::SourceLocExprContext(QualType const &Ty,
+                                           SourceLocation const &L,
+                                           const DeclContext *Ctx)
     : Type(Ty.getAsOpaquePtr()), Loc(L.getPtrEncoding()), Context(Ctx) {}
 
-EvaluatedSourceLocScopeBase
-llvm::DenseMapInfo<EvaluatedSourceLocScopeBase>::getEmptyKey() {
-  return EvaluatedSourceLocScopeBase(
-      DenseMapInfo<const void *>::getEmptyKey(),
-      DenseMapInfo<const void *>::getEmptyKey(),
-      DenseMapInfo<const DeclContext *>::getEmptyKey());
+SourceLocExprContext llvm::DenseMapInfo<SourceLocExprContext>::getEmptyKey() {
+  return SourceLocExprContext(DenseMapInfo<const void *>::getEmptyKey(),
+                              DenseMapInfo<const void *>::getEmptyKey(),
+                              DenseMapInfo<const DeclContext *>::getEmptyKey());
 }
 
-EvaluatedSourceLocScopeBase
-llvm::DenseMapInfo<EvaluatedSourceLocScopeBase>::getTombstoneKey() {
-  return EvaluatedSourceLocScopeBase(
+SourceLocExprContext
+llvm::DenseMapInfo<SourceLocExprContext>::getTombstoneKey() {
+  return SourceLocExprContext(
       DenseMapInfo<const void *>::getTombstoneKey(),
       DenseMapInfo<const void *>::getTombstoneKey(),
       DenseMapInfo<const DeclContext *>::getTombstoneKey());
 }
 
-unsigned llvm::DenseMapInfo<EvaluatedSourceLocScopeBase>::getHashValue(
-    EvaluatedSourceLocScopeBase const &Val) {
+unsigned llvm::DenseMapInfo<SourceLocExprContext>::getHashValue(
+    SourceLocExprContext const &Val) {
   llvm::FoldingSetNodeID ID;
   ID.AddPointer(Val.Type);
   ID.AddPointer(Val.Loc);
@@ -70,9 +69,8 @@ unsigned llvm::DenseMapInfo<EvaluatedSourceLocScopeBase>::getHashValue(
   return ID.ComputeHash();
 }
 
-bool llvm::DenseMapInfo<EvaluatedSourceLocScopeBase>::isEqual(
-    EvaluatedSourceLocScopeBase const &LHS,
-    EvaluatedSourceLocScopeBase const &RHS) {
+bool llvm::DenseMapInfo<SourceLocExprContext>::isEqual(
+    SourceLocExprContext const &LHS, SourceLocExprContext const &RHS) {
   return LHS == RHS;
 }
 
@@ -113,9 +111,10 @@ static std::string getStringValue(const ASTContext &Ctx, const SourceLocExpr *E,
   }
 }
 
-EvaluatedSourceLocScopeBase EvaluatedSourceLocScopeBase::Create(
-    const ASTContext &Ctx, const SourceLocExpr *E, const Expr *DefaultExpr) {
-  EvaluatedSourceLocScopeBase Base;
+SourceLocExprContext SourceLocExprContext::Create(const ASTContext &Ctx,
+                                                  const SourceLocExpr *E,
+                                                  const Expr *DefaultExpr) {
+  SourceLocExprContext Base;
 
   if (auto *DIE = dyn_cast_or_null<CXXDefaultInitExpr>(DefaultExpr)) {
     Base.setLocation(DIE->getUsedLocation());
@@ -139,10 +138,10 @@ EvaluatedSourceLocScopeBase EvaluatedSourceLocScopeBase::Create(
   return Base;
 }
 
-EvaluatedSourceLocScope
-EvaluatedSourceLocScope::Create(ASTContext const &Ctx, const SourceLocExpr *E,
-                                EvaluatedSourceLocScopeBase Base) {
-  EvaluatedSourceLocScope Info{Base, E};
+EvaluatedSourceLocExpr
+EvaluatedSourceLocExpr::Create(ASTContext const &Ctx, const SourceLocExpr *E,
+                               SourceLocExprContext Base) {
+  EvaluatedSourceLocExpr Info{Base, E};
 
   PresumedLoc PLoc = getPresumedSourceLoc(Ctx, Info.getLocation());
   assert(PLoc.isValid());
@@ -155,7 +154,7 @@ EvaluatedSourceLocScope::Create(ASTContext const &Ctx, const SourceLocExpr *E,
     Info.setStringValue(std::move(Val));
 
     APValue::LValueBase LVBase(E);
-    LVBase.setEvaluatedSourceLocScope(Base);
+    LVBase.setSourceLocExprContext(Base);
     APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
     Info.Result.swap(StrVal);
   } break;
@@ -172,29 +171,26 @@ EvaluatedSourceLocScope::Create(ASTContext const &Ctx, const SourceLocExpr *E,
   return Info;
 }
 
-SourceLocExprScopeGuard::SourceLocExprScopeGuard(
-    CurrentSourceLocExprScope NewScope, CurrentSourceLocExprScope &Current)
-    : Current(Current), OldVal(Current), Enable(false) {
-  if ((Enable = ShouldEnable(Current, NewScope)))
-    Current = NewScope;
-}
-
 bool SourceLocExprScopeGuard::ShouldEnable(
     CurrentSourceLocExprScope const &CurrentScope,
     CurrentSourceLocExprScope const &NewScope) {
-  assert(!NewScope.empty() && "the new scope should not be empty");
+  assert(NewScope.getDefaultExpr() && "the new scope should not be empty");
   // Only update the default argument scope if we've entered a new
   // evaluation context, and not when it's nested within another default
   // argument. Example:
   //    int bar(int x = __builtin_LINE()) { return x; }
   //    int foo(int x = bar())  { return x; }
   //    static_assert(foo() == __LINE__);
-  if (CurrentScope.empty())
-    return true;
-  // if (isa<CXXDefaultInitExpr>(CurrentScope.DefaultExpr) &&
-  //        isa<CXXDefaultArgExpr>(NewScope.DefaultExpr))
-  //  return false;
-  return !CurrentScope.isInSameContext(NewScope);
+  return CurrentScope.getDefaultExpr() == nullptr ||
+         NewScope.EvalContextID != CurrentScope.EvalContextID;
+}
+
+SourceLocExprScopeGuard::SourceLocExprScopeGuard(
+    CurrentSourceLocExprScope NewScope, CurrentSourceLocExprScope &Current)
+    : Current(Current), OldVal(Current), Enable(false) {
+
+  if ((Enable = ShouldEnable(Current, NewScope))
+    Current = NewScope;
 }
 
 SourceLocExprScopeGuard::~SourceLocExprScopeGuard() {
