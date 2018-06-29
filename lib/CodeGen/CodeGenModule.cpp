@@ -5144,4 +5144,3 @@ CodeGenModule::createOpenCLIntToSamplerConversion(const Expr *E,
                                 "__translate_sampler_initializer"),
                                 {C});
 }
-
