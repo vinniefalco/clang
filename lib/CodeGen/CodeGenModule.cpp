@@ -5144,3 +5144,12 @@ CodeGenModule::createOpenCLIntToSamplerConversion(const Expr *E,
                                 "__translate_sampler_initializer"),
                                 {C});
 }
+
+CodeGenModule::SourceLocExprScope::SourceLocExprScope(CodeGenModule &CGM,
+                                                      const Expr *E,
+                                                      CodeGenFunction *CGF)
+    : Base(E, CGM.CurSourceLocExprScope, CGF ? CGF->CurCodeDecl : nullptr) {}
+
+CodeGenModule::SourceLocExprScope::SourceLocExprScope(CodeGenFunction &CGF,
+                                                      const Expr *E)
+    : Base(E, CGF.CGM.CurSourceLocExprScope, CGF.CurCodeDecl) {}

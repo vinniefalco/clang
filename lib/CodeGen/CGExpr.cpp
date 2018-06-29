@@ -1273,7 +1273,7 @@ LValue CodeGenFunction::EmitLValue(const Expr *E) {
 
   case Expr::CXXDefaultArgExprClass: {
     auto *DAE = cast<CXXDefaultArgExpr>(E);
-    CXXDefaultArgExprScope Scope(*this, DAE);
+    CodeGenModule::SourceLocExprScope Scope(*this, DAE);
     return EmitLValue(DAE->getExpr());
   }
   case Expr::CXXDefaultInitExprClass: {
@@ -2634,7 +2634,7 @@ LValue CodeGenFunction::EmitObjCEncodeExprLValue(const ObjCEncodeExpr *E) {
 LValue CodeGenFunction::EmitSourceLocExprLValue(const SourceLocExpr *E) {
   assert(E->isStringType());
   auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
-      getContext(), E, CurSourceLocExprScope.getDefaultExpr());
+      getContext(), E, CGM.CurSourceLocExprScope.getDefaultExpr());
   return MakeAddrLValue(
       CGM.GetAddrOfConstantStringFromSourceLocExpr(E, EvaluatedLoc),
       EvaluatedLoc.getType(), AlignmentSource::Decl);

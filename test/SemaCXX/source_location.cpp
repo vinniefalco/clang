@@ -562,3 +562,17 @@ static_assert(is_equal(AI.f, "brace_init.cpp"));
 static_assert(is_equal(AI.func, ""));
 
 } // namespace test_global_scope
+
+namespace TestFuncInInit {
+#line 6000 "InitClass.cpp"
+struct Init {
+  SL info;
+#line 6100 "InitCtor.cpp"
+  constexpr Init(SL info = SL::current()) : info(info) {}
+};
+#line 6200 "InitGlobal.cpp"
+constexpr Init I;
+static_assert(I.info.line() == 6200);
+static_assert(is_equal(I.info.file(), "InitGlobal.cpp"));
+
+} // namespace TestFuncInInit

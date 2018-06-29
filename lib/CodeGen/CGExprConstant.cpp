@@ -864,11 +864,10 @@ public:
     llvm_unreachable("Invalid CastKind");
   }
 
-  llvm::Constant *VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE, QualType T) {
-    return Visit(DAE->getExpr(), T);
-  }
-
   llvm::Constant *VisitCXXDefaultInitExpr(CXXDefaultInitExpr *DIE, QualType T) {
+    // FIXME(EricWF): Do we need this?
+    CodeGenModule::SourceLocExprScope Scope(CGM, DIE, Emitter.CGF);
+
     // No need for a DefaultInitExprScope: we don't handle 'this' in a
     // constant expression.
     return Visit(DIE->getExpr(), T);
@@ -1009,7 +1008,6 @@ public:
                                                         Types, true);
         return llvm::ConstantStruct::get(SType, Elts);
       }
-
       return llvm::ConstantArray::get(AType, Elts);
     }
 
@@ -1441,7 +1439,6 @@ llvm::Constant *ConstantEmitter::tryEmitPrivateForVarInit(const VarDecl &D) {
   }
 
   QualType destType = D.getType();
-
   // Try to emit the initializer.  Note that this can allow some things that
   // are not allowed by tryEmitPrivateForMemory alone.
   if (auto value = D.evaluateValue())
@@ -1589,10 +1586,10 @@ private:
   ConstantLValue VisitStmt(const Stmt *S) { return nullptr; }
   ConstantLValue VisitCompoundLiteralExpr(const CompoundLiteralExpr *E);
   ConstantLValue VisitStringLiteral(const StringLiteral *E);
-  ConstantLValue VisitSourceLocExpr(const SourceLocExpr *E);
   ConstantLValue VisitObjCEncodeExpr(const ObjCEncodeExpr *E);
   ConstantLValue VisitObjCStringLiteral(const ObjCStringLiteral *E);
   ConstantLValue VisitPredefinedExpr(const PredefinedExpr *E);
+  ConstantLValue VisitSourceLocExpr(const SourceLocExpr *E);
   ConstantLValue VisitAddrLabelExpr(const AddrLabelExpr *E);
   ConstantLValue VisitCallExpr(const CallExpr *E);
   ConstantLValue VisitBlockExpr(const BlockExpr *E);
@@ -1743,6 +1740,19 @@ ConstantLValueEmitter::tryEmitBase(const APValue::LValueBase &base) {
 }
 
 ConstantLValue
+ConstantLValueEmitter::VisitSourceLocExpr(const SourceLocExpr *E) {
+  const APValue::LValueBase &Base = Value.getLValueBase();
+  assert(Base.get<const Expr *>() == E &&
+         "the base should refer to this SourceLocExpr");
+  assert(Base.hasSourceLocExprContext() &&
+         "no source location context in the lvalue base");
+  assert(E->isStringType());
+  auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
+      CGM.getContext(), E, Base.getSourceLocExprContext());
+  return CGM.GetAddrOfConstantStringFromSourceLocExpr(E, EvaluatedLoc);
+}
+
+ConstantLValue
 ConstantLValueEmitter::VisitCompoundLiteralExpr(const CompoundLiteralExpr *E) {
   return tryEmitGlobalCompoundLiteral(CGM, Emitter.CGF, E);
 }
@@ -1750,18 +1760,6 @@ ConstantLValueEmitter::VisitCompoundLiteralExpr(const CompoundLiteralExpr *E) {
 ConstantLValue
 ConstantLValueEmitter::VisitStringLiteral(const StringLiteral *E) {
   return CGM.GetAddrOfConstantStringFromLiteral(E);
-}
-
-ConstantLValue
-ConstantLValueEmitter::VisitSourceLocExpr(const SourceLocExpr *E) {
-  assert(E->isStringType());
-  if (auto CGF = Emitter.CGF) {
-    LValue Res = CGF->EmitSourceLocExprLValue(E);
-    return cast<ConstantAddress>(Res.getAddress());
-  }
-  auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(CGM.getContext(), E,
-                                                     /*DefaultExpr*/ nullptr);
-  return CGM.GetAddrOfConstantStringFromSourceLocExpr(E, EvaluatedLoc);
 }
 
 ConstantLValue

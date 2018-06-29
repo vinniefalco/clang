@@ -78,7 +78,7 @@ CurrentSourceLocExprScope::CurrentSourceLocExprScope(const Expr *DefaultExpr,
                                                      const void *EvalContextID)
     : DefaultExpr(DefaultExpr), EvalContextID(EvalContextID) {
   assert(DefaultExpr && "expression cannot be null");
-  assert(EvalContextID && "context pointer cannot be null");
+  // assert(EvalContextID && "context pointer cannot be null");
   assert((isa<CXXDefaultArgExpr>(DefaultExpr) ||
           isa<CXXDefaultInitExpr>(DefaultExpr)) &&
          "expression must be either a default argument or initializer");

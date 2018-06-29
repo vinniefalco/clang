@@ -584,7 +584,7 @@ public:
   Value *VisitSourceLocExpr(SourceLocExpr *SLE) {
     auto &Ctx = CGF.getContext();
     auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
-        Ctx, SLE, CGF.CurSourceLocExprScope.getDefaultExpr());
+        Ctx, SLE, CGF.CGM.CurSourceLocExprScope.getDefaultExpr());
 
     if (SLE->isIntType())
       return Builder.getInt(EvaluatedLoc.Result.getInt());
@@ -596,7 +596,7 @@ public:
   }
 
   Value *VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE) {
-    CodeGenFunction::CXXDefaultArgExprScope Scope(CGF, DAE);
+    CodeGenModule::SourceLocExprScope Scope(CGF, DAE);
     return Visit(DAE->getExpr());
   }
   Value *VisitCXXDefaultInitExpr(CXXDefaultInitExpr *DIE) {

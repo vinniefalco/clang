@@ -1283,10 +1283,6 @@ private:
   SourceLocation LastStopPoint;
 
 public:
-  /// Source location information about the default argument or member
-  /// initializer expression we're evaluating, if any.
-  CurrentSourceLocExprScope CurSourceLocExprScope;
-
   /// A scope within which we are constructing the fields of an object which
   /// might use a CXXDefaultInitExpr. This stashes away a 'this' value to use
   /// if we need to evaluate a CXXDefaultInitExpr within the evaluation.
@@ -1311,8 +1307,7 @@ public:
   public:
     CXXDefaultInitExprScope(CodeGenFunction &CGF, const CXXDefaultInitExpr *E)
         : CGF(CGF), OldCXXThisValue(CGF.CXXThisValue),
-          OldCXXThisAlignment(CGF.CXXThisAlignment),
-          SourceLocScope(E, CGF.CurSourceLocExprScope, CGF.CurCodeDecl) {
+          OldCXXThisAlignment(CGF.CXXThisAlignment), SourceLocScope(CGF, E) {
       CGF.CXXThisValue = CGF.CXXDefaultInitExprThis.getPointer();
       CGF.CXXThisAlignment = CGF.CXXDefaultInitExprThis.getAlignment();
     }
@@ -1325,16 +1320,7 @@ public:
     CodeGenFunction &CGF;
     llvm::Value *OldCXXThisValue;
     CharUnits OldCXXThisAlignment;
-    SourceLocExprScopeGuard SourceLocScope;
-  };
-
-  /// The scope of a CXXDefaultArgExpr.
-  class CXXDefaultArgExprScope : public SourceLocExprScopeGuard {
-    using Base = SourceLocExprScopeGuard;
-
-  public:
-    CXXDefaultArgExprScope(CodeGenFunction &CGF, const CXXDefaultArgExpr *E)
-        : Base(E, CGF.CurSourceLocExprScope, CGF.CurCodeDecl) {}
+    CodeGenModule::SourceLocExprScope SourceLocScope;
   };
 
   /// The scope of an ArrayInitLoopExpr. Within this scope, the value of the
