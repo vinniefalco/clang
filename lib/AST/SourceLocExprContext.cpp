@@ -143,7 +143,8 @@ static EvalResult EvaluateInternal(const ASTContext &Ctx,
   switch (E->getIdentType()) {
   case SourceLocExpr::File:
   case SourceLocExpr::Function: {
-    std::string Str = ::getStringValue(Ctx, E, LocCtx.getLocation(), LocCtx.getContext());
+    std::string Str =
+        ::getStringValue(Ctx, E, LocCtx.getLocation(), LocCtx.getContext());
     APValue::LValueBase LVBase(E);
     LVBase.setSourceLocExprContext(LocCtx);
     APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
