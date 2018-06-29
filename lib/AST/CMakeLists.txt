@@ -32,6 +32,7 @@ add_clang_library(clangAST
   DeclOpenMP.cpp
   DeclPrinter.cpp
   DeclTemplate.cpp
+  EvaluatedSourceLocExpr.cpp
   Expr.cpp
   ExprClassification.cpp
   ExprConstant.cpp
@@ -55,7 +56,6 @@ add_clang_library(clangAST
   RecordLayout.cpp
   RecordLayoutBuilder.cpp
   SelectorLocationsKind.cpp
-  SourceLocExprContext.cpp
   Stmt.cpp
   StmtCXX.cpp
   StmtIterator.cpp
