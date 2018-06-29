@@ -38,13 +38,4 @@ void do_default_arg_test() {
   test_default_arg();
 }
 
-template <class>
-void test_template(const char *f = __builtin_FUNCTION()) {
-  (void)__builtin_FUNCTION();
-}
-void do_template_test() {
-  test_template<int>();
-  // CHECK: ahh
-}
-
 } // namespace test_func
