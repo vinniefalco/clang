@@ -44,64 +44,51 @@ public:
 
 using SL = source_location;
 
-template <class T>
-T launder(T val) { return val; }
 extern "C" int sink(...);
-
-constexpr SL forward(SL sl = SL::current()) {
-  return sl;
-}
-SL forward_bad(SL sl = SL::bad_current()) {
-  return sl;
-}
 
 // RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-GLOBAL-ONE
 //
-// CHECK-GLOBAL-ONE-DAG: @basic_global = global %struct.source_location { i32 1000, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE:[^,]*]], {{[^@]*}}@[[FUNC:[^,]*]],
-// CHECK-GLOBAL-ONE-DAG: @[[FILE]] = {{.*}}c"test_basic.cpp\00"
-// CHECK-GLOBAL-ONE-DAG: @[[FUNC]] = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
-#line 1000 "test_basic.cpp"
-SL basic_global = SL::current();
+// CHECK-GLOBAL-ONE-DAG: @[[FILE:.*]] = {{.*}}c"test_const_init.cpp\00"
+// CHECK-GLOBAL-ONE-DAG: @[[FUNC:\.str\.empty]] = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
+//
+// CHECK-GLOBAL-ONE: @const_init_global = global %struct.source_location { i32 1000, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]]
+#line 1000 "test_const_init.cpp"
+SL const_init_global = SL::current();
 
-// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-GLOBAL-TWO
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-GLOBAL-TWO "-DFUNC=.str.empty"
 //
-// CHECK-GLOBAL-TWO-DAG: @basic_global_bad = global %struct.source_location zeroinitializer, align 8
+// CHECK-GLOBAL-TWO-DAG: @runtime_init_global = global %struct.source_location zeroinitializer, align 8
 //
-// CHECK-GLOBAL-TWO-DAG: call void @_ZN15source_location11bad_currentEjjPKcS1_(%struct.source_location* sret @basic_global_bad, i32 1100, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE:[^,]*]], {{[^@]*}}@[[FUNC:[^,]*]],
-// CHECK-GLOBAL-TWO-DAG: @[[FILE]] = {{.*}}c"test_basic_bad.cpp\00"
-// CHECK-GLOBAL-TWO-DAG: @[[FUNC]] = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
-#line 1100 "test_basic_bad.cpp"
-SL basic_global_bad = SL::bad_current();
+// CHECK-GLOBAL-TWO-DAG: @[[FILE:.*]] = {{.*}}c"test_runtime_init.cpp\00"
+//
+// CHECK-GLOBAL-TWO: define internal void @__cxx_global_var_init()
+// CHECK-GLOBAL-TWO-NOT: ret
+// CHECK-GLOBAL-TWO: call void @_ZN15source_location11bad_currentEjjPKcS1_(%struct.source_location* sret @runtime_init_global,
+// CHECK-GLOBAL-TWO-SAME: i32 1100, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]],
+#line 1100 "test_runtime_init.cpp"
+SL runtime_init_global = SL::bad_current();
 
 #line 2000 "test_function.cpp"
 extern "C" void test_function() {
 // RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-LOCAL-ONE
 //
-// CHECK-LOCAL-ONE-DAG:  call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %local, i32 2100, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE:[^,]*]], {{[^@]*}}@[[FUNC:[^,]*]],
-// CHECK-LOCAL-ONE-DAG: @[[FILE]] = {{.*}}c"test_current.cpp\00"
-// CHECK-LOCAL-ONE-DAG: @[[FUNC]] = {{.*}}c"test_function\00"
+// CHECK-LOCAL-ONE-DAG: @[[FILE:.*]] = {{.*}}c"test_current.cpp\00"
+// CHECK-LOCAL-ONE-DAG: @[[FUNC:.*]] = {{.*}}c"test_function\00"
+//
+// CHECK-LOCAL-ONE:  call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %local,
+// CHECK-LOCAL-ONE-SAME: i32 2100, i32 {{[0-9]+}},
+// CHECK-LOCAL-ONE-SAME: {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]],
 #line 2100 "test_current.cpp"
   SL local = SL::current();
-
-// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-LOCAL-TWO
-//
-// CHECK-LOCAL-TWO-DAG: call void @_ZN15source_location11bad_currentEjjPKcS1_(%struct.source_location* sret %bad_local, i32 2200, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE:[^,]*]], {{[^@]*}}@[[FUNC:[^,]*]],
-// CHECK-LOCAL-TWO-DAG: @[[FILE]] = {{.*}}c"test_bad_current.cpp\00"
-// CHECK-LOCAL-TWO-DAG: @[[FUNC]] = {{.*}}c"test_function\00"
-#line 2200 "test_bad_current.cpp"
-  SL bad_local = SL::bad_current();
 }
 
 #line 3000 "TestInitClass.cpp"
 struct TestInit {
   SL info = SL::current();
-  SL nested_info = forward();
   SL arg_info;
-  SL nested_arg_info;
 
 #line 3100 "TestInitCtor.cpp"
-  TestInit(SL arg_info = SL::current(),
-           SL nested_arg_info = forward()) : arg_info(arg_info), nested_arg_info(nested_arg_info) {}
+  TestInit(SL arg_info = SL::current()) : arg_info(arg_info) {}
 };
 
 // RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-CTOR-GLOBAL "-DFUNC=.str.empty"
@@ -109,13 +96,12 @@ struct TestInit {
 // CHECK-CTOR-GLOBAL-DAG: @GlobalInitVal = global %struct.TestInit zeroinitializer, align 8
 // CHECK-CTOR-GLOBAL-DAG: @[[FILE:.*]] = {{.*}}c"GlobalInitVal.cpp\00"
 //
-// CHECK-CTOR-GLOBAL: define internal void @__cxx_global_var_init.4()
+// CHECK-CTOR-GLOBAL: define internal void @__cxx_global_var_init.3()
 // CHECK-CTOR-GLOBAL-NOT: ret
 //
-// CHECK-CTOR-GLOBAL: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[TMP_ONE:[^,]*]], i32 3400, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]],
-// CHECK-CTOR-GLOBAL-NEXT: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[TMP_TWO:[^,]*]], i32 3400, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]],
-// CHECK-CTOR-GLOBAL-NEXT: call void @_Z7forward15source_location(%struct.source_location* sret %[[TMP_THREE:[^,]*]], %struct.source_location* byval align 8 %[[TMP_TWO]])
-// CHECK-CTOR-GLOBAL-NEXT: call void @_ZN8TestInitC1E15source_locationS0_(%struct.TestInit* @GlobalInitVal, %struct.source_location* {{[^%]*}}%[[TMP_ONE]], %struct.source_location* {{[^%]*}}%[[TMP_THREE]]
+// CHECK-CTOR-GLOBAL: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[TMP_ONE:[^,]*]],
+// CHECK-CTOR-GLOBAL-SAME: i32 3400, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]],
+// CHECK-CTOR-GLOBAL-NEXT: call void @_ZN8TestInitC1E15source_location(%struct.TestInit* @GlobalInitVal, %struct.source_location* {{[^%]*}}%[[TMP_ONE]])
 #line 3400 "GlobalInitVal.cpp"
 TestInit GlobalInitVal;
 
@@ -128,69 +114,119 @@ extern "C" void test_init_function() {
 // CHECK-CTOR-LOCAL: define void @test_init_function()
 // CHECK-CTOR-LOCAL-NOT: ret
 //
-// CHECK-CTOR-LOCAL: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[TMP_ONE:[^,]*]], i32 3500, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]],
-// CHECK-CTOR-LOCAL-NEXT: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[TMP_TWO:[^,]*]], i32 3500, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]],
-// CHECK-CTOR-LOCAL-NEXT: call void @_Z7forward15source_location(%struct.source_location* sret %[[TMP_THREE:[^,]*]], %struct.source_location* byval align 8 %[[TMP_TWO]])
-// CHECK-CTOR-LOCAL-NEXT: call void @_ZN8TestInitC1E15source_locationS0_(%struct.TestInit* %init_local, %struct.source_location* {{[^%]*}}%[[TMP_ONE]], %struct.source_location* {{[^%]*}}%[[TMP_THREE]]
+// CHECK-CTOR-LOCAL: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[TMP:[^,]*]],
+// CHECK-CTOR-LOCAL-SAME: i32 3500, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]],
+// CHECK-CTOR-LOCAL-NEXT: call void @_ZN8TestInitC1E15source_location(%struct.TestInit* %init_local, %struct.source_location* {{[^%]*}}%[[TMP]])
 #line 3500 "LocalInitVal.cpp"
   TestInit init_local;
   sink(init_local);
 }
 
 #line 4000 "ConstexprClass.cpp"
-extern "C" struct TestInitConstexpr {
+struct TestInitConstexpr {
   SL info = SL::current();
   SL arg_info;
-#line 4100 "ConstexprCtorOne.cpp"
-  TestInitConstexpr() = default;
-#line 4200 "ConstexprCtorTwo.cpp"
-  constexpr TestInitConstexpr(int, SL arg_info = SL::current()) : arg_info(arg_info) {}
+#line 4200 "ConstexprCtor.cpp"
+  constexpr TestInitConstexpr(SL arg_info = SL::current()) : arg_info(arg_info) {}
 };
-
-// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-CONSTEXPR-T1
-//
-// CHECK-CONSTEXPR-T1-DAG: @ConstexprGlobalDefault = global %struct.TestInitConstexpr { %struct.source_location { i32 4100, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE_NAME:[^,]*]], {{[^@]*}}@[[FUNC_NAME:[^,]*]]
-// CHECK-CONSTEXPR-T1-DAG: @[[FILE_NAME]] = {{.*}}c"ConstexprCtorOne.cpp\00"
-// CHECK-CONSTEXPR-T1-DAG: @[[FUNC_NAME]] = {{.*}}c"TestInitConstexpr\00"
-#line 4300 "ConstexprGlobalDefault.cpp"
-TestInitConstexpr ConstexprGlobalDefault;
 
 // RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-CONSTEXPR-T2
 //
-// CHECK-CONSTEXPR-T2-DAG: @ConstexprGlobalVal = global %struct.TestInitConstexpr { %struct.source_location { i32 4200, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE_INIT:[^,]*]], {{[^@]*}}@[[FUNC_INIT:[^,]*]], {{[^%]*}}%struct.source_location { i32 4400, i32 {{[0-9]+}},  {{[^@]*}}@[[FILE_ARG:[^,]*]], {{[^@]*}}@.str.empty
-// CHECK-CONSTEXPR-T2-DAG: @[[FILE_INIT]] = {{.*}}c"ConstexprCtorTwo.cpp\00"
-// CHECK-CONSTEXPR-T2-DAG: @[[FUNC_INIT]] = {{.*}}c"TestInitConstexpr\00"
-// CHECK-CONSTEXPR-T2-DAG: @[[FILE_ARG]] = {{.*}}c"ConstexprGlobalVal.cpp\00"
-#line 4400 "ConstexprGlobalVal.cpp"
-TestInitConstexpr ConstexprGlobalVal(42);
+// CHECK-CONSTEXPR-T2-DAG: @[[FILE_INIT:.*]] = {{.*}}c"ConstexprCtor.cpp\00"
+// CHECK-CONSTEXPR-T2-DAG: @[[FUNC_INIT:.*]] = {{.*}}c"TestInitConstexpr\00"
+// CHECK-CONSTEXPR-T2-DAG: @[[FILE_ARG:.*]] = {{.*}}c"ConstexprGlobal.cpp\00"
+//
+// CHECK-CONSTEXPR-T2: @ConstexprGlobal = global %struct.TestInitConstexpr {
+// CHECK-CONSTEXPR-T2-SAME: %struct.source_location { i32 4200, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE_INIT]], {{[^@]*}}@[[FUNC_INIT]],
+// CHECK-CONSTEXPR-T2-SAME: {{[^%]*}}%struct.source_location { i32 4400, i32 {{[0-9]+}},  {{[^@]*}}@[[FILE_ARG]], {{[^@]*}}@.str.empty
+#line 4400 "ConstexprGlobal.cpp"
+TestInitConstexpr ConstexprGlobal;
 
 extern "C" void test_init_function_constexpr() {
-#line 4500 "ConstexprFuncDefault.cpp"
-  TestInitConstexpr InitDefaultConstexpr;
-
-#line 4600 "ConstexprFuncVal.cpp"
-  TestInitConstexpr InitValConstexpr(42);
-
-  sink(ConstexprGlobalDefault);
-  sink(ConstexprGlobalVal);
-  sink(InitDefaultConstexpr);
-  sink(InitValConstexpr);
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-CONSTEXPR-LOCAL
+//
+// CHECK-CONSTEXPR-LOCAL-DAG: @[[FUNC:.*]] = {{.*}}c"test_init_function_constexpr\00"
+// CHECK-CONSTEXPR-LOCAL-DAG: @[[FILE:.*]] = {{.*}}c"ConstexprLocal.cpp\00"
+//
+// CHECK-CONSTEXPR-LOCAL: define void @test_init_function_constexpr()
+// CHECK-CONSTEXPR-LOCAL: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[TMP:[^,]*]],
+// CHECK-CONSTEXPR-LOCAL-SAME: i32 4600, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]]
+// CHECK-CONSTEXPR-LOCAL: call void @_ZN17TestInitConstexprC1E15source_location(%struct.TestInitConstexpr* %local_val, {{.*}}%[[TMP]])
+#line 4600 "ConstexprLocal.cpp"
+  TestInitConstexpr local_val;
 }
 
-#line 5000 "test_init_agg.cpp"
-extern "C" struct TestInitAgg {
-  SL info = SL::current();
-#line 5100 "TestInitAgg.cpp"
+#line 5000 "TestInitAgg.cpp"
+struct TestInitAgg {
+#line 5100 "i1.cpp"
+  SL i1;
+#line 5200 "i2.cpp"
+  SL i2 = SL::current();
+#line 5300 "TestInitAggEnd.cpp"
 };
-#line 5200 "TestInitAggGlobal.cpp"
-TestInitAgg GlobalInitDefaultAgg;
-TestInitAgg GlobalInitValAgg = {};
-extern "C" void test_init_function_agg() {
-#line 5300 "TestInitAggFunc.cpp"
-  TestInitAgg InitDefaultAgg;
-  TestInitAgg InitValAgg = {};
-  sink(GlobalInitDefaultAgg);
-  sink(GlobalInitValAgg);
-  sink(InitDefaultAgg);
-  sink(InitValAgg);
+
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-AGG-DEFAULT
+//
+// CHECK-AGG-DEFAULT-DAG: @[[FILE:.*]] = {{.*}}c"TestInitAgg.cpp\00"
+// CHECK-AGG-DEFAULT-DAG: @[[FUNC:.*]] = {{.*}}c"TestInitAgg\00"
+//
+// CHECK-AGG-DEFAULT: @GlobalAggDefault = global %struct.TestInitAgg {
+// CHECK-AGG-DEFAULT-SAME: %struct.source_location zeroinitializer,
+// CHECK-AGG-DEFAULT-SAME: %struct.source_location { i32 5000, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]]
+#line 5400 "GlobalAggDefault.cpp"
+TestInitAgg GlobalAggDefault;
+
+#line 5500 "test_agg_init_test.cpp"
+extern "C" void test_agg_init() {
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-AGG-BRACE
+//
+// CHECK-AGG-BRACE-DAG: @[[FILE:.*]] = {{.*}}c"BraceInitEnd.cpp\00"
+// CHECK-AGG-BRACE-DAG: @[[FUNC:.*]] = {{.*}}c"test_agg_init\00"
+//
+// CHECK-AGG-BRACE: define void @test_agg_init()
+// CHECK-AGG-BRACE: %[[I2:.*]] = getelementptr inbounds %struct.TestInitAgg, %struct.TestInitAgg* %local_brace_init, i32 0, i32 1
+// CHECK-AGG-BRACE-NEXT: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[I2]],
+// CHECK-AGG-BRACE-SAME: i32 5700, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]]
+#line 5600 "BraceInitStart.cpp"
+  TestInitAgg local_brace_init{
+#line 5700 "BraceInitEnd.cpp"
+  };
+
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-AGG-EQUAL
+//
+// CHECK-AGG-EQUAL-DAG: @[[FILE:.*]] = {{.*}}c"EqualInitEnd.cpp\00"
+// CHECK-AGG-EQUAL-DAG: @[[FUNC:.*]] = {{.*}}c"test_agg_init\00"
+//
+// CHECK-AGG-EQUAL: define void @test_agg_init()
+// CHECK-AGG-EQUAL: %[[I2:.*]] = getelementptr inbounds %struct.TestInitAgg, %struct.TestInitAgg* %local_equal_init, i32 0, i32 1
+// CHECK-AGG-EQUAL-NEXT: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[I2]],
+// CHECK-AGG-EQUAL-SAME: i32 5900, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]]
+#line 5800 "EqualInitStart.cpp"
+  TestInitAgg local_equal_init =
+      {
+#line 5900 "EqualInitEnd.cpp"
+      };
+
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-AGG-LIST
+//
+// CHECK-AGG-LIST-DAG: @[[FILE_DEFAULT:.*]] = {{.*}}c"InitListEnd.cpp\00"
+// CHECK-AGG-LIST-DAG: @[[FILE_ELEM:.*]] = {{.*}}c"ListElem.cpp\00"
+// CHECK-AGG-LIST-DAG: @[[FUNC:.*]] = {{.*}}c"test_agg_init\00"
+//
+// CHECK-AGG-LIST: define void @test_agg_init()
+//
+// CHECK-AGG-LIST: %[[I1:.*]] =  getelementptr inbounds %struct.TestInitAgg, %struct.TestInitAgg* %local_list_init, i32 0, i32 0
+// CHECK-AGG-LIST-NEXT: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[I1]],
+// CHECK-AGG-LIST-SAME: i32 6100, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE_ELEM]], {{[^@]*}}@[[FUNC]]
+//
+// CHECK-AGG-LIST: %[[I2:.*]] = getelementptr inbounds %struct.TestInitAgg, %struct.TestInitAgg* %local_list_init, i32 0, i32 1
+// CHECK-AGG-LIST-NEXT: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[I2]],
+// CHECK-AGG-LIST-SAME: i32 6200, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE_DEFAULT]], {{[^@]*}}@[[FUNC]]
+#line 6000 "InitListStart.cpp"
+  TestInitAgg local_list_init =
+      {
+#line 6100 "ListElem.cpp"
+          {SL::current()}
+#line 6200 "InitListEnd.cpp"
+      };
 }
