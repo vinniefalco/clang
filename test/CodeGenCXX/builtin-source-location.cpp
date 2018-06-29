@@ -243,10 +243,22 @@ struct TestTemplate {
 #line 7200 "test_template.cpp"
 template <class T, int V>
 void test_template() {
+
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-TEMPL -DINT_ID=0
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-TEMPL -DINT_ID=1
+//
+// CHECK-TEMPL-DAG: @[[FILE:.*]] = {{.*}}c"local_templ.cpp\00"
+// CHECK-TEMPL-DAG: @[[FUNC:.*]] = {{.*}}c"test_template\00"
+//
+// CHECK-TEMPL: define weak_odr void @_Z13test_templateI15source_locationLi[[INT_ID]]EEvv()
+// CHECK-TEMPL-NEXT: entry:
+// CHECK-TEMPL-NOT: ret
+//
+// CHECK-TEMPL:  call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[TMP:[^,]*]],
+// CHECK-TEMPL-SAME: i32 7300, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]]
 #line 7300 "local_templ.cpp"
-  const TestTemplate<T, V> local_templ;
+  TestTemplate<T, V> local_templ;
 }
-#line 7400 "InstantOne.cpp"
+#line 7400 "EndTestTemplate.cpp"
 template void test_template<SL, 0>();
-#line 7500 "InstantTwo.cpp"
 template void test_template<SL, 1>();
