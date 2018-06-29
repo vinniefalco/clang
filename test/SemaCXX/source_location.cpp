@@ -576,3 +576,15 @@ static_assert(I.info.line() == 6200);
 static_assert(is_equal(I.info.file(), "InitGlobal.cpp"));
 
 } // namespace TestFuncInInit
+
+namespace TestConstexprContext {
+#line 7000 "TestConstexprContext.cpp"
+  constexpr const char* foo() { return __builtin_FILE(); }
+#line 7100 "Bar.cpp"
+  constexpr const char* bar(const char* x = foo()) { return x; }
+  constexpr bool test() {
+    static_assert(is_equal(bar(), "Bar.cpp"));
+    return true;
+  }
+  static_assert(test());
+}
