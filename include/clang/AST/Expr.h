@@ -3914,6 +3914,7 @@ class SourceLocExpr final : public Expr {
 public:
   enum IdentType { Function, File, Line, Column };
 
+  // FIXME: Ensure the IdentType values stay synced with those in EvaluatedSourceLocExpr
 private:
   SourceLocation BuiltinLoc, RParenLoc;
   DeclContext *ParentContext;

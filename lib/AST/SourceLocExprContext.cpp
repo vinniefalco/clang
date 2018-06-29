@@ -1,4 +1,4 @@
-//===--- SourceLocExprContext.cpp -------------------------------*- C++ -*-===//
+//===--- EvaluatedSourceLocExpr.cpp -------------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -12,11 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/AST/SourceLocExprContext.h"
+#include "clang/AST/EvaluatedSourceLocExpr.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
-#include "clang/AST/SourceLocExprContext.h"
 #include "clang/Basic/SourceLocation.h"
 
 using namespace clang;
@@ -49,97 +48,99 @@ static std::string makeStringValue(const ASTContext &Ctx,
 }
 
 //===----------------------------------------------------------------------===//
-//                    SourceLocExprContext Definitions
+//                    EvaluatedSourceLocExpr Definitions
 //===----------------------------------------------------------------------===//
 
-QualType SourceLocExprContext::getType() const {
-  if (!Type)
-    return QualType();
-  return QualType::getFromOpaquePtr(Type);
+QualType EvaluatedSourceLocExpr::getType(const ASTContext &Ctx) const {
+  assert(!empty());
+  if (hasIntValue())
+    return Ctx.UnsignedIntTy;
+  return SourceLocExpr::BuildStringArrayType(Ctx, FileOrFunc.size() + 1);
 }
 
-void SourceLocExprContext::setType(const QualType &T) {
-  Type = T.getAsOpaquePtr();
+
+EvaluatedSourceLocExpr llvm::DenseMapInfo<EvaluatedSourceLocExpr>::getEmptyKey() {
+  return EvaluatedSourceLocExpr(
+          EvaluatedSourceLocExpr::MakeKeyTag{},
+          DenseMapInfo<char>::getEmptyKey());
 }
 
-SourceLocation SourceLocExprContext::getLocation() const {
-  if (!Loc)
-    return SourceLocation();
-  return SourceLocation::getFromPtrEncoding(Loc);
+EvaluatedSourceLocExpr
+llvm::DenseMapInfo<EvaluatedSourceLocExpr>::getTombstoneKey() {
+  return EvaluatedSourceLocExpr(
+      EvaluatedSourceLocExpr::MakeKeyTag{},
+      DenseMapInfo<char>::getTombstoneKey());
 }
 
-void SourceLocExprContext::setLocation(const SourceLocation &L) {
-  Loc = L.getPtrEncoding();
-}
-
-SourceLocExprContext::SourceLocExprContext(QualType const &Ty,
-                                           SourceLocation const &L,
-                                           const DeclContext *Ctx)
-    : Type(Ty.getAsOpaquePtr()), Loc(L.getPtrEncoding()), Context(Ctx) {}
-
-SourceLocExprContext llvm::DenseMapInfo<SourceLocExprContext>::getEmptyKey() {
-  return SourceLocExprContext(DenseMapInfo<const void *>::getEmptyKey(),
-                              DenseMapInfo<const void *>::getEmptyKey(),
-                              DenseMapInfo<const DeclContext *>::getEmptyKey());
-}
-
-SourceLocExprContext
-llvm::DenseMapInfo<SourceLocExprContext>::getTombstoneKey() {
-  return SourceLocExprContext(
-      DenseMapInfo<const void *>::getTombstoneKey(),
-      DenseMapInfo<const void *>::getTombstoneKey(),
-      DenseMapInfo<const DeclContext *>::getTombstoneKey());
-}
-
-unsigned llvm::DenseMapInfo<SourceLocExprContext>::getHashValue(
-    SourceLocExprContext const &Val) {
+unsigned llvm::DenseMapInfo<EvaluatedSourceLocExpr>::getHashValue(
+    EvaluatedSourceLocExpr const &Val) {
   llvm::FoldingSetNodeID ID;
-  ID.AddPointer(Val.Type);
-  ID.AddPointer(Val.Loc);
-  ID.AddPointer(Val.Context);
+  ID.AddInteger(Val.Kind);
+  switch (Val.Kind) {
+  case EvaluatedSourceLocExpr::IT_None:
+    ID.AddInteger(Val.Empty);
+    break;
+  case EvaluatedSourceLocExpr::IT_LineOrCol:
+    ID.AddInteger(Val.LineOrCol);
+    break;
+  case EvaluatedSourceLocExpr::IT_File:
+    ID.AddString(Val.FileName);
+    break;
+  case EvaluatedSourceLocExpr::IT_Func:
+    ID.AddPointer(Val.FuncDecl);
+    break;
+  }
   return ID.ComputeHash();
 }
 
-bool llvm::DenseMapInfo<SourceLocExprContext>::isEqual(
-    SourceLocExprContext const &LHS, SourceLocExprContext const &RHS) {
+bool llvm::DenseMapInfo<EvaluatedSourceLocExpr>::isEqual(
+    EvaluatedSourceLocExpr const &LHS, EvaluatedSourceLocExpr const &RHS) {
   return LHS == RHS;
 }
 
-SourceLocExprContext SourceLocExprContext::Create(const ASTContext &Ctx,
+EvaluatedSourceLocExpr EvaluatedSourceLocExpr::Create(const ASTContext &Ctx,
                                                   const SourceLocExpr *E,
                                                   const Expr *DefaultExpr) {
-  SourceLocExprContext Base;
+  SourceLocation Loc;
+  const DeclContext *Context;
 
-  if (auto *DIE = dyn_cast_or_null<CXXDefaultInitExpr>(DefaultExpr)) {
-    Base.setLocation(DIE->getUsedLocation());
-    Base.setContext(DIE->getUsedContext());
-  } else if (auto *DAE = dyn_cast_or_null<CXXDefaultArgExpr>(DefaultExpr)) {
-    Base.setLocation(DAE->getUsedLocation());
-    Base.setContext(DAE->getUsedContext());
-  } else {
-    Base.setLocation(E->getLocation());
-    Base.setContext(E->getParentContext());
+  std::tie(Loc, Context) = [&]() -> std::pair<SourceLocation, const DeclContext *> {
+    if (auto *DIE = dyn_cast_or_null<CXXDefaultInitExpr>(DefaultExpr))
+      return {DIE->getUsedLocation(), DIE->getUsedContext()};
+    if (auto *DAE = dyn_cast_or_null<CXXDefaultArgExpr>(DefaultExpr))
+      return {DAE->getUsedLocation(), DAE->getUsedContext()};
+    return {E->getLocation(), E->getParentContext()};
+  }();
+
+  PresumedLoc PLoc = getPresumedSourceLoc(Ctx, Loc);
+
+  switch (E->getIdentType()) {
+  case SourceLocExpr::Function: {
+    DeclarationName FuncName;
+     if (const auto *FD = dyn_cast_or_null<FunctionDecl>(Context))
+       return EvaluatedSourceLocExpr(FileTag{}, FD->getDeclName());
+      return EvaluatedSourceLocExpr(FileTag{}, DeclarationName{});
   }
+  case SourceLocExpr::File:
+    return EvaluatedSourceLocExpr(FileTag{}, PLoc.getFilename());
+  case SourceLocExpr::Line:
+  case SourceLocExpr::Column:
+    return EvaluatedSourceLocExpr(LineOrColTag{},
+            E->getIdentType() == SourceLocExpr::Line ? PLoc.getLine() : PLoc.getColumn());
 
-  if (E->isStringType())
-    Base.setType(SourceLocExpr::BuildStringArrayType(
-        Ctx,
-        makeStringValue(Ctx, E, Base.getLocation(), Base.getContext()).size() +
-            1));
-  else
-    Base.setType(Ctx.UnsignedIntTy);
+  }
+  llvm_unreachable("unhandled case");
 
-  return Base;
 }
 
-APValue SourceLocExprContext::Evaluate(const ASTContext &Ctx,
+APValue EvaluatedSourceLocExpr::Evaluate(const ASTContext &Ctx,
                                        const SourceLocExpr *E) const {
   switch (E->getIdentType()) {
   case SourceLocExpr::File:
   case SourceLocExpr::Function: {
     std::string Str = makeStringValue(Ctx, E, getLocation(), getContext());
     APValue::LValueBase LVBase(E);
-    LVBase.setSourceLocExprContext(*this);
+    LVBase.setEvaluatedSourceLocExpr(*this);
     APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
     return StrVal;
   }
@@ -157,13 +158,13 @@ APValue SourceLocExprContext::Evaluate(const ASTContext &Ctx,
   llvm_unreachable("unhandled case");
 }
 
-uint64_t SourceLocExprContext::getIntValue(const ASTContext &Ctx,
+uint64_t EvaluatedSourceLocExpr::getIntValue(const ASTContext &Ctx,
                                            const SourceLocExpr *E) const {
   assert(E->isIntType() && "SourceLocExpr is not a integer expression");
   return Evaluate(Ctx, E).getInt().getZExtValue();
 }
 
-std::string SourceLocExprContext::getStringValue(const ASTContext &Ctx,
+std::string EvaluatedSourceLocExpr::getStringValue(const ASTContext &Ctx,
                                                  const SourceLocExpr *E) const {
   assert(E->isStringType() &&
          "SourceLocExpr is not a string literal expression");

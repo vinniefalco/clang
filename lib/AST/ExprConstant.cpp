@@ -63,7 +63,7 @@ namespace {
   struct EvalInfo;
 
   using SourceLocExprScopeGuard =
-      CurrentSourceLocExprScope<CallStackFrame>::SourceLocExprScopeGuard;
+      CurrentSourceLocExprScope::SourceLocExprScopeGuard;
 
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
@@ -458,6 +458,10 @@ namespace {
     /// parameters' function scope indices.
     APValue *Arguments;
 
+    /// Source location information about the default argument or default
+    /// initializer expression we're evaluating, if any.
+    CurrentSourceLocExprScope CurSourceLocExprScope;
+
     // Note that we intentionally use std::map here so that references to
     // values are stable.
     typedef std::pair<const void *, unsigned> MapKeyTy;
@@ -700,10 +704,6 @@ namespace {
 
     /// Whether or not we're currently speculatively evaluating.
     bool IsSpeculativelyEvaluating;
-
-    /// Source location information about the default argument or default
-    /// initializer expression we're evaluating, if any.
-    CurrentSourceLocExprScope<CallStackFrame> CurSourceLocExprScope;
 
     enum EvaluationMode {
       /// Evaluate as a constant expression. Stop if we find that the expression
@@ -4734,8 +4734,7 @@ public:
     { return StmtVisitorTy::Visit(E->getReplacement()); }
   bool VisitCXXDefaultArgExpr(const CXXDefaultArgExpr *E) {
     TempVersionRAII RAII(*Info.CurrentCall);
-    SourceLocExprScopeGuard Guard(E, Info.CurSourceLocExprScope,
-                                  Info.CurrentCall);
+    SourceLocExprScopeGuard Guard(E, Info.CurrentCall->CurSourceLocExprScope);
     return StmtVisitorTy::Visit(E->getExpr());
   }
   bool VisitCXXDefaultInitExpr(const CXXDefaultInitExpr *E) {
@@ -4743,8 +4742,7 @@ public:
     // The initializer may not have been parsed yet, or might be erroneous.
     if (!E->getExpr())
       return Error(E);
-    SourceLocExprScopeGuard Guard(E, Info.CurSourceLocExprScope,
-                                  Info.CurrentCall);
+    SourceLocExprScopeGuard Guard(E, Info.CurrentCall->CurSourceLocExprScope);
     return StmtVisitorTy::Visit(E->getExpr());
   }
 
@@ -5800,7 +5798,7 @@ public:
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
     assert(E && E->isStringType());
     SourceLocExprContext LocCtx = SourceLocExprContext::Create(
-        Info.Ctx, E, Info.CurSourceLocExprScope.getDefaultExpr());
+        Info.Ctx, E, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
     APValue LValResult = LocCtx.Evaluate(Info.Ctx, E);
     Result.set(LValResult.getLValueBase());
     Result.addArray(Info, E, Info.Ctx.getAsConstantArrayType(LocCtx.getType()));
@@ -7379,7 +7377,7 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
 bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
   assert(E && E->isIntType());
   auto LocCtx = SourceLocExprContext::Create(
-      Info.Ctx, E, Info.CurSourceLocExprScope.getDefaultExpr());
+      Info.Ctx, E, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
   return Success(LocCtx.getIntValue(Info.Ctx, E), E);
 }
 
