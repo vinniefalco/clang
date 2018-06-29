@@ -230,3 +230,23 @@ extern "C" void test_agg_init() {
 #line 6200 "InitListEnd.cpp"
       };
 }
+
+#line 7000 "TestTemplate.cpp"
+template <class Tp, int>
+struct TestTemplate {
+  Tp info = Tp::current();
+  Tp arg_info;
+#line 7100 "TestTemplateCtor.cpp"
+  constexpr TestTemplate(Tp arg_info = Tp::current()) : arg_info(arg_info) {}
+};
+
+#line 7200 "test_template.cpp"
+template <class T, int V>
+void test_template() {
+#line 7300 "local_templ.cpp"
+  const TestTemplate<T, V> local_templ;
+}
+#line 7400 "InstantOne.cpp"
+template void test_template<SL, 0>();
+#line 7500 "InstantTwo.cpp"
+template void test_template<SL, 1>();

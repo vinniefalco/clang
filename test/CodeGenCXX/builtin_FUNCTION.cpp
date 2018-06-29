@@ -1,4 +1,5 @@
-// RUN: %clang_cc1 -std=c++2a -fblocks %s -triple %itanium_abi_triple -emit-llvm -o - | FileCheck %s
+// RUN: %clang_cc1 -std=c++2a -fblocks %s -triple %itanium_abi_triple -emit-llvm -o %t.ll
+// RUN: FileCheck --input-file %t.ll %s
 
 namespace test_func {
 
@@ -43,22 +44,7 @@ void test_template(const char *f = __builtin_FUNCTION()) {
 }
 void do_template_test() {
   test_template<int>();
+  // CHECK: ahh
 }
 
 } // namespace test_func
-
-namespace test_default_init {
-struct InInit {
-  const char *f = test_func::test_default_arg();
-  const char *f2 = nullptr;
-
-  InInit() = default;
-
-  constexpr InInit(int, const char *ff = __builtin_FUNCTION())
-      : f2(ff) {}
-};
-InInit Default;
-InInit Conv(42);
-InInit Brace = {};
-
-} // namespace test_default_init
