@@ -89,7 +89,7 @@ public:
 
   /// Evaluate the specified SourceLocExpr within this context and return
   /// the resulting integer value.
-  uint32_t getIntValue(const ASTContext &Ctx, const SourceLocExpr *E) const;
+  uint64_t getIntValue(const ASTContext &Ctx, const SourceLocExpr *E) const;
 
   friend inline bool operator==(SourceLocExprContext const &LHS,
                                 SourceLocExprContext const &RHS) {

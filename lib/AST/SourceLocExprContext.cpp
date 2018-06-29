@@ -30,9 +30,9 @@ static PresumedLoc getPresumedSourceLoc(const ASTContext &Ctx,
   return PLoc;
 }
 
-static std::string getStringValue(const ASTContext &Ctx, const SourceLocExpr *E,
-                                  SourceLocation Loc,
-                                  const DeclContext *Context) {
+static std::string makeStringValue(const ASTContext &Ctx,
+                                   const SourceLocExpr *E, SourceLocation Loc,
+                                   const DeclContext *Context) {
   switch (E->getIdentType()) {
   case SourceLocExpr::File:
     return getPresumedSourceLoc(Ctx, Loc).getFilename();
@@ -124,7 +124,7 @@ SourceLocExprContext SourceLocExprContext::Create(const ASTContext &Ctx,
   if (E->isStringType())
     Base.setType(SourceLocExpr::BuildStringArrayType(
         Ctx,
-        getStringValue(Ctx, E, Base.getLocation(), Base.getContext()).size() +
+        makeStringValue(Ctx, E, Base.getLocation(), Base.getContext()).size() +
             1));
   else
     Base.setType(Ctx.UnsignedIntTy);
@@ -132,52 +132,40 @@ SourceLocExprContext SourceLocExprContext::Create(const ASTContext &Ctx,
   return Base;
 }
 
-struct EvalResult {
-  APValue Result;
-  std::string SVal;
-};
-
-static EvalResult EvaluateInternal(const ASTContext &Ctx,
-                                   const SourceLocExpr *E,
-                                   const SourceLocExprContext &LocCtx) {
+APValue SourceLocExprContext::Evaluate(const ASTContext &Ctx,
+                                       const SourceLocExpr *E) const {
   switch (E->getIdentType()) {
   case SourceLocExpr::File:
   case SourceLocExpr::Function: {
-    std::string Str =
-        ::getStringValue(Ctx, E, LocCtx.getLocation(), LocCtx.getContext());
+    std::string Str = makeStringValue(Ctx, E, getLocation(), getContext());
     APValue::LValueBase LVBase(E);
-    LVBase.setSourceLocExprContext(LocCtx);
+    LVBase.setSourceLocExprContext(*this);
     APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
-    return EvalResult{StrVal, Str};
+    return StrVal;
   }
   case SourceLocExpr::Line:
   case SourceLocExpr::Column: {
-    PresumedLoc PLoc = getPresumedSourceLoc(Ctx, LocCtx.getLocation());
+    PresumedLoc PLoc = getPresumedSourceLoc(Ctx, getLocation());
     auto Val = E->getIdentType() == SourceLocExpr::Line ? PLoc.getLine()
                                                         : PLoc.getColumn();
     llvm::APSInt TmpRes(llvm::APInt(Ctx.getTargetInfo().getIntWidth(), Val));
     APValue NewVal(TmpRes);
-    return EvalResult{NewVal, ""};
+    return NewVal;
   }
   }
 
   llvm_unreachable("unhandled case");
 }
 
-uint32_t SourceLocExprContext::getIntValue(const ASTContext &Ctx,
+uint64_t SourceLocExprContext::getIntValue(const ASTContext &Ctx,
                                            const SourceLocExpr *E) const {
   assert(E->isIntType() && "SourceLocExpr is not a integer expression");
-  return EvaluateInternal(Ctx, E, *this).Result.getInt().getZExtValue();
+  return Evaluate(Ctx, E).getInt().getZExtValue();
 }
 
 std::string SourceLocExprContext::getStringValue(const ASTContext &Ctx,
                                                  const SourceLocExpr *E) const {
   assert(E->isStringType() &&
          "SourceLocExpr is not a string literal expression");
-  return EvaluateInternal(Ctx, E, *this).SVal;
-}
-
-APValue SourceLocExprContext::Evaluate(const ASTContext &Ctx,
-                                       const SourceLocExpr *E) const {
-  return EvaluateInternal(Ctx, E, *this).Result;
+  return makeStringValue(Ctx, E, getLocation(), getContext());
 }
