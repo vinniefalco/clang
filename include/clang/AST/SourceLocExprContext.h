@@ -100,6 +100,9 @@ private:
 /// Represents the current source location and context used to determine the
 /// value of the source location builtins (ex. __builtin_LINE), including the
 /// context of default argument and default initializer expressions.
+///
+/// \tparam EvalContextType A type representing the currect evaluation context.
+/// Two contexts are considered equal only if their pointers compare equal.
 template <class EvalContextType> class CurrentSourceLocExprScope {
   /// The CXXDefaultArgExpr or CXXDefaultInitExpr we're currently evaluating.
   const Expr *DefaultExpr = nullptr;
