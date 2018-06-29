@@ -78,23 +78,24 @@ public:
   const DeclContext *getContext() const { return Context; }
   void setContext(const DeclContext *C) { Context = C; }
 
+  /// Evaluate the specified SourceLocExpr within this context and return
+  /// the value.
+  APValue Evaluate(const ASTContext &Ctx, const SourceLocExpr *E) const;
+
+  /// Evaluate the specified SourceLocExpr within this context and return
+  /// the resulting string value.
   std::string getStringValue(const ASTContext &Ctx,
                              const SourceLocExpr *E) const;
-  uint32_t getIntValue(const ASTContext &Ctx, const SourceLocExpr *E) const;
 
-  APValue Evaluate(const ASTContext &Ctx, const SourceLocExpr *E) const;
+  /// Evaluate the specified SourceLocExpr within this context and return
+  /// the resulting integer value.
+  uint32_t getIntValue(const ASTContext &Ctx, const SourceLocExpr *E) const;
 
   friend inline bool operator==(SourceLocExprContext const &LHS,
                                 SourceLocExprContext const &RHS) {
     return LHS.Type == RHS.Type && LHS.Loc == RHS.Loc &&
            LHS.Context == RHS.Context;
   }
-
-private:
-  struct EvalResult;
-
-  EvalResult EvaluateInternal(const ASTContext &Ctx,
-                              const SourceLocExpr *E) const;
 };
 
 /// Represents the current source location and context used to determine the

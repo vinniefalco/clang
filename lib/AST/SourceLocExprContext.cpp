@@ -132,57 +132,51 @@ SourceLocExprContext SourceLocExprContext::Create(const ASTContext &Ctx,
   return Base;
 }
 
-struct SourceLocExprContext::EvalResult {
-  std::string SVal;
+struct EvalResult {
   APValue Result;
+  std::string SVal;
 };
+
+static EvalResult EvaluateInternal(const ASTContext &Ctx,
+                                   const SourceLocExpr *E,
+                                   const SourceLocExprContext &LocCtx) {
+  switch (E->getIdentType()) {
+  case SourceLocExpr::File:
+  case SourceLocExpr::Function: {
+    std::string Str = ::getStringValue(Ctx, E, LocCtx.getLocation(), LocCtx.getContext());
+    APValue::LValueBase LVBase(E);
+    LVBase.setSourceLocExprContext(LocCtx);
+    APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
+    return EvalResult{StrVal, Str};
+  }
+  case SourceLocExpr::Line:
+  case SourceLocExpr::Column: {
+    PresumedLoc PLoc = getPresumedSourceLoc(Ctx, LocCtx.getLocation());
+    auto Val = E->getIdentType() == SourceLocExpr::Line ? PLoc.getLine()
+                                                        : PLoc.getColumn();
+    llvm::APSInt TmpRes(llvm::APInt(Ctx.getTargetInfo().getIntWidth(), Val));
+    APValue NewVal(TmpRes);
+    return EvalResult{NewVal, ""};
+  }
+  }
+
+  llvm_unreachable("unhandled case");
+}
 
 uint32_t SourceLocExprContext::getIntValue(const ASTContext &Ctx,
                                            const SourceLocExpr *E) const {
   assert(E->isIntType() && "SourceLocExpr is not a integer expression");
-  return EvaluateInternal(Ctx, E).Result.getInt().getZExtValue();
+  return EvaluateInternal(Ctx, E, *this).Result.getInt().getZExtValue();
 }
 
 std::string SourceLocExprContext::getStringValue(const ASTContext &Ctx,
                                                  const SourceLocExpr *E) const {
   assert(E->isStringType() &&
          "SourceLocExpr is not a string literal expression");
-  return EvaluateInternal(Ctx, E).SVal;
+  return EvaluateInternal(Ctx, E, *this).SVal;
 }
 
 APValue SourceLocExprContext::Evaluate(const ASTContext &Ctx,
                                        const SourceLocExpr *E) const {
-  return EvaluateInternal(Ctx, E).Result;
-}
-
-SourceLocExprContext::EvalResult
-SourceLocExprContext::EvaluateInternal(const ASTContext &Ctx,
-                                       const SourceLocExpr *E) const {
-  EvalResult Res;
-
-  PresumedLoc PLoc = getPresumedSourceLoc(Ctx, getLocation());
-  assert(PLoc.isValid());
-
-  switch (E->getIdentType()) {
-  case SourceLocExpr::File:
-  case SourceLocExpr::Function: {
-    Res.SVal = ::getStringValue(Ctx, E, getLocation(), getContext());
-
-    APValue::LValueBase LVBase(E);
-    LVBase.setSourceLocExprContext(*this);
-    APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
-    Res.Result.swap(StrVal);
-  } break;
-  case SourceLocExpr::Line:
-  case SourceLocExpr::Column: {
-    auto Val = E->getIdentType() == SourceLocExpr::Line ? PLoc.getLine()
-                                                        : PLoc.getColumn();
-
-    llvm::APSInt TmpRes(llvm::APInt(Ctx.getTargetInfo().getIntWidth(), Val));
-    APValue NewVal(TmpRes);
-    Res.Result.swap(NewVal);
-  } break;
-  }
-
-  return Res;
+  return EvaluateInternal(Ctx, E, *this).Result;
 }
