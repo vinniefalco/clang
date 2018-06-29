@@ -584,19 +584,21 @@ public:
   Value *VisitSourceLocExpr(SourceLocExpr *SLE) {
     auto &Ctx = CGF.getContext();
     auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
-        Ctx, SLE, CGF.CGM.CurSourceLocExprScope.getDefaultExpr());
+        Ctx, SLE, CGF.CurSourceLocExprScope.getDefaultExpr());
 
     if (SLE->isIntType())
       return Builder.getInt(EvaluatedLoc.Result.getInt());
 
     // else, we're building a string literal
-    LValue LV = CGF.EmitSourceLocExprLValue(SLE);
+    LValue LV = CGF.MakeAddrLValue(
+        CGF.CGM.GetAddrOfConstantStringFromSourceLocExpr(SLE, EvaluatedLoc),
+        EvaluatedLoc.getType(), AlignmentSource::Decl);
     return CGF.EmitArrayToPointerDecay(SLE, EvaluatedLoc.getType(), LV)
         .getPointer();
   }
 
   Value *VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE) {
-    CodeGenModule::SourceLocExprScope Scope(CGF, DAE);
+    CodeGenFunction::CXXDefaultArgExprScope Scope(CGF, DAE);
     return Visit(DAE->getExpr());
   }
   Value *VisitCXXDefaultInitExpr(CXXDefaultInitExpr *DIE) {

@@ -1203,6 +1203,8 @@ LValue CodeGenFunction::EmitLValue(const Expr *E) {
 
   case Expr::ObjCPropertyRefExprClass:
     llvm_unreachable("cannot emit a property reference directly");
+  case Expr::SourceLocExprClass:
+    llvm_unreachable("SourceLocExpr isn't modeled as an l-value");
 
   case Expr::ObjCSelectorExprClass:
     return EmitObjCSelectorLValue(cast<ObjCSelectorExpr>(E));
@@ -1237,8 +1239,6 @@ LValue CodeGenFunction::EmitLValue(const Expr *E) {
     return EmitStringLiteralLValue(cast<StringLiteral>(E));
   case Expr::ObjCEncodeExprClass:
     return EmitObjCEncodeExprLValue(cast<ObjCEncodeExpr>(E));
-  case Expr::SourceLocExprClass:
-    return EmitSourceLocExprLValue(cast<SourceLocExpr>(E));
   case Expr::PseudoObjectExprClass:
     return EmitPseudoObjectLValue(cast<PseudoObjectExpr>(E));
   case Expr::InitListExprClass:
@@ -1273,7 +1273,7 @@ LValue CodeGenFunction::EmitLValue(const Expr *E) {
 
   case Expr::CXXDefaultArgExprClass: {
     auto *DAE = cast<CXXDefaultArgExpr>(E);
-    CodeGenModule::SourceLocExprScope Scope(*this, DAE);
+    CXXDefaultArgExprScope Scope(*this, DAE);
     return EmitLValue(DAE->getExpr());
   }
   case Expr::CXXDefaultInitExprClass: {
@@ -2631,14 +2631,6 @@ LValue CodeGenFunction::EmitObjCEncodeExprLValue(const ObjCEncodeExpr *E) {
                         E->getType(), AlignmentSource::Decl);
 }
 
-LValue CodeGenFunction::EmitSourceLocExprLValue(const SourceLocExpr *E) {
-  assert(E->isStringType());
-  auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
-      getContext(), E, CGM.CurSourceLocExprScope.getDefaultExpr());
-  return MakeAddrLValue(
-      CGM.GetAddrOfConstantStringFromSourceLocExpr(E, EvaluatedLoc),
-      EvaluatedLoc.getType(), AlignmentSource::Decl);
-}
 
 LValue CodeGenFunction::EmitPredefinedLValue(const PredefinedExpr *E) {
   auto SL = E->getFunctionName();

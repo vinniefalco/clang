@@ -865,8 +865,8 @@ public:
   }
 
   llvm::Constant *VisitCXXDefaultInitExpr(CXXDefaultInitExpr *DIE, QualType T) {
-    // FIXME(EricWF): Do we need this?
-    CodeGenModule::SourceLocExprScope Scope(CGM, DIE, Emitter.CGF);
+    // FIXME: Is it ever possible for a SourceLocExpr to be below this node?
+    // If so, we need to update the CurSourceLocExprScope in CodeGenFunction.
 
     // No need for a DefaultInitExprScope: we don't handle 'this' in a
     // constant expression.

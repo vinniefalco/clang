@@ -556,20 +556,6 @@ public:
     return *ObjCData;
   }
 
-  /// Source location information about the default argument or member
-  /// initializer expression we're evaluating, if any.
-  CurrentSourceLocExprScope CurSourceLocExprScope;
-
-  /// The scope of a CXXDefaultArgExpr.
-  class SourceLocExprScope : public SourceLocExprScopeGuard {
-    using Base = SourceLocExprScopeGuard;
-
-  public:
-    SourceLocExprScope(CodeGenModule &CGM, const Expr *E,
-                       CodeGenFunction *CGF = nullptr);
-    SourceLocExprScope(CodeGenFunction &CGF, const Expr *E);
-  };
-
   // Version checking function, used to implement ObjC's @available:
   // i32 @__isOSVersionAtLeast(i32, i32, i32)
   llvm::Constant *IsOSVersionAtLeastFn = nullptr;

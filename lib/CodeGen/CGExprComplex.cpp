@@ -211,7 +211,7 @@ public:
     return Visit(E->getSubExpr());
   }
   ComplexPairTy VisitCXXDefaultArgExpr(CXXDefaultArgExpr *DAE) {
-    CodeGenModule::SourceLocExprScope Scope(CGF, DAE);
+    CodeGenFunction::CXXDefaultArgExprScope Scope(CGF, DAE);
     return Visit(DAE->getExpr());
   }
   ComplexPairTy VisitCXXDefaultInitExpr(CXXDefaultInitExpr *DIE) {
