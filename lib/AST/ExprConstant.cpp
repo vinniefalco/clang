@@ -703,7 +703,7 @@ namespace {
 
     /// Source location information about the default argument or default
     /// initializer expression we're evaluating, if any.
-    CurrentSourceLocExprScope<const CallStackFrame *> CurSourceLocExprScope;
+    CurrentSourceLocExprScope<CallStackFrame> CurSourceLocExprScope;
 
     enum EvaluationMode {
       /// Evaluate as a constant expression. Stop if we find that the expression
