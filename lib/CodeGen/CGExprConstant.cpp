@@ -1747,9 +1747,8 @@ ConstantLValueEmitter::VisitSourceLocExpr(const SourceLocExpr *E) {
   assert(Base.hasSourceLocExprContext() &&
          "no source location context in the lvalue base");
   assert(E->isStringType());
-  auto EvaluatedLoc = EvaluatedSourceLocExpr::Create(
-      CGM.getContext(), E, Base.getSourceLocExprContext());
-  return CGM.GetAddrOfConstantStringFromSourceLocExpr(E, EvaluatedLoc);
+  return CGM.GetAddrOfConstantStringFromSourceLocExpr(
+      E, Base.getSourceLocExprContext());
 }
 
 ConstantLValue

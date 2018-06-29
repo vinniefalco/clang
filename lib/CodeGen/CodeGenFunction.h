@@ -23,10 +23,10 @@
 #include "EHScopeStack.h"
 #include "VarBypassDetector.h"
 #include "clang/AST/CharUnits.h"
-#include "clang/AST/EvaluateSourceLocExpr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprOpenMP.h"
+#include "clang/AST/SourceLocExprContext.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/ABI.h"
 #include "clang/Basic/CapturedStmt.h"
@@ -1285,7 +1285,9 @@ private:
 public:
   /// Source location information about the default argument or member
   /// initializer expression we're evaluating, if any.
-  CurrentSourceLocExprScope CurSourceLocExprScope;
+  CurrentSourceLocExprScope<Decl> CurSourceLocExprScope;
+  using SourceLocExprScopeGuard =
+      CurrentSourceLocExprScope<Decl>::SourceLocExprScopeGuard;
 
   /// A scope within which we are constructing the fields of an object which
   /// might use a CXXDefaultInitExpr. This stashes away a 'this' value to use

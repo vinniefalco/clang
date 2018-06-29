@@ -4193,9 +4193,9 @@ CodeGenModule::GetAddrOfConstantStringFromObjCEncode(const ObjCEncodeExpr *E) {
 }
 
 ConstantAddress CodeGenModule::GetAddrOfConstantStringFromSourceLocExpr(
-    const SourceLocExpr *E, const EvaluatedSourceLocExpr &EvaluatedLoc) {
+    const SourceLocExpr *E, const SourceLocExprContext &EvaluatedCtx) {
   assert(E->isStringType());
-  std::string Str = EvaluatedLoc.getStringValue();
+  std::string Str = EvaluatedCtx.getStringValue(getContext(), E);
   StringRef GlobalName = [&]() -> StringRef {
     if (Str.empty())
       return ".str.empty";

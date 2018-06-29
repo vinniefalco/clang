@@ -3972,7 +3972,6 @@ private:
   void setLocEnd(SourceLocation L) { RParenLoc = L; }
 };
 
-
 /// Describes an C or C++ initializer list.
 ///
 /// InitListExpr describes an initializer list, which can be used to

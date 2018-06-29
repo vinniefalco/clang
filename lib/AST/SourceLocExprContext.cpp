@@ -1,4 +1,4 @@
-//===--- EvaluateSourceLocExpr.cpp - ----------------------------*- C++ -*-===//
+//===--- SourceLocExprContext.cpp -------------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,12 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines two basic utilities needed to fully evaluate a
-//  SourceLocExpr within a particular context and to track said context.
+//  This file defines two basic utilities needed to track and fully evaluate a
+//  SourceLocExpr within a particular context.
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/AST/EvaluateSourceLocExpr.h"
+#include "clang/AST/SourceLocExprContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
@@ -20,6 +20,37 @@
 #include "clang/Basic/SourceLocation.h"
 
 using namespace clang;
+
+static PresumedLoc getPresumedSourceLoc(const ASTContext &Ctx,
+                                        SourceLocation Loc) {
+  auto &SourceMgr = Ctx.getSourceManager();
+  PresumedLoc PLoc =
+      SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(Loc).getEnd());
+  assert(PLoc.isValid()); // FIXME: Learn how to handle this.
+  return PLoc;
+}
+
+static std::string getStringValue(const ASTContext &Ctx, const SourceLocExpr *E,
+                                  SourceLocation Loc,
+                                  const DeclContext *Context) {
+  switch (E->getIdentType()) {
+  case SourceLocExpr::File:
+    return getPresumedSourceLoc(Ctx, Loc).getFilename();
+  case SourceLocExpr::Function:
+    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(Context)) {
+      if (DeclarationName Name = FD->getDeclName())
+        return Name.getAsString();
+    }
+    return "";
+  case SourceLocExpr::Line:
+  case SourceLocExpr::Column:
+    llvm_unreachable("no string value for __builtin_LINE\\COLUMN");
+  }
+}
+
+//===----------------------------------------------------------------------===//
+//                    SourceLocExprContext Definitions
+//===----------------------------------------------------------------------===//
 
 QualType SourceLocExprContext::getType() const {
   if (!Type)
@@ -74,43 +105,6 @@ bool llvm::DenseMapInfo<SourceLocExprContext>::isEqual(
   return LHS == RHS;
 }
 
-CurrentSourceLocExprScope::CurrentSourceLocExprScope(const Expr *DefaultExpr,
-                                                     const void *EvalContextID)
-    : DefaultExpr(DefaultExpr), EvalContextID(EvalContextID) {
-  assert(DefaultExpr && "expression cannot be null");
-  // assert(EvalContextID && "context pointer cannot be null");
-  assert((isa<CXXDefaultArgExpr>(DefaultExpr) ||
-          isa<CXXDefaultInitExpr>(DefaultExpr)) &&
-         "expression must be either a default argument or initializer");
-}
-
-static PresumedLoc getPresumedSourceLoc(const ASTContext &Ctx,
-                                        SourceLocation Loc) {
-  auto &SourceMgr = Ctx.getSourceManager();
-  PresumedLoc PLoc =
-      SourceMgr.getPresumedLoc(SourceMgr.getExpansionRange(Loc).getEnd());
-  assert(PLoc.isValid()); // FIXME: Learn how to handle this.
-  return PLoc;
-}
-
-static std::string getStringValue(const ASTContext &Ctx, const SourceLocExpr *E,
-                                  SourceLocation Loc,
-                                  const DeclContext *Context) {
-  switch (E->getIdentType()) {
-  case SourceLocExpr::File:
-    return getPresumedSourceLoc(Ctx, Loc).getFilename();
-  case SourceLocExpr::Function:
-    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(Context)) {
-      if (DeclarationName Name = FD->getDeclName())
-        return Name.getAsString();
-    }
-    return "";
-  case SourceLocExpr::Line:
-  case SourceLocExpr::Column:
-    llvm_unreachable("no string value for __builtin_LINE\\COLUMN");
-  }
-}
-
 SourceLocExprContext SourceLocExprContext::Create(const ASTContext &Ctx,
                                                   const SourceLocExpr *E,
                                                   const Expr *DefaultExpr) {
@@ -138,25 +132,46 @@ SourceLocExprContext SourceLocExprContext::Create(const ASTContext &Ctx,
   return Base;
 }
 
-EvaluatedSourceLocExpr
-EvaluatedSourceLocExpr::Create(ASTContext const &Ctx, const SourceLocExpr *E,
-                               SourceLocExprContext Base) {
-  EvaluatedSourceLocExpr Info{Base, E};
+struct SourceLocExprContext::EvalResult {
+  std::string SVal;
+  APValue Result;
+};
 
-  PresumedLoc PLoc = getPresumedSourceLoc(Ctx, Info.getLocation());
+uint32_t SourceLocExprContext::getIntValue(const ASTContext &Ctx,
+                                           const SourceLocExpr *E) const {
+  assert(E->isIntType() && "SourceLocExpr is not a integer expression");
+  return EvaluateInternal(Ctx, E).Result.getInt().getZExtValue();
+}
+
+std::string SourceLocExprContext::getStringValue(const ASTContext &Ctx,
+                                                 const SourceLocExpr *E) const {
+  assert(E->isStringType() &&
+         "SourceLocExpr is not a string literal expression");
+  return EvaluateInternal(Ctx, E).SVal;
+}
+
+APValue SourceLocExprContext::Evaluate(const ASTContext &Ctx,
+                                       const SourceLocExpr *E) const {
+  return EvaluateInternal(Ctx, E).Result;
+}
+
+SourceLocExprContext::EvalResult
+SourceLocExprContext::EvaluateInternal(const ASTContext &Ctx,
+                                       const SourceLocExpr *E) const {
+  EvalResult Res;
+
+  PresumedLoc PLoc = getPresumedSourceLoc(Ctx, getLocation());
   assert(PLoc.isValid());
 
   switch (E->getIdentType()) {
   case SourceLocExpr::File:
   case SourceLocExpr::Function: {
-    std::string Val =
-        ::getStringValue(Ctx, E, Info.getLocation(), Info.getContext());
-    Info.setStringValue(std::move(Val));
+    Res.SVal = ::getStringValue(Ctx, E, getLocation(), getContext());
 
     APValue::LValueBase LVBase(E);
-    LVBase.setSourceLocExprContext(Base);
+    LVBase.setSourceLocExprContext(*this);
     APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
-    Info.Result.swap(StrVal);
+    Res.Result.swap(StrVal);
   } break;
   case SourceLocExpr::Line:
   case SourceLocExpr::Column: {
@@ -165,35 +180,9 @@ EvaluatedSourceLocExpr::Create(ASTContext const &Ctx, const SourceLocExpr *E,
 
     llvm::APSInt TmpRes(llvm::APInt(Ctx.getTargetInfo().getIntWidth(), Val));
     APValue NewVal(TmpRes);
-    Info.Result.swap(NewVal);
+    Res.Result.swap(NewVal);
   } break;
   }
-  return Info;
-}
 
-bool SourceLocExprScopeGuard::ShouldEnable(
-    CurrentSourceLocExprScope const &CurrentScope,
-    CurrentSourceLocExprScope const &NewScope) {
-  assert(NewScope.getDefaultExpr() && "the new scope should not be empty");
-  // Only update the default argument scope if we've entered a new
-  // evaluation context, and not when it's nested within another default
-  // argument. Example:
-  //    int bar(int x = __builtin_LINE()) { return x; }
-  //    int foo(int x = bar())  { return x; }
-  //    static_assert(foo() == __LINE__);
-  return CurrentScope.getDefaultExpr() == nullptr ||
-         NewScope.EvalContextID != CurrentScope.EvalContextID;
-}
-
-SourceLocExprScopeGuard::SourceLocExprScopeGuard(
-    CurrentSourceLocExprScope NewScope, CurrentSourceLocExprScope &Current)
-    : Current(Current), OldVal(Current), Enable(false) {
-
-  if ((Enable = ShouldEnable(Current, NewScope)))
-    Current = NewScope;
-}
-
-SourceLocExprScopeGuard::~SourceLocExprScopeGuard() {
-  if (Enable)
-    Current = OldVal;
+  return Res;
 }

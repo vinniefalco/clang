@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines the SourceLocExprContext used to track the current
-//  context and location when evaluating source location builtins.
+//  This file defines types used to track the current context and location
+//  when evaluating source location builtins.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,6 +17,8 @@
 
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/DenseMapInfo.h"
+#include <cassert>
+#include <type_traits>
 
 namespace clang {
 class ASTContext;
@@ -25,6 +27,7 @@ class Expr;
 class SourceLocExpr;
 class SourceLocation;
 class QualType;
+class APValue;
 
 /// Contextual information coorisponding to the AST context of a SourceLocExpr
 /// and which are required to fully evaluate it.
@@ -75,11 +78,92 @@ public:
   const DeclContext *getContext() const { return Context; }
   void setContext(const DeclContext *C) { Context = C; }
 
+  std::string getStringValue(const ASTContext &Ctx,
+                             const SourceLocExpr *E) const;
+  uint32_t getIntValue(const ASTContext &Ctx, const SourceLocExpr *E) const;
+
+  APValue Evaluate(const ASTContext &Ctx, const SourceLocExpr *E) const;
+
   friend inline bool operator==(SourceLocExprContext const &LHS,
                                 SourceLocExprContext const &RHS) {
     return LHS.Type == RHS.Type && LHS.Loc == RHS.Loc &&
            LHS.Context == RHS.Context;
   }
+
+private:
+  struct EvalResult;
+
+  EvalResult EvaluateInternal(const ASTContext &Ctx,
+                              const SourceLocExpr *E) const;
+};
+
+/// Represents the current source location and context used to determine the
+/// value of the source location builtins (ex. __builtin_LINE), including the
+/// context of default argument and default initializer expressions.
+template <class EvalContextType> class CurrentSourceLocExprScope {
+  /// The CXXDefaultArgExpr or CXXDefaultInitExpr we're currently evaluating.
+  const Expr *DefaultExpr = nullptr;
+
+  /// A pointer representing the current evaluation context. It is used to
+  /// determine context equality.
+  const EvalContextType *EvalContextID = nullptr;
+
+public:
+  /// A RAII style scope gaurd used for tracking the current source
+  /// location and context as used by the source location builtins
+  /// (ex. __builtin_LINE).
+  class SourceLocExprScopeGuard;
+
+  const Expr *getDefaultExpr() const { return DefaultExpr; }
+
+  explicit CurrentSourceLocExprScope() = default;
+
+private:
+  CurrentSourceLocExprScope(const Expr *DefaultExpr,
+                            const EvalContextType *EvalContextID)
+      : DefaultExpr(DefaultExpr), EvalContextID(EvalContextID) {}
+
+  CurrentSourceLocExprScope(CurrentSourceLocExprScope const &) = default;
+  CurrentSourceLocExprScope &
+  operator=(CurrentSourceLocExprScope const &) = default;
+};
+
+template <class EvalContextType>
+class CurrentSourceLocExprScope<EvalContextType>::SourceLocExprScopeGuard {
+public:
+  SourceLocExprScopeGuard(const Expr *DefaultExpr,
+                          CurrentSourceLocExprScope &Current,
+                          const EvalContextType *EvalContext)
+      : Current(Current), OldVal(Current), Enable(false) {
+    assert(DefaultExpr && "the new scope should not be empty");
+    CurrentSourceLocExprScope NewScope(DefaultExpr, EvalContext);
+    if ((Enable = ShouldEnable(EvalContext)))
+      Current = NewScope;
+  }
+
+  ~SourceLocExprScopeGuard() {
+    if (Enable)
+      Current = OldVal;
+  }
+
+private:
+  bool ShouldEnable(const EvalContextType *NewEvalContext) const {
+    // Only update the default argument scope if we've entered a new
+    // evaluation context, and not when it's nested within another default
+    // argument. Example:
+    //    int bar(int x = __builtin_LINE()) { return x; }
+    //    int foo(int x = bar())  { return x; }
+    //    static_assert(foo() == __LINE__);
+    return Current.getDefaultExpr() == nullptr ||
+           NewEvalContext != Current.EvalContextID;
+  }
+
+  SourceLocExprScopeGuard(SourceLocExprScopeGuard const &) = delete;
+  SourceLocExprScopeGuard &operator=(SourceLocExprScopeGuard const &) = delete;
+
+  CurrentSourceLocExprScope &Current;
+  CurrentSourceLocExprScope OldVal;
+  bool Enable;
 };
 
 } // end namespace clang
