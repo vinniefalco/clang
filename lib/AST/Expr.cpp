@@ -1964,11 +1964,6 @@ QualType SourceLocExpr::BuildStringArrayType(const ASTContext &Ctx,
                                   0);
 }
 
-QualType SourceLocExpr::EvaluatedSourceLocExpr::getType() const {
-  assert(!empty());
-  return Type;
-}
-
 SourceLocExpr::EvaluatedSourceLocExpr
 SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
                                  const Expr *DefaultExpr) const {
@@ -1990,7 +1985,7 @@ SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
   APValue Value = [&]() {
     switch (getIdentType()) {
     case SourceLocExpr::Function:
-    case SourceLocExpr::File:
+    case SourceLocExpr::File: {
       const char *Str = nullptr;
       if (getIdentType() == SourceLocExpr::File) {
         Str = PLoc.getFilename();
@@ -2002,8 +1997,9 @@ SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
       LVBase.setLValueString(Str);
       APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
       return StrVal;
+    }
     case SourceLocExpr::Line:
-    case SourceLocExpr::Column:
+    case SourceLocExpr::Column: {
       int64_t LineOrCol = getIdentType() == SourceLocExpr::Line
                               ? PLoc.getLine()
                               : PLoc.getColumn();
@@ -2012,15 +2008,17 @@ SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
       APValue NewVal(TmpRes);
       return NewVal;
     }
+    }
   }();
 
-  QualType Ty = [&]() {
+  QualType Ty = [&]() -> QualType {
     switch (getIdentType()) {
     case SourceLocExpr::File:
-    case SourceLocExpr::Function:
+    case SourceLocExpr::Function: {
       assert(Value.getLValueBase().hasLValueString());
       StringRef Str = Value.getLValueBase().getLValueString();
       return BuildStringArrayType(Ctx, Str.size() + 1);
+    }
     case SourceLocExpr::Line:
     case SourceLocExpr::Column:
       return Ctx.UnsignedIntTy;

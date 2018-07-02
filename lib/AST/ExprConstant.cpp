@@ -54,7 +54,7 @@
 using namespace clang;
 using llvm::APFloat;
 using llvm::APSInt;
-using SourceLocExpr::EvaluatedSourceLocExpr;
+using EvaluatedSourceLocExpr = SourceLocExpr::EvaluatedSourceLocExpr;
 
 static bool IsGlobalLValue(APValue::LValueBase B);
 
@@ -1391,8 +1391,9 @@ namespace {
       IsNullPtr = true;
     }
 
-    void setInvalid(APValue::LValueBase B, unsigned I = 0) {
-      set(B, true);
+    void setInvalid(const ASTContext &Ctx, APValue::LValueBase B,
+                    unsigned I = 0) {
+      set(Ctx, B, true);
     }
 
     // Check that this LValue is not based on a null pointer. If it is, produce
@@ -2615,13 +2616,11 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info,
 
   if (const auto *SLE = dyn_cast<SourceLocExpr>(Lit)) {
     assert(Base.hasLValueString());
-
     StringRef Str = Base.getLValueString();
-    auto Width = ;
     APSInt Res(Info.Ctx.getCharWidth(),
-               Info.Ctx.CharType->isUnsignedIntegerType());
+               Info.Ctx.CharTy->isUnsignedIntegerType());
     if (Index <= Str.size()) {
-      llvm::APInt IntVal(Width, Str.c_str()[Index]);
+      llvm::APInt IntVal(Info.Ctx.getCharWidth(), Str.data()[Index]);
       Res = IntVal;
     }
     return Res;
@@ -5136,7 +5135,7 @@ protected:
   typedef ExprEvaluatorBase<Derived> ExprEvaluatorBaseTy;
 
   bool Success(APValue::LValueBase B) {
-    Result.set(Info.Ctx, B);
+    Result.set(this->Info.Ctx, B);
     return true;
   }
 
@@ -5172,7 +5171,7 @@ public:
     if (!EvalOK) {
       if (!InvalidBaseOK)
         return false;
-      Result.setInvalid(E);
+      Result.setInvalid(this->Info.Ctx, E);
       return true;
     }
 
@@ -5702,7 +5701,7 @@ static bool evaluateLValueAsAllocSize(EvalInfo &Info, APValue::LValueBase Base,
 
   // Store E instead of E unwrapped so that the type of the LValue's base is
   // what the user wanted.
-  Result.setInvalid(E);
+  Result.setInvalid(Info.Ctx, E);
 
   QualType Pointee = E->getType()->castAs<PointerType>()->getPointeeType();
   Result.addUnsizedArray(Info, E, Pointee);
@@ -6007,7 +6006,7 @@ bool PointerExprEvaluator::visitNonBuiltinCallExpr(const CallExpr *E) {
   if (!(InvalidBaseOK && getAllocSizeAttr(E)))
     return false;
 
-  Result.setInvalid(E);
+  Result.setInvalid(Info.Ctx, E);
   QualType PointeeTy = E->getType()->castAs<PointerType>()->getPointeeType();
   Result.addUnsizedArray(Info, E, PointeeTy);
   return true;
@@ -10707,7 +10706,7 @@ bool Expr::EvaluateAsInitializer(APValue &Value, const ASTContext &Ctx,
   InitInfo.setEvaluatingDecl(VD, Value);
 
   LValue LVal;
-  LVal.set(Info.Ctx, VD);
+  LVal.set(Ctx, VD);
 
   // C++11 [basic.start.init]p2:
   //  Variables with static storage duration or thread storage duration shall be

@@ -50,7 +50,7 @@ llvm::DenseMapInfo<clang::APValue::LValueBase>::getEmptyKey() {
       DenseMapInfo<clang::APValue::LValueBase::PtrTy>::getEmptyKey(),
       DenseMapInfo<unsigned>::getEmptyKey(),
       DenseMapInfo<unsigned>::getEmptyKey(),
-      DenseMapInfo<StringRef>::getEmptyKey());
+      DenseMapInfo<const char *>::getEmptyKey());
 }
 
 clang::APValue::LValueBase
@@ -59,7 +59,7 @@ llvm::DenseMapInfo<clang::APValue::LValueBase>::getTombstoneKey() {
       DenseMapInfo<clang::APValue::LValueBase::PtrTy>::getTombstoneKey(),
       DenseMapInfo<unsigned>::getTombstoneKey(),
       DenseMapInfo<unsigned>::getTombstoneKey(),
-      DenseMapInfo<StringRef>::getTombstoneKey());
+      DenseMapInfo<const char *>::getTombstoneKey());
 }
 
 unsigned llvm::DenseMapInfo<clang::APValue::LValueBase>::getHashValue(
