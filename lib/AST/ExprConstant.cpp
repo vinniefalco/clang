@@ -1598,8 +1598,8 @@ static bool EvaluateAsRValue(EvalInfo &Info, const Expr *E, APValue &Result);
 template <class KeyTy>
 static APValue &createTemporary(const KeyTy *Key, bool IsLifetimeExtended,
                                 LValue &LV, CallStackFrame &Frame) {
-  LV.set({Key, Frame.Info.CurrentCall->Index,
-          Frame.Info.CurrentCall->getTempVersion()});
+  LV.set(Frame.Info.Ctx, {Key, Frame.Info.CurrentCall->Index,
+                          Frame.Info.CurrentCall->getTempVersion()});
   return Frame.createTemporary(Key, IsLifetimeExtended);
 }
 
@@ -5137,7 +5137,7 @@ protected:
   typedef ExprEvaluatorBase<Derived> ExprEvaluatorBaseTy;
 
   bool Success(APValue::LValueBase B) {
-    Result.set(B);
+    Result.set(Info.Ctx, B);
     return true;
   }
 
@@ -5388,8 +5388,8 @@ bool LValueExprEvaluator::VisitVarDecl(const Expr *E, const VarDecl *VD) {
 
   if (!VD->getType()->isReferenceType()) {
     if (Frame) {
-      Result.set({VD, Frame->Index,
-                  Info.CurrentCall->getCurrentTemporaryVersion(VD)});
+      Result.set(Info.Ctx, {VD, Frame->Index,
+                            Info.CurrentCall->getCurrentTemporaryVersion(VD)});
       return true;
     }
     return Success(VD);
@@ -5426,7 +5426,7 @@ bool LValueExprEvaluator::VisitMaterializeTemporaryExpr(
   if (E->getStorageDuration() == SD_Static) {
     Value = Info.Ctx.getMaterializedTemporaryValue(E, true);
     *Value = APValue();
-    Result.set(E);
+    Result.set(Info.Ctx, E);
   } else {
     Value = &createTemporary(E, E->getStorageDuration() == SD_Automatic, Result,
                              *Info.CurrentCall);
@@ -5717,7 +5717,7 @@ class PointerExprEvaluator
   bool InvalidBaseOK;
 
   bool Success(const Expr *E) {
-    Result.set(E);
+    Result.set(Info.Ctx, E);
     return true;
   }
 
@@ -5805,7 +5805,7 @@ public:
     EvaluatedSourceLocExpr LocCtx = EvaluatedSourceLocExpr::Create(
         Info.Ctx, E, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
     APValue LValResult = LocCtx.Evaluate(Info.Ctx, E);
-    Result.set(LValResult.getLValueBase());
+    Result.set(Info.Ctx, LValResult.getLValueBase());
     Result.addArray(Info, E, Info.Ctx.getAsConstantArrayType(LocCtx.getType()));
     return true;
   }
@@ -9113,7 +9113,7 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
         CmpInfo.getValueInfo(CmpInfo.makeWeakResult(ResKind))->VD;
     // Check and evaluate the result as a constant expression.
     LValue LV;
-    LV.set(VD);
+    LV.set(Info.Ctx, VD);
     if (!handleLValueToRValueConversion(Info, E, E->getType(), LV, Result))
       return false;
     return CheckConstantExpression(Info, E->getExprLoc(), E->getType(), Result);
@@ -10707,7 +10707,7 @@ bool Expr::EvaluateAsInitializer(APValue &Value, const ASTContext &Ctx,
   InitInfo.setEvaluatingDecl(VD, Value);
 
   LValue LVal;
-  LVal.set(VD);
+  LVal.set(Info.Ctx, VD);
 
   // C++11 [basic.start.init]p2:
   //  Variables with static storage duration or thread storage duration shall be
@@ -11345,7 +11345,7 @@ bool Expr::isPotentialConstantExpr(const FunctionDecl *FD,
   // is a temporary being used as the 'this' pointer.
   LValue This;
   ImplicitValueInitExpr VIE(RD ? Info.Ctx.getRecordType(RD) : Info.Ctx.IntTy);
-  This.set({&VIE, Info.CurrentCall->Index});
+  This.set(Info.Ctx, {&VIE, Info.CurrentCall->Index});
 
   ArrayRef<const Expr*> Args;
 
