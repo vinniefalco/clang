@@ -166,7 +166,6 @@ uint64_t EvaluatedSourceLocExpr::getIntValue(const ASTContext &Ctx,
 
 std::string EvaluatedSourceLocExpr::getStringValue(const ASTContext &Ctx,
                                                  const SourceLocExpr *E) const {
-  assert(E->isStringType() &&
-         "SourceLocExpr is not a string literal expression");
-  return makeStringValue(Ctx, E, getLocation(), getContext());
+  assert(false);
+  return "";
 }

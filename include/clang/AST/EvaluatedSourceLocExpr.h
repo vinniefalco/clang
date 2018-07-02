@@ -100,12 +100,9 @@ public:
       return false;
     if (LHS.Kind == IT_None)
       return true;
-    if (LHS.Kind == IT_IntType)
+    if (LHS.Kind == IT_LineOrCol)
       return LHS.LineOrCol == RHS.LineOrCol;
-    if (LHS.Kind == IT_StringType)
-      return LHS.FileOrFunc == RHS.FileOrFunc;
-    // We've got an empty key or tombstone
-    return LHS.Dummy == RHS.Dummy;
+    return false; // FIXME(EricWF)
   }
 };
 

@@ -38,9 +38,9 @@
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/CharUnits.h"
+#include "clang/AST/EvaluatedSourceLocExpr.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/RecordLayout.h"
-#include "clang/AST/SourceLocExprContext.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/Builtins.h"
@@ -68,8 +68,8 @@ namespace {
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
 
-    if (B.hasSourceLocExprContext())
-      return B.getSourceLocExprContext().getType();
+    if (B.hasEvaluatedSourceLocExpr())
+      return B.getEvaluatedSourceLocExpr().getType();
 
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>()) {
       // FIXME: It's unclear where we're supposed to take the type from, and
@@ -2608,9 +2608,9 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info,
   }
 
   if (const auto *SLE = dyn_cast<SourceLocExpr>(Lit)) {
-    assert(Base.hasSourceLocExprContext());
+    assert(Base.hasEvaluatedSourceLocExpr());
 
-    SourceLocExprContext LocCtx = Base.getSourceLocExprContext();
+    EvaluatedSourceLocExpr LocCtx = Base.getEvaluatedSourceLocExpr();
     std::string Str = LocCtx.getStringValue(Info.Ctx, SLE);
     const auto *StrTy = Info.Ctx.getAsConstantArrayType(LocCtx.getType());
     assert(StrTy && (StrTy->getSize().getZExtValue() == Str.size() + 1));
@@ -3356,9 +3356,9 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     } else if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(Base)) {
       // APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
-      assert(LVal.Base.hasSourceLocExprContext() &&
+      assert(LVal.Base.hasEvaluatedSourceLocExpr() &&
              "the type of a SourceLocExpr must be explicitly specified");
-      SourceLocExprContext LocCtx = LVal.Base.getSourceLocExprContext();
+      EvaluatedSourceLocExpr LocCtx = LVal.Base.getEvaluatedSourceLocExpr();
       APValue EvaluatedLoc = LocCtx.Evaluate(Info.Ctx, SLE);
       CompleteObject StrObj(&EvaluatedLoc, LocCtx.getType(), false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
@@ -5797,7 +5797,7 @@ public:
 
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
     assert(E && E->isStringType());
-    SourceLocExprContext LocCtx = SourceLocExprContext::Create(
+    EvaluatedSourceLocExpr LocCtx = EvaluatedSourceLocExpr::Create(
         Info.Ctx, E, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
     APValue LValResult = LocCtx.Evaluate(Info.Ctx, E);
     Result.set(LValResult.getLValueBase());
@@ -7376,7 +7376,7 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
 
 bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
   assert(E && E->isIntType());
-  auto LocCtx = SourceLocExprContext::Create(
+  auto LocCtx = EvaluatedSourceLocExpr::Create(
       Info.Ctx, E, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
   return Success(LocCtx.getIntValue(Info.Ctx, E), E);
 }
