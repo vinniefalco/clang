@@ -32,43 +32,6 @@ QualType EvaluatedSourceLocExpr::getType(const ASTContext &Ctx) const {
   return SourceLocExpr::BuildStringArrayType(Ctx, getStringSize() + 1);
 }
 
-
-EvaluatedSourceLocExpr llvm::DenseMapInfo<EvaluatedSourceLocExpr>::getEmptyKey() {
-  return EvaluatedSourceLocExpr(
-          EvaluatedSourceLocExpr::MakeKeyTag{},
-          DenseMapInfo<char>::getEmptyKey());
-}
-
-EvaluatedSourceLocExpr
-llvm::DenseMapInfo<EvaluatedSourceLocExpr>::getTombstoneKey() {
-  return EvaluatedSourceLocExpr(
-      EvaluatedSourceLocExpr::MakeKeyTag{},
-      DenseMapInfo<char>::getTombstoneKey());
-}
-
-unsigned llvm::DenseMapInfo<EvaluatedSourceLocExpr>::getHashValue(
-    EvaluatedSourceLocExpr const &Val) {
-  llvm::FoldingSetNodeID ID;
-  ID.AddInteger(Val.Kind);
-  switch (Val.Kind) {
-  case EvaluatedSourceLocExpr::IT_None:
-    ID.AddInteger(Val.Empty);
-    break;
-  case EvaluatedSourceLocExpr::IT_LineOrCol:
-    ID.AddInteger(Val.LineOrCol);
-    break;
-  case EvaluatedSourceLocExpr::IT_FileOrFunc:
-    ID.AddString(Val.FileOrFunc);
-    break;
-  }
-  return ID.ComputeHash();
-}
-
-bool llvm::DenseMapInfo<EvaluatedSourceLocExpr>::isEqual(
-    EvaluatedSourceLocExpr const &LHS, EvaluatedSourceLocExpr const &RHS) {
-  return LHS == RHS;
-}
-
 EvaluatedSourceLocExpr EvaluatedSourceLocExpr::Create(const ASTContext &Ctx,
                                                   const SourceLocExpr *E,
                                                   const Expr *DefaultExpr) {
@@ -89,26 +52,25 @@ EvaluatedSourceLocExpr EvaluatedSourceLocExpr::Create(const ASTContext &Ctx,
   switch (E->getIdentType()) {
   case SourceLocExpr::Function:
     const auto *FD = dyn_cast_or_null<FunctionDecl>(Context);
-    return EvaluatedSourceLocExpr(FD ? Ctx.getReadableFunctionName(FD) : "");
+    return EvaluatedSourceLocExpr(E, FD ? Ctx.getReadableFunctionName(FD) : "");
   case SourceLocExpr::File:
-    return EvaluatedSourceLocExpr(PLoc.getFilename());
+    return EvaluatedSourceLocExpr(E, PLoc.getFilename());
   case SourceLocExpr::Line:
   case SourceLocExpr::Column:
-    return EvaluatedSourceLocExpr(E->getIdentType() == SourceLocExpr::Line
-                                      ? PLoc.getLine()
-                                      : PLoc.getColumn());
+    return EvaluatedSourceLocExpr(E, E->getIdentType() == SourceLocExpr::Line
+                                         ? PLoc.getLine()
+                                         : PLoc.getColumn());
   }
   llvm_unreachable("unhandled case");
 
 }
 
-APValue EvaluatedSourceLocExpr::Evaluate(const ASTContext &Ctx,
-                                         const SourceLocExpr *E) const {
+APValue EvaluatedSourceLocExpr::getValue() const {
   switch (E->getIdentType()) {
   case SourceLocExpr::File:
   case SourceLocExpr::Function: {
     APValue::LValueBase LVBase(E);
-    LVBase.setEvaluatedSourceLocExpr(*this);
+    LVBase.setLValueString(FileOrFunc);
     APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
     return StrVal;
   }
@@ -129,7 +91,7 @@ uint64_t EvaluatedSourceLocExpr::getIntValue() const {
   return LineOrCol;
 }
 
-StringRef EvaluatedSourceLocExpr::getStringValue() const {
+const char *EvaluatedSourceLocExpr::getStringValue() const {
   assert(hasStringValue() && "no string value");
-  return StringRef(FileOrFunc);
+  return FileOrFunc;
 }

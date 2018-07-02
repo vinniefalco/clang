@@ -65,11 +65,14 @@ namespace {
   using SourceLocExprScopeGuard =
       CurrentSourceLocExprScope::SourceLocExprScopeGuard;
 
-  static QualType getType(APValue::LValueBase B) {
+  static QualType getType(const ASTContext &Ctx, APValue::LValueBase B) {
     if (!B) return QualType();
 
-    if (B.hasEvaluatedSourceLocExpr())
-      return B.getEvaluatedSourceLocExpr().getType();
+    if (B.hasLValueString()) {
+      assert(B.is<const Expr *>() && isa<SourceLocExpr>(B.get<const Expr *>()));
+      StringRef S = B.getLValueString();
+      return SourceLocExpr::BuildStringArrayType(Ctx, S.size() + 1);
+    }
 
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>()) {
       // FIXME: It's unclear where we're supposed to take the type from, and
@@ -189,7 +192,7 @@ namespace {
     assert(!isBaseAnAllocSizeCall(Base) &&
            "Unsized arrays shouldn't appear here");
     unsigned MostDerivedLength = 0;
-    Type = getType(Base);
+    Type = getType(Ctx, Base);
 
     for (unsigned I = 0, N = Path.size(); I != N; ++I) {
       if (Type->isArrayType()) {
@@ -1361,7 +1364,8 @@ namespace {
       IsNullPtr = V.isNullPointer();
     }
 
-    void set(APValue::LValueBase B, bool BInvalid = false) {
+    void set(const ASTContext &Ctx, APValue::LValueBase B,
+             bool BInvalid = false) {
 #ifndef NDEBUG
       // We only allow a few types of invalid bases. Enforce that here.
       if (BInvalid) {
@@ -1374,7 +1378,7 @@ namespace {
       Base = B;
       Offset = CharUnits::fromQuantity(0);
       InvalidBase = BInvalid;
-      Designator = SubobjectDesignator(getType(B));
+      Designator = SubobjectDesignator(getType(Ctx, B));
       IsNullPtr = false;
     }
 
@@ -1424,7 +1428,8 @@ namespace {
         return;
       }
       if (checkSubobject(Info, E, CSK_ArrayToPointer)) {
-        assert(getType(Base)->isPointerType() || getType(Base)->isArrayType());
+        assert(getType(Info.Ctx, Base)->isPointerType() ||
+               getType(Info.Ctx, Base)->isArrayType());
         Designator.FirstEntryIsAnUnsizedArray = true;
         Designator.addUnsizedArrayUnchecked(ElemTy);
       }
@@ -3141,7 +3146,7 @@ static CompleteObject findCompleteObject(EvalInfo &Info, const Expr *E,
 
   // Compute value storage location and type of base object.
   APValue *BaseVal = nullptr;
-  QualType BaseType = getType(LVal.Base);
+  QualType BaseType = getType(Info.Ctx, LVal.Base);
   bool LifetimeStartedInEvaluation = Frame;
 
   if (const ValueDecl *D = LVal.Base.dyn_cast<const ValueDecl*>()) {
@@ -7378,7 +7383,7 @@ bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
   assert(E && E->isIntType());
   auto LocCtx = EvaluatedSourceLocExpr::Create(
       Info.Ctx, E, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
-  return Success(LocCtx.getIntValue(Info.Ctx, E), E);
+  return Success(LocCtx.getIntValue(), E);
 }
 
 /// Check whether the given declaration can be directly converted to an integral
@@ -7721,7 +7726,7 @@ static bool isDesignatorAtObjectEnd(const ASTContext &Ctx, const LValue &LVal) {
   }
 
   unsigned I = 0;
-  QualType BaseType = getType(Base);
+  QualType BaseType = getType(Ctx, Base);
   if (LVal.Designator.FirstEntryIsAnUnsizedArray) {
     // If we don't know the array bound, conservatively assume we're looking at
     // the final array element.
@@ -8454,7 +8459,7 @@ static bool isOnePastTheEndOfCompleteObject(const ASTContext &Ctx,
 
   // A pointer to an incomplete type might be past-the-end if the type's size is
   // zero.  We cannot tell because the type is incomplete.
-  QualType Ty = getType(LV.getLValueBase());
+  QualType Ty = getType(Ctx, LV.getLValueBase());
   if (Ty->isIncompleteType())
     return true;
 
@@ -8982,8 +8987,9 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     // - Otherwise pointer comparisons are unspecified.
     if (!LHSDesignator.Invalid && !RHSDesignator.Invalid && IsRelational) {
       bool WasArrayIndex;
-      unsigned Mismatch = FindDesignatorMismatch(
-          getType(LHSValue.Base), LHSDesignator, RHSDesignator, WasArrayIndex);
+      unsigned Mismatch =
+          FindDesignatorMismatch(getType(Info.Ctx, LHSValue.Base),
+                                 LHSDesignator, RHSDesignator, WasArrayIndex);
       // At the point where the designators diverge, the comparison has a
       // specified value if:
       //  - we are comparing array indices
@@ -9027,7 +9033,7 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     // compare pointers within the object in question; otherwise, the result
     // depends on where the object is located in memory.
     if (!LHSValue.Base.isNull() && IsRelational) {
-      QualType BaseTy = getType(LHSValue.Base);
+      QualType BaseTy = getType(Info.Ctx, LHSValue.Base);
       if (BaseTy->isIncompleteType())
         return Error(E);
       CharUnits Size = Info.Ctx.getTypeSizeInChars(BaseTy);
@@ -9203,7 +9209,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     //   one past the last element of the array object, the behavior is
     //   undefined.
     if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
-        !AreElementsOfSameArray(getType(LHSValue.Base), LHSDesignator,
+        !AreElementsOfSameArray(getType(Info.Ctx, LHSValue.Base), LHSDesignator,
                                 RHSDesignator))
       Info.CCEDiag(E, diag::note_constexpr_pointer_subtraction_not_same_array);
 

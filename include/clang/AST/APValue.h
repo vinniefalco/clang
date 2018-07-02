@@ -14,7 +14,6 @@
 #ifndef LLVM_CLANG_AST_APVALUE_H
 #define LLVM_CLANG_AST_APVALUE_H
 
-#include "clang/AST/EvaluatedSourceLocExpr.h"
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APSInt.h"
@@ -65,8 +64,8 @@ public:
 
     template <class T>
     LValueBase(T P, unsigned I = 0, unsigned V = 0,
-               EvaluatedSourceLocExpr BaseCtx = {})
-        : Ptr(P), CallIndex(I), Version(V), LocContext(BaseCtx) {}
+               const char *LValueString = nullptr)
+        : Ptr(P), CallIndex(I), Version(V), LValueString(LValueString) {}
 
     template <class T>
     bool is() const { return Ptr.is<T>(); }
@@ -77,11 +76,9 @@ public:
     template <class T>
     T dyn_cast() const { return Ptr.dyn_cast<T>(); }
 
-    bool hasEvaluatedSourceLocExpr() const { return bool(LocContext); }
-    EvaluatedSourceLocExpr getEvaluatedSourceLocExpr() const { return LocContext; }
-    void setEvaluatedSourceLocExpr(EvaluatedSourceLocExpr Other) {
-      LocContext = Other;
-    }
+    bool hasLValueString() const { return bool(LValueString); }
+    const char *getLValueString() const { return LValueString; }
+    void setLValueString(const char *Str) { LValueString = Str; }
 
     void *getOpaqueValue() const;
 
@@ -107,13 +104,14 @@ public:
 
     bool operator==(const LValueBase &Other) const {
       return Ptr == Other.Ptr && CallIndex == Other.CallIndex &&
-             Version == Other.Version && LocContext == Other.LocContext;
+             Version == Other.Version &&
+             StringRef(LValueString) == StringRef(Other.LValueString);
     }
 
   private:
     PtrTy Ptr;
     unsigned CallIndex, Version;
-    EvaluatedSourceLocExpr LocContext;
+    const char *LValueString = nullptr;
   };
 
   typedef llvm::PointerIntPair<const Decl *, 1, bool> BaseOrMemberType;

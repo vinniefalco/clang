@@ -50,7 +50,7 @@ llvm::DenseMapInfo<clang::APValue::LValueBase>::getEmptyKey() {
       DenseMapInfo<clang::APValue::LValueBase::PtrTy>::getEmptyKey(),
       DenseMapInfo<unsigned>::getEmptyKey(),
       DenseMapInfo<unsigned>::getEmptyKey(),
-      DenseMapInfo<EvaluatedSourceLocExpr>::getEmptyKey());
+      DenseMapInfo<StringRef>::getEmptyKey());
 }
 
 clang::APValue::LValueBase
@@ -59,7 +59,7 @@ llvm::DenseMapInfo<clang::APValue::LValueBase>::getTombstoneKey() {
       DenseMapInfo<clang::APValue::LValueBase::PtrTy>::getTombstoneKey(),
       DenseMapInfo<unsigned>::getTombstoneKey(),
       DenseMapInfo<unsigned>::getTombstoneKey(),
-      DenseMapInfo<EvaluatedSourceLocExpr>::getTombstoneKey());
+      DenseMapInfo<StringRef>::getTombstoneKey());
 }
 
 unsigned llvm::DenseMapInfo<clang::APValue::LValueBase>::getHashValue(
@@ -68,8 +68,8 @@ unsigned llvm::DenseMapInfo<clang::APValue::LValueBase>::getHashValue(
   ID.AddPointer(Base.getOpaqueValue());
   ID.AddInteger(Base.getCallIndex());
   ID.AddInteger(Base.getVersion());
-  ID.AddInteger(DenseMapInfo<EvaluatedSourceLocExpr>::getHashValue(
-      Base.getEvaluatedSourceLocExpr()));
+  ID.AddInteger(
+      DenseMapInfo<StringRef>::getHashValue(StringRef(Base.getLValueString())));
   return ID.ComputeHash();
 }
 

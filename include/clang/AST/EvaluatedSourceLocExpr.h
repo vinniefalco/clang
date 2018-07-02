@@ -15,94 +15,64 @@
 #ifndef LLVM_CLANG_AST_EVALUATED_SOURCE_LOC_EXPR_H
 #define LLVM_CLANG_AST_EVALUATED_SOURCE_LOC_EXPR_H
 
-
-#include "clang/AST/DeclarationName.h"
+#include "clang/AST/Expr.h"
 #include "clang/Basic/LLVM.h"
-#include "llvm/ADT/DenseMapInfo.h"
+#include "llvm/ADT/StringRef.h"
 #include <cassert>
-#include <type_traits>
 
 namespace clang {
 class ASTContext;
-class DeclContext;
-class Expr;
-class SourceLocExpr;
 class SourceLocation;
 class QualType;
 class APValue;
-class FunctionDecl;
 
 /// Contextual information coorisponding to the AST context of a SourceLocExpr
 /// and which are required to fully evaluate it.
 ///
 /// This information is used by APValue to propagate
 struct EvaluatedSourceLocExpr {
-  /// The types of the source location builtins.
-  enum ResultKind : char { IT_None, IT_LineOrCol, IT_FileOrFunc };
 
 private:
-  friend struct llvm::DenseMapInfo<EvaluatedSourceLocExpr>;
+  const SourceLocExpr *E;
   union {
     uint64_t LineOrCol;
     const char *FileOrFunc;
-    /// Used by DenseMapInfo when creating empty and tombstone keys.
-    char Empty;
   };
-  ResultKind Kind;
 
-  struct MakeKeyTag {};
-
-  EvaluatedSourceLocExpr(MakeKeyTag, char KeyValue)
-    : Empty(KeyValue),  Kind(IT_None) {}
-  explicit EvaluatedSourceLocExpr(int64_t IntVal)
-      : LineOrCol(IntVal), Kind(IT_LineOrCol) {}
-  explicit EvaluatedSourceLocExpr(const char *StrVal)
-      : FileOrFunc(StrVal), Kind(IT_FileOrFunc) {}
+  explicit EvaluatedSourceLocExpr(const SourceLocExpr *E, int64_t IntVal)
+      : E(E), LineOrCol(IntVal) {}
+  explicit EvaluatedSourceLocExpr(const SourceLocExpr *E, const char *StrVal)
+      : E(E), FileOrFunc(StrVal) {}
 
 public:
-  EvaluatedSourceLocExpr() : Empty(0), Kind(IT_None) {}
-
+  EvaluatedSourceLocExpr() : E(nullptr) {}
 
   /// Determine and return the contextual information for a SourceLocExpr
   /// appearing in the (possibly null) default argument or initializer
   /// expression.
   static EvaluatedSourceLocExpr Create(const ASTContext &Ctx,
-                                     const SourceLocExpr *E,
-                                     const Expr *DefaultExpr);
+                                       const SourceLocExpr *E,
+                                       const Expr *DefaultExpr);
 
-  bool empty() const { return Kind == IT_None; }
+  bool empty() const { return !E; }
   explicit operator bool() const { return !empty(); }
 
-  bool hasStringValue() const { return Kind == IT_FileOrFunc; }
-  bool hasIntValue() const { return Kind == IT_LineOrCol; }
+  bool hasStringValue() const { return E && E->isStringType(); }
+  bool hasIntValue() const { return E && E->isIntType(); }
 
   QualType getType(const ASTContext &Ctx) const;
 
-  /// Evaluate the specified SourceLocExpr within this context and return
-  /// the value.
-  APValue Evaluate(const ASTContext &Ctx, const SourceLocExpr *E) const;
+  /// Return the evaluated Value.
+  APValue getValue() const;
 
   /// Evaluate the specified SourceLocExpr within this context and return
   /// the resulting string value.
-  StringRef getStringValue() const;
-  unsigned getStringSize() const { return getStringValue().size(); }
+  const char *getStringValue() const;
+  unsigned getStringSize() const { return StringRef(getStringValue()).size(); }
 
   /// Evaluate the specified SourceLocExpr within this context and return
   /// the resulting integer value.
   uint64_t getIntValue() const;
-
-  friend inline bool operator==(EvaluatedSourceLocExpr const &LHS,
-                                EvaluatedSourceLocExpr const &RHS) {
-    if (LHS.Kind != RHS.Kind)
-      return false;
-    if (LHS.Kind == IT_None)
-      return true;
-    if (LHS.Kind == IT_LineOrCol)
-      return LHS.LineOrCol == RHS.LineOrCol;
-    if (LHS.Kind == IT_FileOrFunc)
-      return LHS.FileOrFunc == RHS.FileOrFunc;
-    return false;
-  }
 };
 
 /// Represents the current source location and context used to determine the
@@ -177,15 +147,5 @@ private:
 };
 
 } // end namespace clang
-
-namespace llvm {
-template <> struct DenseMapInfo<clang::EvaluatedSourceLocExpr> {
-  using KeyType = clang::EvaluatedSourceLocExpr;
-  static KeyType getEmptyKey();
-  static KeyType getTombstoneKey();
-  static unsigned getHashValue(const KeyType &Val);
-  static bool isEqual(const KeyType &LHS, const KeyType &RHS);
-};
-} // namespace llvm
 
 #endif // LLVM_CLANG_AST_EVALUATED_SOURCE_LOC_EXPR_H
