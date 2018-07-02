@@ -4009,7 +4009,6 @@ public:
   /// Evaluate the specified SourceLocExpr within this context and return
   /// the resulting string value.
   const char *getStringValue() const;
-  unsigned getStringSize() const { return StringRef(getStringValue()).size(); }
 
   /// Evaluate the specified SourceLocExpr within this context and return
   /// the resulting integer value.
