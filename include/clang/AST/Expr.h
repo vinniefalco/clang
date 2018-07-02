@@ -3995,24 +3995,18 @@ class SourceLocExpr::EvaluatedSourceLocExpr {
       : Value(std::move(V)), Type(Type) {}
 
 public:
-  bool empty() const { return Value.isUninit(); }
-  explicit operator bool() const { return !empty(); }
+  /// Return the type of the evaluated SourceLocExpr. For string values this
+  /// is the ConstantArrayType, not the character pointer type.
+  QualType getType() const { return Type; }
+
+  /// Return the evaluated value.
+  APValue getValue() const { return Value; }
+
+  const char *getStringValue() const;
+  uint64_t getIntValue() const;
 
   bool hasStringValue() const { return Value.isLValue(); }
   bool hasIntValue() const { return Value.isInt(); }
-
-  QualType getType() const { return Type; }
-
-  /// Return the evaluated Value.
-  APValue getValue() const { return Value; }
-
-  /// Evaluate the specified SourceLocExpr within this context and return
-  /// the resulting string value.
-  const char *getStringValue() const;
-
-  /// Evaluate the specified SourceLocExpr within this context and return
-  /// the resulting integer value.
-  uint64_t getIntValue() const;
 };
 
 /// Describes an C or C++ initializer list.
