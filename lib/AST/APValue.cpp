@@ -50,6 +50,10 @@ static bool isEmptyOrTombstoneStr(const char *S) {
 
 bool APValue::LValueBase::compareLValueString(
     const LValueBase const &Other) const {
+  // fast path
+  if (LValueString == Other.LValueString)
+    return true;
+
   if (isEmptyOrTombstoneStr(LValueString) ||
       isEmptyOrTombstoneStr(Other.LValueString))
     return LValueString == Other.LValueString;
