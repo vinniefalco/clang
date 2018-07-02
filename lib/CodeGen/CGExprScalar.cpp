@@ -593,7 +593,7 @@ public:
     LValue LV =
         CGF.MakeAddrLValue(CGF.CGM.GetAddrOfConstantStringFromSourceLocExpr(
                                SLE, Evaluated.getStringValue()),
-                           LocCtx.getType(), AlignmentSource::Decl);
+                           Evaluated.getType(), AlignmentSource::Decl);
     return CGF.EmitArrayToPointerDecay(SLE, Evaluated.getType(), LV)
         .getPointer();
   }
