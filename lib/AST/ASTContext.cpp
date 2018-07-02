@@ -9910,7 +9910,7 @@ const char *ASTContext::getReadableFunctionName(const FunctionDecl *D) const {
       strcpy(Buff, S.c_str());
       Result = Buff;
     }
-    assert(false && "FIXME(EricWF)");
+    llvm_unreachable("function is expected to have non-empty name");
   }
   return Result;
 }

@@ -3916,7 +3916,8 @@ public:
 
   class EvaluatedSourceLocExpr;
 
-  /// FIXME(EricWF): Document this
+  /// Return the result of evaluating this SourceLocExpr in the specified
+  /// (and possibly null) default argument or initialization context.
   EvaluatedSourceLocExpr EvaluateInContext(const ASTContext &Ctx,
                                            const Expr *DefaultExpr) const;
 
