@@ -2009,6 +2009,7 @@ SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
       return NewVal;
     }
     }
+    llvm_unreachable("unhandled case");
   }();
 
   QualType Ty = [&]() -> QualType {
@@ -2023,11 +2024,10 @@ SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
     case SourceLocExpr::Column:
       return Ctx.UnsignedIntTy;
     }
+    llvm_unreachable("unhandled case");
   }();
 
   return EvaluatedSourceLocExpr(std::move(Value), Ty);
-
-  llvm_unreachable("unhandled case");
 }
 
 uint64_t SourceLocExpr::EvaluatedSourceLocExpr::getIntValue() const {
