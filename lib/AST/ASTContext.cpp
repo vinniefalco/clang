@@ -9899,6 +9899,22 @@ ASTContext::getMaterializedTemporaryValue(const MaterializeTemporaryExpr *E,
   return MaterializedTemporaryValues.lookup(E);
 }
 
+const char *ASTContext::getReadableFunctionName(const FunctionDecl *D) const {
+  assert(D && "decl may not be null");
+  const char *&Result = ReadableFunctionNameCache[D];
+  if (!Result) {
+    if (DeclarationName Name = D->getDeclName()) {
+      std::string S = Name.getAsString();
+      assert(S.size() >= 1);
+      char *Buff = (char *)Allocate(S.size() + 1);
+      strcpy(Buff, S.c_str());
+      Result = Buff;
+    }
+    assert(false && "FIXME(EricWF)");
+  }
+  return Result;
+}
+
 bool ASTContext::AtomicUsesUnsupportedLibcall(const AtomicExpr *E) const {
   const llvm::Triple &T = getTargetInfo().getTriple();
   if (!T.isOSDarwin())

@@ -249,6 +249,12 @@ class ASTContext : public RefCountedBase<ASTContext> {
   llvm::DenseMap<const MaterializeTemporaryExpr *, APValue *>
     MaterializedTemporaryValues;
 
+  /// A cache maping a function declaration to its human-readable function name.
+  ///
+  /// This is lazily created.  This is intentionally not serialized.
+  mutable llvm::DenseMap<const FunctionDecl *, const char *>
+      ReadableFunctionNameCache;
+
   /// Representation of a "canonical" template template parameter that
   /// is used in canonical template names.
   class CanonicalTemplateTemplateParm : public llvm::FoldingSetNode {
@@ -2717,6 +2723,10 @@ public:
   /// of static storage duration.
   APValue *getMaterializedTemporaryValue(const MaterializeTemporaryExpr *E,
                                          bool MayCreate);
+
+  /// Return a string representing the human readable name for the specified
+  /// function declaration.
+  const char *getReadableFunctionName(const FunctionDecl *D) const;
 
   //===--------------------------------------------------------------------===//
   //                    Statistics

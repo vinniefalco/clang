@@ -38,31 +38,27 @@ class FunctionDecl;
 /// This information is used by APValue to propagate
 struct EvaluatedSourceLocExpr {
   /// The types of the source location builtins.
-  enum ResultKind : char { IT_None, IT_LineOrCol, IT_File, IT_Func };
+  enum ResultKind : char { IT_None, IT_LineOrCol, IT_FileOrFunc };
 
 private:
   friend struct llvm::DenseMapInfo<EvaluatedSourceLocExpr>;
   union {
     uint64_t LineOrCol;
-    const char *FileName;
-    DeclarationName FuncName;
+    const char *FileOrFunc;
     /// Used by DenseMapInfo when creating empty and tombstone keys.
     char Empty;
   };
   ResultKind Kind;
 
   struct MakeKeyTag {};
-  struct LineOrColTag {};
-  struct FileTag {};
-  struct FuncTag {};
+
   EvaluatedSourceLocExpr(MakeKeyTag, char KeyValue)
     : Empty(KeyValue),  Kind(IT_None) {}
-  explicit EvaluatedSourceLocExpr(LineOrColTag, int64_t IntVal)
-    : LineOrCol(IntVal), Kind(IT_LineOrCol) {}
-  explicit EvaluatedSourceLocExpr(FileTag, const char* StrVal)
-    : FileName(StrVal), Kind(IT_File) {}
-  explicit EvaluatedSourceLocExpr(FuncTag, DeclarationName Name)
-    : FuncName(Name), Kind(IT_Func) {}
+  explicit EvaluatedSourceLocExpr(int64_t IntVal)
+      : LineOrCol(IntVal), Kind(IT_LineOrCol) {}
+  explicit EvaluatedSourceLocExpr(const char *StrVal)
+      : FileOrFunc(StrVal), Kind(IT_FileOrFunc) {}
+
 public:
   EvaluatedSourceLocExpr() : Empty(0), Kind(IT_None) {}
 
@@ -77,7 +73,7 @@ public:
   bool empty() const { return Kind == IT_None; }
   explicit operator bool() const { return !empty(); }
 
-  bool hasStringValue() const { return Kind == IT_Func || Kind == IT_File; }
+  bool hasStringValue() const { return Kind == IT_FileOrFunc; }
   bool hasIntValue() const { return Kind == IT_LineOrCol; }
 
   QualType getType(const ASTContext &Ctx) const;
@@ -89,6 +85,7 @@ public:
   /// Evaluate the specified SourceLocExpr within this context and return
   /// the resulting string value.
   StringRef getStringValue() const;
+  unsigned getStringSize() const { return getStringValue().size(); }
 
   /// Evaluate the specified SourceLocExpr within this context and return
   /// the resulting integer value.
@@ -102,7 +99,9 @@ public:
       return true;
     if (LHS.Kind == IT_LineOrCol)
       return LHS.LineOrCol == RHS.LineOrCol;
-    return false; // FIXME(EricWF)
+    if (LHS.Kind == IT_FileOrFunc)
+      return LHS.FileOrFunc == RHS.FileOrFunc;
+    return false;
   }
 };
 
