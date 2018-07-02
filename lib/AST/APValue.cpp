@@ -48,8 +48,7 @@ static bool isEmptyOrTombstoneStr(const char *S) {
   return S == SI::getEmptyKey() || S == SI::getTombstoneKey();
 }
 
-bool APValue::LValueBase::compareLValueString(
-    const LValueBase const &Other) const {
+bool APValue::LValueBase::compareLValueString(const LValueBase &Other) const {
   // fast path
   if (LValueString == Other.LValueString)
     return true;
