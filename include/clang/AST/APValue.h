@@ -76,10 +76,8 @@ public:
     template <class T>
     T dyn_cast() const { return Ptr.dyn_cast<T>(); }
 
-    bool hasLValueString() const;
-    const char *getLValueString() const;
-
-    const char *getLValueStringUnsafe() const { return LValueString; }
+    bool hasLValueString() const { return LValueString; }
+    const char *getLValueString() const { return LValueString; }
     void setLValueString(const char *Str) { LValueString = Str; }
 
     void *getOpaqueValue() const;
@@ -104,12 +102,20 @@ public:
       return Version;
     }
 
-    bool operator==(const LValueBase &Other) const;
+    bool operator==(const LValueBase &Other) const {
+      return Ptr == Other.Ptr && CallIndex == Other.CallIndex &&
+             Version == Other.Version && compareLValueString(Other);
+    }
 
   private:
+    bool compareLValueString(const LValueBase &Other) const;
+
     PtrTy Ptr;
     unsigned CallIndex, Version;
-    const char *LValueString = nullptr;
+
+    /// If this LValueBase refers to a SourceLocExpr for a file or function,
+    /// this represents the evaluated value of that expression.
+    const char *LValueString;
   };
 
   typedef llvm::PointerIntPair<const Decl *, 1, bool> BaseOrMemberType;
