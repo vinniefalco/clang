@@ -2025,7 +2025,7 @@ SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
     }
   }();
 
-  return EvaluatedSourceLocExpr(this, std::move(Value), Ty);
+  return EvaluatedSourceLocExpr(std::move(Value), Ty);
 
   llvm_unreachable("unhandled case");
 }

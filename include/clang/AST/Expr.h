@@ -3985,19 +3985,18 @@ private:
 class SourceLocExpr::EvaluatedSourceLocExpr {
   friend class SourceLocExpr;
 
-  const SourceLocExpr *const E;
   const APValue Value;
   const QualType Type;
 
-  EvaluatedSourceLocExpr(const SourceLocExpr *E, APValue V, QualType Type)
-      : E(E), Value(std::move(V)), Type(Type) {}
+  EvaluatedSourceLocExpr(APValue V, QualType Type)
+      : Value(std::move(V)), Type(Type) {}
 
 public:
-  bool empty() const { return !E; }
+  bool empty() const { return Value.isUninit(); }
   explicit operator bool() const { return !empty(); }
 
-  bool hasStringValue() const { return E && E->isStringType(); }
-  bool hasIntValue() const { return E && E->isIntType(); }
+  bool hasStringValue() const { return Value.isLValue(); }
+  bool hasIntValue() const { return Value.isInt(); }
 
   QualType getType() const { return Type; }
 
