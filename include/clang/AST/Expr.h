@@ -3911,28 +3911,28 @@ public:
 /// Represents a function call to one of __builtin_LINE(), __builtin_COLUMN(),
 /// __builtin_FUNCTION(), or __builtin_FILE()
 class SourceLocExpr final : public Expr {
-public:
-  enum IdentType { Function, File, Line, Column };
-
-  class EvaluatedSourceLocExpr;
-
-  /// Return the result of evaluating this SourceLocExpr in the specified
-  /// (and possibly null) default argument or initialization context.
-  EvaluatedSourceLocExpr EvaluateInContext(const ASTContext &Ctx,
-                                           const Expr *DefaultExpr) const;
-
-private:
   SourceLocation BuiltinLoc, RParenLoc;
   DeclContext *ParentContext;
 
 public:
-  static QualType BuildStringArrayType(const ASTContext &Ctx, unsigned Size);
+  enum IdentType { Function, File, Line, Column };
+
+  /// Represents the result of evaluating a SourceLocExpr within a specific
+  /// context.
+  class EvaluatedSourceLocExpr;
 
   SourceLocExpr(const ASTContext &Ctx, IdentType Type, SourceLocation BLoc,
                 SourceLocation RParenLoc, DeclContext *Context);
 
   /// Build an empty call expression.
   explicit SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
+
+  static QualType BuildStringArrayType(const ASTContext &Ctx, unsigned Size);
+
+  /// Return the result of evaluating this SourceLocExpr in the specified
+  /// (and possibly null) default argument or initialization context.
+  EvaluatedSourceLocExpr EvaluateInContext(const ASTContext &Ctx,
+                                           const Expr *DefaultExpr) const;
 
   /// Return a string representing the name of the specific builtin function.
   StringRef getBuiltinStr() const LLVM_READONLY;
@@ -3983,6 +3983,8 @@ private:
   void setLocEnd(SourceLocation L) { RParenLoc = L; }
 };
 
+/// Represents the result of evaluating a SourceLocExpr within a specific
+/// context.
 class SourceLocExpr::EvaluatedSourceLocExpr {
   friend class SourceLocExpr;
 
