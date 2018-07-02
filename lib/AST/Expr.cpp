@@ -1964,6 +1964,84 @@ QualType SourceLocExpr::BuildStringArrayType(const ASTContext &Ctx,
                                   0);
 }
 
+QualType SourceLocExpr::EvaluatedSourceLocExpr::getType() const {
+  assert(!empty());
+  return Type;
+}
+
+SourceLocExpr::EvaluatedSourceLocExpr
+SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
+                                 const Expr *DefaultExpr) const {
+  SourceLocation Loc;
+  const DeclContext *Context;
+
+  std::tie(Loc,
+           Context) = [&]() -> std::pair<SourceLocation, const DeclContext *> {
+    if (auto *DIE = dyn_cast_or_null<CXXDefaultInitExpr>(DefaultExpr))
+      return {DIE->getUsedLocation(), DIE->getUsedContext()};
+    if (auto *DAE = dyn_cast_or_null<CXXDefaultArgExpr>(DefaultExpr))
+      return {DAE->getUsedLocation(), DAE->getUsedContext()};
+    return {this->getLocation(), this->getParentContext()};
+  }();
+
+  PresumedLoc PLoc = Ctx.getSourceManager().getPresumedLoc(
+      Ctx.getSourceManager().getExpansionRange(Loc).getEnd());
+
+  APValue Value = [&]() {
+    switch (getIdentType()) {
+    case SourceLocExpr::Function:
+    case SourceLocExpr::File:
+      const char *Str = nullptr;
+      if (getIdentType() == SourceLocExpr::File) {
+        Str = PLoc.getFilename();
+      } else {
+        const auto *FD = dyn_cast_or_null<FunctionDecl>(Context);
+        Str = FD ? Ctx.getReadableFunctionName(FD) : "";
+      }
+      APValue::LValueBase LVBase(this);
+      LVBase.setLValueString(Str);
+      APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
+      return StrVal;
+    case SourceLocExpr::Line:
+    case SourceLocExpr::Column:
+      int64_t LineOrCol = getIdentType() == SourceLocExpr::Line
+                              ? PLoc.getLine()
+                              : PLoc.getColumn();
+      llvm::APSInt TmpRes(
+          llvm::APInt(Ctx.getTargetInfo().getIntWidth(), LineOrCol));
+      APValue NewVal(TmpRes);
+      return NewVal;
+    }
+  }();
+
+  QualType Ty = [&]() {
+    switch (getIdentType()) {
+    case SourceLocExpr::File:
+    case SourceLocExpr::Function:
+      assert(Value.getLValueBase().hasLValueString());
+      StringRef Str = Value.getLValueBase().getLValueString();
+      return BuildStringArrayType(Ctx, Str.size() + 1);
+    case SourceLocExpr::Line:
+    case SourceLocExpr::Column:
+      return Ctx.UnsignedIntTy;
+    }
+  }();
+
+  return EvaluatedSourceLocExpr(this, std::move(Value), Ty);
+
+  llvm_unreachable("unhandled case");
+}
+
+uint64_t SourceLocExpr::EvaluatedSourceLocExpr::getIntValue() const {
+  assert(hasIntValue() && "SourceLocExpr is not a integer expression");
+  return Value.getInt().getExtValue();
+}
+
+const char *SourceLocExpr::EvaluatedSourceLocExpr::getStringValue() const {
+  assert(hasStringValue() && "no string value");
+  return Value.getLValueBase().getLValueString();
+}
+
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,
                            ArrayRef<Expr*> initExprs, SourceLocation rbraceloc)
   : Expr(InitListExprClass, QualType(), VK_RValue, OK_Ordinary, false, false,

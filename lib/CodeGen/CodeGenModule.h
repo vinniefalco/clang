@@ -24,7 +24,6 @@
 #include "clang/AST/DeclOpenMP.h"
 #include "clang/AST/GlobalDecl.h"
 #include "clang/AST/Mangle.h"
-#include "clang/AST/SourceLocExprContext.h"
 #include "clang/Basic/ABI.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/Module.h"
@@ -887,9 +886,10 @@ public:
   GetAddrOfConstantStringFromObjCEncode(const ObjCEncodeExpr *);
 
   /// Return a pointer to a constant array for the given SourceLocExpr node
-  /// when evaluated in the current environment.
-  ConstantAddress GetAddrOfConstantStringFromSourceLocExpr(
-      const SourceLocExpr *E, const SourceLocExprContext &EvaluatedLoc);
+  /// which evaluates to the specified value.
+  ConstantAddress
+  GetAddrOfConstantStringFromSourceLocExpr(const SourceLocExpr *E,
+                                           StringRef Value);
 
   /// Returns a pointer to a character array containing the literal and a
   /// terminating '\0' character. The result has pointer to array type.

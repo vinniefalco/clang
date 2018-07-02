@@ -32,7 +32,6 @@ add_clang_library(clangAST
   DeclOpenMP.cpp
   DeclPrinter.cpp
   DeclTemplate.cpp
-  EvaluatedSourceLocExpr.cpp
   Expr.cpp
   ExprClassification.cpp
   ExprConstant.cpp

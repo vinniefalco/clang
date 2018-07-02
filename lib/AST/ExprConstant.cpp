@@ -38,7 +38,7 @@
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/CharUnits.h"
-#include "clang/AST/EvaluatedSourceLocExpr.h"
+#include "clang/AST/CurrentSourceLocExprScope.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/StmtVisitor.h"
@@ -52,8 +52,9 @@
 #define DEBUG_TYPE "exprconstant"
 
 using namespace clang;
-using llvm::APSInt;
 using llvm::APFloat;
+using llvm::APSInt;
+using SourceLocExpr::EvaluatedSourceLocExpr;
 
 static bool IsGlobalLValue(APValue::LValueBase B);
 
@@ -2613,15 +2614,12 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info,
   }
 
   if (const auto *SLE = dyn_cast<SourceLocExpr>(Lit)) {
-    assert(Base.hasEvaluatedSourceLocExpr());
+    assert(Base.hasLValueString());
 
-    EvaluatedSourceLocExpr LocCtx = Base.getEvaluatedSourceLocExpr();
-    std::string Str = LocCtx.getStringValue(Info.Ctx, SLE);
-    const auto *StrTy = Info.Ctx.getAsConstantArrayType(LocCtx.getType());
-    assert(StrTy && (StrTy->getSize().getZExtValue() == Str.size() + 1));
-
-    auto Width = Info.Ctx.getCharWidth();
-    APSInt Res(Width, StrTy->getElementType()->isUnsignedIntegerType());
+    StringRef Str = Base.getLValueString();
+    auto Width = ;
+    APSInt Res(Info.Ctx.getCharWidth(),
+               Info.Ctx.CharType->isUnsignedIntegerType());
     if (Index <= Str.size()) {
       llvm::APInt IntVal(Width, Str.c_str()[Index]);
       Res = IntVal;
@@ -3360,12 +3358,13 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       CompleteObject StrObj(&Str, Base->getType(), false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     } else if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(Base)) {
-      // APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
-      assert(LVal.Base.hasEvaluatedSourceLocExpr() &&
+      assert(LVal.Base.hasLValueString() &&
              "the type of a SourceLocExpr must be explicitly specified");
-      EvaluatedSourceLocExpr LocCtx = LVal.Base.getEvaluatedSourceLocExpr();
-      APValue EvaluatedLoc = LocCtx.Evaluate(Info.Ctx, SLE);
-      CompleteObject StrObj(&EvaluatedLoc, LocCtx.getType(), false);
+      StringRef StrVal = LVal.Base.getLValueString();
+      QualType StrTy =
+          SourceLocExpr::BuildStringArrayType(Info.Ctx, StrVal.size() + 1);
+      APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
+      CompleteObject StrObj(&Str, StrTy, false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     }
   }
@@ -5802,11 +5801,12 @@ public:
 
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
     assert(E && E->isStringType());
-    EvaluatedSourceLocExpr LocCtx = EvaluatedSourceLocExpr::Create(
-        Info.Ctx, E, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
-    APValue LValResult = LocCtx.Evaluate(Info.Ctx, E);
+    EvaluatedSourceLocExpr Evaluated = E->EvaluateInContext(
+        Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
+    APValue LValResult = Evaluated.getValue();
     Result.set(Info.Ctx, LValResult.getLValueBase());
-    Result.addArray(Info, E, Info.Ctx.getAsConstantArrayType(LocCtx.getType()));
+    Result.addArray(Info, E,
+                    Info.Ctx.getAsConstantArrayType(Evaluated.getType()));
     return true;
   }
 
@@ -7381,9 +7381,9 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
 
 bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
   assert(E && E->isIntType());
-  auto LocCtx = EvaluatedSourceLocExpr::Create(
-      Info.Ctx, E, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
-  return Success(LocCtx.getIntValue(), E);
+  EvaluatedSourceLocExpr Evaluated = E->EvaluateInContext(
+      Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
+  return Success(Evaluated.getIntValue(), E);
 }
 
 /// Check whether the given declaration can be directly converted to an integral

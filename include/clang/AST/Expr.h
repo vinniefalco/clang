@@ -3914,7 +3914,12 @@ class SourceLocExpr final : public Expr {
 public:
   enum IdentType { Function, File, Line, Column };
 
-  // FIXME: Ensure the IdentType values stay synced with those in EvaluatedSourceLocExpr
+  class EvaluatedSourceLocExpr;
+
+  /// FIXME(EricWF): Document this
+  EvaluatedSourceLocExpr EvaluateInContext(const ASTContext &Ctx,
+                                           const Expr *DefaultExpr) const;
+
 private:
   SourceLocation BuiltinLoc, RParenLoc;
   DeclContext *ParentContext;
@@ -3975,6 +3980,38 @@ private:
   void setParentContext(DeclContext *DC) { ParentContext = DC; }
   void setLocStart(SourceLocation L) { BuiltinLoc = L; }
   void setLocEnd(SourceLocation L) { RParenLoc = L; }
+};
+
+class SourceLocExpr::EvaluatedSourceLocExpr {
+  friend class SourceLocExpr;
+
+  const SourceLocExpr *const E;
+  const APValue Value;
+  const QualType Type;
+
+  EvaluatedSourceLocExpr(const SourceLocExpr *E, APValue V, QualType Type)
+      : E(E), Value(std::move(V)), Type(Type) {}
+
+public:
+  bool empty() const { return !E; }
+  explicit operator bool() const { return !empty(); }
+
+  bool hasStringValue() const { return E && E->isStringType(); }
+  bool hasIntValue() const { return E && E->isIntType(); }
+
+  QualType getType() const { return Type; }
+
+  /// Return the evaluated Value.
+  APValue getValue() const { return Value; }
+
+  /// Evaluate the specified SourceLocExpr within this context and return
+  /// the resulting string value.
+  const char *getStringValue() const;
+  unsigned getStringSize() const { return StringRef(getStringValue()).size(); }
+
+  /// Evaluate the specified SourceLocExpr within this context and return
+  /// the resulting integer value.
+  uint64_t getIntValue() const;
 };
 
 /// Describes an C or C++ initializer list.
