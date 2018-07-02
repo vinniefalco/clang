@@ -2017,6 +2017,8 @@ SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
     case SourceLocExpr::File:
     case SourceLocExpr::Function: {
       assert(Value.getLValueBase().hasLValueString());
+      // Build the ConstantArrayType coorisponding to the evaluated strings
+      // length.
       StringRef Str = Value.getLValueBase().getLValueString();
       return BuildStringArrayType(Ctx, Str.size() + 1);
     }
