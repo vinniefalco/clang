@@ -43,6 +43,32 @@ APValue::LValueBase::operator bool () const {
   return static_cast<bool>(Ptr);
 }
 
+static bool isEmptyOrTombstoneStr(const char *S) {
+  using SI = llvm::DenseMapInfo<const char *>;
+  return S == SI::getEmptyKey() || S == SI::getTombstoneKey();
+}
+
+bool APValue::LValueBase::hasLValueString() const {
+  return LValueString && !isEmptyOrTombstoneStr(LValueString)
+}
+
+const char *APValue::LValueBase::getLValueString() const {
+  assert(hasLValueString() && "has no LValueString");
+  return LValueString;
+}
+
+bool APValue::LValueBase::operator==(const APValue::LValueBase &Other) const {
+  auto CompareStr = [&]() {
+    if (hasLValueString() != Other.hasLValueString())
+      return false;
+    if (!hasLValueString())
+      return LValueString == Other.LValueString;
+    return StringRef(LValueString) == StringRef(Other.LValueString);
+  };
+
+  return Ptr == Other.Ptr && CallIndex == Other.CallIndex &&
+         Version == Other.Version && CompareStr();
+}
 
 clang::APValue::LValueBase
 llvm::DenseMapInfo<clang::APValue::LValueBase>::getEmptyKey() {
@@ -68,8 +94,11 @@ unsigned llvm::DenseMapInfo<clang::APValue::LValueBase>::getHashValue(
   ID.AddPointer(Base.getOpaqueValue());
   ID.AddInteger(Base.getCallIndex());
   ID.AddInteger(Base.getVersion());
-  ID.AddInteger(
-      DenseMapInfo<StringRef>::getHashValue(StringRef(Base.getLValueString())));
+  if (Base.hasLValueString())
+    ID.AddString(StringRef(Base.getLValueString()));
+  else
+    ID.AddPointer(Base.getLValueStringUnsafe());
+
   return ID.ComputeHash();
 }
 

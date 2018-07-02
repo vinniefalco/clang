@@ -76,8 +76,10 @@ public:
     template <class T>
     T dyn_cast() const { return Ptr.dyn_cast<T>(); }
 
-    bool hasLValueString() const { return bool(LValueString); }
-    const char *getLValueString() const { return LValueString; }
+    bool hasLValueString() const;
+    const char *getLValueString() const;
+
+    const char *getLValueStringUnsafe() const { return LValueString; }
     void setLValueString(const char *Str) { LValueString = Str; }
 
     void *getOpaqueValue() const;
@@ -102,11 +104,7 @@ public:
       return Version;
     }
 
-    bool operator==(const LValueBase &Other) const {
-      return Ptr == Other.Ptr && CallIndex == Other.CallIndex &&
-             Version == Other.Version &&
-             StringRef(LValueString) == StringRef(Other.LValueString);
-    }
+    bool operator==(const LValueBase &Other) const;
 
   private:
     PtrTy Ptr;
