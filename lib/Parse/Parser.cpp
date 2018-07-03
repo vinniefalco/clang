@@ -78,13 +78,6 @@ DiagnosticBuilder Parser::Diag(const Token &Tok, unsigned DiagID) {
   return Diag(Tok.getLocation(), DiagID);
 }
 
-DiagnosticBuilder Parser::Diag(SourceLocation Loc,
-                               const PartialDiagnostic &PD) {
-  DiagnosticBuilder Builder(Diag(Loc, PD.getDiagID()));
-  PD.Emit(Builder);
-  return Builder;
-}
-
 /// Emits a diagnostic suggesting parentheses surrounding a
 /// given range.
 ///
