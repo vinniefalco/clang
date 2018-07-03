@@ -592,10 +592,9 @@ public:
     // else, we're building a string literal
     const APValue::LValueBase &Base = Evaluated.getLValueBase();
     QualType StrType = Base.getGlobalStringType()->desugar();
-    LValue LV =
-        CGF.MakeAddrLValue(CGF.CGM.GetAddrOfConstantStringFromSourceLocExpr(
-                               SLE, Base.getGlobalString()),
-                           StrType, AlignmentSource::Decl);
+    LValue LV = CGF.MakeAddrLValue(
+        CGF.CGM.GetAddrOfConstantCString(Base.getGlobalString()), StrType,
+        AlignmentSource::Decl);
     return CGF.EmitArrayToPointerDecay(SLE, StrType, LV).getPointer();
   }
 

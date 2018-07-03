@@ -1701,9 +1701,6 @@ static bool IsGlobalLValue(APValue::LValueBase B) {
   case Expr::CXXUuidofExprClass:
     return true;
 
-  case Expr::SourceLocExprClass:
-    return cast<SourceLocExpr>(E)->isStringType();
-
   case Expr::CallExprClass:
     return IsStringLiteralCall(cast<CallExpr>(E));
   // For GCC compatibility, &&label has static storage duration.
@@ -3352,8 +3349,6 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       CompleteObject StrObj(&Str, Base->getType(), false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     } else if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(Base)) {
-      assert(LVal.Base.isGlobalString() &&
-             "the type of a SourceLocExpr must be explicitly specified");
       APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
       CompleteObject StrObj(&Str, LVal.Base.getGlobalStringType()->desugar(),
                             false);
@@ -5792,7 +5787,6 @@ public:
   }
 
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
-    assert(E && E->isStringType());
     APValue LValResult = E->EvaluateInContext(
         Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
     Result.set(LValResult.getLValueBase());
@@ -7370,7 +7364,6 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
 }
 
 bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
-  assert(E && E->isIntType());
   APValue Evaluated = E->EvaluateInContext(
       Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
   return Success(Evaluated.getInt(), E);

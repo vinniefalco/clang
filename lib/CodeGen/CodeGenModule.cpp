@@ -4191,20 +4191,6 @@ CodeGenModule::GetAddrOfConstantStringFromObjCEncode(const ObjCEncodeExpr *E) {
   return GetAddrOfConstantCString(Str);
 }
 
-ConstantAddress
-CodeGenModule::GetAddrOfConstantStringFromSourceLocExpr(const SourceLocExpr *E,
-                                                        StringRef Str) {
-  assert(E->isStringType());
-  StringRef GlobalName = [&]() -> StringRef {
-    if (Str.empty())
-      return ".str.empty";
-    if (E->getIdentType() == SourceLocExpr::File)
-      return ".str.file";
-    return ".str.func";
-  }();
-  return GetAddrOfConstantCString(Str, GlobalName.data());
-}
-
 /// GetAddrOfConstantCString - Returns a pointer to a character array containing
 /// the literal and a terminating '\0' character.
 /// The result has pointer to array type.

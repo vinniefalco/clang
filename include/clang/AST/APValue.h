@@ -141,8 +141,8 @@ public:
 
     PtrTy Ptr;
     union {
-      GlobalStringData StrData;
       NormalLValueData NormalData;
+      GlobalStringData StrData;
     };
   };
 

@@ -1746,8 +1746,7 @@ ConstantLValueEmitter::VisitSourceLocExpr(const SourceLocExpr *E) {
          "the base should refer to this SourceLocExpr");
   assert(Base.isGlobalString() &&
          "source location expression does not evaluate to global string?");
-  return CGM.GetAddrOfConstantStringFromSourceLocExpr(E,
-                                                      Base.getGlobalString());
+  return CGM.GetAddrOfConstantCString(Base.getGlobalString());
 }
 
 ConstantLValue

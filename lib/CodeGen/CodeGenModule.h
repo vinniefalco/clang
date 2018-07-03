@@ -885,12 +885,6 @@ public:
   ConstantAddress
   GetAddrOfConstantStringFromObjCEncode(const ObjCEncodeExpr *);
 
-  /// Return a pointer to a constant array for the given SourceLocExpr node
-  /// which evaluates to the specified value.
-  ConstantAddress
-  GetAddrOfConstantStringFromSourceLocExpr(const SourceLocExpr *E,
-                                           StringRef Value);
-
   /// Returns a pointer to a character array containing the literal and a
   /// terminating '\0' character. The result has pointer to array type.
   ///
