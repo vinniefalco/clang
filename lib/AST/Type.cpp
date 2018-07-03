@@ -3131,6 +3131,14 @@ TransformTraitType::TransformTraitType(const ASTContext &Ctx,
   }
 }
 
+static StringRef TransformTraitType::GetTransformTraitIdentifier(TTKind Kind) {
+  switch (Kind) {
+  case TransformTraitType::EnumUnderlyingType:
+    return "__underlying_type";
+  }
+  llvm_unreachable("unhandled case");
+}
+
 DependentTransformTraitType::DependentTransformTraitType(
     const ASTContext &C, ArrayRef<QualType> ArgTys, TTKind TKind)
     : TransformTraitType(C, ArgTys, C.DependentTy, TKind, QualType()) {}

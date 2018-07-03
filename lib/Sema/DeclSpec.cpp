@@ -370,9 +370,12 @@ bool Declarator::isDeclarationOfFunction() const {
       if (Expr *E = DS.getRepAsExpr())
         return E->getType()->isFunctionType();
       return false;
-     
-    case TST_underlyingType:
-      return false;
+
+    case TST_underlyingType: {
+      QualType QT = DS.getRepAsType().get();
+      assert(!QT.isNull());
+      return QT->isFunctionType();
+    }
 
     case TST_typename:
     case TST_typeofType: {
@@ -695,24 +698,6 @@ bool DeclSpec::SetTypeSpecType(TST T, SourceLocation TagKwLoc,
   TypeRep = Rep;
   TSTLoc = TagKwLoc;
   TSTNameLoc = TagNameLoc;
-  TypeSpecOwned = false;
-  return false;
-}
-
-bool DeclSpec::SetTypeSpecType(TST T, SourceLocation Loc, const char *&PrevSpec,
-                               unsigned &DiagID, ArrayRef<ParsedType> Rep,
-                               const PrintingPolicy &Policy) {
-  assert(isTypeListRep(T) && "T does not store a type");
-
-  if (TypeSpecType != TST_unspecified) {
-    PrevSpec = DeclSpec::getSpecifierName((TST)TypeSpecType, Policy);
-    DiagID = diag::err_invalid_decl_spec_combination;
-    return true;
-  }
-  TypeSpecType = T;
-  TypeListRep = SmallVector<ParsedType, 2>(Rep.begin(), Rep.end());
-  TSTLoc = Loc;
-  TSTNameLoc = Loc;
   TypeSpecOwned = false;
   return false;
 }

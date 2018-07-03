@@ -372,8 +372,6 @@ private:
     Expr *ExprRep;
   };
 
-  SmallVector<ParsedType, 0> TypeListRep;
-
   // attributes.
   ParsedAttributes Attrs;
 
@@ -406,14 +404,11 @@ private:
   ObjCDeclSpec *ObjCQualifiers;
 
   static bool isTypeRep(TST T) {
-    return (T == TST_typename || T == TST_typeofType || T == TST_atomic || T == TST_underlyingType);
+    return (T == TST_typename || T == TST_typeofType ||
+            T == TST_underlyingType || T == TST_atomic);
   }
   static bool isExprRep(TST T) {
     return (T == TST_typeofExpr || T == TST_decltype);
-  }
-  static bool isTypeListRep(TST T) {
-    // FIXME(EricWF): Remove Me
-    return false; //(T == TST_underlyingType);
   }
 
   DeclSpec(const DeclSpec &) = delete;
@@ -491,7 +486,6 @@ public:
   bool isTypeAltiVecBool() const { return TypeAltiVecBool; }
   bool isTypeSpecOwned() const { return TypeSpecOwned; }
   bool isTypeRep() const { return isTypeRep((TST) TypeSpecType); }
-  bool isTypeListRep() const { return isTypeListRep((TST)TypeSpecType); }
   bool isTypeSpecPipe() const { return TypeSpecPipe; }
   bool isTypeSpecSat() const { return TypeSpecSat; }
 
@@ -506,12 +500,6 @@ public:
   Expr *getRepAsExpr() const {
     assert(isExprRep((TST) TypeSpecType) && "DeclSpec does not store an expr");
     return ExprRep;
-  }
-  ArrayRef<ParsedType> getRepAsTypeList() const {
-    assert(isTypeListRep((TST)TypeSpecType) &&
-           "DeclSpec does not store a type list");
-
-    return TypeListRep;
   }
   CXXScopeSpec &getTypeSpecScope() { return TypeScope; }
   const CXXScopeSpec &getTypeSpecScope() const { return TypeScope; }
@@ -663,11 +651,9 @@ public:
                        SourceLocation TagNameLoc, const char *&PrevSpec,
                        unsigned &DiagID, Decl *Rep, bool Owned,
                        const PrintingPolicy &Policy);
+
   bool SetTypeSpecType(TST T, SourceLocation Loc, const char *&PrevSpec,
                        unsigned &DiagID, Expr *Rep,
-                       const PrintingPolicy &policy);
-  bool SetTypeSpecType(TST T, SourceLocation Loc, const char *&PrevSpec,
-                       unsigned &DiagID, ArrayRef<ParsedType> Rep,
                        const PrintingPolicy &policy);
   bool SetTypeAltiVecVector(bool isAltiVecVector, SourceLocation Loc,
                        const char *&PrevSpec, unsigned &DiagID,

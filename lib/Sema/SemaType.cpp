@@ -5372,27 +5372,12 @@ namespace {
       Sema::GetTypeFromParser(DS.getRepAsType(), &TInfo);
       TL.setUnderlyingTInfo(TInfo);
     }
+
     void VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {
       assert(DS.getTypeSpecType() == DeclSpec::TST_underlyingType);
       TypeSourceInfo *RepTInfo = nullptr;
       Sema::GetTypeFromParser(DS.getRepAsType(), &RepTInfo);
       TL.copy(RepTInfo->getTypeLoc());
-      return;
-
-      TL.setKWLoc(DS.getTypeSpecTypeLoc());
-      TL.setParensRange(DS.getTypeofParensRange());
-      ParsedType ParsedTT = DS.getRepAsType();
-      QualType TransformTy = Sema::GetTypeFromParser(ParsedTT, nullptr);
-      const TransformTraitType *Ty = TransformTy->getAs<TransformTraitType>();
-
-      SmallVector<TypeSourceInfo *, 2> ArgInfo;
-      for (auto QT : Ty->getArgs()) {
-        assert(!QT.isNull());
-        TypeSourceInfo *TInfo = nullptr;
-        Sema::GetTypeFromParser(ParsedType::make(QT), &TInfo);
-        ArgInfo.push_back(TInfo);
-      }
-      TL.setArgTInfo(ArgInfo);
     }
 
     void VisitBuiltinTypeLoc(BuiltinTypeLoc TL) {
@@ -8116,20 +8101,19 @@ TypeResult Sema::ActOnTransformTraitType(ArrayRef<ParsedType> ParsedArgs,
                                          TransformTraitType::TTKind Kind,
                                          SourceLocation KWLoc,
                                          SourceRange ParenRange) {
-  SmallVector<TypeSourceInfo *, 2> TypeArgs;
-  TypeArgs.reserve(ParsedArgs.size());
+  SmallVector<TypeSourceInfo *, 2> ArgTInfos;
+  SmallVector<QualType, 2> ArgTypes;
+  ArgTInfos.reserve(ParsedArgs.size());
+  ArgTypes.reserve(ParsedArgs.size());
 
-  SmallVector<QualType, 2> Args;
-  Args.reserve(ParsedArgs.size());
   for (auto &PT : ParsedArgs) {
-    TypeSourceInfo *TypeArgInfo = nullptr;
-    QualType NewArg = GetTypeFromParser(PT, &TypeArgInfo);
-    assert(!NewArg.isNull());
-    assert(TypeArgInfo && "No type source info?");
-    Args.push_back(NewArg);
-    TypeArgs.push_back(TypeArgInfo);
+    TypeSourceInfo *ArgTypeInfo = nullptr;
+    QualType NewArg = GetTypeFromParser(PT, &ArgTypeInfo);
+    assert(ArgTypeInfo && "No type source info?");
+    ArgTypes.push_back(NewArg);
+    ArgTInfos.push_back(ArgTypeInfo);
   }
-  QualType Result = BuildTransformTraitType(Args, Kind, Loc);
+  QualType Result = BuildTransformTraitType(ArgTypes, Kind, KWLoc);
   if (Result.isNull())
     return TypeResult(/*IsInvalid*/true);
 
@@ -8141,9 +8125,8 @@ TypeResult Sema::ActOnTransformTraitType(ArrayRef<ParsedType> ParsedArgs,
   TTT.setKWLoc(KWLoc);
   TTT.setParensRange(ParenRange);
   if (TTT.getNumArgs() > 0) {
-    assert(TTT.getNumArgs() == TypeArgs.size());
-    for (unsigned I = 0, N = TTT.getNumArgs(); I != N; ++I)
-      TTT.setArgInfo(I, TypeArgs[I]);
+    assert(TTT.getNumArgs() == ArgTInfos.size());
+    TTT.setArgTInfo(ArgTInfos);
   }
 
   return CreateParsedType(Result, ResultTInfo);
