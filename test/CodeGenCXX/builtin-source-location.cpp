@@ -46,20 +46,22 @@ using SL = source_location;
 
 extern "C" int sink(...);
 
+
 // RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-GLOBAL-ONE
 //
 // CHECK-GLOBAL-ONE-DAG: @[[FILE:.*]] = {{.*}}c"test_const_init.cpp\00"
-// CHECK-GLOBAL-ONE-DAG: @[[FUNC:\.str\.empty]] = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
+// CHECK-GLOBAL-ONE-DAG: @[[FUNC:.*]] = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
 //
 // CHECK-GLOBAL-ONE: @const_init_global = global %struct.source_location { i32 1000, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE]], {{[^@]*}}@[[FUNC]]
 #line 1000 "test_const_init.cpp"
 SL const_init_global = SL::current();
 
-// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-GLOBAL-TWO "-DFUNC=.str.empty"
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-GLOBAL-TWO
 //
 // CHECK-GLOBAL-TWO-DAG: @runtime_init_global = global %struct.source_location zeroinitializer, align 8
 //
 // CHECK-GLOBAL-TWO-DAG: @[[FILE:.*]] = {{.*}}c"test_runtime_init.cpp\00"
+// CHECK-GLOBAL-TWO-DAG: @[[FUNC:.*]] = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
 //
 // CHECK-GLOBAL-TWO: define internal void @__cxx_global_var_init()
 // CHECK-GLOBAL-TWO-NOT: ret
@@ -91,10 +93,11 @@ struct TestInit {
   TestInit(SL arg_info = SL::current()) : arg_info(arg_info) {}
 };
 
-// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-CTOR-GLOBAL "-DFUNC=.str.empty"
+// RUN: FileCheck --input-file %t.ll %s --check-prefix=CHECK-CTOR-GLOBAL
 //
 // CHECK-CTOR-GLOBAL-DAG: @GlobalInitVal = global %struct.TestInit zeroinitializer, align 8
 // CHECK-CTOR-GLOBAL-DAG: @[[FILE:.*]] = {{.*}}c"GlobalInitVal.cpp\00"
+// CHECK-CTOR-GLOBAL-DAG: @[[FUNC:.*]] = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
 //
 // CHECK-CTOR-GLOBAL: define internal void @__cxx_global_var_init.3()
 // CHECK-CTOR-GLOBAL-NOT: ret
@@ -135,10 +138,11 @@ struct TestInitConstexpr {
 // CHECK-CONSTEXPR-T2-DAG: @[[FILE_INIT:.*]] = {{.*}}c"ConstexprCtor.cpp\00"
 // CHECK-CONSTEXPR-T2-DAG: @[[FUNC_INIT:.*]] = {{.*}}c"TestInitConstexpr\00"
 // CHECK-CONSTEXPR-T2-DAG: @[[FILE_ARG:.*]] = {{.*}}c"ConstexprGlobal.cpp\00"
+// CHECK-CONSTEXPR-T2-DAG: @[[EMPTY:.*]] = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
 //
 // CHECK-CONSTEXPR-T2: @ConstexprGlobal = global %struct.TestInitConstexpr {
 // CHECK-CONSTEXPR-T2-SAME: %struct.source_location { i32 4200, i32 {{[0-9]+}}, {{[^@]*}}@[[FILE_INIT]], {{[^@]*}}@[[FUNC_INIT]],
-// CHECK-CONSTEXPR-T2-SAME: {{[^%]*}}%struct.source_location { i32 4400, i32 {{[0-9]+}},  {{[^@]*}}@[[FILE_ARG]], {{[^@]*}}@.str.empty
+// CHECK-CONSTEXPR-T2-SAME: {{[^%]*}}%struct.source_location { i32 4400, i32 {{[0-9]+}},  {{[^@]*}}@[[FILE_ARG]], {{[^@]*}}@[[EMPTY]]
 #line 4400 "ConstexprGlobal.cpp"
 TestInitConstexpr ConstexprGlobal;
 
