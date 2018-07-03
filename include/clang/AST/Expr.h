@@ -3927,7 +3927,7 @@ public:
   /// Build an empty call expression.
   explicit SourceLocExpr(EmptyShell Empty) : Expr(SourceLocExprClass, Empty) {}
 
-  static QualType BuildStringArrayType(const ASTContext &Ctx, unsigned Size);
+  static QualType BuildStringArrayType(const ASTContext &Ctx, StringRef Str);
 
   /// Return the result of evaluating this SourceLocExpr in the specified
   /// (and possibly null) default argument or initialization context.

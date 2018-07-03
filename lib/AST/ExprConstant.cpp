@@ -72,7 +72,7 @@ namespace {
     if (B.hasLValueString()) {
       assert(B.is<const Expr *>() && isa<SourceLocExpr>(B.get<const Expr *>()));
       StringRef S = B.getLValueString();
-      return SourceLocExpr::BuildStringArrayType(Ctx, S.size() + 1);
+      return SourceLocExpr::BuildStringArrayType(Ctx, S);
     }
 
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>()) {
@@ -3360,8 +3360,7 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       assert(LVal.Base.hasLValueString() &&
              "the type of a SourceLocExpr must be explicitly specified");
       StringRef StrVal = LVal.Base.getLValueString();
-      QualType StrTy =
-          SourceLocExpr::BuildStringArrayType(Info.Ctx, StrVal.size() + 1);
+      QualType StrTy = SourceLocExpr::BuildStringArrayType(Info.Ctx, StrVal);
       APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
       CompleteObject StrObj(&Str, StrTy, false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);

@@ -1954,14 +1954,15 @@ StringRef SourceLocExpr::getBuiltinStr() const {
 }
 
 QualType SourceLocExpr::BuildStringArrayType(const ASTContext &Ctx,
-                                             unsigned Size) {
+                                             StringRef Str) {
+  assert(!Str.data() && "cannot have null StringRef");
   QualType Ty = Ctx.CharTy;
   // A C++ string literal has a const-qualified element type (C++ 2.13.4p1).
   if (Ctx.getLangOpts().CPlusPlus || Ctx.getLangOpts().ConstStrings)
     Ty = Ty.withConst();
 
-  return Ctx.getConstantArrayType(Ty, llvm::APInt(32, Size), ArrayType::Normal,
-                                  0);
+  return Ctx.getConstantArrayType(Ty, llvm::APInt(32, Str.size() + 1),
+                                  ArrayType::Normal, 0);
 }
 
 SourceLocExpr::EvaluatedSourceLocExpr
@@ -2020,7 +2021,7 @@ SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
       // Build the ConstantArrayType coorisponding to the evaluated strings
       // length.
       StringRef Str = Value.getLValueBase().getLValueString();
-      return BuildStringArrayType(Ctx, Str.size() + 1);
+      return BuildStringArrayType(Ctx, Str);
     }
     case SourceLocExpr::Line:
     case SourceLocExpr::Column:
