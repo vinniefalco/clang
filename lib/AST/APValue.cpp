@@ -114,8 +114,8 @@ unsigned llvm::DenseMapInfo<clang::APValue::LValueBase>::getHashValue(
     ID.AddInteger(Base.getVersion());
     break;
   case LVBase::BK_String:
-    ID.AddString(Base.getLValueString());
-    ID.AddPointer(Base.getLValueStringType());
+    ID.AddString(Base.getGlobalString());
+    ID.AddPointer(Base.getGlobalStringType());
     break;
   }
 

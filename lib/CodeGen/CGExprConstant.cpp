@@ -1744,10 +1744,10 @@ ConstantLValueEmitter::VisitSourceLocExpr(const SourceLocExpr *E) {
   const APValue::LValueBase &Base = Value.getLValueBase();
   assert(Base.get<const Expr *>() == E &&
          "the base should refer to this SourceLocExpr");
-  assert(Base.isLValueString() &&
-         "no source location context in the lvalue base");
+  assert(Base.isGlobalString() &&
+         "source location expression does not evaluate to global string?");
   return CGM.GetAddrOfConstantStringFromSourceLocExpr(E,
-                                                      Base.getLValueString());
+                                                      Base.getGlobalString());
 }
 
 ConstantLValue

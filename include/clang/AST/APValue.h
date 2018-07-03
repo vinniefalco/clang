@@ -81,14 +81,14 @@ public:
     template <class T>
     T dyn_cast() const { return Ptr.dyn_cast<T>(); }
 
-    bool isLValueString() const { return getBaseKind() == BK_String; }
+    bool isGlobalString() const { return getBaseKind() == BK_String; }
 
-    StringRef getLValueString() const {
-      assert(isLValueString());
+    StringRef getGlobalString() const {
+      assert(isGlobalString());
       return StrData.getString();
     }
-    const ConstantArrayType *getLValueStringType() const {
-      assert(isLValueString());
+    const ConstantArrayType *getGlobalStringType() const {
+      assert(isGlobalString());
       return StrData.Type;
     }
 

@@ -68,8 +68,8 @@ namespace {
   static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
 
-    if (B.isLValueString())
-      return B.getLValueStringType()->desugar();
+    if (B.isGlobalString())
+      return B.getGlobalStringType()->desugar();
 
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>()) {
       // FIXME: It's unclear where we're supposed to take the type from, and
@@ -1677,7 +1677,7 @@ static bool IsGlobalLValue(APValue::LValueBase B) {
   }
 
   // A string literal.
-  if (B.isLValueString())
+  if (B.isGlobalString())
     return true;
 
   const Expr *E = B.get<const Expr*>();
@@ -2610,8 +2610,8 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info,
   }
 
   if (const auto *SLE = dyn_cast<SourceLocExpr>(Lit)) {
-    assert(Base.isLValueString());
-    StringRef Str = Base.getLValueString();
+    assert(Base.isGlobalString());
+    StringRef Str = Base.getGlobalString();
     APSInt Res(Info.Ctx.getCharWidth(),
                Info.Ctx.CharTy->isUnsignedIntegerType());
     if (Index <= Str.size()) {
@@ -3352,10 +3352,10 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       CompleteObject StrObj(&Str, Base->getType(), false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     } else if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(Base)) {
-      assert(LVal.Base.isLValueString() &&
+      assert(LVal.Base.isGlobalString() &&
              "the type of a SourceLocExpr must be explicitly specified");
       APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
-      CompleteObject StrObj(&Str, LVal.Base.getLValueStringType()->desugar(),
+      CompleteObject StrObj(&Str, LVal.Base.getGlobalStringType()->desugar(),
                             false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     }
@@ -5796,7 +5796,7 @@ public:
     APValue LValResult = E->EvaluateInContext(
         Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
     Result.set(LValResult.getLValueBase());
-    Result.addArray(Info, E, LValResult.getLValueBase().getLValueStringType());
+    Result.addArray(Info, E, LValResult.getLValueBase().getGlobalStringType());
     return true;
   }
 

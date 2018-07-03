@@ -9911,11 +9911,9 @@ const char *ASTContext::getReadableFunctionName(const FunctionDecl *D) const {
   // exist, add a new entry.
   const char *&Result = ReadableFunctionNameCache[D];
   if (!Result) {
-    DeclarationName Name = D->getDeclName();
-    assert(Name && "expected declaration to have a name");
-    std::string S = Name.getAsString();
-    assert(!S.empty());
-    Result = strcpy((char *)Allocate(S.size() + 1), Result);
+    assert(D->getDeclName() && "expected declaration to have a name");
+    std::string S = D->getDeclName().getAsString();
+    Result = strcpy((char *)Allocate(S.size() + 1), S.c_str());
   }
   return Result;
 }
