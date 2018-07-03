@@ -5374,6 +5374,11 @@ namespace {
     }
     void VisitTransformTraitTypeLoc(TransformTraitTypeLoc TL) {
       assert(DS.getTypeSpecType() == DeclSpec::TST_underlyingType);
+      TypeSourceInfo *RepTInfo = nullptr;
+      Sema::GetTypeFromParser(DS.getRepAsType(), &RepTInfo);
+      TL.copy(RepTInfo->getTypeLoc());
+      return;
+
       TL.setKWLoc(DS.getTypeSpecTypeLoc());
       TL.setParensRange(DS.getTypeofParensRange());
       ParsedType ParsedTT = DS.getRepAsType();
@@ -8108,20 +8113,40 @@ static bool CheckTransformTraitArity(Sema &S, TransformTraitType::TTKind Kind,
 }
 
 TypeResult Sema::ActOnTransformTraitType(ArrayRef<ParsedType> ParsedArgs,
-                                     TransformTraitType::TTKind Kind,
-                                     SourceLocation Loc) {
+                                         TransformTraitType::TTKind Kind,
+                                         SourceLocation KWLoc,
+                                         SourceRange ParenRange) {
+  SmallVector<TypeSourceInfo *, 2> TypeArgs;
+  TypeArgs.reserve(ParsedArgs.size());
+
   SmallVector<QualType, 2> Args;
-    Args.reserve(ParsedArgs.size());
-  for (auto PT : ParsedArgs) {
-      QualType NewArg = GetTypeFromParser(PT);
-      assert(!NewArg.isNull());
-      Args.push_back(NewArg);
-    }
+  Args.reserve(ParsedArgs.size());
+  for (auto &PT : ParsedArgs) {
+    TypeSourceInfo *TypeArgInfo = nullptr;
+    QualType NewArg = GetTypeFromParser(PT, &TypeArgInfo);
+    assert(!NewArg.isNull());
+    assert(TypeArgInfo && "No type source info?");
+    Args.push_back(NewArg);
+    TypeArgs.push_back(TypeArgInfo);
+  }
   QualType Result = BuildTransformTraitType(Args, Kind, Loc);
   if (Result.isNull())
     return TypeResult(/*IsInvalid*/true);
 
-  return ParsedType::make(Result);
+  // Create source information for this type.
+  TypeSourceInfo *ResultTInfo = Context.CreateTypeSourceInfo(Result);
+  TypeLoc ResultTL = ResultTInfo->getTypeLoc();
+
+  auto TTT = ResultTL.castAs<TransformTraitTypeLoc>();
+  TTT.setKWLoc(KWLoc);
+  TTT.setParensRange(ParenRange);
+  if (TTT.getNumArgs() > 0) {
+    assert(TTT.getNumArgs() == TypeArgs.size());
+    for (unsigned I = 0, N = TTT.getNumArgs(); I != N; ++I)
+      TTT.setArgInfo(I, TypeArgs[I]);
+  }
+
+  return CreateParsedType(Result, ResultTInfo);
 }
 
 QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,

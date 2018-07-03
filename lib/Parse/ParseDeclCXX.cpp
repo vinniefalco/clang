@@ -1068,7 +1068,8 @@ void Parser::ParseTransformTraitTypeSpecifier(DeclSpec &DS) {
   if (Parens.consumeClose())
     return Error();
 
-  TypeResult TyRes = Actions.ActOnTransformTraitType(Args, KindInfo.first, StartLoc);
+  TypeResult TyRes = Actions.ActOnTransformTraitType(
+      Args, KindInfo.first, StartLoc, Parens.getRange());
   if (TyRes.isInvalid())
     return Error();
 

@@ -10410,9 +10410,7 @@ bool TreeTransform<Derived>::TransformTypeList(
     ArrayRef<TypeSourceInfo *> InArgs, bool &ArgChanged,
     SmallVectorImpl<TypeSourceInfo *> &Args) {
   for (unsigned I = 0, N = InArgs.size(); I != N; ++I) {
-    llvm::errs() << "Here With I=" << I << "\n";
     TypeSourceInfo *From = InArgs[I];
-    From->getTypeLoc();
     TypeLoc FromTL = From->getTypeLoc();
     if (!FromTL.getAs<PackExpansionTypeLoc>()) {
       TypeLocBuilder TLB;

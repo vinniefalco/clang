@@ -1650,7 +1650,8 @@ public:
 
   TypeResult ActOnTransformTraitType(ArrayRef<ParsedType> ArgTypes,
                                      TransformTraitType::TTKind Kind,
-                                     SourceLocation Loc);
+                                     SourceLocation KWLoc,
+                                     SourceRange ParenRange);
 
   QualType ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
                                            TransformTraitType::TTKind Kind,
