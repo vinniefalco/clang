@@ -3268,18 +3268,32 @@ void CXXNameMangler::mangleType(const DecltypeType *T) {
 }
 
 void CXXNameMangler::mangleType(const TransformTraitType *T) {
-  // If this is dependent, we need to record that. If not, we simply
-  // mangle it as the underlying type since they are equivalent.
-  if (T->isDependentType()) {
-    StringRef Ident =
-        TransformTraitType::GetTransformTraitIdentifier(T->getTTKind());
-    Out << "u" << Ident.size() << Ident;
-    for (auto Ty : T->getArgs())
-      mangleType(Ty);
-    // Disambiguate the end of the argument list.
-    Out << "E";
-  } else
+  // TransformTraitType's uses a non-standard mangling with the intent to
+  // suggest it as a Itanium ABI extension.
+  //
+  // <type-traits-type> ::=
+  //     u <source-name> [<template-args>...] # vendor extended type
+
+  // If this type isn't dependent, simply mangle it as the transformed type
+  // since they are equivalent. Otherwise, we need to record the dependent type.
+  if (!T->isDependentType()) {
     mangleType(T->getTransformedType());
+    return;
+  }
+
+  Out << "u";
+
+  // mangle the source name.
+  StringRef Ident =
+      TransformTraitType::GetTransformTraitIdentifier(T->getTTKind());
+  Out << Ident.size() << Ident;
+
+  // mangle each argument type.
+  for (auto Ty : T->getArgs())
+    mangleType(Ty);
+
+  // Disambiguate the end of the argument list.
+  Out << "E";
 }
 
 void CXXNameMangler::mangleType(const AutoType *T) {
