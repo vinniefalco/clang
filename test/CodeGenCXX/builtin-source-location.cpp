@@ -99,7 +99,7 @@ struct TestInit {
 // CHECK-CTOR-GLOBAL-DAG: @[[FILE:.*]] = {{.*}}c"GlobalInitVal.cpp\00"
 // CHECK-CTOR-GLOBAL-DAG: @[[FUNC:.*]] = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
 //
-// CHECK-CTOR-GLOBAL: define internal void @__cxx_global_var_init.3()
+// CHECK-CTOR-GLOBAL: define internal void @__cxx_global_var_init.{{[0-9]+}}()
 // CHECK-CTOR-GLOBAL-NOT: ret
 //
 // CHECK-CTOR-GLOBAL: call void @_ZN15source_location7currentEjjPKcS1_(%struct.source_location* sret %[[TMP_ONE:[^,]*]],
