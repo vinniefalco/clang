@@ -3135,6 +3135,8 @@ StringRef TransformTraitType::getName(TTKind Kind) {
   switch (Kind) {
   case TransformTraitType::EnumUnderlyingType:
     return "__underlying_type";
+  case TransformTraitType::EnumRawInvocationType:
+    return "__raw_invocation_type";
   }
   llvm_unreachable("unhandled case");
 }

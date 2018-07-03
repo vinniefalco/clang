@@ -7237,6 +7237,13 @@ def note_inequality_comparison_to_or_assign : Note<
 def err_incomplete_type_used_in_type_trait_expr : Error<
   "incomplete type %0 used in type trait expression">;
 
+def err_raw_invocation_type_not_callable : Error<
+  "non-callable type %0 used in __raw_invocation_type trait">;
+def err_raw_invocation_type_member_pointer_arity : Error <
+  "__raw_invocation_type with a pointer to member %select{function|data}0"
+   " requires 2%select{ or more|}0 arguments; have "
+  "%1 argument%s1">;
+
 def err_require_constant_init_failed : Error<
   "variable does not have a constant initializer">;
 def note_declared_required_constant_init_here : Note<

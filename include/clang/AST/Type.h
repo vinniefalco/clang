@@ -4010,7 +4010,7 @@ public:
 /// A unary type transform, which is a type constructed from another.
 class TransformTraitType : public Type {
 public:
-  enum TTKind { EnumUnderlyingType };
+  enum TTKind { EnumUnderlyingType, EnumRawInvocationType };
 
 private:
   QualType *ArgStorage;
