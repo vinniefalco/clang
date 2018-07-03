@@ -24,6 +24,7 @@ namespace clang {
   class AddrLabelExpr;
   class ASTContext;
   class CharUnits;
+  class ConstantArrayType;
   class DeclContext;
   class DiagnosticBuilder;
   class Expr;
@@ -60,12 +61,16 @@ public:
   public:
     typedef llvm::PointerUnion<const ValueDecl *, const Expr *> PtrTy;
 
-    LValueBase() : CallIndex(0), Version(0) {}
+    LValueBase() : NormalData{} {}
+
+    LValueBase(const Expr *E, const char *StrVal,
+               const ConstantArrayType *ArrTy);
 
     template <class T>
-    LValueBase(T P, unsigned I = 0, unsigned V = 0,
-               const char *LValueString = nullptr)
-        : Ptr(P), CallIndex(I), Version(V), LValueString(LValueString) {}
+    LValueBase(T P, unsigned I = 0, unsigned V = 0) : Ptr(P), NormalData{I, V} {
+      assert(getBaseKind() == BK_Normal &&
+             "cannot create string base with this constructor");
+    }
 
     template <class T>
     bool is() const { return Ptr.is<T>(); }
@@ -76,9 +81,16 @@ public:
     template <class T>
     T dyn_cast() const { return Ptr.dyn_cast<T>(); }
 
-    bool hasLValueString() const { return LValueString; }
-    const char *getLValueString() const { return LValueString; }
-    void setLValueString(const char *Str) { LValueString = Str; }
+    bool isLValueString() const { return getBaseKind() == BK_String; }
+
+    StringRef getLValueString() const {
+      assert(isLValueString());
+      return StrData.getString();
+    }
+    const ConstantArrayType *getLValueStringType() const {
+      assert(isLValueString());
+      return StrData.Type;
+    }
 
     void *getOpaqueValue() const;
 
@@ -91,31 +103,47 @@ public:
     }
 
     unsigned getCallIndex() const {
-      return CallIndex;
+      if (getBaseKind() == BK_Normal)
+        return NormalData.CallIndex;
+      return 0;
     }
 
     void setCallIndex(unsigned Index) {
-      CallIndex = Index;
+      assert(getBaseKind() == BK_Normal);
+      NormalData.CallIndex = Index;
     }
 
     unsigned getVersion() const {
-      return Version;
+      if (getBaseKind() == BK_Normal)
+        return NormalData.Version;
+      return 0;
     }
 
-    bool operator==(const LValueBase &Other) const {
-      return Ptr == Other.Ptr && CallIndex == Other.CallIndex &&
-             Version == Other.Version && compareLValueString(Other);
-    }
+    bool operator==(const LValueBase &Other) const;
 
   private:
-    bool compareLValueString(const LValueBase &Other) const;
+    friend struct ::llvm::DenseMapInfo<LValueBase>;
+
+    enum BaseKind { BK_Normal, BK_String };
+    BaseKind getBaseKind() const;
+
+    struct NormalLValueData {
+      unsigned CallIndex;
+      unsigned Version;
+    };
+    /// If this LValueBase refers to a SourceLocExpr for a file or function,
+    /// this represents the evaluated type and value of that expression.
+    struct GlobalStringData {
+      const char *Value;
+      const ConstantArrayType *Type;
+      StringRef getString() const;
+    };
 
     PtrTy Ptr;
-    unsigned CallIndex, Version;
-
-    /// If this LValueBase refers to a SourceLocExpr for a file or function,
-    /// this represents the evaluated value of that expression.
-    const char *LValueString;
+    union {
+      GlobalStringData StrData;
+      NormalLValueData NormalData;
+    };
   };
 
   typedef llvm::PointerIntPair<const Decl *, 1, bool> BaseOrMemberType;

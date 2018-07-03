@@ -1955,7 +1955,7 @@ StringRef SourceLocExpr::getBuiltinStr() const {
 
 QualType SourceLocExpr::BuildStringArrayType(const ASTContext &Ctx,
                                              StringRef Str) {
-  assert(!Str.data() && "cannot have null StringRef");
+  assert(Str.data() && "cannot have null StringRef");
   QualType Ty = Ctx.CharTy;
   // A C++ string literal has a const-qualified element type (C++ 2.13.4p1).
   if (Ctx.getLangOpts().CPlusPlus || Ctx.getLangOpts().ConstStrings)
@@ -1965,9 +1965,8 @@ QualType SourceLocExpr::BuildStringArrayType(const ASTContext &Ctx,
                                   ArrayType::Normal, 0);
 }
 
-SourceLocExpr::EvaluatedSourceLocExpr
-SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
-                                 const Expr *DefaultExpr) const {
+APValue SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
+                                         const Expr *DefaultExpr) const {
   SourceLocation Loc;
   const DeclContext *Context;
 
@@ -1983,64 +1982,32 @@ SourceLocExpr::EvaluateInContext(const ASTContext &Ctx,
   PresumedLoc PLoc = Ctx.getSourceManager().getPresumedLoc(
       Ctx.getSourceManager().getExpansionRange(Loc).getEnd());
 
-  APValue Value = [&]() {
-    switch (getIdentType()) {
-    case SourceLocExpr::Function:
-    case SourceLocExpr::File: {
-      const char *Str = nullptr;
-      if (getIdentType() == SourceLocExpr::File) {
-        Str = PLoc.getFilename();
-      } else {
-        const auto *FD = dyn_cast_or_null<FunctionDecl>(Context);
-        Str = FD ? Ctx.getReadableFunctionName(FD) : "";
-      }
-      APValue::LValueBase LVBase(this);
-      LVBase.setLValueString(Str);
-      APValue StrVal(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
-      return StrVal;
+  switch (getIdentType()) {
+  case SourceLocExpr::Function:
+  case SourceLocExpr::File: {
+    const char *Str = nullptr;
+    if (getIdentType() == SourceLocExpr::File) {
+      Str = PLoc.getFilename();
+    } else {
+      const auto *FD = dyn_cast_or_null<FunctionDecl>(Context);
+      Str = FD ? Ctx.getReadableFunctionName(FD) : "";
     }
-    case SourceLocExpr::Line:
-    case SourceLocExpr::Column: {
-      int64_t LineOrCol = getIdentType() == SourceLocExpr::Line
-                              ? PLoc.getLine()
-                              : PLoc.getColumn();
-      llvm::APSInt TmpRes(
-          llvm::APInt(Ctx.getTargetInfo().getIntWidth(), LineOrCol));
-      APValue NewVal(TmpRes);
-      return NewVal;
-    }
-    }
-    llvm_unreachable("unhandled case");
-  }();
-
-  QualType Ty = [&]() -> QualType {
-    switch (getIdentType()) {
-    case SourceLocExpr::File:
-    case SourceLocExpr::Function: {
-      assert(Value.getLValueBase().hasLValueString());
-      // Build the ConstantArrayType coorisponding to the evaluated strings
-      // length.
-      StringRef Str = Value.getLValueBase().getLValueString();
-      return BuildStringArrayType(Ctx, Str);
-    }
-    case SourceLocExpr::Line:
-    case SourceLocExpr::Column:
-      return Ctx.UnsignedIntTy;
-    }
-    llvm_unreachable("unhandled case");
-  }();
-
-  return EvaluatedSourceLocExpr(std::move(Value), Ty);
-}
-
-uint64_t SourceLocExpr::EvaluatedSourceLocExpr::getIntValue() const {
-  assert(hasIntValue() && "SourceLocExpr is not a integer expression");
-  return Value.getInt().getExtValue();
-}
-
-const char *SourceLocExpr::EvaluatedSourceLocExpr::getStringValue() const {
-  assert(hasStringValue() && "no string value");
-  return Value.getLValueBase().getLValueString();
+    assert(Str && "should not be null");
+    APValue::LValueBase LVBase(
+        this, Str, Ctx.getAsConstantArrayType(BuildStringArrayType(Ctx, Str)));
+    return APValue(LVBase, CharUnits::Zero(), APValue::NoLValuePath{});
+  }
+  case SourceLocExpr::Line:
+  case SourceLocExpr::Column: {
+    int64_t LineOrCol = getIdentType() == SourceLocExpr::Line
+                            ? PLoc.getLine()
+                            : PLoc.getColumn();
+    llvm::APSInt IntVal(
+        llvm::APInt(Ctx.getTargetInfo().getIntWidth(), LineOrCol));
+    return APValue(IntVal);
+  }
+  }
+  llvm_unreachable("unhandled case");
 }
 
 InitListExpr::InitListExpr(const ASTContext &C, SourceLocation lbraceloc,

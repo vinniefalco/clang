@@ -54,7 +54,6 @@
 using namespace clang;
 using llvm::APFloat;
 using llvm::APSInt;
-using EvaluatedSourceLocExpr = SourceLocExpr::EvaluatedSourceLocExpr;
 
 static bool IsGlobalLValue(APValue::LValueBase B);
 
@@ -66,14 +65,11 @@ namespace {
   using SourceLocExprScopeGuard =
       CurrentSourceLocExprScope::SourceLocExprScopeGuard;
 
-  static QualType getType(const ASTContext &Ctx, APValue::LValueBase B) {
+  static QualType getType(APValue::LValueBase B) {
     if (!B) return QualType();
 
-    if (B.hasLValueString()) {
-      assert(B.is<const Expr *>() && isa<SourceLocExpr>(B.get<const Expr *>()));
-      StringRef S = B.getLValueString();
-      return SourceLocExpr::BuildStringArrayType(Ctx, S);
-    }
+    if (B.isLValueString())
+      return B.getLValueStringType()->desugar();
 
     if (const ValueDecl *D = B.dyn_cast<const ValueDecl*>()) {
       // FIXME: It's unclear where we're supposed to take the type from, and
@@ -193,7 +189,7 @@ namespace {
     assert(!isBaseAnAllocSizeCall(Base) &&
            "Unsized arrays shouldn't appear here");
     unsigned MostDerivedLength = 0;
-    Type = getType(Ctx, Base);
+    Type = getType(Base);
 
     for (unsigned I = 0, N = Path.size(); I != N; ++I) {
       if (Type->isArrayType()) {
@@ -1365,8 +1361,7 @@ namespace {
       IsNullPtr = V.isNullPointer();
     }
 
-    void set(const ASTContext &Ctx, APValue::LValueBase B,
-             bool BInvalid = false) {
+    void set(APValue::LValueBase B, bool BInvalid = false) {
 #ifndef NDEBUG
       // We only allow a few types of invalid bases. Enforce that here.
       if (BInvalid) {
@@ -1379,7 +1374,7 @@ namespace {
       Base = B;
       Offset = CharUnits::fromQuantity(0);
       InvalidBase = BInvalid;
-      Designator = SubobjectDesignator(getType(Ctx, B));
+      Designator = SubobjectDesignator(getType(B));
       IsNullPtr = false;
     }
 
@@ -1391,10 +1386,7 @@ namespace {
       IsNullPtr = true;
     }
 
-    void setInvalid(const ASTContext &Ctx, APValue::LValueBase B,
-                    unsigned I = 0) {
-      set(Ctx, B, true);
-    }
+    void setInvalid(APValue::LValueBase B, unsigned I = 0) { set(B, true); }
 
     // Check that this LValue is not based on a null pointer. If it is, produce
     // a diagnostic and mark the designator as invalid.
@@ -1430,8 +1422,7 @@ namespace {
         return;
       }
       if (checkSubobject(Info, E, CSK_ArrayToPointer)) {
-        assert(getType(Info.Ctx, Base)->isPointerType() ||
-               getType(Info.Ctx, Base)->isArrayType());
+        assert(getType(Base)->isPointerType() || getType(Base)->isArrayType());
         Designator.FirstEntryIsAnUnsizedArray = true;
         Designator.addUnsizedArrayUnchecked(ElemTy);
       }
@@ -1600,8 +1591,8 @@ static bool EvaluateAsRValue(EvalInfo &Info, const Expr *E, APValue &Result);
 template <class KeyTy>
 static APValue &createTemporary(const KeyTy *Key, bool IsLifetimeExtended,
                                 LValue &LV, CallStackFrame &Frame) {
-  LV.set(Frame.Info.Ctx, {Key, Frame.Info.CurrentCall->Index,
-                          Frame.Info.CurrentCall->getTempVersion()});
+  LV.set({Key, Frame.Info.CurrentCall->Index,
+          Frame.Info.CurrentCall->getTempVersion()});
   return Frame.createTemporary(Key, IsLifetimeExtended);
 }
 
@@ -1684,6 +1675,10 @@ static bool IsGlobalLValue(APValue::LValueBase B) {
     // ... the address of a function,
     return isa<FunctionDecl>(D);
   }
+
+  // A string literal.
+  if (B.isLValueString())
+    return true;
 
   const Expr *E = B.get<const Expr*>();
   switch (E->getStmtClass()) {
@@ -2615,7 +2610,7 @@ static APSInt extractStringLiteralCharacter(EvalInfo &Info,
   }
 
   if (const auto *SLE = dyn_cast<SourceLocExpr>(Lit)) {
-    assert(Base.hasLValueString());
+    assert(Base.isLValueString());
     StringRef Str = Base.getLValueString();
     APSInt Res(Info.Ctx.getCharWidth(),
                Info.Ctx.CharTy->isUnsignedIntegerType());
@@ -3143,7 +3138,7 @@ static CompleteObject findCompleteObject(EvalInfo &Info, const Expr *E,
 
   // Compute value storage location and type of base object.
   APValue *BaseVal = nullptr;
-  QualType BaseType = getType(Info.Ctx, LVal.Base);
+  QualType BaseType = getType(LVal.Base);
   bool LifetimeStartedInEvaluation = Frame;
 
   if (const ValueDecl *D = LVal.Base.dyn_cast<const ValueDecl*>()) {
@@ -3357,12 +3352,11 @@ static bool handleLValueToRValueConversion(EvalInfo &Info, const Expr *Conv,
       CompleteObject StrObj(&Str, Base->getType(), false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     } else if (const SourceLocExpr *SLE = dyn_cast<SourceLocExpr>(Base)) {
-      assert(LVal.Base.hasLValueString() &&
+      assert(LVal.Base.isLValueString() &&
              "the type of a SourceLocExpr must be explicitly specified");
-      StringRef StrVal = LVal.Base.getLValueString();
-      QualType StrTy = SourceLocExpr::BuildStringArrayType(Info.Ctx, StrVal);
       APValue Str(LVal.Base, CharUnits::Zero(), APValue::NoLValuePath(), 0);
-      CompleteObject StrObj(&Str, StrTy, false);
+      CompleteObject StrObj(&Str, LVal.Base.getLValueStringType()->desugar(),
+                            false);
       return extractSubobject(Info, Conv, StrObj, LVal.Designator, RVal);
     }
   }
@@ -5134,7 +5128,7 @@ protected:
   typedef ExprEvaluatorBase<Derived> ExprEvaluatorBaseTy;
 
   bool Success(APValue::LValueBase B) {
-    Result.set(this->Info.Ctx, B);
+    Result.set(B);
     return true;
   }
 
@@ -5170,7 +5164,7 @@ public:
     if (!EvalOK) {
       if (!InvalidBaseOK)
         return false;
-      Result.setInvalid(this->Info.Ctx, E);
+      Result.setInvalid(E);
       return true;
     }
 
@@ -5385,8 +5379,8 @@ bool LValueExprEvaluator::VisitVarDecl(const Expr *E, const VarDecl *VD) {
 
   if (!VD->getType()->isReferenceType()) {
     if (Frame) {
-      Result.set(Info.Ctx, {VD, Frame->Index,
-                            Info.CurrentCall->getCurrentTemporaryVersion(VD)});
+      Result.set(
+          {VD, Frame->Index, Info.CurrentCall->getCurrentTemporaryVersion(VD)});
       return true;
     }
     return Success(VD);
@@ -5423,7 +5417,7 @@ bool LValueExprEvaluator::VisitMaterializeTemporaryExpr(
   if (E->getStorageDuration() == SD_Static) {
     Value = Info.Ctx.getMaterializedTemporaryValue(E, true);
     *Value = APValue();
-    Result.set(Info.Ctx, E);
+    Result.set(E);
   } else {
     Value = &createTemporary(E, E->getStorageDuration() == SD_Automatic, Result,
                              *Info.CurrentCall);
@@ -5700,7 +5694,7 @@ static bool evaluateLValueAsAllocSize(EvalInfo &Info, APValue::LValueBase Base,
 
   // Store E instead of E unwrapped so that the type of the LValue's base is
   // what the user wanted.
-  Result.setInvalid(Info.Ctx, E);
+  Result.setInvalid(E);
 
   QualType Pointee = E->getType()->castAs<PointerType>()->getPointeeType();
   Result.addUnsizedArray(Info, E, Pointee);
@@ -5714,7 +5708,7 @@ class PointerExprEvaluator
   bool InvalidBaseOK;
 
   bool Success(const Expr *E) {
-    Result.set(Info.Ctx, E);
+    Result.set(E);
     return true;
   }
 
@@ -5799,12 +5793,10 @@ public:
 
   bool VisitSourceLocExpr(const SourceLocExpr *E) {
     assert(E && E->isStringType());
-    EvaluatedSourceLocExpr Evaluated = E->EvaluateInContext(
+    APValue LValResult = E->EvaluateInContext(
         Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
-    APValue LValResult = Evaluated.getValue();
-    Result.set(Info.Ctx, LValResult.getLValueBase());
-    Result.addArray(Info, E,
-                    Info.Ctx.getAsConstantArrayType(Evaluated.getType()));
+    Result.set(LValResult.getLValueBase());
+    Result.addArray(Info, E, LValResult.getLValueBase().getLValueStringType());
     return true;
   }
 
@@ -6005,7 +5997,7 @@ bool PointerExprEvaluator::visitNonBuiltinCallExpr(const CallExpr *E) {
   if (!(InvalidBaseOK && getAllocSizeAttr(E)))
     return false;
 
-  Result.setInvalid(Info.Ctx, E);
+  Result.setInvalid(E);
   QualType PointeeTy = E->getType()->castAs<PointerType>()->getPointeeType();
   Result.addUnsizedArray(Info, E, PointeeTy);
   return true;
@@ -7379,9 +7371,9 @@ static bool EvaluateInteger(const Expr *E, APSInt &Result, EvalInfo &Info) {
 
 bool IntExprEvaluator::VisitSourceLocExpr(const SourceLocExpr *E) {
   assert(E && E->isIntType());
-  EvaluatedSourceLocExpr Evaluated = E->EvaluateInContext(
+  APValue Evaluated = E->EvaluateInContext(
       Info.Ctx, Info.CurrentCall->CurSourceLocExprScope.getDefaultExpr());
-  return Success(Evaluated.getIntValue(), E);
+  return Success(Evaluated.getInt(), E);
 }
 
 /// Check whether the given declaration can be directly converted to an integral
@@ -7724,7 +7716,7 @@ static bool isDesignatorAtObjectEnd(const ASTContext &Ctx, const LValue &LVal) {
   }
 
   unsigned I = 0;
-  QualType BaseType = getType(Ctx, Base);
+  QualType BaseType = getType(Base);
   if (LVal.Designator.FirstEntryIsAnUnsizedArray) {
     // If we don't know the array bound, conservatively assume we're looking at
     // the final array element.
@@ -8457,7 +8449,7 @@ static bool isOnePastTheEndOfCompleteObject(const ASTContext &Ctx,
 
   // A pointer to an incomplete type might be past-the-end if the type's size is
   // zero.  We cannot tell because the type is incomplete.
-  QualType Ty = getType(Ctx, LV.getLValueBase());
+  QualType Ty = getType(LV.getLValueBase());
   if (Ty->isIncompleteType())
     return true;
 
@@ -8985,9 +8977,8 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     // - Otherwise pointer comparisons are unspecified.
     if (!LHSDesignator.Invalid && !RHSDesignator.Invalid && IsRelational) {
       bool WasArrayIndex;
-      unsigned Mismatch =
-          FindDesignatorMismatch(getType(Info.Ctx, LHSValue.Base),
-                                 LHSDesignator, RHSDesignator, WasArrayIndex);
+      unsigned Mismatch = FindDesignatorMismatch(
+          getType(LHSValue.Base), LHSDesignator, RHSDesignator, WasArrayIndex);
       // At the point where the designators diverge, the comparison has a
       // specified value if:
       //  - we are comparing array indices
@@ -9031,7 +9022,7 @@ EvaluateComparisonBinaryOperator(EvalInfo &Info, const BinaryOperator *E,
     // compare pointers within the object in question; otherwise, the result
     // depends on where the object is located in memory.
     if (!LHSValue.Base.isNull() && IsRelational) {
-      QualType BaseTy = getType(Info.Ctx, LHSValue.Base);
+      QualType BaseTy = getType(LHSValue.Base);
       if (BaseTy->isIncompleteType())
         return Error(E);
       CharUnits Size = Info.Ctx.getTypeSizeInChars(BaseTy);
@@ -9111,7 +9102,7 @@ bool RecordExprEvaluator::VisitBinCmp(const BinaryOperator *E) {
         CmpInfo.getValueInfo(CmpInfo.makeWeakResult(ResKind))->VD;
     // Check and evaluate the result as a constant expression.
     LValue LV;
-    LV.set(Info.Ctx, VD);
+    LV.set(VD);
     if (!handleLValueToRValueConversion(Info, E, E->getType(), LV, Result))
       return false;
     return CheckConstantExpression(Info, E->getExprLoc(), E->getType(), Result);
@@ -9207,7 +9198,7 @@ bool IntExprEvaluator::VisitBinaryOperator(const BinaryOperator *E) {
     //   one past the last element of the array object, the behavior is
     //   undefined.
     if (!LHSDesignator.Invalid && !RHSDesignator.Invalid &&
-        !AreElementsOfSameArray(getType(Info.Ctx, LHSValue.Base), LHSDesignator,
+        !AreElementsOfSameArray(getType(LHSValue.Base), LHSDesignator,
                                 RHSDesignator))
       Info.CCEDiag(E, diag::note_constexpr_pointer_subtraction_not_same_array);
 
@@ -10705,7 +10696,7 @@ bool Expr::EvaluateAsInitializer(APValue &Value, const ASTContext &Ctx,
   InitInfo.setEvaluatingDecl(VD, Value);
 
   LValue LVal;
-  LVal.set(Ctx, VD);
+  LVal.set(VD);
 
   // C++11 [basic.start.init]p2:
   //  Variables with static storage duration or thread storage duration shall be
@@ -11343,7 +11334,7 @@ bool Expr::isPotentialConstantExpr(const FunctionDecl *FD,
   // is a temporary being used as the 'this' pointer.
   LValue This;
   ImplicitValueInitExpr VIE(RD ? Info.Ctx.getRecordType(RD) : Info.Ctx.IntTy);
-  This.set(Info.Ctx, {&VIE, Info.CurrentCall->Index});
+  This.set({&VIE, Info.CurrentCall->Index});
 
   ArrayRef<const Expr*> Args;
 

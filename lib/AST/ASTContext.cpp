@@ -9912,6 +9912,7 @@ const char *ASTContext::getReadableFunctionName(const FunctionDecl *D) const {
     } else
       llvm_unreachable("function is expected to have non-empty name");
   }
+  assert(Result != nullptr);
   return Result;
 }
 

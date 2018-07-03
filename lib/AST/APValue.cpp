@@ -43,20 +43,48 @@ APValue::LValueBase::operator bool () const {
   return static_cast<bool>(Ptr);
 }
 
-static bool isEmptyOrTombstoneStr(const char *S) {
-  using SI = llvm::DenseMapInfo<const char *>;
-  return S == SI::getEmptyKey() || S == SI::getTombstoneKey();
+template <class T> static bool isEmptyOrTombstoneStr(T const &V) {
+  using DMI = llvm::DenseMapInfo<T>;
+  return V == DMI::getEmptyKey() || V == DMI::getTombstoneKey();
 }
 
-bool APValue::LValueBase::compareLValueString(const LValueBase &Other) const {
-  // fast path
-  if (LValueString == Other.LValueString)
-    return true;
+APValue::LValueBase::LValueBase(const Expr *E, const char *StrVal,
+                                const ConstantArrayType *ArrTy)
+    : Ptr(E), StrData{StrVal, ArrTy} {
+  assert(isa<SourceLocExpr>(E) &&
+         "cannot construct string lvalue base from this expression");
+  assert(StrVal && ArrTy && "arguments cannot be null");
+  assert(getBaseKind() == BK_String);
+}
 
-  if (isEmptyOrTombstoneStr(LValueString) ||
-      isEmptyOrTombstoneStr(Other.LValueString))
-    return LValueString == Other.LValueString;
-  return StringRef(LValueString) == StringRef(Other.LValueString);
+APValue::LValueBase::BaseKind APValue::LValueBase::getBaseKind() const {
+  if (isEmptyOrTombstoneStr(Ptr))
+    return BK_Normal;
+  if (dyn_cast_or_null<SourceLocExpr>(Ptr.dyn_cast<const Expr *>()))
+    return BK_String;
+  return BK_Normal;
+}
+
+bool APValue::LValueBase::operator==(const LValueBase &Other) const {
+  if (Ptr != Other.Ptr)
+    return false;
+  assert(getBaseKind() == Other.getBaseKind());
+
+  switch (getBaseKind()) {
+  case BK_Normal:
+    return NormalData.Version == Other.NormalData.Version &&
+           NormalData.CallIndex == Other.NormalData.CallIndex;
+  case BK_String:
+    return StrData.getString() == Other.StrData.getString() &&
+           StrData.Type == Other.StrData.Type;
+  }
+  llvm_unreachable("unhandled case");
+}
+
+StringRef APValue::LValueBase::GlobalStringData::getString() const {
+  assert(Value && Type);
+  unsigned Size = Type->getSize().getZExtValue();
+  return StringRef(Value, *Value ? Size - 1 : 0);
 }
 
 clang::APValue::LValueBase
@@ -64,8 +92,7 @@ llvm::DenseMapInfo<clang::APValue::LValueBase>::getEmptyKey() {
   return clang::APValue::LValueBase(
       DenseMapInfo<clang::APValue::LValueBase::PtrTy>::getEmptyKey(),
       DenseMapInfo<unsigned>::getEmptyKey(),
-      DenseMapInfo<unsigned>::getEmptyKey(),
-      DenseMapInfo<const char *>::getEmptyKey());
+      DenseMapInfo<unsigned>::getEmptyKey());
 }
 
 clang::APValue::LValueBase
@@ -73,19 +100,24 @@ llvm::DenseMapInfo<clang::APValue::LValueBase>::getTombstoneKey() {
   return clang::APValue::LValueBase(
       DenseMapInfo<clang::APValue::LValueBase::PtrTy>::getTombstoneKey(),
       DenseMapInfo<unsigned>::getTombstoneKey(),
-      DenseMapInfo<unsigned>::getTombstoneKey(),
-      DenseMapInfo<const char *>::getTombstoneKey());
+      DenseMapInfo<unsigned>::getTombstoneKey());
 }
 
 unsigned llvm::DenseMapInfo<clang::APValue::LValueBase>::getHashValue(
     const clang::APValue::LValueBase &Base) {
+  using LVBase = clang::APValue::LValueBase;
   llvm::FoldingSetNodeID ID;
   ID.AddPointer(Base.getOpaqueValue());
-  ID.AddInteger(Base.getCallIndex());
-  ID.AddInteger(Base.getVersion());
-
-  assert(!isEmptyOrTombstoneStr(Base.getLValueString()));
-  ID.AddString(StringRef(Base.getLValueString()));
+  switch (Base.getBaseKind()) {
+  case LVBase::BK_Normal:
+    ID.AddInteger(Base.getCallIndex());
+    ID.AddInteger(Base.getVersion());
+    break;
+  case LVBase::BK_String:
+    ID.AddString(Base.getLValueString());
+    ID.AddPointer(Base.getLValueStringType());
+    break;
+  }
 
   return ID.ComputeHash();
 }

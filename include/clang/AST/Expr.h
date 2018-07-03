@@ -3917,10 +3917,6 @@ class SourceLocExpr final : public Expr {
 public:
   enum IdentType { Function, File, Line, Column };
 
-  /// Represents the result of evaluating a SourceLocExpr within a specific
-  /// context.
-  class EvaluatedSourceLocExpr;
-
   SourceLocExpr(const ASTContext &Ctx, IdentType Type, SourceLocation BLoc,
                 SourceLocation RParenLoc, DeclContext *Context);
 
@@ -3931,8 +3927,8 @@ public:
 
   /// Return the result of evaluating this SourceLocExpr in the specified
   /// (and possibly null) default argument or initialization context.
-  EvaluatedSourceLocExpr EvaluateInContext(const ASTContext &Ctx,
-                                           const Expr *DefaultExpr) const;
+  APValue EvaluateInContext(const ASTContext &Ctx,
+                            const Expr *DefaultExpr) const;
 
   /// Return a string representing the name of the specific builtin function.
   StringRef getBuiltinStr() const LLVM_READONLY;
@@ -3981,32 +3977,6 @@ private:
   void setParentContext(DeclContext *DC) { ParentContext = DC; }
   void setLocStart(SourceLocation L) { BuiltinLoc = L; }
   void setLocEnd(SourceLocation L) { RParenLoc = L; }
-};
-
-/// Represents the result of evaluating a SourceLocExpr within a specific
-/// context.
-class SourceLocExpr::EvaluatedSourceLocExpr {
-  friend class SourceLocExpr;
-
-  const APValue Value;
-  const QualType Type;
-
-  EvaluatedSourceLocExpr(APValue V, QualType Type)
-      : Value(std::move(V)), Type(Type) {}
-
-public:
-  /// Return the type of the evaluated SourceLocExpr. For string values this
-  /// is the ConstantArrayType, not the character pointer type.
-  QualType getType() const { return Type; }
-
-  /// Return the evaluated value.
-  APValue getValue() const { return Value; }
-
-  const char *getStringValue() const;
-  uint64_t getIntValue() const;
-
-  bool hasStringValue() const { return Value.isLValue(); }
-  bool hasIntValue() const { return Value.isInt(); }
 };
 
 /// Describes an C or C++ initializer list.

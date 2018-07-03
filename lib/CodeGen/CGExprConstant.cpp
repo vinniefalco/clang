@@ -1744,9 +1744,8 @@ ConstantLValueEmitter::VisitSourceLocExpr(const SourceLocExpr *E) {
   const APValue::LValueBase &Base = Value.getLValueBase();
   assert(Base.get<const Expr *>() == E &&
          "the base should refer to this SourceLocExpr");
-  assert(Base.hasLValueString() &&
+  assert(Base.isLValueString() &&
          "no source location context in the lvalue base");
-  assert(E->isStringType());
   return CGM.GetAddrOfConstantStringFromSourceLocExpr(E,
                                                       Base.getLValueString());
 }
