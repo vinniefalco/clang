@@ -9901,21 +9901,19 @@ ASTContext::getMaterializedTemporaryValue(const MaterializeTemporaryExpr *E,
 
 const char *ASTContext::getReadableFunctionName(const FunctionDecl *D) const {
   assert(D && "decl may not be null");
+  if (IdentifierInfo *II = D->getDeclName().getAsIdentifierInfo()) {
+    assert(D->getDeclName().getAsString() == II->getName());
+    return II->getNameStart();
+  }
   const char *&Result = ReadableFunctionNameCache[D];
   if (!Result) {
-    if (DeclarationName Name = D->getDeclName()) {
-      if (auto *II = Name.getAsIdentifierInfo()) {
-        Result = II->getNameStart();
-      } else {
-        std::string S = Name.getAsString();
-        assert(!Name.getAsIdentifierInfo());
-        assert(S.size() >= 1);
-        char *Buff = (char *)Allocate(S.size() + 1);
-        strcpy(Buff, S.c_str());
-        Result = Buff;
-      }
-    } else
-      llvm_unreachable("function is expected to have non-empty name");
+    DeclarationName Name = D->getDeclName();
+    assert(Name && "expected declaration to have a name");
+    std::string S = Name.getAsString();
+    assert(!S.empty());
+    char *Buff = (char *)Allocate(S.size() + 1);
+    strcpy(Buff, S.c_str());
+    Result = Buff;
   }
   assert(Result != nullptr);
   return Result;
