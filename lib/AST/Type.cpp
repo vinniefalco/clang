@@ -88,6 +88,16 @@ const IdentifierInfo* QualType::getBaseTypeIdentifier() const {
   return nullptr;
 }
 
+bool QualType::mayBeDynamicClass() const {
+  const auto *ClassDecl = getTypePtr()->getPointeeCXXRecordDecl();
+  return ClassDecl && ClassDecl->mayBeDynamicClass();
+}
+
+bool QualType::mayBeNotDynamicClass() const {
+  const auto *ClassDecl = getTypePtr()->getPointeeCXXRecordDecl();
+  return !ClassDecl || ClassDecl->mayBeNonDynamicClass();
+}
+
 bool QualType::isConstant(QualType T, const ASTContext &Ctx) {
   if (T.isConstQualified())
     return true;
@@ -341,7 +351,7 @@ QualType QualType::IgnoreParens(QualType T) {
   return T;
 }
 
-/// \brief This will check for a T (which should be a Type which can act as
+/// This will check for a T (which should be a Type which can act as
 /// sugar, such as a TypedefType) by removing any existing sugar until it
 /// reaches a T or a non-sugared type.
 template<typename T> static const T *getAsSugar(const Type *Cur) {
@@ -1724,7 +1734,7 @@ bool Type::hasIntegerRepresentation() const {
     return isIntegerType();
 }
 
-/// \brief Determine whether this type is an integral type.
+/// Determine whether this type is an integral type.
 ///
 /// This routine determines whether the given type is an integral type per 
 /// C++ [basic.fundamental]p7. Although the C standard does not define the
@@ -1805,7 +1815,7 @@ bool Type::isChar32Type() const {
   return false;
 }
 
-/// \brief Determine whether this type is any of the built-in character
+/// Determine whether this type is any of the built-in character
 /// types.
 bool Type::isAnyCharacterType() const {
   const auto *BT = dyn_cast<BuiltinType>(CanonicalType);
@@ -1981,7 +1991,7 @@ Type::ScalarTypeKind Type::getScalarTypeKind() const {
   llvm_unreachable("unknown scalar type");
 }
 
-/// \brief Determines whether the type is a C++ aggregate type or C
+/// Determines whether the type is a C++ aggregate type or C
 /// aggregate or union type.
 ///
 /// An aggregate type is an array or a class type (struct, union, or
@@ -2064,7 +2074,7 @@ bool Type::isIncompleteType(NamedDecl **Def) const {
       return false;
     // The inheritance attribute might only be present on the most recent
     // CXXRecordDecl, use that one.
-    RD = RD->getMostRecentDecl();
+    RD = RD->getMostRecentNonInjectedDecl();
     // Nothing interesting to do if the inheritance attribute is already set.
     if (RD->hasAttr<MSInheritanceAttr>())
       return false;
@@ -2680,6 +2690,54 @@ StringRef BuiltinType::getName(const PrintingPolicy &Policy) const {
     return "double";
   case LongDouble:
     return "long double";
+  case ShortAccum:
+    return "short _Accum";
+  case Accum:
+    return "_Accum";
+  case LongAccum:
+    return "long _Accum";
+  case UShortAccum:
+    return "unsigned short _Accum";
+  case UAccum:
+    return "unsigned _Accum";
+  case ULongAccum:
+    return "unsigned long _Accum";
+  case BuiltinType::ShortFract:
+    return "short _Fract";
+  case BuiltinType::Fract:
+    return "_Fract";
+  case BuiltinType::LongFract:
+    return "long _Fract";
+  case BuiltinType::UShortFract:
+    return "unsigned short _Fract";
+  case BuiltinType::UFract:
+    return "unsigned _Fract";
+  case BuiltinType::ULongFract:
+    return "unsigned long _Fract";
+  case BuiltinType::SatShortAccum:
+    return "_Sat short _Accum";
+  case BuiltinType::SatAccum:
+    return "_Sat _Accum";
+  case BuiltinType::SatLongAccum:
+    return "_Sat long _Accum";
+  case BuiltinType::SatUShortAccum:
+    return "_Sat unsigned short _Accum";
+  case BuiltinType::SatUAccum:
+    return "_Sat unsigned _Accum";
+  case BuiltinType::SatULongAccum:
+    return "_Sat unsigned long _Accum";
+  case BuiltinType::SatShortFract:
+    return "_Sat short _Fract";
+  case BuiltinType::SatFract:
+    return "_Sat _Fract";
+  case BuiltinType::SatLongFract:
+    return "_Sat long _Fract";
+  case BuiltinType::SatUShortFract:
+    return "_Sat unsigned short _Fract";
+  case BuiltinType::SatUFract:
+    return "_Sat unsigned _Fract";
+  case BuiltinType::SatULongFract:
+    return "_Sat unsigned long _Fract";
   case Float16:
     return "_Float16";
   case Float128:
@@ -3380,7 +3438,7 @@ void ObjCTypeParamType::Profile(llvm::FoldingSetNodeID &ID) {
 
 namespace {
 
-/// \brief The cached properties of a type.
+/// The cached properties of a type.
 class CachedProperties {
   Linkage L;
   bool local;
@@ -3547,7 +3605,7 @@ static CachedProperties computeCachedProperties(const Type *T) {
   llvm_unreachable("unhandled type class");
 }
 
-/// \brief Determine the linkage of this type.
+/// Determine the linkage of this type.
 Linkage Type::getLinkage() const {
   Cache::ensure(this);
   return TypeBits.getLinkage();
@@ -3907,13 +3965,13 @@ bool Type::isObjCLifetimeType() const {
   return type->isObjCRetainableType();
 }
 
-/// \brief Determine whether the given type T is a "bridgable" Objective-C type,
+/// Determine whether the given type T is a "bridgable" Objective-C type,
 /// which is either an Objective-C object pointer type or an 
 bool Type::isObjCARCBridgableType() const {
   return isObjCObjectPointerType() || isBlockPointerType();
 }
 
-/// \brief Determine whether the given type T is a "bridgeable" C type.
+/// Determine whether the given type T is a "bridgeable" C type.
 bool Type::isCARCBridgableType() const {
   const auto *Pointer = getAs<PointerType>();
   if (!Pointer)
@@ -3973,5 +4031,21 @@ QualType::DestructionKind QualType::isDestructedTypeImpl(QualType type) {
 }
 
 CXXRecordDecl *MemberPointerType::getMostRecentCXXRecordDecl() const {
-  return getClass()->getAsCXXRecordDecl()->getMostRecentDecl();
+  return getClass()->getAsCXXRecordDecl()->getMostRecentNonInjectedDecl();
+}
+
+void clang::FixedPointValueToString(SmallVectorImpl<char> &Str,
+                                    const llvm::APSInt &Val, unsigned Scale,
+                                    unsigned Radix) {
+  llvm::APSInt ScaleVal = llvm::APSInt::getUnsigned(1ULL << Scale);
+  llvm::APSInt IntPart = Val / ScaleVal;
+  llvm::APSInt FractPart = Val % ScaleVal;
+  llvm::APSInt RadixInt = llvm::APSInt::getUnsigned(Radix);
+
+  IntPart.toString(Str, Radix);
+  Str.push_back('.');
+  do {
+    (FractPart * RadixInt / ScaleVal).toString(Str, Radix);
+    FractPart = (FractPart * RadixInt) % ScaleVal;
+  } while (FractPart.getExtValue());
 }

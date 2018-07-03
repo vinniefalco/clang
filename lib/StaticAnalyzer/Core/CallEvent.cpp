@@ -166,7 +166,7 @@ bool CallEvent::isGlobalCFunction(StringRef FunctionName) const {
   return CheckerContext::isCLibraryFunction(FD, FunctionName);
 }
 
-/// \brief Returns true if a type is a pointer-to-const or reference-to-const
+/// Returns true if a type is a pointer-to-const or reference-to-const
 /// with no further indirection.
 static bool isPointerToConst(QualType Ty) {
   QualType PointeeTy = Ty->getPointeeType();
@@ -399,10 +399,10 @@ RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
     getManager()->getContext(FD);
   bool IsAutosynthesized;
   Stmt* Body = AD->getBody(IsAutosynthesized);
-  DEBUG({
-      if (IsAutosynthesized)
-        llvm::dbgs() << "Using autosynthesized body for " << FD->getName()
-                     << "\n";
+  LLVM_DEBUG({
+    if (IsAutosynthesized)
+      llvm::dbgs() << "Using autosynthesized body for " << FD->getName()
+                   << "\n";
   });
   if (Body) {
     const Decl* Decl = AD->getDecl();
@@ -534,9 +534,14 @@ void CXXInstanceCall::getExtraInvalidatedValues(
     // Get the record decl for the class of 'This'. D->getParent() may return a
     // base class decl, rather than the class of the instance which needs to be
     // checked for mutable fields.
+    // TODO: We might as well look at the dynamic type of the object.
     const Expr *Ex = getCXXThisExpr()->ignoreParenBaseCasts();
-    const CXXRecordDecl *ParentRecord = Ex->getType()->getAsCXXRecordDecl();
-    if (!ParentRecord || ParentRecord->hasMutableFields())
+    QualType T = Ex->getType();
+    if (T->isPointerType()) // Arrow or implicit-this syntax?
+      T = T->getPointeeType();
+    const CXXRecordDecl *ParentRecord = T->getAsCXXRecordDecl();
+    assert(ParentRecord);
+    if (ParentRecord->hasMutableFields())
       return;
     // Preserve CXXThis.
     const MemRegion *ThisRegion = ThisVal.getAsRegion();
@@ -1216,7 +1221,7 @@ CallEventRef<>
 CallEventManager::getCaller(const StackFrameContext *CalleeCtx,
                             ProgramStateRef State) {
   const LocationContext *ParentCtx = CalleeCtx->getParent();
-  const LocationContext *CallerCtx = ParentCtx->getCurrentStackFrame();
+  const LocationContext *CallerCtx = ParentCtx->getStackFrame();
   assert(CallerCtx && "This should not be used for top-level stack frames");
 
   const Stmt *CallSite = CalleeCtx->getCallSite();

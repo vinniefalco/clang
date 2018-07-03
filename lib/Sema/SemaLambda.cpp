@@ -24,7 +24,7 @@
 using namespace clang;
 using namespace sema;
 
-/// \brief Examines the FunctionScopeInfo stack to determine the nearest
+/// Examines the FunctionScopeInfo stack to determine the nearest
 /// enclosing lambda (to the current lambda) that is 'capture-ready' for 
 /// the variable referenced in the current lambda (i.e. \p VarToCapture).
 /// If successful, returns the index into Sema's FunctionScopeInfo stack
@@ -135,7 +135,7 @@ getStackIndexOfNearestEnclosingCaptureReadyLambda(
   return NoLambdaIsCaptureReady;
 }
 
-/// \brief Examines the FunctionScopeInfo stack to determine the nearest
+/// Examines the FunctionScopeInfo stack to determine the nearest
 /// enclosing lambda (to the current lambda) that is 'capture-capable' for 
 /// the variable referenced in the current lambda (i.e. \p VarToCapture).
 /// If successful, returns the index into Sema's FunctionScopeInfo stack
@@ -263,7 +263,7 @@ CXXRecordDecl *Sema::createLambdaClosureType(SourceRange IntroducerRange,
   return Class;
 }
 
-/// \brief Determine whether the given context is or is enclosed in an inline
+/// Determine whether the given context is or is enclosed in an inline
 /// function.
 static bool isInInlineFunction(const DeclContext *DC) {
   while (!DC->isFileContext()) {
@@ -692,9 +692,7 @@ void Sema::deduceClosureReturnType(CapturingScopeInfo &CSI) {
   }
 
   // Third case: only one return statement. Don't bother doing extra work!
-  SmallVectorImpl<ReturnStmt*>::iterator I = CSI.Returns.begin(),
-                                         E = CSI.Returns.end();
-  if (I+1 == E)
+  if (CSI.Returns.size() == 1)
     return;
 
   // General case: many return statements.
@@ -703,15 +701,22 @@ void Sema::deduceClosureReturnType(CapturingScopeInfo &CSI) {
   // We require the return types to strictly match here.
   // Note that we've already done the required promotions as part of
   // processing the return statement.
-  for (; I != E; ++I) {
-    const ReturnStmt *RS = *I;
+  for (const ReturnStmt *RS : CSI.Returns) {
     const Expr *RetE = RS->getRetValue();
 
     QualType ReturnType =
         (RetE ? RetE->getType() : Context.VoidTy).getUnqualifiedType();
     if (Context.getCanonicalFunctionResultType(ReturnType) ==
-          Context.getCanonicalFunctionResultType(CSI.ReturnType))
+          Context.getCanonicalFunctionResultType(CSI.ReturnType)) {
+      // Use the return type with the strictest possible nullability annotation.
+      auto RetTyNullability = ReturnType->getNullability(Ctx);
+      auto BlockNullability = CSI.ReturnType->getNullability(Ctx);
+      if (BlockNullability &&
+          (!RetTyNullability ||
+           hasWeakerNullability(*RetTyNullability, *BlockNullability)))
+        CSI.ReturnType = ReturnType;
       continue;
+    }
 
     // FIXME: This is a poor diagnostic for ReturnStmts without expressions.
     // TODO: It's possible that the *first* return is the divergent one.
@@ -1189,7 +1194,7 @@ QualType Sema::getLambdaConversionFunctionResultType(
                                  CallOpProto->getParamTypes(), InvokerExtInfo);
 }
 
-/// \brief Add a lambda's conversion to function pointer, as described in
+/// Add a lambda's conversion to function pointer, as described in
 /// C++11 [expr.prim.lambda]p6.
 static void addFunctionPointerConversion(Sema &S,
                                          SourceRange IntroducerRange,
@@ -1358,7 +1363,7 @@ static void addFunctionPointerConversion(Sema &S,
     Class->addDecl(Invoke);
 }
 
-/// \brief Add a lambda's conversion to block pointer.
+/// Add a lambda's conversion to block pointer.
 static void addBlockPointerConversion(Sema &S, 
                                       SourceRange IntroducerRange,
                                       CXXRecordDecl *Class,

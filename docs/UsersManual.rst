@@ -1269,6 +1269,12 @@ are listed below.
    devirtualization and virtual constant propagation, for classes with
    :doc:`hidden LTO visibility <LTOVisibility>`. Requires ``-flto``.
 
+.. option:: -fforce-emit-vtables
+
+   In order to improve devirtualization, forces emitting of vtables even in
+   modules where it isn't necessary. It causes more inline virtual functions
+   to be emitted.
+
 .. option:: -fno-assume-sane-operator-new
 
    Don't assume that the C++'s new operator is sane.
@@ -1735,11 +1741,11 @@ profile creation and use.
 .. option:: -fprofile-generate[=<dirname>]
 
   The ``-fprofile-generate`` and ``-fprofile-generate=`` flags will use
-  an alterantive instrumentation method for profile generation. When
+  an alternative instrumentation method for profile generation. When
   given a directory name, it generates the profile file
   ``default_%m.profraw`` in the directory named ``dirname`` if specified.
   If ``dirname`` does not exist, it will be created at runtime. ``%m`` specifier
-  will be substibuted with a unique id documented in step 2 above. In other words,
+  will be substituted with a unique id documented in step 2 above. In other words,
   with ``-fprofile-generate[=<dirname>]`` option, the "raw" profile data automatic
   merging is turned on by default, so there will no longer any risk of profile
   clobbering from different running processes.  For example,

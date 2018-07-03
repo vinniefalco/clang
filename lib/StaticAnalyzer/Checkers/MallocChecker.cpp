@@ -30,6 +30,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
+#include "AllocationState.h"
 #include <climits>
 #include <utility>
 
@@ -45,7 +46,8 @@ enum AllocationFamily {
   AF_CXXNew,
   AF_CXXNewArray,
   AF_IfNameIndex,
-  AF_Alloca
+  AF_Alloca,
+  AF_InternalBuffer
 };
 
 class RefState {
@@ -134,10 +136,10 @@ enum ReallocPairKind {
 };
 
 /// \class ReallocPair
-/// \brief Stores information about the symbol being reallocated by a call to
+/// Stores information about the symbol being reallocated by a call to
 /// 'realloc' to allow modeling failed reallocation later in the path.
 struct ReallocPair {
-  // \brief The symbol which realloc reallocated.
+  // The symbol which realloc reallocated.
   SymbolRef ReallocatedSym;
   ReallocPairKind Kind;
 
@@ -256,20 +258,20 @@ private:
 
   void initIdentifierInfo(ASTContext &C) const;
 
-  /// \brief Determine family of a deallocation expression.
+  /// Determine family of a deallocation expression.
   AllocationFamily getAllocationFamily(CheckerContext &C, const Stmt *S) const;
 
-  /// \brief Print names of allocators and deallocators.
+  /// Print names of allocators and deallocators.
   ///
   /// \returns true on success.
   bool printAllocDeallocName(raw_ostream &os, CheckerContext &C,
                              const Expr *E) const;
 
-  /// \brief Print expected name of an allocator based on the deallocator's
+  /// Print expected name of an allocator based on the deallocator's
   /// family derived from the DeallocExpr.
   void printExpectedAllocName(raw_ostream &os, CheckerContext &C,
                               const Expr *DeallocExpr) const;
-  /// \brief Print expected name of a deallocator based on the allocator's
+  /// Print expected name of a deallocator based on the allocator's
   /// family.
   void printExpectedDeallocName(raw_ostream &os, AllocationFamily Family) const;
 
@@ -284,12 +286,12 @@ private:
   bool isStandardNewDelete(const FunctionDecl *FD, ASTContext &C) const;
   ///@}
 
-  /// \brief Process C++ operator new()'s allocation, which is the part of C++
+  /// Process C++ operator new()'s allocation, which is the part of C++
   /// new-expression that goes before the constructor.
   void processNewAllocation(const CXXNewExpr *NE, CheckerContext &C,
                             SVal Target) const;
 
-  /// \brief Perform a zero-allocation check.
+  /// Perform a zero-allocation check.
   /// The optional \p RetVal parameter specifies the newly allocated pointer
   /// value; if unspecified, the value of expression \p E is used.
   ProgramStateRef ProcessZeroAllocation(CheckerContext &C, const Expr *E,
@@ -351,7 +353,7 @@ private:
   static ProgramStateRef CallocMem(CheckerContext &C, const CallExpr *CE,
                                    ProgramStateRef State);
 
-  ///\brief Check if the memory associated with this symbol was released.
+  ///Check if the memory associated with this symbol was released.
   bool isReleased(SymbolRef Sym, CheckerContext &C) const;
 
   bool checkUseAfterFree(SymbolRef Sym, CheckerContext &C, const Stmt *S) const;
@@ -429,8 +431,7 @@ private:
   /// The bug visitor which allows us to print extra diagnostics along the
   /// BugReport path. For example, showing the allocation site of the leaked
   /// region.
-  class MallocBugVisitor final
-      : public BugReporterVisitorImpl<MallocBugVisitor> {
+  class MallocBugVisitor final : public BugReporterVisitor {
   protected:
     enum NotificationMode {
       Normal,
@@ -509,7 +510,7 @@ private:
                                                    BugReporterContext &BRC,
                                                    BugReport &BR) override;
 
-    std::unique_ptr<PathDiagnosticPiece>
+    std::shared_ptr<PathDiagnosticPiece>
     getEndPath(BugReporterContext &BRC, const ExplodedNode *EndPathNode,
                BugReport &BR) override {
       if (!IsLeak)
@@ -519,7 +520,7 @@ private:
         PathDiagnosticLocation::createEndOfPath(EndPathNode,
                                                 BRC.getSourceManager());
       // Do not add the statement itself as a range in case of leak.
-      return llvm::make_unique<PathDiagnosticEventPiece>(L, BR.getDescription(),
+      return std::make_shared<PathDiagnosticEventPiece>(L, BR.getDescription(),
                                                          false);
     }
 
@@ -1467,6 +1468,7 @@ void MallocChecker::printExpectedAllocName(raw_ostream &os, CheckerContext &C,
     case AF_CXXNew: os << "'new'"; return;
     case AF_CXXNewArray: os << "'new[]'"; return;
     case AF_IfNameIndex: os << "'if_nameindex()'"; return;
+    case AF_InternalBuffer: os << "container-specific allocator"; return;
     case AF_Alloca:
     case AF_None: llvm_unreachable("not a deallocation expression");
   }
@@ -1479,6 +1481,7 @@ void MallocChecker::printExpectedDeallocName(raw_ostream &os,
     case AF_CXXNew: os << "'delete'"; return;
     case AF_CXXNewArray: os << "'delete[]'"; return;
     case AF_IfNameIndex: os << "'if_freenameindex()'"; return;
+    case AF_InternalBuffer: os << "container-specific deallocator"; return;
     case AF_Alloca:
     case AF_None: llvm_unreachable("suspicious argument");
   }
@@ -1653,7 +1656,9 @@ MallocChecker::getCheckIfTracked(AllocationFamily Family,
     return Optional<MallocChecker::CheckKind>();
   }
   case AF_CXXNew:
-  case AF_CXXNewArray: {
+  case AF_CXXNewArray:
+  // FIXME: Add new CheckKind for AF_InternalBuffer.
+  case AF_InternalBuffer: {
     if (IsALeakCheck) {
       if (ChecksEnabled[CK_NewDeleteLeaksChecker])
         return CK_NewDeleteLeaksChecker;
@@ -2253,7 +2258,7 @@ MallocChecker::getAllocationSite(const ExplodedNode *N, SymbolRef Sym,
             // Do not show local variables belonging to a function other than
             // where the error is reported.
             if (!VR ||
-                (VR->getStackFrame() == LeakContext->getCurrentStackFrame()))
+                (VR->getStackFrame() == LeakContext->getStackFrame()))
               ReferenceRegion = MR;
           }
         }
@@ -2914,7 +2919,7 @@ std::shared_ptr<PathDiagnosticPiece> MallocChecker::MallocBugVisitor::VisitNode(
             // reference counting operations within it (see the code above),
             // and if so, we'd conclude that it likely is a reference counting
             // pointer destructor.
-            ReleaseDestructorLC = LC->getCurrentStackFrame();
+            ReleaseDestructorLC = LC->getStackFrame();
             // It is unlikely that releasing memory is delegated to a destructor
             // inside a destructor of a shared pointer, because it's fairly hard
             // to pass the information that the pointer indeed needs to be
@@ -2990,6 +2995,20 @@ void MallocChecker::printState(raw_ostream &Out, ProgramStateRef State,
     }
   }
 }
+
+namespace clang {
+namespace ento {
+namespace allocation_state {
+
+ProgramStateRef
+markReleased(ProgramStateRef State, SymbolRef Sym, const Expr *Origin) {
+  AllocationFamily Family = AF_InternalBuffer;
+  return State->set<RegionState>(Sym, RefState::getReleased(Family, Origin));
+}
+
+} // end namespace allocation_state
+} // end namespace ento
+} // end namespace clang
 
 void ento::registerNewDeleteLeaksChecker(CheckerManager &mgr) {
   registerCStringCheckerBasic(mgr);

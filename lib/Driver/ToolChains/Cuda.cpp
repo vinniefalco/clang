@@ -164,8 +164,8 @@ CudaInstallationDetector::CudaInstallationDetector(
       std::string FilePath = LibDevicePath + "/libdevice.10.bc";
       if (FS.exists(FilePath)) {
         for (const char *GpuArchName :
-             {"sm_20", "sm_30", "sm_32", "sm_35", "sm_50", "sm_52", "sm_53",
-                   "sm_60", "sm_61", "sm_62", "sm_70", "sm_72"}) {
+             {"sm_30", "sm_32", "sm_35", "sm_37", "sm_50", "sm_52", "sm_53",
+              "sm_60", "sm_61", "sm_62", "sm_70", "sm_72"}) {
           const CudaArch GpuArch = StringToCudaArch(GpuArchName);
           if (Version >= MinVersionForCudaArch(GpuArch) &&
               Version <= MaxVersionForCudaArch(GpuArch))
@@ -635,8 +635,10 @@ void CudaToolChain::addClangTargetOptions(
     // CUDA-9.0 uses new instructions that are only available in PTX6.0+
     PtxFeature = "+ptx60";
   }
-  CC1Args.push_back("-target-feature");
-  CC1Args.push_back(PtxFeature);
+  CC1Args.append({"-target-feature", PtxFeature});
+  if (DriverArgs.hasFlag(options::OPT_fcuda_short_ptr,
+                         options::OPT_fno_cuda_short_ptr, false))
+    CC1Args.append({"-mllvm", "--nvptx-short-ptr"});
 
   if (DeviceOffloadingKind == Action::OFK_OpenMP) {
     SmallVector<StringRef, 8> LibraryPaths;

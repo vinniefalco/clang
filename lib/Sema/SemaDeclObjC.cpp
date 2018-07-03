@@ -202,7 +202,7 @@ void Sema::CheckObjCMethodOverride(ObjCMethodDecl *NewMethod,
   }
 }
 
-/// \brief Check a method declaration for compatibility with the Objective-C
+/// Check a method declaration for compatibility with the Objective-C
 /// ARC conventions.
 bool Sema::CheckARCMethodDecl(ObjCMethodDecl *method) {
   ObjCMethodFamily family = method->getMethodFamily();
@@ -1210,6 +1210,11 @@ Sema::ActOnStartProtocolInterface(SourceLocation AtProtoInterfaceLoc,
     PDecl = ObjCProtocolDecl::Create(Context, CurContext, ProtocolName,
                                      ProtocolLoc, AtProtoInterfaceLoc,
                                      /*PrevDecl=*/nullptr);
+
+    // If we are using modules, add the decl to the context in order to
+    // serialize something meaningful.
+    if (getLangOpts().Modules)
+      PushOnScopeChains(PDecl, TUScope);
     PDecl->startDefinition();
   } else {
     if (PrevDecl) {
@@ -3366,7 +3371,7 @@ void Sema::addMethodToGlobalList(ObjCMethodList *List,
   Previous->setNext(new (Mem) ObjCMethodList(Method));
 }
 
-/// \brief Read the contents of the method pool for a given selector from
+/// Read the contents of the method pool for a given selector from
 /// external storage.
 void Sema::ReadMethodPool(Selector Sel) {
   assert(ExternalSource && "We need an external AST source");
@@ -4105,7 +4110,7 @@ CvtQTToAstBitMask(ObjCDeclSpec::ObjCDeclQualifier PQTVal) {
   return (Decl::ObjCDeclQualifier) (unsigned) PQTVal;
 }
 
-/// \brief Check whether the declared result type of the given Objective-C
+/// Check whether the declared result type of the given Objective-C
 /// method declaration is compatible with the method's class.
 ///
 static Sema::ResultTypeCompatibilityKind 
@@ -4817,7 +4822,7 @@ void Sema::ActOnDefs(Scope *S, Decl *TagD, SourceLocation DeclStart,
   }
 }
 
-/// \brief Build a type-check a new Objective-C exception variable declaration.
+/// Build a type-check a new Objective-C exception variable declaration.
 VarDecl *Sema::BuildObjCExceptionDecl(TypeSourceInfo *TInfo, QualType T,
                                       SourceLocation StartLoc,
                                       SourceLocation IdLoc,
@@ -4838,12 +4843,17 @@ VarDecl *Sema::BuildObjCExceptionDecl(TypeSourceInfo *TInfo, QualType T,
     // Don't do any further checking.
   } else if (T->isDependentType()) {
     // Okay: we don't know what this type will instantiate to.
-  } else if (!T->isObjCObjectPointerType()) {
-    Invalid = true;
-    Diag(IdLoc ,diag::err_catch_param_not_objc_type);
   } else if (T->isObjCQualifiedIdType()) {
     Invalid = true;
     Diag(IdLoc, diag::err_illegal_qualifiers_on_catch_parm);
+  } else if (T->isObjCIdType()) {
+    // Okay: we don't know what this type will instantiate to.
+  } else if (!T->isObjCObjectPointerType()) {
+    Invalid = true;
+    Diag(IdLoc, diag::err_catch_param_not_objc_type);
+  } else if (!T->getAs<ObjCObjectPointerType>()->getInterfaceType()) {
+    Invalid = true;
+    Diag(IdLoc, diag::err_catch_param_not_objc_type);
   }
   
   VarDecl *New = VarDecl::Create(Context, CurContext, StartLoc, IdLoc, Id,

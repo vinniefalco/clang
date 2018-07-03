@@ -175,7 +175,7 @@ bool darwin::Linker::NeedsTempPath(const InputInfoList &Inputs) const {
   return false;
 }
 
-/// \brief Pass -no_deduplicate to ld64 under certain conditions:
+/// Pass -no_deduplicate to ld64 under certain conditions:
 ///
 /// - Either -O0 or -O1 is explicitly specified
 /// - No -O option is specified *and* this is a compile+link (implicit -O0)
@@ -409,7 +409,7 @@ void darwin::Linker::AddLinkArgs(Compilation &C, const ArgList &Args,
   Args.AddLastArg(CmdArgs, options::OPT_Mach);
 }
 
-/// \brief Determine whether we are linking the ObjC runtime.
+/// Determine whether we are linking the ObjC runtime.
 static bool isObjCRuntimeLinked(const ArgList &Args) {
   if (isObjCAutoRefCount(Args)) {
     Args.ClaimAllArgs(options::OPT_fobjc_link_runtime);
@@ -1019,7 +1019,6 @@ void Darwin::addProfileRTLibs(const ArgList &Args,
   // runtime, automatically export symbols necessary to implement some of the
   // runtime's functionality.
   if (hasExportSymbolDirective(Args)) {
-    addExportedSymbol(CmdArgs, "_VPMergeHook");
     addExportedSymbol(CmdArgs, "___llvm_profile_filename");
     addExportedSymbol(CmdArgs, "___llvm_profile_raw_version");
     addExportedSymbol(CmdArgs, "_lprofCurFilename");
@@ -1473,10 +1472,16 @@ Optional<DarwinPlatform> inferDeploymentTargetFromSDK(DerivedArgList &Args) {
 std::string getOSVersion(llvm::Triple::OSType OS, const llvm::Triple &Triple,
                          const Driver &TheDriver) {
   unsigned Major, Minor, Micro;
+  llvm::Triple SystemTriple(llvm::sys::getProcessTriple());
   switch (OS) {
   case llvm::Triple::Darwin:
   case llvm::Triple::MacOSX:
-    if (!Triple.getMacOSXVersion(Major, Minor, Micro))
+    // If there is no version specified on triple, and both host and target are
+    // macos, use the host triple to infer OS version.
+    if (Triple.isMacOSX() && SystemTriple.isMacOSX() &&
+        !Triple.getOSMajorVersion())
+      SystemTriple.getMacOSXVersion(Major, Minor, Micro);
+    else if (!Triple.getMacOSXVersion(Major, Minor, Micro))
       TheDriver.Diag(diag::err_drv_invalid_darwin_version)
           << Triple.getOSName();
     break;

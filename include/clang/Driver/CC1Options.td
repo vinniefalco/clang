@@ -36,6 +36,10 @@ def triple_EQ : Joined<["-"], "triple=">, Alias<triple>;
 def mfpmath : Separate<["-"], "mfpmath">,
   HelpText<"Which unit to use for fp math">;
 
+def fpadding_on_unsigned_fixed_point : Flag<["-"], "fpadding-on-unsigned-fixed-point">,
+		  HelpText<"Force each unsigned fixed point type to have an extra bit of padding to align their scales with those of signed fixed point types">;
+def fno_padding_on_unsigned_fixed_point : Flag<["-"], "fno-padding-on-unsigned-fixed-point">;
+
 //===----------------------------------------------------------------------===//
 // Analyzer Options
 //===----------------------------------------------------------------------===//
@@ -445,6 +449,8 @@ def no_code_completion_ns_level_decls : Flag<["-"], "no-code-completion-ns-level
   HelpText<"Do not include declarations inside namespaces (incl. global namespace) in the code-completion results.">;
 def code_completion_brief_comments : Flag<["-"], "code-completion-brief-comments">,
   HelpText<"Include brief documentation comments in code-completion results.">;
+def code_completion_with_fixits : Flag<["-"], "code-completion-with-fixits">,
+  HelpText<"Include code completion results which require small fix-its.">;
 def disable_free : Flag<["-"], "disable-free">,
   HelpText<"Disable freeing of memory on exit">;
 def discard_value_names : Flag<["-"], "discard-value-names">,
@@ -561,6 +567,8 @@ def rewrite_macros : Flag<["-"], "rewrite-macros">,
   HelpText<"Expand macros without full preprocessing">;
 def migrate : Flag<["-"], "migrate">,
   HelpText<"Migrate source code">;
+def compiler_options_dump : Flag<["-"], "compiler-options-dump">,
+  HelpText<"Dump the compiler configuration options">;
 }
 
 def emit_llvm_uselists : Flag<["-"], "emit-llvm-uselists">,
@@ -605,7 +613,9 @@ def find_pch_source_EQ : Joined<["-"], "find-pch-source=">,
            "to this flag.">;
 def fno_pch_timestamp : Flag<["-"], "fno-pch-timestamp">,
   HelpText<"Disable inclusion of timestamp in precompiled headers">;
-  
+def building_pch_with_obj : Flag<["-"], "building-pch-with-obj">,
+  HelpText<"This compilation is part of building a PCH with corresponding object file.">;
+
 def aligned_alloc_unavailable : Flag<["-"], "faligned-alloc-unavailable">,
   HelpText<"Aligned allocation/deallocation functions are unavailable">;
 
@@ -619,6 +629,8 @@ def version : Flag<["-"], "version">,
   HelpText<"Print the compiler version">;
 def main_file_name : Separate<["-"], "main-file-name">,
   HelpText<"Main file name to use for debug info">;
+def split_dwarf_file : Separate<["-"], "split-dwarf-file">,
+  HelpText<"File name to use for split dwarf debug info output">;
 
 }
 
@@ -628,8 +640,6 @@ def fexternc_nounwind : Flag<["-"], "fexternc-nounwind">,
   HelpText<"Assume all functions with C linkage do not unwind">;
 def enable_split_dwarf : Flag<["-"], "enable-split-dwarf">,
   HelpText<"Use split dwarf/Fission">;
-def split_dwarf_file : Separate<["-"], "split-dwarf-file">,
-  HelpText<"File name to use for split dwarf debug info output">;
 def fno_wchar : Flag<["-"], "fno-wchar">,
   HelpText<"Disable C++ builtin type wchar_t">;
 def fconstant_string_class : Separate<["-"], "fconstant-string-class">,

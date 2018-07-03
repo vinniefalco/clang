@@ -747,9 +747,18 @@ class WebAssemblyTargetCodeGenInfo final : public TargetCodeGenInfo {
 public:
   explicit WebAssemblyTargetCodeGenInfo(CodeGen::CodeGenTypes &CGT)
       : TargetCodeGenInfo(new WebAssemblyABIInfo(CGT)) {}
+
+  void setTargetAttributes(const Decl *D, llvm::GlobalValue *GV,
+                           CodeGen::CodeGenModule &CGM) const override {
+    if (auto *FD = dyn_cast_or_null<FunctionDecl>(D)) {
+      llvm::Function *Fn = cast<llvm::Function>(GV);
+      if (!FD->doesThisDeclarationHaveABody() && !FD->hasPrototype())
+        Fn->addFnAttr("no-prototype");
+    }
+  }
 };
 
-/// \brief Classify argument of given type \p Ty.
+/// Classify argument of given type \p Ty.
 ABIArgInfo WebAssemblyABIInfo::classifyArgumentType(QualType Ty) const {
   Ty = useFirstFieldIfTransparentUnion(Ty);
 
@@ -844,7 +853,7 @@ Address PNaClABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
   return EmitVAArgInstr(CGF, VAListAddr, Ty, ABIArgInfo::getDirect());
 }
 
-/// \brief Classify argument of given type \p Ty.
+/// Classify argument of given type \p Ty.
 ABIArgInfo PNaClABIInfo::classifyArgumentType(QualType Ty) const {
   if (isAggregateTypeForABI(Ty)) {
     if (CGCXXABI::RecordArgABI RAA = getRecordArgABI(Ty, getCXXABI()))
@@ -945,7 +954,7 @@ static ABIArgInfo getDirectX86Hva(llvm::Type* T = nullptr) {
 // X86-32 ABI Implementation
 //===----------------------------------------------------------------------===//
 
-/// \brief Similar to llvm::CCState, but for Clang.
+/// Similar to llvm::CCState, but for Clang.
 struct CCState {
   CCState(unsigned CC) : CC(CC), FreeRegs(0), FreeSSERegs(0) {}
 
@@ -998,14 +1007,14 @@ class X86_32ABIInfo : public SwiftABIInfo {
 
   ABIArgInfo getIndirectReturnResult(QualType Ty, CCState &State) const;
 
-  /// \brief Return the alignment to use for the given type on the stack.
+  /// Return the alignment to use for the given type on the stack.
   unsigned getTypeStackAlignInBytes(QualType Ty, unsigned Align) const;
 
   Class classify(QualType Ty) const;
   ABIArgInfo classifyReturnType(QualType RetTy, CCState &State) const;
   ABIArgInfo classifyArgumentType(QualType RetTy, CCState &State) const;
 
-  /// \brief Updates the number of available free registers, returns 
+  /// Updates the number of available free registers, returns 
   /// true if any registers were allocated.
   bool updateFreeRegs(QualType Ty, CCState &State) const;
 
@@ -1015,7 +1024,7 @@ class X86_32ABIInfo : public SwiftABIInfo {
 
   bool canExpandIndirectArgument(QualType Ty) const;
 
-  /// \brief Rewrite the function info so that all memory arguments use
+  /// Rewrite the function info so that all memory arguments use
   /// inalloca.
   void rewriteWithInAlloca(CGFunctionInfo &FI) const;
 
@@ -4287,7 +4296,7 @@ PPC32TargetCodeGenInfo::initDwarfEHRegSizeTable(CodeGen::CodeGenFunction &CGF,
 
 namespace {
 /// PPC64_SVR4_ABIInfo - The 64-bit PowerPC ELF (SVR4) ABI information.
-class PPC64_SVR4_ABIInfo : public ABIInfo {
+class PPC64_SVR4_ABIInfo : public SwiftABIInfo {
 public:
   enum ABIKind {
     ELFv1 = 0,
@@ -4331,7 +4340,7 @@ private:
 public:
   PPC64_SVR4_ABIInfo(CodeGen::CodeGenTypes &CGT, ABIKind Kind, bool HasQPX,
                      bool SoftFloatABI)
-      : ABIInfo(CGT), Kind(Kind), HasQPX(HasQPX),
+      : SwiftABIInfo(CGT), Kind(Kind), HasQPX(HasQPX),
         IsSoftFloatABI(SoftFloatABI) {}
 
   bool isPromotableTypeForABI(QualType Ty) const;
@@ -4374,6 +4383,15 @@ public:
 
   Address EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
                     QualType Ty) const override;
+
+  bool shouldPassIndirectlyForSwift(ArrayRef<llvm::Type*> scalars,
+                                    bool asReturnValue) const override {
+    return occupiesMoreThan(CGT, scalars, /*total*/ 4);
+  }
+
+  bool isSwiftErrorInRegister() const override {
+    return false;
+  }
 };
 
 class PPC64_SVR4_TargetCodeGenInfo : public TargetCodeGenInfo {
@@ -7637,7 +7655,7 @@ public:
                             llvm::Function *BlockInvokeFunc,
                             llvm::Value *BlockLiteral) const override;
   bool shouldEmitStaticExternCAliases() const override;
-  void setCUDAKernelCallingConvention(llvm::Function *F) const override;
+  void setCUDAKernelCallingConvention(const FunctionType *&FT) const override;
 };
 }
 
@@ -7774,8 +7792,9 @@ bool AMDGPUTargetCodeGenInfo::shouldEmitStaticExternCAliases() const {
 }
 
 void AMDGPUTargetCodeGenInfo::setCUDAKernelCallingConvention(
-    llvm::Function *F) const {
-  F->setCallingConv(llvm::CallingConv::AMDGPU_KERNEL);
+    const FunctionType *&FT) const {
+  FT = getABIInfo().getContext().adjustFunctionType(
+      FT, FT->getExtInfo().withCallingConv(CC_OpenCLKernel));
 }
 
 //===----------------------------------------------------------------------===//

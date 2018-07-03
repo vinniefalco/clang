@@ -180,7 +180,6 @@ void ODRHash::AddTemplateParameterList(const TemplateParameterList *TPL) {
 
 void ODRHash::clear() {
   DeclNameMap.clear();
-  TypeMap.clear();
   Bools.clear();
   ID.clear();
 }
@@ -383,6 +382,7 @@ public:
     if (hasDefaultArgument) {
       AddTemplateArgument(D->getDefaultArgument());
     }
+    Hash.AddBoolean(D->isParameterPack());
 
     Inherited::VisitTemplateTypeParmDecl(D);
   }
@@ -395,6 +395,7 @@ public:
     if (hasDefaultArgument) {
       AddStmt(D->getDefaultArgument());
     }
+    Hash.AddBoolean(D->isParameterPack());
 
     Inherited::VisitNonTypeTemplateParmDecl(D);
   }
@@ -407,8 +408,26 @@ public:
     if (hasDefaultArgument) {
       AddTemplateArgument(D->getDefaultArgument().getArgument());
     }
+    Hash.AddBoolean(D->isParameterPack());
 
     Inherited::VisitTemplateTemplateParmDecl(D);
+  }
+
+  void VisitTemplateDecl(const TemplateDecl *D) {
+    Hash.AddTemplateParameterList(D->getTemplateParameters());
+
+    Inherited::VisitTemplateDecl(D);
+  }
+
+  void VisitRedeclarableTemplateDecl(const RedeclarableTemplateDecl *D) {
+    Hash.AddBoolean(D->isMemberSpecialization());
+    Inherited::VisitRedeclarableTemplateDecl(D);
+  }
+
+  void VisitFunctionTemplateDecl(const FunctionTemplateDecl *D) {
+    Visit(D->getTemplatedDecl());
+    AddDecl(D->getTemplatedDecl());
+    Inherited::VisitFunctionTemplateDecl(D);
   }
 };
 } // namespace
@@ -428,6 +447,7 @@ bool ODRHash::isWhitelistedDecl(const Decl *D, const CXXRecordDecl *Parent) {
     case Decl::CXXMethod:
     case Decl::Field:
     case Decl::Friend:
+    case Decl::FunctionTemplate:
     case Decl::StaticAssert:
     case Decl::TypeAlias:
     case Decl::Typedef:
@@ -749,14 +769,6 @@ public:
 
 void ODRHash::AddType(const Type *T) {
   assert(T && "Expecting non-null pointer.");
-  auto Result = TypeMap.insert(std::make_pair(T, TypeMap.size()));
-  ID.AddInteger(Result.first->second);
-  // On first encounter of a Type pointer, process it.  Every time afterwards,
-  // only the index value is needed.
-  if (!Result.second) {
-    return;
-  }
-
   ODRTypeVisitor(ID, *this).Visit(T);
 }
 

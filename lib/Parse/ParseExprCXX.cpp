@@ -100,7 +100,7 @@ void Parser::CheckForTemplateAndDigraph(Token &Next, ParsedType ObjectType,
              /*AtDigraph*/false);
 }
 
-/// \brief Parse global scope or nested-name-specifier if present.
+/// Parse global scope or nested-name-specifier if present.
 ///
 /// Parses a C++ global scope specifier ('::') or nested-name-specifier (which
 /// may be preceded by '::'). Note that this routine will not parse ::new or
@@ -515,7 +515,7 @@ bool Parser::ParseOptionalCXXScopeSpecifier(CXXScopeSpec &SS,
           << FixItHint::CreateInsertion(Tok.getLocation(), "template ");
 
         if (TemplateNameKind TNK = Actions.ActOnDependentTemplateName(
-                getCurScope(), SS, SourceLocation(), TemplateName, ObjectType,
+                getCurScope(), SS, Tok.getLocation(), TemplateName, ObjectType,
                 EnteringContext, Template, /*AllowInjectedClassName*/ true)) {
           // Consume the identifier.
           ConsumeToken();
@@ -561,10 +561,13 @@ ExprResult Parser::tryParseCXXIdExpression(CXXScopeSpec &SS, bool isAddressOfOpe
   if (isAddressOfOperand && isPostfixExpressionSuffixStart())
     isAddressOfOperand = false;
 
-  return Actions.ActOnIdExpression(getCurScope(), SS, TemplateKWLoc, Name,
-                                   Tok.is(tok::l_paren), isAddressOfOperand,
-                                   nullptr, /*IsInlineAsmIdentifier=*/false,
-                                   &Replacement);
+  ExprResult E = Actions.ActOnIdExpression(
+      getCurScope(), SS, TemplateKWLoc, Name, Tok.is(tok::l_paren),
+      isAddressOfOperand, nullptr, /*IsInlineAsmIdentifier=*/false,
+      &Replacement);
+  if (!E.isInvalid() && !E.isUnset() && Tok.is(tok::less))
+    checkPotentialAngleBracket(E);
+  return E;
 }
 
 /// ParseCXXIdExpression - Handle id-expression.
@@ -730,7 +733,7 @@ ExprResult Parser::TryParseLambdaExpression() {
   return ParseLambdaExpressionAfterIntroducer(Intro);
 }
 
-/// \brief Parse a lambda introducer.
+/// Parse a lambda introducer.
 /// \param Intro A LambdaIntroducer filled in with information about the
 ///        contents of the lambda-introducer.
 /// \param SkippedInits If non-null, we are disambiguating between an Obj-C
@@ -1500,7 +1503,7 @@ ExprResult Parser::ParseCXXUuidof() {
   return Result;
 }
 
-/// \brief Parse a C++ pseudo-destructor expression after the base,
+/// Parse a C++ pseudo-destructor expression after the base,
 /// . or -> operator, and nested-name-specifier have already been
 /// parsed.
 ///
@@ -1621,7 +1624,7 @@ ExprResult Parser::ParseThrowExpression() {
   }
 }
 
-/// \brief Parse the C++ Coroutines co_yield expression.
+/// Parse the C++ Coroutines co_yield expression.
 ///
 ///       co_yield-expression:
 ///         'co_yield' assignment-expression[opt]
@@ -1735,6 +1738,8 @@ Parser::ParseCXXTypeConstructExpression(const DeclSpec &DS) {
 Sema::ConditionResult Parser::ParseCXXCondition(StmtResult *InitStmt,
                                                 SourceLocation Loc,
                                                 Sema::ConditionKind CK) {
+  ParenBraceBracketBalancer BalancerRAIIObj(*this);
+
   if (Tok.is(tok::code_completion)) {
     Actions.CodeCompleteOrdinaryName(getCurScope(), Sema::PCC_Condition);
     cutOffParsing();
@@ -2007,7 +2012,7 @@ bool Parser::ParseCXXTypeSpecifierSeq(DeclSpec &DS) {
   return false;
 }
 
-/// \brief Finish parsing a C++ unqualified-id that is a template-id of
+/// Finish parsing a C++ unqualified-id that is a template-id of
 /// some form. 
 ///
 /// This routine is invoked when a '<' is encountered after an identifier or
@@ -2191,7 +2196,7 @@ bool Parser::ParseUnqualifiedIdTemplateId(CXXScopeSpec &SS,
   return false;
 }
 
-/// \brief Parse an operator-function-id or conversion-function-id as part
+/// Parse an operator-function-id or conversion-function-id as part
 /// of a C++ unqualified-id.
 ///
 /// This routine is responsible only for parsing the operator-function-id or
@@ -2430,7 +2435,7 @@ bool Parser::ParseUnqualifiedIdOperator(CXXScopeSpec &SS, bool EnteringContext,
   return false;  
 }
 
-/// \brief Parse a C++ unqualified-id (or a C identifier), which describes the
+/// Parse a C++ unqualified-id (or a C identifier), which describes the
 /// name of an entity.
 ///
 /// \code
@@ -2505,10 +2510,10 @@ bool Parser::ParseUnqualifiedId(CXXScopeSpec &SS, bool EnteringContext,
     if (AllowConstructorName && 
         Actions.isCurrentClassName(*Id, getCurScope(), &SS)) {
       // We have parsed a constructor name.
-      ParsedType Ty = Actions.getTypeName(*Id, IdLoc, getCurScope(), &SS, false,
-                                          false, nullptr,
-                                          /*IsCtorOrDtorName=*/true,
-                                          /*NonTrivialTypeSourceInfo=*/true);
+      ParsedType Ty = Actions.getConstructorName(*Id, IdLoc, getCurScope(), SS,
+                                                 EnteringContext);
+      if (!Ty)
+        return true;
       Result.setConstructorName(Ty, IdLoc, IdLoc);
     } else if (getLangOpts().CPlusPlus17 &&
                AllowDeductionGuide && SS.isEmpty() &&
@@ -2555,11 +2560,11 @@ bool Parser::ParseUnqualifiedId(CXXScopeSpec &SS, bool EnteringContext,
           << TemplateId->Name
           << FixItHint::CreateRemoval(
                     SourceRange(TemplateId->LAngleLoc, TemplateId->RAngleLoc));
-        ParsedType Ty =
-            Actions.getTypeName(*TemplateId->Name, TemplateId->TemplateNameLoc,
-                                getCurScope(), &SS, false, false, nullptr,
-                                /*IsCtorOrDtorName=*/true,
-                                /*NontrivialTypeSourceInfo=*/true);
+        ParsedType Ty = Actions.getConstructorName(
+            *TemplateId->Name, TemplateId->TemplateNameLoc, getCurScope(), SS,
+            EnteringContext);
+        if (!Ty)
+          return true;
         Result.setConstructorName(Ty, TemplateId->TemplateNameLoc,
                                   TemplateId->RAngleLoc);
         ConsumeAnnotationToken();
@@ -3002,7 +3007,7 @@ static unsigned TypeTraitArity(tok::TokenKind kind) {
   }
 }
 
-/// \brief Parse the built-in type-trait pseudo-functions that allow 
+/// Parse the built-in type-trait pseudo-functions that allow 
 /// implementation of the TR1/C++11 type traits templates.
 ///
 ///       primary-expression:
