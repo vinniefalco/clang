@@ -923,6 +923,14 @@ TEST_F(FormatTestObjC, ObjCSnippets) {
   verifyFormat("@property(assign, nonatomic) CGFloat hoverAlpha;");
   verifyFormat("@property(assign, getter=isEditable) BOOL editable;");
 
+  Style.ColumnLimit = 50;
+  verifyFormat("@interface Foo\n"
+               "- (void)doStuffWithFoo:(id)name\n"
+               "                   bar:(id)bar\n"
+               "                   baz:(id)baz\n"
+               "    NS_SWIFT_NAME(doStuff(withFoo:bar:baz:));\n"
+               "@end");
+
   Style = getMozillaStyle();
   verifyFormat("@property (assign, getter=isEditable) BOOL editable;");
   verifyFormat("@property BOOL editable;");
@@ -1216,6 +1224,26 @@ TEST_F(FormatTestObjC, BreaksCallStatementWhereSemiJustOverTheLimit) {
                "             ccccccccc:dddddddd\n"
                "                    ee:fddd];\n"
                "}");
+}
+
+TEST_F(FormatTestObjC, AlwaysBreakBeforeMultilineStrings) {
+  Style = getGoogleStyle(FormatStyle::LK_ObjC);
+  Style.ColumnLimit = 40;
+  verifyFormat("aaaa = @\"bbbb\"\n"
+               "       @\"cccc\";");
+  verifyFormat("aaaa(@\"bbbb\"\n"
+               "     @\"cccc\");");
+  verifyFormat("aaaa(qqq, @\"bbbb\"\n"
+               "          @\"cccc\");");
+  verifyFormat("[aaaa qqqq:@\"bbbb\"\n"
+               "           @\"cccc\"];");
+  verifyFormat("aaaa = [aaaa qqqq:@\"bbbb\"\n"
+               "                  @\"cccc\"];");
+  verifyFormat("[aaaa qqqq:@\"bbbb\"\n"
+               "           @\"cccc\"\n"
+               "        rr:42\n"
+               "    ssssss:@\"ee\"\n"
+               "           @\"fffff\"];");
 }
 
 } // end namespace

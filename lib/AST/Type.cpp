@@ -88,6 +88,16 @@ const IdentifierInfo* QualType::getBaseTypeIdentifier() const {
   return nullptr;
 }
 
+bool QualType::mayBeDynamicClass() const {
+  const auto *ClassDecl = getTypePtr()->getPointeeCXXRecordDecl();
+  return ClassDecl && ClassDecl->mayBeDynamicClass();
+}
+
+bool QualType::mayBeNotDynamicClass() const {
+  const auto *ClassDecl = getTypePtr()->getPointeeCXXRecordDecl();
+  return !ClassDecl || ClassDecl->mayBeNonDynamicClass();
+}
+
 bool QualType::isConstant(QualType T, const ASTContext &Ctx) {
   if (T.isConstQualified())
     return true;
@@ -2668,6 +2678,42 @@ StringRef BuiltinType::getName(const PrintingPolicy &Policy) const {
     return "unsigned _Accum";
   case ULongAccum:
     return "unsigned long _Accum";
+  case BuiltinType::ShortFract:
+    return "short _Fract";
+  case BuiltinType::Fract:
+    return "_Fract";
+  case BuiltinType::LongFract:
+    return "long _Fract";
+  case BuiltinType::UShortFract:
+    return "unsigned short _Fract";
+  case BuiltinType::UFract:
+    return "unsigned _Fract";
+  case BuiltinType::ULongFract:
+    return "unsigned long _Fract";
+  case BuiltinType::SatShortAccum:
+    return "_Sat short _Accum";
+  case BuiltinType::SatAccum:
+    return "_Sat _Accum";
+  case BuiltinType::SatLongAccum:
+    return "_Sat long _Accum";
+  case BuiltinType::SatUShortAccum:
+    return "_Sat unsigned short _Accum";
+  case BuiltinType::SatUAccum:
+    return "_Sat unsigned _Accum";
+  case BuiltinType::SatULongAccum:
+    return "_Sat unsigned long _Accum";
+  case BuiltinType::SatShortFract:
+    return "_Sat short _Fract";
+  case BuiltinType::SatFract:
+    return "_Sat _Fract";
+  case BuiltinType::SatLongFract:
+    return "_Sat long _Fract";
+  case BuiltinType::SatUShortFract:
+    return "_Sat unsigned short _Fract";
+  case BuiltinType::SatUFract:
+    return "_Sat unsigned _Fract";
+  case BuiltinType::SatULongFract:
+    return "_Sat unsigned long _Fract";
   case Float16:
     return "_Float16";
   case Float128:
@@ -3949,4 +3995,20 @@ QualType::DestructionKind QualType::isDestructedTypeImpl(QualType type) {
 
 CXXRecordDecl *MemberPointerType::getMostRecentCXXRecordDecl() const {
   return getClass()->getAsCXXRecordDecl()->getMostRecentNonInjectedDecl();
+}
+
+void clang::FixedPointValueToString(SmallVectorImpl<char> &Str,
+                                    const llvm::APSInt &Val, unsigned Scale,
+                                    unsigned Radix) {
+  llvm::APSInt ScaleVal = llvm::APSInt::getUnsigned(1ULL << Scale);
+  llvm::APSInt IntPart = Val / ScaleVal;
+  llvm::APSInt FractPart = Val % ScaleVal;
+  llvm::APSInt RadixInt = llvm::APSInt::getUnsigned(Radix);
+
+  IntPart.toString(Str, Radix);
+  Str.push_back('.');
+  do {
+    (FractPart * RadixInt / ScaleVal).toString(Str, Radix);
+    FractPart = (FractPart * RadixInt) % ScaleVal;
+  } while (FractPart.getExtValue());
 }

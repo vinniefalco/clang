@@ -7224,6 +7224,73 @@ public:
 
   // FIXME: Missing: array subscript of vector, member of vector
 };
+
+class FixedPointExprEvaluator
+    : public ExprEvaluatorBase<FixedPointExprEvaluator> {
+  APValue &Result;
+
+ public:
+  FixedPointExprEvaluator(EvalInfo &info, APValue &result)
+      : ExprEvaluatorBaseTy(info), Result(result) {}
+
+  bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
+    assert(E->getType()->isFixedPointType() && "Invalid evaluation result.");
+    assert(SI.isSigned() == E->getType()->isSignedFixedPointType() &&
+           "Invalid evaluation result.");
+    assert(SI.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
+           "Invalid evaluation result.");
+    Result = APValue(SI);
+    return true;
+  }
+  bool Success(const llvm::APSInt &SI, const Expr *E) {
+    return Success(SI, E, Result);
+  }
+
+  bool Success(const llvm::APInt &I, const Expr *E, APValue &Result) {
+    assert(E->getType()->isFixedPointType() && "Invalid evaluation result.");
+    assert(I.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
+           "Invalid evaluation result.");
+    Result = APValue(APSInt(I));
+    Result.getInt().setIsUnsigned(E->getType()->isUnsignedFixedPointType());
+    return true;
+  }
+  bool Success(const llvm::APInt &I, const Expr *E) {
+    return Success(I, E, Result);
+  }
+
+  bool Success(uint64_t Value, const Expr *E, APValue &Result) {
+    assert(E->getType()->isFixedPointType() && "Invalid evaluation result.");
+    Result = APValue(Info.Ctx.MakeIntValue(Value, E->getType()));
+    return true;
+  }
+  bool Success(uint64_t Value, const Expr *E) {
+    return Success(Value, E, Result);
+  }
+
+  bool Success(CharUnits Size, const Expr *E) {
+    return Success(Size.getQuantity(), E);
+  }
+
+  bool Success(const APValue &V, const Expr *E) {
+    if (V.isLValue() || V.isAddrLabelDiff()) {
+      Result = V;
+      return true;
+    }
+    return Success(V.getInt(), E);
+  }
+
+  bool ZeroInitialization(const Expr *E) { return Success(0, E); }
+
+  //===--------------------------------------------------------------------===//
+  //                            Visitor Methods
+  //===--------------------------------------------------------------------===//
+
+  bool VisitFixedPointLiteral(const FixedPointLiteral *E) {
+    return Success(E->getValue(), E);
+  }
+
+  bool VisitUnaryOperator(const UnaryOperator *E);
+};
 } // end anonymous namespace
 
 /// EvaluateIntegerOrLValue - Evaluate an rvalue integral-typed expression, and
@@ -7362,6 +7429,15 @@ EvaluateBuiltinClassifyType(QualType T, const LangOptions &LangOpts) {
     case BuiltinType::UShortAccum:
     case BuiltinType::UAccum:
     case BuiltinType::ULongAccum:
+    case BuiltinType::UShortFract:
+    case BuiltinType::UFract:
+    case BuiltinType::ULongFract:
+    case BuiltinType::SatUShortAccum:
+    case BuiltinType::SatUAccum:
+    case BuiltinType::SatULongAccum:
+    case BuiltinType::SatUShortFract:
+    case BuiltinType::SatUFract:
+    case BuiltinType::SatULongFract:
       return GCCTypeClass::None;
 
     case BuiltinType::NullPtr:
@@ -8159,6 +8235,124 @@ bool IntExprEvaluator::VisitBuiltinCallExpr(const CallExpr *E,
   case Builtin::BIomp_is_initial_device:
     // We can decide statically which value the runtime would return if called.
     return Success(Info.getLangOpts().OpenMPIsDevice ? 0 : 1, E);
+  case Builtin::BI__builtin_add_overflow:
+  case Builtin::BI__builtin_sub_overflow:
+  case Builtin::BI__builtin_mul_overflow:
+  case Builtin::BI__builtin_sadd_overflow:
+  case Builtin::BI__builtin_uadd_overflow:
+  case Builtin::BI__builtin_uaddl_overflow:
+  case Builtin::BI__builtin_uaddll_overflow:
+  case Builtin::BI__builtin_usub_overflow:
+  case Builtin::BI__builtin_usubl_overflow:
+  case Builtin::BI__builtin_usubll_overflow:
+  case Builtin::BI__builtin_umul_overflow:
+  case Builtin::BI__builtin_umull_overflow:
+  case Builtin::BI__builtin_umulll_overflow:
+  case Builtin::BI__builtin_saddl_overflow:
+  case Builtin::BI__builtin_saddll_overflow:
+  case Builtin::BI__builtin_ssub_overflow:
+  case Builtin::BI__builtin_ssubl_overflow:
+  case Builtin::BI__builtin_ssubll_overflow:
+  case Builtin::BI__builtin_smul_overflow:
+  case Builtin::BI__builtin_smull_overflow:
+  case Builtin::BI__builtin_smulll_overflow: {
+    LValue ResultLValue;
+    APSInt LHS, RHS;
+
+    QualType ResultType = E->getArg(2)->getType()->getPointeeType();
+    if (!EvaluateInteger(E->getArg(0), LHS, Info) ||
+        !EvaluateInteger(E->getArg(1), RHS, Info) ||
+        !EvaluatePointer(E->getArg(2), ResultLValue, Info))
+      return false;
+
+    APSInt Result;
+    bool DidOverflow = false;
+
+    // If the types don't have to match, enlarge all 3 to the largest of them.
+    if (BuiltinOp == Builtin::BI__builtin_add_overflow ||
+        BuiltinOp == Builtin::BI__builtin_sub_overflow ||
+        BuiltinOp == Builtin::BI__builtin_mul_overflow) {
+      bool IsSigned = LHS.isSigned() || RHS.isSigned() ||
+                      ResultType->isSignedIntegerOrEnumerationType();
+      bool AllSigned = LHS.isSigned() && RHS.isSigned() &&
+                      ResultType->isSignedIntegerOrEnumerationType();
+      uint64_t LHSSize = LHS.getBitWidth();
+      uint64_t RHSSize = RHS.getBitWidth();
+      uint64_t ResultSize = Info.Ctx.getTypeSize(ResultType);
+      uint64_t MaxBits = std::max(std::max(LHSSize, RHSSize), ResultSize);
+
+      // Add an additional bit if the signedness isn't uniformly agreed to. We
+      // could do this ONLY if there is a signed and an unsigned that both have
+      // MaxBits, but the code to check that is pretty nasty.  The issue will be
+      // caught in the shrink-to-result later anyway.
+      if (IsSigned && !AllSigned)
+        ++MaxBits;
+
+      LHS = APSInt(IsSigned ? LHS.sextOrSelf(MaxBits) : LHS.zextOrSelf(MaxBits),
+                   !IsSigned);
+      RHS = APSInt(IsSigned ? RHS.sextOrSelf(MaxBits) : RHS.zextOrSelf(MaxBits),
+                   !IsSigned);
+      Result = APSInt(MaxBits, !IsSigned);
+    }
+
+    // Find largest int.
+    switch (BuiltinOp) {
+    default:
+      llvm_unreachable("Invalid value for BuiltinOp");
+    case Builtin::BI__builtin_add_overflow:
+    case Builtin::BI__builtin_sadd_overflow:
+    case Builtin::BI__builtin_saddl_overflow:
+    case Builtin::BI__builtin_saddll_overflow:
+    case Builtin::BI__builtin_uadd_overflow:
+    case Builtin::BI__builtin_uaddl_overflow:
+    case Builtin::BI__builtin_uaddll_overflow:
+      Result = LHS.isSigned() ? LHS.sadd_ov(RHS, DidOverflow)
+                              : LHS.uadd_ov(RHS, DidOverflow);
+      break;
+    case Builtin::BI__builtin_sub_overflow:
+    case Builtin::BI__builtin_ssub_overflow:
+    case Builtin::BI__builtin_ssubl_overflow:
+    case Builtin::BI__builtin_ssubll_overflow:
+    case Builtin::BI__builtin_usub_overflow:
+    case Builtin::BI__builtin_usubl_overflow:
+    case Builtin::BI__builtin_usubll_overflow:
+      Result = LHS.isSigned() ? LHS.ssub_ov(RHS, DidOverflow)
+                              : LHS.usub_ov(RHS, DidOverflow);
+      break;
+    case Builtin::BI__builtin_mul_overflow:
+    case Builtin::BI__builtin_smul_overflow:
+    case Builtin::BI__builtin_smull_overflow:
+    case Builtin::BI__builtin_smulll_overflow:
+    case Builtin::BI__builtin_umul_overflow:
+    case Builtin::BI__builtin_umull_overflow:
+    case Builtin::BI__builtin_umulll_overflow:
+      Result = LHS.isSigned() ? LHS.smul_ov(RHS, DidOverflow)
+                              : LHS.umul_ov(RHS, DidOverflow);
+      break;
+    }
+
+    // In the case where multiple sizes are allowed, truncate and see if
+    // the values are the same.
+    if (BuiltinOp == Builtin::BI__builtin_add_overflow ||
+        BuiltinOp == Builtin::BI__builtin_sub_overflow ||
+        BuiltinOp == Builtin::BI__builtin_mul_overflow) {
+      // APSInt doesn't have a TruncOrSelf, so we use extOrTrunc instead,
+      // since it will give us the behavior of a TruncOrSelf in the case where
+      // its parameter <= its size.  We previously set Result to be at least the
+      // type-size of the result, so getTypeSize(ResultType) <= Result.BitWidth
+      // will work exactly like TruncOrSelf.
+      APSInt Temp = Result.extOrTrunc(Info.Ctx.getTypeSize(ResultType));
+      Temp.setIsSigned(ResultType->isSignedIntegerOrEnumerationType());
+
+      if (!APSInt::isSameValue(Temp, Result))
+        DidOverflow = true;
+      Result = Temp;
+    }
+
+    APValue APV{Result};
+    handleAssignment(Info, E, ResultLValue, ResultType, APV);
+    return Success(DidOverflow, E);
+  }
   }
 }
 
@@ -9337,6 +9531,37 @@ bool IntExprEvaluator::VisitCXXNoexceptExpr(const CXXNoexceptExpr *E) {
   return Success(E->getValue(), E);
 }
 
+bool FixedPointExprEvaluator::VisitUnaryOperator(const UnaryOperator *E) {
+  switch (E->getOpcode()) {
+    default:
+      // Invalid unary operators
+      return Error(E);
+    case UO_Plus:
+      // The result is just the value.
+      return Visit(E->getSubExpr());
+    case UO_Minus: {
+      if (!Visit(E->getSubExpr())) return false;
+      if (!Result.isInt()) return Error(E);
+      const APSInt &Value = Result.getInt();
+      if (Value.isSigned() && Value.isMinSignedValue() && E->canOverflow()) {
+        SmallString<64> S;
+        FixedPointValueToString(S, Value,
+                                Info.Ctx.getTypeInfo(E->getType()).Width,
+                                /*Radix=*/10);
+        Info.CCEDiag(E, diag::note_constexpr_overflow) << S << E->getType();
+        if (Info.noteUndefinedBehavior()) return false;
+      }
+      return Success(-Value, E);
+    }
+    case UO_LNot: {
+      bool bres;
+      if (!EvaluateAsBooleanCondition(E->getSubExpr(), bres, Info))
+        return false;
+      return Success(!bres, E);
+    }
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Float Evaluation
 //===----------------------------------------------------------------------===//
@@ -10188,6 +10413,8 @@ static bool Evaluate(APValue &Result, EvalInfo &Info, const Expr *E) {
     if (!EvaluateComplex(E, C, Info))
       return false;
     C.moveInto(Result);
+  } else if (T->isFixedPointType()) {
+    if (!FixedPointExprEvaluator(Info, Result).Visit(E)) return false;
   } else if (T->isMemberPointerType()) {
     MemberPtr P;
     if (!EvaluateMemberPointer(E, P, Info))
@@ -10636,6 +10863,7 @@ static ICEDiag CheckICE(const Expr* E, const ASTContext &Ctx) {
   case Expr::GenericSelectionExprClass:
     return CheckICE(cast<GenericSelectionExpr>(E)->getResultExpr(), Ctx);
   case Expr::IntegerLiteralClass:
+  case Expr::FixedPointLiteralClass:
   case Expr::CharacterLiteralClass:
   case Expr::ObjCBoolLiteralExprClass:
   case Expr::CXXBoolLiteralExprClass:

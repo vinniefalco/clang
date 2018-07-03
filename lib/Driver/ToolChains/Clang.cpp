@@ -1084,6 +1084,10 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString(Twine("-find-pch-source=") +
                                          Inputs[0].second->getValue()));
   }
+  if (YcIndex != -1 && JA.getKind() >= Action::PrecompileJobClass &&
+      JA.getKind() <= Action::AssembleJobClass) {
+    CmdArgs.push_back(Args.MakeArgString("-building-pch-with-obj"));
+  }
 
   bool RenderedImplicitInclude = false;
   int AI = -1;
@@ -1471,12 +1475,6 @@ void Clang::AddAArch64TargetArgs(const ArgList &Args,
       CmdArgs.push_back("-aarch64-enable-global-merge=false");
     else
       CmdArgs.push_back("-aarch64-enable-global-merge=true");
-  }
-
-  if (!Args.hasArg(options::OPT_mno_outline) &&
-       Args.getLastArg(options::OPT_moutline)) {
-    CmdArgs.push_back("-mllvm");
-    CmdArgs.push_back("-enable-machine-outliner");
   }
 }
 
@@ -3048,7 +3046,8 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
     CmdArgs.push_back("-debug-info-macro");
 
   // -ggnu-pubnames turns on gnu style pubnames in the backend.
-  if (Args.hasArg(options::OPT_ggnu_pubnames))
+  if (Args.hasFlag(options::OPT_ggnu_pubnames, options::OPT_gno_gnu_pubnames,
+                   false))
     CmdArgs.push_back("-ggnu-pubnames");
 
   // -gdwarf-aranges turns on the emission of the aranges section in the
@@ -3472,6 +3471,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    options::OPT_fno_strict_vtable_pointers,
                    false))
     CmdArgs.push_back("-fstrict-vtable-pointers");
+  if (Args.hasFlag(options::OPT_fforce_emit_vtables,
+                   options::OPT_fno_force_emit_vtables,
+                   false))
+    CmdArgs.push_back("-fforce-emit-vtables");
   if (!Args.hasFlag(options::OPT_foptimize_sibling_calls,
                     options::OPT_fno_optimize_sibling_calls))
     CmdArgs.push_back("-mdisable-tail-calls");
@@ -3497,8 +3500,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       Args.hasArg(options::OPT_dA))
     CmdArgs.push_back("-masm-verbose");
 
-  if (!Args.hasFlag(options::OPT_fintegrated_as, options::OPT_fno_integrated_as,
-                    IsIntegratedAssemblerDefault))
+  if (!getToolChain().useIntegratedAs())
     CmdArgs.push_back("-no-integrated-as");
 
   if (Args.hasArg(options::OPT_fdebug_pass_structure)) {
@@ -3687,9 +3689,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (auto *ABICompatArg = Args.getLastArg(options::OPT_fclang_abi_compat_EQ))
     ABICompatArg->render(Args, CmdArgs);
 
-  // Add runtime flag for PS4 when PGO or Coverage are enabled.
-  if (RawTriple.isPS4CPU())
+  // Add runtime flag for PS4 when PGO, coverage, or sanitizers are enabled.
+  if (RawTriple.isPS4CPU()) {
     PS4cpu::addProfileRTArgs(getToolChain(), Args, CmdArgs);
+    PS4cpu::addSanitizerArgs(getToolChain(), CmdArgs);
+  }
 
   // Pass options for controlling the default header search paths.
   if (Args.hasArg(options::OPT_nostdinc)) {
@@ -4792,6 +4796,33 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasFlag(options::OPT_fcomplete_member_pointers,
                    options::OPT_fno_complete_member_pointers, false))
     CmdArgs.push_back("-fcomplete-member-pointers");
+
+  if (Arg *A = Args.getLastArg(options::OPT_moutline,
+                               options::OPT_mno_outline)) {
+    if (A->getOption().matches(options::OPT_moutline)) {
+      // We only support -moutline in AArch64 right now. If we're not compiling
+      // for AArch64, emit a warning and ignore the flag. Otherwise, add the
+      // proper mllvm flags.
+      if (Triple.getArch() != llvm::Triple::aarch64) {
+        D.Diag(diag::warn_drv_moutline_unsupported_opt) << Triple.getArchName();
+      } else {
+        CmdArgs.push_back("-mllvm");
+        CmdArgs.push_back("-enable-machine-outliner");
+
+        // The outliner shouldn't compete with linkers that dedupe linkonceodr
+        // functions in LTO. Enable that behaviour by default when compiling with
+        // LTO.
+        if (getToolChain().getDriver().isUsingLTO()) {
+          CmdArgs.push_back("-mllvm");
+          CmdArgs.push_back("-enable-linkonceodr-outlining");
+        }
+      }
+    } else {
+      // Disable all outlining behaviour.
+      CmdArgs.push_back("-mllvm");
+      CmdArgs.push_back("-enable-machine-outliner=never");
+    }
+  }
 
   // Finally add the compile command to the compilation.
   if (Args.hasArg(options::OPT__SLASH_fallback) &&

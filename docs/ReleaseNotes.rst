@@ -103,14 +103,19 @@ Non-comprehensive list of changes in this release
 New Compiler Flags
 ------------------
 
-- :option:`-fstrict-float-cast-overflow` and
-  :option:`-fno-strict-float-cast-overflow`.
+- ``-fstrict-float-cast-overflow`` and ``-fno-strict-float-cast-overflow``.
 
   When a floating-point value is not representable in a destination integer
   type, the code has undefined behavior according to the language standard. By
   default, Clang will not guarantee any particular result in that case. With the
   'no-strict' option, Clang attempts to match the overflowing behavior of the
   target's native float-to-int conversion instructions.
+
+- ``-fforce-emit-vtables`` and ``-fno-force-emit-vtables``.
+
+   In order to improve devirtualization, forces emitting of vtables even in
+   modules where it isn't necessary. It causes more inline virtual functions
+   to be emitted.
 
 - ...
 

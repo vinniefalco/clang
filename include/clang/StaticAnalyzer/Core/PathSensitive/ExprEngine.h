@@ -106,11 +106,6 @@ public:
     bool IsTemporaryCtorOrDtor = false;
 
     /// This call is a constructor for a temporary that is lifetime-extended
-    /// by binding a smaller object within it to a reference, for example
-    /// 'const int &x = C().x;'.
-    bool IsTemporaryLifetimeExtendedViaSubobject = false;
-
-    /// This call is a constructor for a temporary that is lifetime-extended
     /// by binding it to a reference-type field within an aggregate,
     /// for example 'A { const C &c; }; A a = { C() };'
     bool IsTemporaryLifetimeExtendedViaAggregate = false;
@@ -542,7 +537,7 @@ public:
   void evalEagerlyAssumeBinOpBifurcation(ExplodedNodeSet &Dst, ExplodedNodeSet &Src, 
                          const Expr *Ex);
   
-  std::pair<const ProgramPointTag *, const ProgramPointTag *>
+  static std::pair<const ProgramPointTag *, const ProgramPointTag *>
     geteagerlyAssumeBinOpBifurcationTags();
 
   SVal evalMinus(SVal X) {
@@ -749,14 +744,15 @@ private:
   /// constructing into an existing region.
   const CXXConstructExpr *findDirectConstructorForCurrentCFGElement();
 
-  /// For a given constructor, look forward in the current CFG block to
-  /// determine the region into which an object will be constructed by \p CE.
-  /// When the lookahead fails, a temporary region is returned, and the
+  /// Update the program state with all the path-sensitive information
+  /// that's necessary to perform construction of an object with a given
+  /// syntactic construction context. If the construction context is unavailable
+  /// or unusable for any reason, a dummy temporary region is returned, and the
   /// IsConstructorWithImproperlyModeledTargetRegion flag is set in \p CallOpts.
-  SVal getLocationForConstructedObject(const CXXConstructExpr *CE,
-                                       ExplodedNode *Pred,
-                                       const ConstructionContext *CC,
-                                       EvalCallOptions &CallOpts);
+  /// Returns the updated program state and the new object's this-region.
+  std::pair<ProgramStateRef, SVal> prepareForObjectConstruction(
+      const Expr *E, ProgramStateRef State, const LocationContext *LCtx,
+      const ConstructionContext *CC, EvalCallOptions &CallOpts);
 
   /// Store the location of a C++ object corresponding to a statement
   /// until the statement is actually encountered. For example, if a DeclStmt
@@ -766,35 +762,51 @@ private:
   /// made within the constructor alive until its declaration actually
   /// goes into scope.
   static ProgramStateRef addObjectUnderConstruction(
-      ProgramStateRef State, const Stmt *S,
+      ProgramStateRef State,
+      llvm::PointerUnion<const Stmt *, const CXXCtorInitializer *> P,
       const LocationContext *LC, SVal V);
 
   /// Mark the object sa fully constructed, cleaning up the state trait
   /// that tracks objects under construction.
-  static ProgramStateRef finishObjectConstruction(ProgramStateRef State,
-                                                  const Stmt *S,
-                                                  const LocationContext *LC);
+  static ProgramStateRef finishObjectConstruction(
+      ProgramStateRef State,
+      llvm::PointerUnion<const Stmt *, const CXXCtorInitializer *> P,
+      const LocationContext *LC);
 
   /// If the given statement corresponds to an object under construction,
   /// being part of its construciton context, retrieve that object's location.
-  static Optional<SVal> getObjectUnderConstruction(ProgramStateRef State,
-                                                   const Stmt *S,
-                                                   const LocationContext *LC);
+  static Optional<SVal> getObjectUnderConstruction(
+      ProgramStateRef State,
+      llvm::PointerUnion<const Stmt *, const CXXCtorInitializer *> P,
+      const LocationContext *LC);
+
+  /// If the given expression corresponds to a temporary that was used for
+  /// passing into an elidable copy/move constructor and that constructor
+  /// was actually elided, track that we also need to elide the destructor.
+  static ProgramStateRef elideDestructor(ProgramStateRef State,
+                                         const CXXBindTemporaryExpr *BTE,
+                                         const LocationContext *LC);
+
+  /// Stop tracking the destructor that corresponds to an elided constructor.
+  static ProgramStateRef
+  cleanupElidedDestructor(ProgramStateRef State,
+                          const CXXBindTemporaryExpr *BTE,
+                          const LocationContext *LC);
+
+  /// Returns true if the given expression corresponds to a temporary that
+  /// was constructed for passing into an elidable copy/move constructor
+  /// and that constructor was actually elided.
+  static bool isDestructorElided(ProgramStateRef State,
+                                 const CXXBindTemporaryExpr *BTE,
+                                 const LocationContext *LC);
 
   /// Check if all objects under construction have been fully constructed
   /// for the given context range (including FromLC, not including ToLC).
-  /// This is useful for assertions.
+  /// This is useful for assertions. Also checks if elided destructors
+  /// were cleaned up.
   static bool areAllObjectsFullyConstructed(ProgramStateRef State,
                                             const LocationContext *FromLC,
                                             const LocationContext *ToLC);
-
-  /// Adds an initialized temporary and/or a materialization, whichever is
-  /// necessary, by looking at the whole construction context. Handles
-  /// function return values, which need the construction context of the parent
-  /// stack frame, automagically.
-  ProgramStateRef markStatementsCorrespondingToConstructedObject(
-      ProgramStateRef State, const ConstructionContext *CC,
-      const LocationContext *LC, SVal V);
 };
 
 /// Traits for storing the call processing policy inside GDM.
