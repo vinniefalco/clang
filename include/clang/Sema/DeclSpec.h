@@ -406,7 +406,7 @@ private:
 
   static bool isTypeRep(TST T) {
     return (T == TST_typename || T == TST_typeofType ||
-            T == TST_underlyingType T == TST_rawInvocationType ||
+            T == TST_underlyingType || T == TST_rawInvocationType ||
             T == TST_atomic);
   }
   static bool isExprRep(TST T) {
