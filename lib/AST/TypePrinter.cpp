@@ -935,16 +935,14 @@ void TypePrinter::printTransformTraitBefore(const TransformTraitType *T,
                                             raw_ostream &OS) {
   IncludeStrongLifetimeRAII Strong(Policy);
 
-  switch (T->getTTKind()) {
-  case TransformTraitType::EnumUnderlyingType:
-    OS << "__underlying_type(";
-    break;
-  }
+  OS << T->getName() << "(";
+
   for (unsigned I = 0; I != T->getNumArgs(); ++I) {
     print(T->getArg(I), OS, StringRef());
     if ((I + 1) != T->getNumArgs())
       OS << ", ";
   }
+
   OS << ')';
   spaceBeforePlaceHolder(OS);
 }

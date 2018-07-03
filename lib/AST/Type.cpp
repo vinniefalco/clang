@@ -3131,7 +3131,7 @@ TransformTraitType::TransformTraitType(const ASTContext &Ctx,
   }
 }
 
-StringRef TransformTraitType::GetTransformTraitIdentifier(TTKind Kind) {
+StringRef TransformTraitType::getName(TTKind Kind) {
   switch (Kind) {
   case TransformTraitType::EnumUnderlyingType:
     return "__underlying_type";

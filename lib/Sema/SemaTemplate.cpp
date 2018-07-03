@@ -1048,10 +1048,10 @@ NamedDecl *Sema::ActOnNonTypeTemplateParameter(Scope *S, Declarator &D,
     //   template-parameter:
     //     ...
     //     parameter-declaration
-    // p2
+    // p2 
     //   ... A storage class shall not be specified in a template-parameter
     //   declaration.
-    // [dcl.typedef]p1:
+    // [dcl.typedef]p1: 
     //   The typedef specifier [...] shall not be used in the decl-specifier-seq
     //   of a parameter-declaration
     const DeclSpec &DS = D.getDeclSpec();

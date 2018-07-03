@@ -38,7 +38,6 @@ namespace clang {
   class CorrectionCandidateCallback;
   class DeclGroupRef;
   class DiagnosticBuilder;
-  class PartialDiagnostic;
   class Parser;
   class ParsingDeclRAIIObject;
   class ParsingDeclSpec;
@@ -1007,7 +1006,6 @@ public:
   DiagnosticBuilder Diag(unsigned DiagID) {
     return Diag(Tok, DiagID);
   }
-  DiagnosticBuilder Diag(SourceLocation Loc, const PartialDiagnostic &PD);
 
 private:
   void SuggestParentheses(SourceLocation Loc, unsigned DK,

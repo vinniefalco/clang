@@ -4040,7 +4040,8 @@ public:
     return ArgStorage[N];
   }
 
-  static StringRef GetTransformTraitIdentifier(TTKind Kind);
+  static StringRef getName(TTKind K);
+  StringRef getName() const { return getName(getTTKind()); }
 
   TTKind getTTKind() const {
     return static_cast<TTKind>(TransformTraitTypeBits.TTKind);
