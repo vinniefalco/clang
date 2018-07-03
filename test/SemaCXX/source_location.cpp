@@ -583,7 +583,7 @@ namespace TestConstexprContext {
 #line 7100 "Bar.cpp"
   constexpr const char* bar(const char* x = foo()) { return x; }
   constexpr bool test() {
-    static_assert(is_equal(bar(), "Bar.cpp"));
+    static_assert(is_equal(bar(), "TestConstexprContext.cpp"));
     return true;
   }
   static_assert(test());

@@ -9909,8 +9909,8 @@ const char *ASTContext::getReadableFunctionName(const FunctionDecl *D) const {
       char *Buff = (char *)Allocate(S.size() + 1);
       strcpy(Buff, S.c_str());
       Result = Buff;
-    }
-    llvm_unreachable("function is expected to have non-empty name");
+    } else
+      llvm_unreachable("function is expected to have non-empty name");
   }
   return Result;
 }
