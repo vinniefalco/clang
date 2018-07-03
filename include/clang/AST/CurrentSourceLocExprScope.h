@@ -33,10 +33,6 @@ public:
   /// (ex. __builtin_LINE).
   class SourceLocExprScopeGuard;
 
-  /// A RAII style scope guard used to clear the current context and reset it
-  /// to null, it will be restored upon destruction.
-  class ClearSourceLocExprScopeGuard;
-
   const Expr *getDefaultExpr() const { return DefaultExpr; }
 
   explicit CurrentSourceLocExprScope() = default;
@@ -72,23 +68,6 @@ private:
   CurrentSourceLocExprScope &Current;
   CurrentSourceLocExprScope OldVal;
   bool Enable;
-};
-
-class CurrentSourceLocExprScope::ClearSourceLocExprScopeGuard {
-public:
-  ClearSourceLocExprScopeGuard(CurrentSourceLocExprScope &Current)
-      : Current(Current), OldVal(Current) {
-    Current = CurrentSourceLocExprScope{};
-  }
-
-  ~ClearSourceLocExprScopeGuard() { Current = OldVal; }
-
-private:
-  ClearSourceLocExprScopeGuard(ClearSourceLocExprScopeGuard const &) = delete;
-  ClearSourceLocExprScopeGuard &
-  operator=(ClearSourceLocExprScopeGuard const &) = delete;
-  CurrentSourceLocExprScope &Current;
-  CurrentSourceLocExprScope OldVal;
 };
 
 } // end namespace clang
