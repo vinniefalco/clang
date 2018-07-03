@@ -1142,3 +1142,14 @@ namespace test58 {
   // CHECK-LABEL: @_ZN6test581AC1INS_5StateEEET_MNS_8identityIS3_E4typeEFbvE
   void fn1() { A(a, &State::m_fn1); }
 }
+
+namespace test59 {
+struct C {
+  void operator();
+};
+template <class T>
+void fn(T, __raw_invocation_type(T));
+
+template void fn<C>(C, __underlying_type(C));
+
+} // namespace test59
