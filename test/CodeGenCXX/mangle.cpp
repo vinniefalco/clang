@@ -1110,7 +1110,7 @@ template <typename T>
 void fn(T, __underlying_type(T)) {}
 
 template void fn<E>(E, __underlying_type(E));
-// CHECK-LABEL: @_ZN6test552fnINS_1EEEEvT_U3eutS2_E
+// CHECK-LABEL: @_ZN6test552fnINS_1EEEEvT_u17__underlying_typeIS2_E
 
 void fn2(E, __underlying_type(E)) {}
 // CHECK-LABEL: @_ZN6test553fn2ENS_1EEj

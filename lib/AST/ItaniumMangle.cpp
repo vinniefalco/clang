@@ -3272,7 +3272,7 @@ void CXXNameMangler::mangleType(const TransformTraitType *T) {
   // suggest it as a Itanium ABI extension.
   //
   // <type-traits-type> ::=
-  //     u <source-name> [<template-args>...] # vendor extended type
+  //     u <source-name> [<template-args>] # vendor extended type
 
   // If this type isn't dependent, simply mangle it as the transformed type
   // since they are equivalent. Otherwise, we need to record the dependent type.
@@ -3287,6 +3287,10 @@ void CXXNameMangler::mangleType(const TransformTraitType *T) {
   StringRef Ident =
       TransformTraitType::GetTransformTraitIdentifier(T->getTTKind());
   Out << Ident.size() << Ident;
+
+  assert(T->getNumArgs() && "Empty argument list for transformation trait?");
+
+  Out << "I";
 
   // mangle each argument type.
   for (auto Ty : T->getArgs())
