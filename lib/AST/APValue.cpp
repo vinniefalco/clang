@@ -43,7 +43,7 @@ APValue::LValueBase::operator bool () const {
   return static_cast<bool>(Ptr);
 }
 
-template <class T> static bool isEmptyOrTombstoneStr(T const &V) {
+template <class T> static bool isEmptyOrTombstoneKey(T const &V) {
   using DMI = llvm::DenseMapInfo<T>;
   return V == DMI::getEmptyKey() || V == DMI::getTombstoneKey();
 }
@@ -58,7 +58,7 @@ APValue::LValueBase::LValueBase(const Expr *E, const char *StrVal,
 }
 
 APValue::LValueBase::BaseKind APValue::LValueBase::getBaseKind() const {
-  if (isEmptyOrTombstoneStr(Ptr))
+  if (isEmptyOrTombstoneKey(Ptr))
     return BK_Normal;
   if (dyn_cast_or_null<SourceLocExpr>(Ptr.dyn_cast<const Expr *>()))
     return BK_String;
