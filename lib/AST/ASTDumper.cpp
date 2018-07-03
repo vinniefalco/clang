@@ -363,11 +363,10 @@ namespace  {
       dumpStmt(T->getUnderlyingExpr());
     }
     void VisitTransformTraitType(const TransformTraitType *T) {
-      switch (T->getTTKind()) {
-      case TransformTraitType::EnumUnderlyingType:
-        OS << " underlying_type";
-        break;
-      }
+      StringRef Name = T->getName();
+      // Don't print the name with leading underscores.
+      Name.consume_front("__");
+      OS << " " << Name;
       for (auto Ty : T->getArgs())
         dumpTypeAsChild(Ty);
     }

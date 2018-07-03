@@ -953,6 +953,7 @@ void TypePrinter::printTransformTraitAfter(const TransformTraitType *T,
 
   switch (T->getTTKind()) {
   case TransformTraitType::EnumUnderlyingType:
+  case TransformTraitType::EnumRawInvocationType:
     return;
   }
 

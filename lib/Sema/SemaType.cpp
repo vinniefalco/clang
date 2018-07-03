@@ -8300,8 +8300,11 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
     assert(!ED->getIntegerType().isNull());
     return ED->getIntegerType();
   }
+
   case TransformTraitType::EnumRawInvocationType: {
     assert(ArgTypes.size() >= 1);
+
+    // Build up opaque value expressions representing the type arguments.
     SmallVector<OpaqueValueExpr, 4> ArgValues;
     for (auto Ty : ArgTypes) {
       if (Ty->isObjectType() || Ty->isFunctionType())
