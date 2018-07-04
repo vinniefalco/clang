@@ -1144,12 +1144,24 @@ namespace test58 {
 }
 
 namespace test59 {
-struct C {
-  void operator();
-};
-template <class T>
-void fn(T, __raw_invocation_type(T));
+using F = void(&)();
+using F1 = int(*)(int);
+using F2 = char*(*)(int, void*);
 
-template void fn<C>(C, __underlying_type(C));
+template <class T>
+void fn(T, __raw_invocation_type(T)) {}
+
+// CHECK-LABEL: @_ZN6test592fnIRFvvEEEvT_u21__raw_invocation_typeIS3_E(
+template void fn<F>(F, __raw_invocation_type(F));
+
+template <class T, class U>
+void fn2(T, U, __raw_invocation_type(T, U)) {}
+
+// CHECK-LABEL: @_ZN6test593fn2IPFiiEiEEvT_T0_u21__raw_invocation_typeIS3_S4_E(
+template void fn2<F1, int>(F1, int, __raw_invocation_type(F1, int));
+
+// CHECK-LABEL: @_ZN6test593fn3EPFPciPvE(
+void fn3(__raw_invocation_type(F2, long, void*)) {}
+
 
 } // namespace test59
