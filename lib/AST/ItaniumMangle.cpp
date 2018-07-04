@@ -3284,8 +3284,7 @@ void CXXNameMangler::mangleType(const TransformTraitType *T) {
   Out << "u";
 
   // mangle the source name.
-  StringRef Ident =
-      TransformTraitType::GetTransformTraitIdentifier(T->getTTKind());
+  StringRef Ident = T->getName();
   Out << Ident.size() << Ident;
 
   assert(T->getNumArgs() && "Empty argument list for transformation trait?");
