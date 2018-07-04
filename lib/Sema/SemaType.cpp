@@ -8146,32 +8146,6 @@ enum RawInvocationKind {
   RIT_Object,
 };
 
-struct RawInvocationInfo {
-  RawInvocationKind Kind;
-  const FunctionProtoType *Callee;
-};
-
-static RawInvocationInfo ClassifyRawInvocationFunction(QualType FnType) {
-  FnType = FnType.getNonReferenceType();
-  if (FnType->isFunctionType())
-    return {RIT_Function, FnType->getAs<FunctionProtoType>()};
-  else if (FnType->isFunctionPointerType()) {
-    return {RIT_Function, FnType->getAs<PointerType>()
-                              ->getPointeeType()
-                              ->castAs<FunctionProtoType>()};
-  } else if (FnType->isMemberFunctionPointerType()) {
-    return {RIT_MemberFunction, FnType->getAs<MemberPointerType>()
-                                    ->getPointeeType()
-                                    ->castAs<FunctionProtoType>()};
-  } else if (FnType->isMemberDataPointerType()) {
-    return {RIT_MemberData, nullptr};
-  } else if (FnType->isRecordType()) {
-    return {RIT_Object, nullptr};
-  } else {
-    return {RIT_None, nullptr};
-  }
-  llvm_unreachable("unhandled function type");
-}
 
 static QualType computeRawInvocationType(Sema &S, RawInvocationKind Kind,
                                          ExprResult CallResult,
@@ -8181,6 +8155,7 @@ static QualType computeRawInvocationType(Sema &S, RawInvocationKind Kind,
                                          ArrayRef<Expr *> AllArgExprs) {
   if (CallResult.isInvalid())
     return QualType();
+
   Expr *Result = CallResult.get();
   auto adjustTy = [&](const Expr *E) {
     QualType T = E->getType();
@@ -8257,6 +8232,30 @@ static QualType computeRawInvocationType(Sema &S, RawInvocationKind Kind,
                              FunctionProtoType::ExtProtoInfo());
 }
 
+static bool CheckTransformTraitCompleteness(Sema &S,
+                                            TransformTraitType::TTKind TKind,
+                                            ArrayRef<QualType> ArgTypes,
+                                            SourceLocation Loc) {
+  switch (TKind) {
+  case TransformTraitType::EnumUnderlyingType:
+    return false; // Enum completeness is checked later.
+
+  // [meta.trans.other] LFTS v2:
+  //   Fn and all types in the parameter pack ArgTypes shall be complete
+  //   types, (possibly cv-qualified) void, or arrays of unknown bound.
+  case TransformTraitType::EnumRawInvocationType:
+    for (auto Ty : ArgTypes) {
+      if (Ty->isIncompleteArrayType() || Ty->isVoidType())
+        continue;
+      if (S.RequireCompleteType(
+              Loc, Ty, diag::err_incomplete_type_used_in_type_trait_expr))
+        return true;
+    }
+    return false;
+  }
+  llvm_unreachable("unhandled case");
+}
+
 QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
                                                TransformTraitType::TTKind TKind,
                                                SourceLocation Loc) {
@@ -8270,14 +8269,14 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
   if (DelayChecking)
     return Context.DependentTy;
 
-  if (CheckTransformTraitArity(*this, TKind, ArgTypes.size(), Loc, SourceRange(Loc)))
+  if (CheckTransformTraitArity(*this, TKind, ArgTypes.size(), Loc,
+                               SourceRange(Loc)) ||
+      CheckTransformTraitCompleteness(*this, TKind, ArgTypes, Loc))
     return Error();
 
   switch (TKind) {
   case TransformTraitType::EnumUnderlyingType: {
-    assert(ArgTypes.size() == 1);
-    if (ArgTypes[0]->isDependentType())
-      return Context.DependentTy;
+    assert(ArgTypes.size() == 1 && !ArgTypes[0]->isDependentType());
 
     QualType BaseType = ArgTypes[0];
     if (!BaseType->isEnumeralType()) {
@@ -8303,18 +8302,34 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
 
   case TransformTraitType::EnumRawInvocationType: {
     assert(ArgTypes.size() >= 1);
-    // [meta.trans.other] LFTS v2:
-    //   Fn and all types in the parameter pack ArgTypes shall be complete
-    //   types, (possibly cv-qualified) void, or arrays of unknown bound.
-    for (auto Ty : ArgTypes) {
-      if (Ty->isIncompleteArrayType() || Ty->isVoidType())
-        continue;
-      if (RequireCompleteType(
-              Loc, Ty, diag::err_incomplete_type_used_in_type_trait_expr))
-        return QualType();
-    }
 
-    RawInvocationInfo Info = ClassifyRawInvocationFunction(ArgTypes[0]);
+    RawInvocationKind InvokeKind;
+    const FunctionProtoType *Callee;
+
+    /// Determine
+    std::tie(InvokeKind, Callee) =
+        [&]() -> std::pair<RawInvocationKind, const FunctionProtoType *> {
+      QualType FnType = ArgTypes[0];
+      FnType = FnType.getNonReferenceType();
+      if (FnType->isFunctionType())
+        return {RIT_Function, FnType->getAs<FunctionProtoType>()};
+      else if (FnType->isFunctionPointerType()) {
+        return {RIT_Function, FnType->getAs<PointerType>()
+                                  ->getPointeeType()
+                                  ->castAs<FunctionProtoType>()};
+      } else if (FnType->isMemberFunctionPointerType()) {
+        return {RIT_MemberFunction, FnType->getAs<MemberPointerType>()
+                                        ->getPointeeType()
+                                        ->castAs<FunctionProtoType>()};
+      } else if (FnType->isMemberDataPointerType()) {
+        return {RIT_MemberData, nullptr};
+      } else if (FnType->isRecordType()) {
+        return {RIT_Object, nullptr};
+      } else {
+        return {RIT_None, nullptr};
+      }
+      llvm_unreachable("unhandled function type");
+    }();
 
     EnterExpressionEvaluationContext Unevaluated(
         *this, Sema::ExpressionEvaluationContext::Unevaluated);
@@ -8335,7 +8350,7 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
     }
 
     ExprResult Result = ExprError();
-    switch (Info.Kind) {
+    switch (InvokeKind) {
     case RIT_None:
       Diag(Loc, diag::err_raw_invocation_type_not_callable) << ArgTypes[0];
       return QualType();
@@ -8383,14 +8398,14 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
       if (!Result.isInvalid()) {
         CallExpr *CE = Result.getAs<CallExpr>();
         assert(CE->getDirectCallee());
-        Info.Callee = CE->getDirectCallee()
-                          ->getFunctionType()
-                          ->castAs<FunctionProtoType>();
+        Callee = CE->getDirectCallee()
+                     ->getFunctionType()
+                     ->castAs<FunctionProtoType>();
       }
       break;
     }
     }
-    return computeRawInvocationType(*this, Info.Kind, Result, Info.Callee, Loc,
+    return computeRawInvocationType(*this, InvokeKind, Result, Callee, Loc,
                                     ArgTypes, ArgExprs);
   }
   }
