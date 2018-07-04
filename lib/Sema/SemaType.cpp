@@ -8314,34 +8314,39 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
         return QualType();
     }
 
-    // Build up opaque value expressions representing the type arguments.
-    SmallVector<OpaqueValueExpr, 4> ArgValues;
-    for (auto Ty : ArgTypes) {
-      if (Ty->isObjectType() || Ty->isFunctionType())
-        Ty = Context.getRValueReferenceType(Ty);
-      ArgValues.push_back(OpaqueValueExpr(Loc, Ty.getNonLValueExprType(Context),
-                                          Expr::getValueKindForType(Ty)));
-    }
-
-    SmallVector<Expr *, 4> ArgExprs;
-    ArgExprs.reserve(ArgValues.size());
-    for (OpaqueValueExpr &OE : ArgValues)
-      ArgExprs.push_back(&OE);
-
-    auto Info = ClassifyRawInvocationFunction(ArgTypes[0]);
+    RawInvocationInfo Info = ClassifyRawInvocationFunction(ArgTypes[0]);
 
     EnterExpressionEvaluationContext Unevaluated(
         *this, Sema::ExpressionEvaluationContext::Unevaluated);
     Sema::ContextRAII TUContext(*this, Context.getTranslationUnitDecl());
 
+    // Build up opaque value expressions representing the type arguments.
+    llvm::BumpPtrAllocator TmpAlloc;
+    OpaqueValueExpr *Buff = TmpAlloc.Allocate<OpaqueValueExpr>(ArgTypes.size());
+    SmallVector<Expr *, 4> ArgExprs;
+
+    for (unsigned I = 0, N = ArgTypes.size(); I != N; ++I) {
+      QualType Ty = ArgTypes[I];
+      if (Ty->isObjectType() || Ty->isFunctionType())
+        Ty = Context.getRValueReferenceType(Ty);
+      ArgExprs.push_back(::new (static_cast<void *>(Buff + I)) OpaqueValueExpr(
+          Loc, Ty.getNonLValueExprType(Context),
+          Expr::getValueKindForType(Ty)));
+    }
+
     ExprResult Result = ExprError();
     switch (Info.Kind) {
+    case RIT_None:
+      Diag(Loc, diag::err_raw_invocation_type_not_callable) << ArgTypes[0];
+      return QualType();
+
     case RIT_Function: {
       ArrayRef<Expr *> CallArgs = ArrayRef<Expr *>(ArgExprs).slice(1);
       Result = BuildResolvedCallExpr(ArgExprs[0], /*NDecl=*/nullptr, Loc,
                                      CallArgs, Loc);
       break;
     }
+
     case RIT_MemberFunction: {
       if (ArgTypes.size() < 2) {
         Diag(Loc, diag::err_raw_invocation_type_member_pointer_arity)
@@ -8359,6 +8364,7 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
           /*Scope=*/nullptr, BinOpRes.get(), Loc, CallArgs, Loc);
       break;
     }
+
     case RIT_MemberData: {
       if (ArgTypes.size() != 2) {
         Diag(Loc, diag::err_raw_invocation_type_member_pointer_arity)
@@ -8368,6 +8374,7 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
       Result = CreateBuiltinBinOp(Loc, BO_PtrMemD, ArgExprs[1], ArgExprs[0]);
       break;
     }
+
     case RIT_Object: {
       MutableArrayRef<Expr *> CallArgs =
           MutableArrayRef<Expr *>(ArgExprs).slice(1);
@@ -8381,10 +8388,6 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
                           ->castAs<FunctionProtoType>();
       }
       break;
-    }
-    case RIT_None: {
-      Diag(Loc, diag::err_raw_invocation_type_not_callable) << ArgTypes[0];
-      return QualType();
     }
     }
     return computeRawInvocationType(*this, Info.Kind, Result, Info.Callee, Loc,
