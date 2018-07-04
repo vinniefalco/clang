@@ -8081,11 +8081,11 @@ static bool CheckTransformTraitArity(Sema &S, TransformTraitType::TTKind Kind,
 
   struct DiagInfo {
     unsigned ReqNumArgs;
-    unsigned SelectOne;
+    unsigned SelectOrMore;
   };
   auto DiagSelect = [&]() -> Optional<DiagInfo> {
     if (NumArgs == 0)
-      return DiagInfo{Arity, 0};
+      return DiagInfo{Arity, IsVariadic};
     if (Arity && !IsVariadic && Arity != NumArgs)
       return DiagInfo{Arity, 0};
     if (Arity && IsVariadic && NumArgs < Arity)
@@ -8096,8 +8096,8 @@ static bool CheckTransformTraitArity(Sema &S, TransformTraitType::TTKind Kind,
   if (DiagSelect.hasValue()) {
     auto Info = DiagSelect.getValue();
     S.Diag(Loc, diag::err_type_trait_arity)
-      << Info.ReqNumArgs << Info.SelectOne << (Info.ReqNumArgs != 1)
-      << (int)NumArgs << R;
+        << Info.ReqNumArgs << Info.SelectOrMore
+        << (Info.ReqNumArgs != 1 || Info.SelectOrMore) << (int)NumArgs << R;
     return true;
   }
   return false;
@@ -8303,6 +8303,16 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
 
   case TransformTraitType::EnumRawInvocationType: {
     assert(ArgTypes.size() >= 1);
+    // [meta.trans.other] LFTS v2:
+    //   Fn and all types in the parameter pack ArgTypes shall be complete
+    //   types, (possibly cv-qualified) void, or arrays of unknown bound.
+    for (auto Ty : ArgTypes) {
+      if (Ty->isIncompleteArrayType() || Ty->isVoidType())
+        continue;
+      if (RequireCompleteType(
+              Loc, Ty, diag::err_incomplete_type_used_in_type_trait_expr))
+        return QualType();
+    }
 
     // Build up opaque value expressions representing the type arguments.
     SmallVector<OpaqueValueExpr, 4> ArgValues;
@@ -8377,10 +8387,8 @@ QualType Sema::ComputeTransformTraitResultType(ArrayRef<QualType> ArgTypes,
       return QualType();
     }
     }
-    QualType Underlying = computeRawInvocationType(
-        *this, Info.Kind, Result, Info.Callee, Loc, ArgTypes, ArgExprs);
-    if (Underlying.isNull())
-      return QualType();
+    return computeRawInvocationType(*this, Info.Kind, Result, Info.Callee, Loc,
+                                    ArgTypes, ArgExprs);
   }
   }
 
