@@ -85,6 +85,15 @@ ATTR T ecb; // OK
 }
 } // namespace test_subjects
 
+#if __cplusplus >= 201103L
+namespace test_attr_parse {
+
+[[constinit, constinit]] int x = 42; // expected-error {{attribute 'constinit' cannot appear multiple times in an attribute specifier}}
+[[constinit(1)]] int y = 42; // expected-error {{attribute 'constinit' cannot have an argument list}}
+
+[[clang::constinit(1)]] int z = 42; // expected-error {{'constinit' attribute takes no arguments}}
+} // namespace test_attr_parse
+#endif
 namespace test_zero_init {
 ATTR int x;
 struct T {
