@@ -1736,12 +1736,14 @@ def ReqdWorkGroupSize : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def RequireConstantInit : InheritableAttr {
+def ConstInit : InheritableAttr {
   // This attribute does not have a C [[]] spelling because it requires the
   // CPlusPlus language option.
-  let Spellings = [Clang<"require_constant_initialization", 0>];
+  let Spellings = [Clang<"require_constant_initialization", 0>,
+                   Clang<"constinit", 0>,
+                   CXX11<"", "constinit", 201807>];
   let Subjects = SubjectList<[GlobalVar], ErrorDiag>;
-  let Documentation = [RequireConstantInitDocs];
+  let Documentation = [ConstInitDocs];
   let LangOpts = [CPlusPlus];
 }
 

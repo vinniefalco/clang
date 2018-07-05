@@ -1151,15 +1151,16 @@ all optional, but the attribute has to have at least one clause.
   }];
 }
 
-def RequireConstantInitDocs : Documentation {
+def ConstInitDocs : Documentation {
   let Category = DocCatVariable;
   let Content = [{
 This attribute specifies that the variable to which it is attached is intended
 to have a `constant initializer <http://en.cppreference.com/w/cpp/language/constant_initialization>`_
 according to the rules of [basic.start.static]. The variable is required to
-have static or thread storage duration. If the initialization of the variable
-is not a constant initializer an error will be produced. This attribute may
-only be used in C++.
+have static or thread storage duration. It may only be applied to defining
+declarations and in-class static data member declarations. If the initialization
+of the variable is not a constant initializer an error will be produced. This
+attribute may only be used in C++.
 
 Note that in C++03 strict constant expression checking is not done. Instead
 the attribute reports if Clang can emit the variable as a constant, even if it's
@@ -1177,7 +1178,7 @@ of silently falling back on dynamic initialization.
 .. code-block:: c++
 
   // -std=c++14
-  #define SAFE_STATIC [[clang::require_constant_initialization]]
+  #define SAFE_STATIC [[clang::constinit]]
   struct T {
     constexpr T(int) {}
     ~T(); // non-trivial

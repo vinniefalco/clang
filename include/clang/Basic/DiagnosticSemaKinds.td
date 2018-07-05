@@ -7237,10 +7237,13 @@ def note_inequality_comparison_to_or_assign : Note<
 def err_incomplete_type_used_in_type_trait_expr : Error<
   "incomplete type %0 used in type trait expression">;
 
-def err_require_constant_init_failed : Error<
+def err_constinit_attr_failed : Error<
   "variable does not have a constant initializer">;
-def note_declared_required_constant_init_here : Note<
-  "required by 'require_constant_initialization' attribute here">;
+def err_constinit_attr_non_defining_decl : Error<
+  "%0 attribute cannot be applied to a '%select{extern|extern \"C\"}1' variable "
+  "declaration unless it is a definition">;
+def note_declared_constinit_attr_here : Note<
+  "required by %0 attribute here">;
 
 def err_dimension_expr_not_constant_integer : Error<
   "dimension expression does not evaluate to a constant unsigned int">;

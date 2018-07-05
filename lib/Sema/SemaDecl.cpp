@@ -11139,6 +11139,15 @@ void Sema::ActOnUninitializedDecl(Decl *RealDecl) {
         Diag(Var->getLocation(), diag::note_private_extern);
       }
 
+      if (!Var->isInvalidDecl() && Var->hasAttr<ConstInitAttr>() &&
+          !Var->isStaticDataMember()) {
+        assert(Var->isExternC() || Var->hasExternalFormalLinkage());
+        auto *CI = Var->getAttr<ConstInitAttr>();
+        bool IsExternC = Var->isExternC();
+        Diag(CI->getLocation(), diag::err_constinit_attr_non_defining_decl)
+            << CI << (!IsExternC);
+      }
+
       return;
 
     case VarDecl::TentativeDefinition:
@@ -11440,8 +11449,8 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
 
   // Apply section attributes and pragmas to global variables.
   bool GlobalStorage = var->hasGlobalStorage();
-  if (GlobalStorage && var->isThisDeclarationADefinition() &&
-      !inTemplateInstantiation()) {
+  bool IsDefinition = var->isThisDeclarationADefinition();
+  if (GlobalStorage && IsDefinition && !inTemplateInstantiation()) {
     PragmaStack<StringLiteral *> *Stack = nullptr;
     int SectionFlags = ASTContext::PSF_Implicit | ASTContext::PSF_Read;
     if (var->getType().isConstQualified())
@@ -11539,17 +11548,16 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
 
     // Don't emit further diagnostics about constexpr globals since they
     // were just diagnosed.
-    if (!var->isConstexpr() && GlobalStorage &&
-            var->hasAttr<RequireConstantInitAttr>()) {
+    if (!var->isConstexpr() && GlobalStorage && var->hasAttr<ConstInitAttr>()) {
       // FIXME: Need strict checking in C++03 here.
       bool DiagErr = getLangOpts().CPlusPlus11
           ? !var->checkInitIsICE() : !checkConstInit();
       if (DiagErr) {
-        auto attr = var->getAttr<RequireConstantInitAttr>();
-        Diag(var->getLocation(), diag::err_require_constant_init_failed)
-          << Init->getSourceRange();
-        Diag(attr->getLocation(), diag::note_declared_required_constant_init_here)
-          << attr->getRange();
+        auto attr = var->getAttr<ConstInitAttr>();
+        Diag(var->getLocation(), diag::err_constinit_attr_failed)
+            << Init->getSourceRange();
+        Diag(attr->getLocation(), diag::note_declared_constinit_attr_here)
+            << attr << attr->getRange();
         if (getLangOpts().CPlusPlus11) {
           APValue Value;
           SmallVector<PartialDiagnosticAt, 8> Notes;
@@ -11562,10 +11570,9 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
               << CacheCulprit->getSourceRange();
         }
       }
-    }
-    else if (!var->isConstexpr() && IsGlobal &&
-             !getDiagnostics().isIgnored(diag::warn_global_constructor,
-                                    var->getLocation())) {
+    } else if (!var->isConstexpr() && IsGlobal &&
+               !getDiagnostics().isIgnored(diag::warn_global_constructor,
+                                           var->getLocation())) {
       // Warn about globals which don't have a constant initializer.  Don't
       // warn about globals with a non-trivial destructor because we already
       // warned about them.

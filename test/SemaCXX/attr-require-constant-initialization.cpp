@@ -5,7 +5,7 @@
 // RUN: -Wglobal-constructors -std=c++14 %s
 // RUN: %clang_cc1 -fsyntax-only -verify -DTEST_THREE -xc %s
 
-#define ATTR __attribute__((require_constant_initialization)) // expected-note 0+ {{expanded from macro}}
+#define ATTR __attribute__((constinit)) // expected-note 0+ {{expanded from macro}}
 
 int ReturnInt(); // expected-note 0+ {{declared here}}
 
@@ -56,13 +56,30 @@ struct StoresNonLit {
 #if defined(TEST_ONE) // Test semantics of attribute
 
 // Test diagnostics when attribute is applied to non-static declarations.
-void test_func_local(ATTR int param) { // expected-error {{only applies to global variables}}
+// expected-error@+1 {{only applies to definitions of global variables and static data members}}
+void test_func_local(ATTR int param) {
   ATTR int x = 42;                     // expected-error {{only applies to}}
   ATTR extern int y;
 }
 struct ATTR class_mem { // expected-error {{only applies to}}
   ATTR int x;           // expected-error {{only applies to}}
 };
+
+// test diagnostics when the attribute is applied to a non-defining declaration
+// that doesn't declare a in-class static data member.
+namespace test_subjects {
+struct E {};               // E should have constant initialization even without an initializer.
+ATTR extern E e;           // expected-error {{only applies to definitions}}
+extern ATTR E ed = E();    // OK.
+ATTR extern "C" E c;       // expected-error {{only applies to definitions}}
+ATTR extern "C" E cd = {}; // OK
+struct T {
+  ATTR static int x; // OK.
+};
+extern "C" {
+ATTR T t; // OK
+}
+} // namespace test_subjects
 
 // [basic.start.static]p2.1
 // if each full-expression (including implicit conversions) that appears in
