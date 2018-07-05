@@ -7240,8 +7240,8 @@ def err_incomplete_type_used_in_type_trait_expr : Error<
 def err_constinit_attr_failed : Error<
   "variable does not have a constant initializer">;
 def err_constinit_attr_non_defining_decl : Error<
-  "%0 attribute cannot be applied to a '%select{extern|extern \"C\"}1' variable "
-  "declaration unless it is a definition">;
+  "%0 attribute cannot be applied to a non-defining declaration of an "
+  "%select{'extern'|extern \"C\"}1 variable">;
 def note_declared_constinit_attr_here : Note<
   "required by %0 attribute here">;
 

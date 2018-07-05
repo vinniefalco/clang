@@ -11139,13 +11139,16 @@ void Sema::ActOnUninitializedDecl(Decl *RealDecl) {
         Diag(Var->getLocation(), diag::note_private_extern);
       }
 
-      if (!Var->isInvalidDecl() && Var->hasAttr<ConstInitAttr>() &&
-          !Var->isStaticDataMember()) {
-        assert(Var->isExternC() || Var->hasExternalFormalLinkage());
+      // Don't allow [[constinit]] to appear on a extern or extern "C"
+      // declaration that is not a definition because we can't propagate
+      // it to the definition.
+      if (Var->hasAttr<ConstInitAttr>() && !Var->isStaticDataMember() &&
+          !Var->isInvalidDecl()) {
+        assert(Var->hasExternalStorage() || Var->isExternC());
         auto *CI = Var->getAttr<ConstInitAttr>();
         bool IsExternC = Var->isExternC();
         Diag(CI->getLocation(), diag::err_constinit_attr_non_defining_decl)
-            << CI << (!IsExternC);
+            << CI << IsExternC;
       }
 
       return;
@@ -11549,22 +11552,31 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
     // Don't emit further diagnostics about constexpr globals since they
     // were just diagnosed.
     if (!var->isConstexpr() && GlobalStorage && var->hasAttr<ConstInitAttr>()) {
-      // FIXME: Need strict checking in C++03 here.
-      bool DiagErr = getLangOpts().CPlusPlus11
-          ? !var->checkInitIsICE() : !checkConstInit();
+
+      // Check for a C++03 constant initializer first, and if that fails
+      // check for an ICE in C++11 and beyond.
+      bool DiagErr = !checkConstInit() &&
+                     (!getLangOpts().CPlusPlus11 || !var->checkInitIsICE());
+
       if (DiagErr) {
         auto attr = var->getAttr<ConstInitAttr>();
         Diag(var->getLocation(), diag::err_constinit_attr_failed)
             << Init->getSourceRange();
         Diag(attr->getLocation(), diag::note_declared_constinit_attr_here)
             << attr << attr->getRange();
+        bool DiagnosedSubExpr = false;
         if (getLangOpts().CPlusPlus11) {
           APValue Value;
           SmallVector<PartialDiagnosticAt, 8> Notes;
-          Init->EvaluateAsInitializer(Value, getASTContext(), var, Notes);
+          bool Success =
+              Init->EvaluateAsInitializer(Value, getASTContext(), var, Notes);
+          DiagnosedSubExpr = !Success;
+          if (Success)
+            assert(Notes.empty());
           for (auto &it : Notes)
             Diag(it.first, it.second);
-        } else {
+        }
+        if (!DiagnosedSubExpr) {
           Diag(CacheCulprit->getExprLoc(),
                diag::note_invalid_subexpr_in_const_expr)
               << CacheCulprit->getSourceRange();
