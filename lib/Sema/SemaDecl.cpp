@@ -11553,10 +11553,9 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
     // were just diagnosed.
     if (!var->isConstexpr() && GlobalStorage && var->hasAttr<ConstInitAttr>()) {
 
-      // Check for a C++03 constant initializer first, and if that fails
-      // check for an ICE in C++11 and beyond.
-      bool DiagErr = !checkConstInit() &&
-                     (!getLangOpts().CPlusPlus11 || !var->checkInitIsICE());
+      // Use strict checking in C++11 onwards, otherwise simply check the
+      // compiler can emit it as a constant expression.
+      bool DiagErr = getLangOpts().CPlusPlus11 ? !var->checkInitIsICE() : !checkConstInit();
 
       if (DiagErr) {
         auto attr = var->getAttr<ConstInitAttr>();
@@ -11564,19 +11563,13 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
             << Init->getSourceRange();
         Diag(attr->getLocation(), diag::note_declared_constinit_attr_here)
             << attr << attr->getRange();
-        bool DiagnosedSubExpr = false;
         if (getLangOpts().CPlusPlus11) {
           APValue Value;
           SmallVector<PartialDiagnosticAt, 8> Notes;
-          bool Success =
-              Init->EvaluateAsInitializer(Value, getASTContext(), var, Notes);
-          DiagnosedSubExpr = !Success;
-          if (Success)
-            assert(Notes.empty());
+          Init->EvaluateAsInitializer(Value, getASTContext(), var, Notes);
           for (auto &it : Notes)
             Diag(it.first, it.second);
-        }
-        if (!DiagnosedSubExpr) {
+        } else {
           Diag(CacheCulprit->getExprLoc(),
                diag::note_invalid_subexpr_in_const_expr)
               << CacheCulprit->getSourceRange();
