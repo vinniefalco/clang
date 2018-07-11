@@ -10719,10 +10719,12 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
   }
 
   if (VDecl->isResumableSpecified()) {
-    if (CheckResumableVarDeclInit(VDecl, Init)) {
+    ExprResult NewInit = BuildResumableVarDeclInit(VDecl, Init);
+    if (NewInit.isInvalid()) {
       RealDecl->setInvalidDecl();
       return;
     }
+    Init = NewInit.get();
   }
 
   // C++11 [decl.spec.auto]p6. Deduce the type which 'auto' stands in for.
@@ -10870,24 +10872,6 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
     }
 
     Init = Result.getAs<Expr>();
-  } else if (!VDecl->isInvalidDecl() && VDecl->isResumableSpecified()) {
-    // FIXME(EricWF): Make this do something correct-ish. For now just perform
-    // default initialization.
-#if 0
-    InitializedEntity Entity = InitializedEntity::InitializeVariable(VDecl);
-    InitializationKind Kind = InitializationKind::CreateForInit(
-        VDecl->getLocation(), /*DirectInit*/ true, /*Init*/ nullptr);
-
-    MultiExprArg Args;
-    InitializationSequence InitSeq(*this, Entity, Kind, Args,
-                                   /*TopLevelOfInitList=*/false,
-                                   /*TreatUnavailableAsInvalid=*/false);
-    ExprResult Result = InitSeq.Perform(*this, Entity, Kind, Args, &DclT);
-    if (Result.isInvalid()) {
-      VDecl->setInvalidDecl();
-      return;
-    }
-#endif
   }
 
   // Check for self-references within variable initializers.

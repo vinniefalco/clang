@@ -1951,7 +1951,7 @@ public:
   void CheckCompletedResumableFunctionBody(FunctionDecl *FD, Stmt *Body,
                                            sema::FunctionScopeInfo *FnScope);
 
-  bool CheckResumableVarDeclInit(VarDecl *VD, Expr *Init);
+  ExprResult BuildResumableVarDeclInit(VarDecl *VD, Expr *Init);
 
   void SetCurFunctionImplicitlyResumable(const BreakResumableStmt *S);
   void SetCurFunctionImplicitlyResumable(const FunctionDecl *D,

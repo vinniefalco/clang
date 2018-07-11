@@ -276,7 +276,7 @@ public:
 };
 } // namespace
 
-bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
+ExprResult Sema::BuildResumableVarDeclInit(VarDecl *VD, Expr *Init) {
   assert(VD && Init && "cannot be null");
   SourceLocation Loc = VD->getLocation();
 
@@ -285,7 +285,7 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     VD->setInvalidDecl();
     if (RD)
       RD->setInvalidDecl();
-    return true;
+    return ExprError();
   };
 
   Init = Init->IgnoreParens();
@@ -411,8 +411,6 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
   VD->setType(NewRecordType);
 
   // Build the new ResumableExpr wrapper around the initializer.
-  ResumableExpr *NewInit = ResumableExpr::Create(Context, RD, Init);
+  ResumableExpr *NewInit = ResumableExpr::Create(Context, RD, Init, VD);
   return NewInit;
-
-  return false;
 }
