@@ -525,6 +525,9 @@ class CXXRecordDecl : public RecordDecl {
     /// Whether this class describes a C++ lambda.
     unsigned IsLambda : 1;
 
+    /// Whether this class describes a C++ resumable object.
+    unsigned IsResumable : 1;
+
     /// Whether we are currently parsing base specifiers.
     unsigned IsParsingBaseSpecifiers : 1;
 
@@ -1196,6 +1199,12 @@ public:
   /// class.
   bool needsOverloadResolutionForDestructor() const {
     return data().NeedOverloadResolutionForDestructor;
+  }
+
+  /// Determine whether this class describes a resumable object.
+  bool isResumable() const {
+    auto *DD = DefinitionData;
+    return DD && DD->IsResumable;
   }
 
   /// Determine whether this class describes a lambda function object.

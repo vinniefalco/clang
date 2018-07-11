@@ -281,14 +281,46 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
   Init = Init->IgnoreParens();
   CheckResumableVarInit Checker{*this, VD, Init, Init->getExprLoc()};
   Checker.TraverseStmt(Init);
-  if (Checker.CheckedInit)
-    return Checker.IsInvalid;
+  if (Checker.CheckedInit && Checker.IsInvalid)
+    return true;
+  else if (!Checker.CheckedInit) {
 
-  llvm::errs() << "Unhandled Resumable var decl init case\n";
-  Init->dumpColor();
-  Diag(Init->getExprLoc(), diag::err_resumable_var_decl_init_not_call_expr)
-      << VD << Init->getSourceRange();
-  return true;
+    llvm::errs() << "Unhandled Resumable var decl init case\n";
+    Init->dumpColor();
+    Diag(Init->getExprLoc(), diag::err_resumable_var_decl_init_not_call_expr)
+        << VD << Init->getSourceRange();
+    return true;
+  }
+
+  CXXRecordDecl *RD = CXXRecordDecl::Create(
+      Context, TTK_Class, CurContext, VD->getLocStart(), VD->getLocation(),
+      &PP.getIdentifierTable().get("__promise"), /*PrevDecl*/ nullptr,
+      /*DelayTypeCreation*/ false);
+
+  RD->startDefinition();
+
+  auto *CArr =
+      Context.getConstantArrayType(Context.CharTy, llvm::APInt(32, 1024), 0, 0);
+
+  struct {
+    QualType Ty;
+    const char *Name;
+  } Fields[] = {{QualType(CArr, 0), "data"}};
+
+  // Create fields
+  for (auto F : Fields) {
+    FieldDecl *Field = FieldDecl::Create(
+        *this, RD, SourceLocation(), SourceLocation(),
+        &PP.getIdentifierTable().get(F.Name), F.Ty, /*TInfo=*/nullptr,
+        /*BitWidth=*/nullptr,
+        /*Mutable=*/false, ICIS_NoInit);
+    Field->setAccess(AS_public);
+    RD->addDecl(Field);
+  }
+
+  RD->completeDefinition();
+
+  VD->setType(QualType(RD->getTypeForDecl(), 0));
 
 #if 0
   if (auto *CE = dyn_cast<CallExpr>(Init)) {
