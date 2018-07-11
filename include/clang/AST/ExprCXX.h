@@ -1802,7 +1802,7 @@ public:
 };
 
 class ResumableExpr final : public Expr {
-  VarDecl *ResumableObj = nullptr;
+  VarDecl *ResumableObject = nullptr;
   Stmt *SourceExpr = nullptr;
 
   /// Construct a Resumable expression.
