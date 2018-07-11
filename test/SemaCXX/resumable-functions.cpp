@@ -359,6 +359,8 @@ struct Tag {};
 resumable Tag<1> foo() { return {}; }
 resumable Tag<2> bar() noexcept(false) { return {}; }
 resumable Tag<3> baz() noexcept { return {}; }
+int global = 42;
+resumable const int &ref_ty() { return global; }
 
 void test_type_equal() {
   resumable auto r = foo();
@@ -372,8 +374,9 @@ void t1() {
   using Result = T::result_type;
   static_assert(__is_same(Result, Tag<1>), "");
 
-  resumable auto r2 = bar();
-  using T = decltype(r);
+  resumable auto r2 = ref_ty();
+  using T2 = decltype(r2);
+  static_assert(__is_same(T2::result_type, int const &), "");
 }
 
 void test_ready() {
@@ -386,7 +389,7 @@ void test_ready() {
 }
 
 void test_resume() {
-  resumable auto r1 = foo();
+  resumable auto r1 = foo(); // expected-note {{'resume' declared here}}
   resumable auto r2 = bar();
   resumable auto r3 = baz();
   static_assert(!noexcept(r1.resume()), "");
@@ -403,7 +406,7 @@ void test_resume() {
 }
 
 void test_result() {
-  resumable auto r1 = foo();
+  resumable auto r1 = foo(); // expected-note {{'result' declared here}}
   resumable auto r2 = bar();
   static_assert(!noexcept(r1.result()), "");
   static_assert(__is_same(decltype(r1.result()), Tag<1>), "");
@@ -414,5 +417,15 @@ void test_result() {
   const auto &cr = r1;
   // expected-error-re@+1 {{'this' argument to member function 'result' has type 'const (anonymous class at {{.*}}resumable-functions.cpp{{.*}})}}
   cr.result();
+
+  resumable auto r3 = ref_ty();
+  static_assert(__is_same(decltype(r3.result()), const int &), "");
+  const int &t2 = r3.result();
 }
+
+void test_deleted_copy() {
+  resumable auto r = foo();
+  auto r2 = r;
+}
+
 } // namespace test_class_members

@@ -304,23 +304,17 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
 
   RD = CXXRecordDecl::CreateResumableClass(Context, CurContext,
                                            VD->getLocStart());
-  assert(RD->isBeingDefined());
-  QualType RecordTy(RD->getTypeForDecl(), 0);
-
-  QualType CArrTy = Context.getConstantArrayType(
-      Context.CharTy, llvm::APInt(32, 1024), ArrayType::Normal, 0);
-
-  struct {
-    QualType Ty;
-    const char *Name;
-  } Fields[] = {{CArrTy, "data"}};
+  assert(RD->isBeingDefined() && RD->isImplicit());
+  QualType RecordTy = Context.getTypeDeclType(RD);
 
   // Create buffer field.
-  for (auto &F : Fields) {
+  {
+    QualType CArrTy = Context.getConstantArrayType(
+        Context.CharTy, llvm::APInt(32, 1024), ArrayType::Normal, 0);
     // FIXME(EricWF): Align this field to the maximum alignment.
     FieldDecl *Field = FieldDecl::Create(
         Context, RD, SourceLocation(), SourceLocation(),
-        &PP.getIdentifierTable().get(F.Name), F.Ty, /*TInfo=*/nullptr,
+        &PP.getIdentifierTable().get("__data_"), CArrTy, /*TInfo=*/nullptr,
         /*BitWidth=*/nullptr,
         /*Mutable=*/false, ICIS_NoInit);
     Field->setAccess(AS_private);
@@ -337,7 +331,8 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     if (DecltypeRes.isInvalid())
       return Error();
 
-    ResultTy = DecltypeRes.get()->getType();
+    Expr *DeclExpr = DecltypeRes.get();
+    ResultTy = BuildDecltypeType(DeclExpr, Loc, /*AsUnevaluated*/ true);
 
     TypedefDecl *ResultTypedef =
         TypedefDecl::Create(Context, RD, SourceLocation(), SourceLocation(),
@@ -357,6 +352,7 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
         /*IsInline*/ false, /*isConstexpr*/ false,
         /*IsResumable*/ false, Loc);
     MD->setAccess(AS_public);
+    MD->setImplicit(true);
     RD->addDecl(MD);
   };
 
@@ -383,13 +379,55 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
   }
   // Create result_type result();
   { AddMethod("result", ResultTy, FunctionProtoType::ExtProtoInfo{}); }
+  {
+    DeclarationName Name = Context.DeclarationNames.getCXXConstructorName(
+        Context.getCanonicalType(RecordTy));
+    SourceLocation ClassLoc = RD->getLocation();
+    DeclarationNameInfo NameInfo(Name, ClassLoc);
+
+    QualType ArgTy = Context.getLValueReferenceType(RecordTy.withConst());
+
+    CXXConstructorDecl *CopyConstructor = CXXConstructorDecl::Create(
+        Context, RD, Loc, NameInfo,
+        Context.getFunctionType(Context.VoidTy, ArgTy,
+                                FunctionProtoType::ExtProtoInfo{}),
+        /*TInfo=*/nullptr,
+        /*isExplicit=*/false, /*isInline=*/true, /*isImplicitlyDeclared=*/false,
+        /*IsConstexpr=*/false);
+    CopyConstructor->setAccess(AS_public);
+    CopyConstructor->setDeletedAsWritten(true);
+    RD->addDecl(CopyConstructor);
+  }
+  {
+    DeclarationName Name =
+        Context.DeclarationNames.getCXXOperatorName(OO_Equal);
+    DeclarationNameInfo NameInfo(Name, Loc);
+    QualType ArgTy = Context.getLValueReferenceType(RecordTy.withConst());
+    QualType RetTy = Context.getLValueReferenceType(RecordTy);
+    CXXMethodDecl *CopyAssignment = CXXMethodDecl::Create(
+        Context, RD, Loc, NameInfo,
+        Context.getFunctionType(RetTy, ArgTy,
+                                FunctionProtoType::ExtProtoInfo{}),
+        /*TInfo=*/nullptr, /*StorageClass=*/SC_None,
+        /*isInline=*/true, /*IsConstexpr=*/false, /*isResumable=*/false,
+        SourceLocation());
+    CopyAssignment->setAccess(AS_public);
+    CopyAssignment->setDeletedAsWritten();
+    RD->addDecl(CopyAssignment);
+  }
   // TODO: Add magic constructor of some sort.
   // TODO: Delete copy constructor
+
   // TODO: Delete assignment operator
 
   // RD->setImplicitCopyConstructorIsDeleted();
 
-  RD->completeDefinition();
+  SmallVector<Decl *, 4> Fields(RD->fields());
+  ActOnFields(nullptr, Loc, RD, Fields, SourceLocation(), SourceLocation(),
+              nullptr);
+  CheckCompletedCXXClass(RD);
+
+  // RD->completeDefinition();
 
   // Replace 'auto' with the new class type.
   QualType NewRecordType = Context.getQualifiedType(
