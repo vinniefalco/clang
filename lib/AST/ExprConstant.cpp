@@ -4250,14 +4250,18 @@ static bool CheckTrivialDefaultConstructor(EvalInfo &Info,
   // Tolerate default-initialization which has been preceeded by
   // zero-initialization. invoking the trivial default constructor buys nothing
   // but grief.
-  bool IsForNonLocalDefaultInit = false;
-  if (!IsValueInitialization && Info.EvaluatingDecl &&
-      Info.EvaluatingDecl.is<const ValueDecl *>()) {
-    if (const VarDecl *VD =
-            dyn_cast<VarDecl>(Info.EvaluatingDecl.get<const ValueDecl *>()))
-      IsForNonLocalDefaultInit = !VD->hasLocalStorage() && !Result.isUninit();
-  }
-  // assert(IsValueInitialization || IsForNonLocalDefaultInit);
+  bool IsForNonLocalDefaultInit = [&]() {
+    if (!IsValueInitialization && Info.EvaluatingDecl &&
+        Info.EvaluatingDecl.is<const ValueDecl *>()) {
+      if (const VarDecl *VD =
+              dyn_cast<VarDecl>(Info.EvaluatingDecl.get<const ValueDecl *>())) {
+        // FIXME(EricWF): Is it correct to expect that zero-initialization
+        // has already been performed.
+        return !VD->hasLocalStorage() && !Result.isUninit();
+      }
+    }
+    return false;
+  }();
   // Value-initialization does not call a trivial default constructor, so such a
   // call is a core constant expression whether or not the constructor is
   // constexpr.
@@ -6487,7 +6491,7 @@ bool RecordExprEvaluator::VisitCXXConstructExpr(const CXXConstructExpr *E,
     //  1) We're performing value-initialization, and should zero-initialize
     //     the object, or
     //  2) We're performing default-initialization of an object with a trivial
-    //     constexpr default constructor, in which case we should start the
+    //     default constructor, in which case we should start the
     //     lifetimes of all the base subobjects (there can be no data member
     //     subobjects in this case) per [basic.life]p1.
     // Either way, ZeroInitialization is appropriate.
