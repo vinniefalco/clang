@@ -6285,6 +6285,7 @@ enum InvalidResumableVarDeclSelect {
   IRV_ThreadLocal,
   IRV_Extern,
   IRV_Constexpr,
+  IRV_Const,
   IRV_None = -1,
 };
 
@@ -6629,6 +6630,8 @@ NamedDecl *Sema::ActOnVariableDeclarator(
             << NewVD << ((int)Select);
         NewVD->setInvalidDecl();
       };
+      if (NewVD->getType().isConstQualified())
+        DoDiag(IRV_Const, NewVD->getTypeSpecStartLoc());
       if (D.getDeclSpec().isConstexprSpecified())
         DoDiag(IRV_Constexpr, D.getDeclSpec().getConstexprSpecLoc());
       if (D.getDeclSpec().isExternInLinkageSpec())

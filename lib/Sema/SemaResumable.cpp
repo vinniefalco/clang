@@ -356,6 +356,9 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     RD->addDecl(MD);
   };
 
+  // Create result_type result();
+  AddMethod("result", ResultTy, FunctionProtoType::ExtProtoInfo{});
+
   // Create bool	ready()	const	noexcept;
   {
     FunctionProtoType::ExtProtoInfo Proto;
@@ -377,13 +380,29 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     Proto.ExceptionSpec.NoexceptExpr = NoexceptRes.get();
     AddMethod("resume", Context.VoidTy, Proto);
   }
-  // Create result_type result();
-  { AddMethod("result", ResultTy, FunctionProtoType::ExtProtoInfo{}); }
+
+  // FIXME(EricWF): Create dummy default constructor
   {
     DeclarationName Name = Context.DeclarationNames.getCXXConstructorName(
         Context.getCanonicalType(RecordTy));
-    SourceLocation ClassLoc = RD->getLocation();
-    DeclarationNameInfo NameInfo(Name, ClassLoc);
+    DeclarationNameInfo NameInfo(Name, Loc);
+    CXXConstructorDecl *DefaultConstructor = CXXConstructorDecl::Create(
+        Context, RD, Loc, NameInfo,
+        Context.getFunctionType(Context.VoidTy, None,
+                                FunctionProtoType::ExtProtoInfo{}),
+        /*TInfo=*/nullptr,
+        /*isExplicit=*/false, /*isInline=*/false, /*isImplicitlyDeclared=*/true,
+        /*IsConstexpr=*/false);
+    DefaultConstructor->setAccess(AS_public);
+    RD->addDecl(DefaultConstructor);
+  }
+#if 0
+  // Delete copy constructor
+  // FIXME(EricWF): Should we just do this implicitly?
+  {
+    DeclarationName Name = Context.DeclarationNames.getCXXConstructorName(
+        Context.getCanonicalType(RecordTy));
+    DeclarationNameInfo NameInfo(Name, Loc);
 
     QualType ArgTy = Context.getLValueReferenceType(RecordTy.withConst());
 
@@ -403,6 +422,7 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     CopyConstructor->setDeletedAsWritten(true);
     RD->addDecl(CopyConstructor);
   }
+  // Delete the copy assignment operator
   {
     DeclarationName Name =
         Context.DeclarationNames.getCXXOperatorName(OO_Equal);
@@ -426,11 +446,7 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     CopyAssignment->setDeletedAsWritten();
     RD->addDecl(CopyAssignment);
   }
-  // TODO: Add magic constructor of some sort.
-  // TODO: Delete copy constructor
-
-  // TODO: Delete assignment operator
-
+#endif
   // RD->setImplicitCopyConstructorIsDeleted();
 
   SmallVector<Decl *, 4> Fields(RD->fields());

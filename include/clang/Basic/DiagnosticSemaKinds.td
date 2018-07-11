@@ -2422,8 +2422,8 @@ def err_resumable_redecl_mismatch : Error<
   "|resumable declaration of %0 follows non-resumable declaration}1">;
 def err_resumable_virtual : Error<"virtual function cannot be resumable">;
 def err_resumable_var_decl_spec_invalid : Error<
-  "%select{static|thread_local|extern|constexpr}1 variable %0 cannot be declared "
-  "resumable">;
+  "resumable variable %0 cannot be declared "
+  "%select{static|thread_local|extern|constexpr|const}1">;
 def err_resumable_var_decl_type : Error<
   "resumable variable cannot be declared with type %0; "
   "declared type must be 'auto'">;
@@ -2455,6 +2455,7 @@ def err_explicit_instantiation_of_resumable_function : Error<
     "function %1">;
 def note_explicit_instantiation_declaration_here : Note<
     "explicit instantiation declaration is here">;
+def note_resumable_decl : Note<"resumable expression begins here">;
 
 // C++ Concepts TS
 def err_concept_wrong_decl_kind : Error<

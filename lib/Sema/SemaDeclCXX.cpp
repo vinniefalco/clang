@@ -7116,6 +7116,14 @@ bool Sema::ShouldDeleteSpecialMember(CXXMethodDecl *MD, CXXSpecialMember CSM,
     return true;
   }
 
+  if (RD->isResumable() &&
+      (CSM == CXXDefaultConstructor || CSM == CXXCopyConstructor ||
+       CSM == CXXCopyAssignment)) {
+    if (Diagnose)
+      Diag(RD->getLocation(), diag::note_resumable_decl);
+    return true;
+  }
+
   // For an anonymous struct or union, the copy and assignment special members
   // will never be used, so skip the check. For an anonymous union declared at
   // namespace scope, the constructor and destructor are used.
