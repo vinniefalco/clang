@@ -1801,6 +1801,55 @@ public:
   }
 };
 
+class ResumableExpr final : public Expr {
+
+  Stmt *SourceExpr = nullptr;
+
+  /// Construct a Resumable expression.
+  ResumableExpr(QualType T, Expr *SourceExpr);
+
+  /// Construct an empty Resumable expression.
+  ResumableExpr(EmptyShell Empty) : Expr(ResumableExprClass, Empty) {}
+
+public:
+  friend class ASTStmtReader;
+  friend class ASTStmtWriter;
+
+  /// Construct a new Resumable expression.
+  static ResumableExpr *Create(const ASTContext &C, CXXRecordDecl *Class,
+                               Expr *SourceExpr);
+
+  /// Construct a new Resumable expression that will be deserialized from
+  /// an external source.
+  static ResumableExpr *CreateDeserialized(const ASTContext &C);
+
+  Expr *getSourceExpr() const { return cast_or_null<Expr>(SourceExpr); }
+
+  /// Retrieve the class that corresponds to the resumable object.
+  ///
+  /// This is the "closure type", and stores the
+  /// captures in its fields and provides the various operations permitted
+  /// on a Resumable (copying, calling).
+  CXXRecordDecl *getResumableClass() const;
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ResumableExprClass;
+  }
+
+  SourceLocation getLocStart() const LLVM_READONLY {
+    return SourceExpr->getLocStart();
+  }
+
+  SourceLocation getLocEnd() const LLVM_READONLY {
+    return SourceExpr->getLocEnd();
+  }
+
+  child_range children() {
+    // Includes initialization exprs plus body stmt
+    return child_range(&SourceExpr, &SourceExpr + 1);
+  }
+};
+
 /// An expression "T()" which creates a value-initialized rvalue of type
 /// T, which is a non-class type.  See (C++98 [5.2.3p2]).
 class CXXScalarValueInitExpr : public Expr {

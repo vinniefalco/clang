@@ -380,7 +380,7 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     Proto.ExceptionSpec.NoexceptExpr = NoexceptRes.get();
     AddMethod("resume", Context.VoidTy, Proto);
   }
-
+#if 0
   // FIXME(EricWF): Create dummy default constructor
   {
     DeclarationName Name = Context.DeclarationNames.getCXXConstructorName(
@@ -396,6 +396,7 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     DefaultConstructor->setAccess(AS_public);
     RD->addDecl(DefaultConstructor);
   }
+#endif
 
   SmallVector<Decl *, 4> Fields(RD->fields());
   ActOnFields(nullptr, Loc, RD, Fields, SourceLocation(), SourceLocation(),
@@ -408,6 +409,10 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
   QualType NewRecordType = Context.getQualifiedType(
       RD->getTypeForDecl(), VD->getType().getQualifiers());
   VD->setType(NewRecordType);
+
+  // Build the new ResumableExpr wrapper around the initializer.
+  ResumableExpr *NewInit = ResumableExpr::Create(Context, RD, Init);
+  return NewInit;
 
   return false;
 }

@@ -10873,7 +10873,7 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
   } else if (!VDecl->isInvalidDecl() && VDecl->isResumableSpecified()) {
     // FIXME(EricWF): Make this do something correct-ish. For now just perform
     // default initialization.
-
+#if 0
     InitializedEntity Entity = InitializedEntity::InitializeVariable(VDecl);
     InitializationKind Kind = InitializationKind::CreateForInit(
         VDecl->getLocation(), /*DirectInit*/ true, /*Init*/ nullptr);
@@ -10887,6 +10887,7 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
       VDecl->setInvalidDecl();
       return;
     }
+#endif
   }
 
   // Check for self-references within variable initializers.

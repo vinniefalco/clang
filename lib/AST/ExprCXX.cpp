@@ -1025,6 +1025,26 @@ bool LambdaExpr::isMutable() const {
   return !getCallOperator()->isConst();
 }
 
+ResumableExpr::ResumableExpr(QualType T, Expr *Source)
+    : Expr(ResumableExprClass, T, VK_RValue, OK_Ordinary, T->isDependentType(),
+           T->isDependentType(), T->isDependentType(),
+           Source->containsUnexpandedParameterPack()),
+      SourceExpr(Source) {}
+
+ResumableExpr *ResumableExpr::Create(const ASTContext &C, CXXRecordDecl *Class,
+                                     Expr *SourceExpr) {
+  QualType T = C.getTypeDeclType(Class);
+  return new (C) ResumableExpr(T, SourceExpr);
+}
+
+ResumableExpr *ResumableExpr::CreateDeserialized(const ASTContext &C) {
+  return new (C) ResumableExpr(Empty);
+}
+
+CXXRecordDecl *ResumableExpr::getResumableClass() const {
+  return getType()->getAsCXXRecordDecl();
+}
+
 ExprWithCleanups::ExprWithCleanups(Expr *subexpr,
                                    bool CleanupsHaveSideEffects,
                                    ArrayRef<CleanupObject> objects)
