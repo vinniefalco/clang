@@ -1,7 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -DTEST_ONE -Wno-c++11-extensions -std=c++03 %s
 // RUN: %clang_cc1 -fsyntax-only -verify -DTEST_ONE -std=c++11 %s
 // RUN: %clang_cc1 -fsyntax-only -verify -DTEST_ONE -std=c++14 %s
-
 // RUN: %clang_cc1 -fsyntax-only -verify -DTEST_TWO \
 // RUN: -Wglobal-constructors -std=c++14 %s
 // RUN: %clang_cc1 -fsyntax-only -verify -DTEST_THREE -xc %s

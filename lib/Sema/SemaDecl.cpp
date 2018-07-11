@@ -11554,21 +11554,8 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
     if (!var->isConstexpr() && GlobalStorage &&
             var->hasAttr<ConstInitAttr>()) {
       // FIXME: Need strict checking in C++03 here.
-      SmallVector<PartialDiagnosticAt, 8> Notes;
-      bool HasError = [&]() {
-        if (getLangOpts().CPlusPlus11) {
-          // checkInitIsICE() is overly strict, but is likely already cached.
-          // If that say's we're OK, we don't need to go any further.
-          if (var->checkInitIsICE())
-            return true;
-          // Otherwise, properly evaluate the initializer within the context
-          // of the specified var, allowing for zero-initialization.
-          APValue Value;
-          return !Init->EvaluateAsInitializer(Value, getASTContext(), var, Notes);
-        }
-        // FIXME: Use non-strict checking in C++03.
-        return !checkConstInit();
-      }();
+      bool HasError = getLangOpts().CPlusPlus11 ? !var->checkInitIsICE()
+                                                : !checkConstInit();
       if (HasError) {
         auto attr = var->getAttr<ConstInitAttr>();
         Diag(var->getLocation(), diag::err_constinit_attr_failed)
@@ -11576,6 +11563,9 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
         Diag(attr->getLocation(), diag::note_declared_constinit_attr_here)
           << attr << attr->getRange();
         if (getLangOpts().CPlusPlus11) {
+          APValue Result;
+          SmallVector<PartialDiagnosticAt, 8> Notes;
+          Init->EvaluateAsInitializer(Result, getASTContext(), var, Notes);
           for (auto &it : Notes)
             Diag(it.first, it.second);
         } else {

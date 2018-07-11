@@ -4239,16 +4239,30 @@ static EvalStmtResult EvaluateStmt(StmtResult &Result, EvalInfo &Info,
 /// default constructor. If so, we'll fold it whether or not it's marked as
 /// constexpr. If it is marked as constexpr, we will never implicitly define it,
 /// so we need special handling.
-static bool CheckTrivialDefaultConstructor(EvalInfo &Info, SourceLocation Loc,
+static bool CheckTrivialDefaultConstructor(EvalInfo &Info,
+                                           const APValue &Result,
+                                           SourceLocation Loc,
                                            const CXXConstructorDecl *CD,
                                            bool IsValueInitialization) {
   if (!CD->isTrivial() || !CD->isDefaultConstructor())
     return false;
 
+  // Tolerate default-initialization which has been preceeded by
+  // zero-initialization. invoking the trivial default constructor buys nothing
+  // but grief.
+  bool IsForNonLocalDefaultInit = false;
+  if (!IsValueInitialization && Info.EvaluatingDecl &&
+      Info.EvaluatingDecl.is<const ValueDecl *>()) {
+    if (const VarDecl *VD =
+            dyn_cast<VarDecl>(Info.EvaluatingDecl.get<const ValueDecl *>()))
+      IsForNonLocalDefaultInit = !VD->hasLocalStorage() && !Result.isUninit();
+  }
+  // assert(IsValueInitialization || IsForNonLocalDefaultInit);
   // Value-initialization does not call a trivial default constructor, so such a
   // call is a core constant expression whether or not the constructor is
   // constexpr.
-  if (!CD->isConstexpr() && !IsValueInitialization) {
+  if (!CD->isConstexpr() &&
+      (!IsValueInitialization && !IsForNonLocalDefaultInit)) {
     if (Info.getLangOpts().CPlusPlus11) {
       // FIXME: If DiagDecl is an implicitly-declared special member function,
       // we should be much more explicit about why it's not constexpr.
@@ -6463,7 +6477,8 @@ bool RecordExprEvaluator::VisitCXXConstructExpr(const CXXConstructExpr *E,
   if (FD->isInvalidDecl() || FD->getParent()->isInvalidDecl()) return false;
 
   bool ZeroInit = E->requiresZeroInitialization();
-  if (CheckTrivialDefaultConstructor(Info, E->getExprLoc(), FD, ZeroInit)) {
+  if (CheckTrivialDefaultConstructor(Info, Result, E->getExprLoc(), FD,
+                                     ZeroInit)) {
     // If we've already performed zero-initialization, we're already done.
     if (!Result.isUninit())
       return true;
