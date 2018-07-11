@@ -343,3 +343,76 @@ void t3() {
   resumable auto x = pred() ? foo() : other();
 }
 }
+
+namespace test_class_members {
+template <class T>
+struct IsConst {
+  enum { value = false };
+};
+template <class T>
+struct IsConst<const T> {
+  enum { value = true };
+};
+
+template <int>
+struct Tag {};
+resumable Tag<1> foo() { return {}; }
+resumable Tag<2> bar() noexcept(false) { return {}; }
+resumable Tag<3> baz() noexcept { return {}; }
+
+void test_type_equal() {
+  resumable auto r = foo();
+  resumable auto r2 = foo();
+  static_assert(!__is_same(decltype(r), decltype(r2)), "");
+}
+
+void t1() {
+  resumable auto r = foo();
+  using T = decltype(r);
+  using Result = T::result_type;
+  static_assert(__is_same(Result, Tag<1>), "");
+
+  resumable auto r2 = bar();
+  using T = decltype(r);
+}
+
+void test_ready() {
+  resumable auto r = foo();
+  const auto &cr = r;
+  using T = decltype(r);
+  static_assert(__is_same(decltype(r.ready()), bool), "");
+  static_assert(noexcept(r.ready()), "");
+  bool ready = cr.ready();
+}
+
+void test_resume() {
+  resumable auto r1 = foo();
+  resumable auto r2 = bar();
+  resumable auto r3 = baz();
+  static_assert(!noexcept(r1.resume()), "");
+  static_assert(!noexcept(r2.resume()), "");
+  static_assert(noexcept(r3.resume()), "");
+
+  static_assert(__is_same(decltype(r1.resume()), void), "");
+
+  r1.resume();
+
+  const auto &cr = r1;
+  // expected-error-re@+1 {{'this' argument to member function 'resume' has type 'const (anonymous class at {{.*}}resumable-functions.cpp{{.*}})}}
+  cr.resume();
+}
+
+void test_result() {
+  resumable auto r1 = foo();
+  resumable auto r2 = bar();
+  static_assert(!noexcept(r1.result()), "");
+  static_assert(__is_same(decltype(r1.result()), Tag<1>), "");
+  static_assert(__is_same(decltype(r2.result()), Tag<2>), "");
+
+  Tag<1> t = r1.result();
+
+  const auto &cr = r1;
+  // expected-error-re@+1 {{'this' argument to member function 'result' has type 'const (anonymous class at {{.*}}resumable-functions.cpp{{.*}})}}
+  cr.result();
+}
+} // namespace test_class_members

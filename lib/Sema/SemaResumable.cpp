@@ -280,22 +280,30 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
   assert(VD && Init && "cannot be null");
   SourceLocation Loc = VD->getLocation();
 
+  CXXRecordDecl *RD = nullptr;
+  auto Error = [&]() {
+    VD->setInvalidDecl();
+    if (RD)
+      RD->setInvalidDecl();
+    return true;
+  };
+
   Init = Init->IgnoreParens();
   CheckResumableVarInit Checker{*this, VD, Init, Init->getExprLoc()};
   Checker.TraverseStmt(Init);
   if (Checker.CheckedInit && Checker.IsInvalid)
-    return true;
+    return Error();
   else if (!Checker.CheckedInit) {
 
     llvm::errs() << "Unhandled Resumable var decl init case\n";
     Init->dumpColor();
     Diag(Init->getExprLoc(), diag::err_resumable_var_decl_init_not_call_expr)
         << VD << Init->getSourceRange();
-    return true;
+    return Error();
   }
 
-  CXXRecordDecl *RD = CXXRecordDecl::CreateResumableClass(Context, CurContext,
-                                                          VD->getLocStart());
+  RD = CXXRecordDecl::CreateResumableClass(Context, CurContext,
+                                           VD->getLocStart());
   assert(RD->isBeingDefined());
   QualType RecordTy(RD->getTypeForDecl(), 0);
 
@@ -327,73 +335,54 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
         /*IsDecltype*/ true);
     ExprResult DecltypeRes = ActOnDecltypeExpression(Init);
     if (DecltypeRes.isInvalid())
-      return true;
+      return Error();
 
     ResultTy = DecltypeRes.get()->getType();
 
-    TypedefDecl *ResultTypedef = TypedefDecl::Create(
-        Context, RD, SourceLocation(), SourceLocation(),
-        &PP.getIdentifierTable().get("result_type"),
-        Context.getTrivialTypeSourceInfo(DecltypeRes.get()->getType()));
+    TypedefDecl *ResultTypedef =
+        TypedefDecl::Create(Context, RD, SourceLocation(), SourceLocation(),
+                            &PP.getIdentifierTable().get("result_type"),
+                            Context.getTrivialTypeSourceInfo(ResultTy, Loc));
     ResultTypedef->setAccess(AS_public);
     RD->addDecl(ResultTypedef);
   }
+
+  auto AddMethod = [&](StringRef Name, QualType ReturnTy,
+                       FunctionProtoType::ExtProtoInfo Proto) {
+    QualType MethodTy = Context.getFunctionType(ReturnTy, None, Proto);
+    CXXMethodDecl *MD = CXXMethodDecl::Create(
+        Context, RD, Loc,
+        DeclarationNameInfo(&PP.getIdentifierTable().get(Name), Loc), MethodTy,
+        Context.getTrivialTypeSourceInfo(MethodTy, Loc), SC_None,
+        /*IsInline*/ false, /*isConstexpr*/ false,
+        /*IsResumable*/ false, Loc);
+    MD->setAccess(AS_public);
+    RD->addDecl(MD);
+  };
 
   // Create bool	ready()	const	noexcept;
   {
     FunctionProtoType::ExtProtoInfo Proto;
     Proto.ExceptionSpec.Type = EST_BasicNoexcept;
     Proto.TypeQuals = Qualifiers::Const;
-    QualType MethodTy = Context.getFunctionType(Context.BoolTy, None, Proto);
-    CXXMethodDecl *MD = CXXMethodDecl::Create(
-        Context, RD, SourceLocation(),
-        DeclarationNameInfo(&PP.getIdentifierTable().get("ready"),
-                            SourceLocation()),
-        MethodTy, Context.getTrivialTypeSourceInfo(MethodTy), SC_None,
-        /*IsInline*/ false, /*isConstexpr*/ false,
-        /*IsResumable*/ false, SourceLocation());
-    MD->setAccess(AS_public);
-    RD->addDecl(MD);
+    AddMethod("ready", Context.BoolTy, Proto);
   }
   // Create void resume() noexcept(noexcept(expression));
   {
-
     FunctionProtoType::ExtProtoInfo Proto;
     Proto.ExceptionSpec.Type = EST_BasicNoexcept;
     ExprResult CondRes = BuildCXXNoexceptExpr(Loc, Init, Loc);
     if (CondRes.isInvalid())
-      return true;
+      return Error();
     ExprResult NoexceptRes =
         ActOnNoexceptSpec(Loc, CondRes.get(), Proto.ExceptionSpec.Type);
     if (NoexceptRes.isInvalid())
-      return true;
+      return Error();
     Proto.ExceptionSpec.NoexceptExpr = NoexceptRes.get();
-
-    QualType MethodTy = Context.getFunctionType(Context.BoolTy, None, Proto);
-    CXXMethodDecl *MD = CXXMethodDecl::Create(
-        Context, RD, SourceLocation(),
-        DeclarationNameInfo(&PP.getIdentifierTable().get("resume"),
-                            SourceLocation()),
-        MethodTy, Context.getTrivialTypeSourceInfo(MethodTy), SC_None,
-        /*IsInline*/ false, /*isConstexpr*/ false,
-        /*IsResumable*/ false, SourceLocation());
-    MD->setAccess(AS_public);
-    RD->addDecl(MD);
+    AddMethod("resume", Context.VoidTy, Proto);
   }
   // Create result_type result();
-  {
-    FunctionProtoType::ExtProtoInfo Proto;
-    QualType MethodTy = Context.getFunctionType(ResultTy, None, Proto);
-    CXXMethodDecl *MD = CXXMethodDecl::Create(
-        Context, RD, SourceLocation(),
-        DeclarationNameInfo(&PP.getIdentifierTable().get("resume"),
-                            SourceLocation()),
-        MethodTy, Context.getTrivialTypeSourceInfo(MethodTy), SC_None,
-        /*IsInline*/ false, /*isConstexpr*/ false,
-        /*IsResumable*/ false, SourceLocation());
-    MD->setAccess(AS_public);
-    RD->addDecl(MD);
-  }
+  { AddMethod("result", ResultTy, FunctionProtoType::ExtProtoInfo{}); }
   // TODO: Add magic constructor of some sort.
   // TODO: Delete copy constructor
   // TODO: Delete assignment operator
@@ -402,7 +391,10 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
 
   RD->completeDefinition();
 
-  VD->setType(QualType(RD->getTypeForDecl(), 0));
+  // Replace 'auto' with the new class type.
+  QualType NewRecordType = Context.getQualifiedType(
+      RD->getTypeForDecl(), VD->getType().getQualifiers());
+  VD->setType(NewRecordType);
 
   return false;
 }
