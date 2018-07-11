@@ -431,8 +431,7 @@ private:
   /// The bug visitor which allows us to print extra diagnostics along the
   /// BugReport path. For example, showing the allocation site of the leaked
   /// region.
-  class MallocBugVisitor final
-      : public BugReporterVisitorImpl<MallocBugVisitor> {
+  class MallocBugVisitor final : public BugReporterVisitor {
   protected:
     enum NotificationMode {
       Normal,
@@ -481,8 +480,13 @@ private:
     inline bool isReleased(const RefState *S, const RefState *SPrev,
                            const Stmt *Stmt) {
       // Did not track -> released. Other state (allocated) -> released.
-      return (Stmt && (isa<CallExpr>(Stmt) || isa<CXXDeleteExpr>(Stmt)) &&
-              (S && S->isReleased()) && (!SPrev || !SPrev->isReleased()));
+      // The statement associated with the release might be missing.
+      bool IsReleased = (S && S->isReleased()) &&
+                        (!SPrev || !SPrev->isReleased());
+      assert(!IsReleased ||
+             (Stmt && (isa<CallExpr>(Stmt) || isa<CXXDeleteExpr>(Stmt))) ||
+             (!Stmt && S->getAllocationFamily() == AF_InternalBuffer));
+      return IsReleased;
     }
 
     inline bool isRelinquished(const RefState *S, const RefState *SPrev,
@@ -511,7 +515,7 @@ private:
                                                    BugReporterContext &BRC,
                                                    BugReport &BR) override;
 
-    std::unique_ptr<PathDiagnosticPiece>
+    std::shared_ptr<PathDiagnosticPiece>
     getEndPath(BugReporterContext &BRC, const ExplodedNode *EndPathNode,
                BugReport &BR) override {
       if (!IsLeak)
@@ -521,7 +525,7 @@ private:
         PathDiagnosticLocation::createEndOfPath(EndPathNode,
                                                 BRC.getSourceManager());
       // Do not add the statement itself as a range in case of leak.
-      return llvm::make_unique<PathDiagnosticEventPiece>(L, BR.getDescription(),
+      return std::make_shared<PathDiagnosticEventPiece>(L, BR.getDescription(),
                                                          false);
     }
 
@@ -1989,6 +1993,11 @@ void MallocChecker::ReportUseAfterFree(CheckerContext &C, SourceRange Range,
     R->markInteresting(Sym);
     R->addRange(Range);
     R->addVisitor(llvm::make_unique<MallocBugVisitor>(Sym));
+
+    const RefState *RS = C.getState()->get<RegionState>(Sym);
+    if (RS->getAllocationFamily() == AF_InternalBuffer)
+      R->addVisitor(allocation_state::getDanglingBufferBRVisitor(Sym));
+
     C.emitReport(std::move(R));
   }
 }
@@ -2259,7 +2268,7 @@ MallocChecker::getAllocationSite(const ExplodedNode *N, SymbolRef Sym,
             // Do not show local variables belonging to a function other than
             // where the error is reported.
             if (!VR ||
-                (VR->getStackFrame() == LeakContext->getCurrentStackFrame()))
+                (VR->getStackFrame() == LeakContext->getStackFrame()))
               ReferenceRegion = MR;
           }
         }
@@ -2851,8 +2860,17 @@ static bool isReferenceCountingPointerDestructor(const CXXDestructorDecl *DD) {
 std::shared_ptr<PathDiagnosticPiece> MallocChecker::MallocBugVisitor::VisitNode(
     const ExplodedNode *N, const ExplodedNode *PrevN, BugReporterContext &BRC,
     BugReport &BR) {
+
+  ProgramStateRef state = N->getState();
+  ProgramStateRef statePrev = PrevN->getState();
+
+  const RefState *RS = state->get<RegionState>(Sym);
+  const RefState *RSPrev = statePrev->get<RegionState>(Sym);
+
   const Stmt *S = PathDiagnosticLocation::getStmt(N);
-  if (!S)
+  // When dealing with containers, we sometimes want to give a note
+  // even if the statement is missing.
+  if (!S && (!RS || RS->getAllocationFamily() != AF_InternalBuffer))
     return nullptr;
 
   const LocationContext *CurrentLC = N->getLocationContext();
@@ -2877,14 +2895,6 @@ std::shared_ptr<PathDiagnosticPiece> MallocChecker::MallocBugVisitor::VisitNode(
     }
   }
 
-  ProgramStateRef state = N->getState();
-  ProgramStateRef statePrev = PrevN->getState();
-
-  const RefState *RS = state->get<RegionState>(Sym);
-  const RefState *RSPrev = statePrev->get<RegionState>(Sym);
-  if (!RS)
-    return nullptr;
-
   // FIXME: We will eventually need to handle non-statement-based events
   // (__attribute__((cleanup))).
 
@@ -2897,7 +2907,21 @@ std::shared_ptr<PathDiagnosticPiece> MallocChecker::MallocBugVisitor::VisitNode(
       StackHint = new StackHintGeneratorForSymbol(Sym,
                                                   "Returned allocated memory");
     } else if (isReleased(RS, RSPrev, S)) {
-      Msg = "Memory is released";
+      const auto Family = RS->getAllocationFamily();
+      switch(Family) {
+        case AF_Alloca:
+        case AF_Malloc:
+        case AF_CXXNew:
+        case AF_CXXNewArray:
+        case AF_IfNameIndex:
+          Msg = "Memory is released";
+          break;
+        case AF_InternalBuffer:
+          Msg = "Internal buffer is released because the object was destroyed";
+          break;
+        case AF_None:
+          llvm_unreachable("Unhandled allocation family!");
+      }
       StackHint = new StackHintGeneratorForSymbol(Sym,
                                              "Returning; memory was released");
 
@@ -2920,7 +2944,7 @@ std::shared_ptr<PathDiagnosticPiece> MallocChecker::MallocBugVisitor::VisitNode(
             // reference counting operations within it (see the code above),
             // and if so, we'd conclude that it likely is a reference counting
             // pointer destructor.
-            ReleaseDestructorLC = LC->getCurrentStackFrame();
+            ReleaseDestructorLC = LC->getStackFrame();
             // It is unlikely that releasing memory is delegated to a destructor
             // inside a destructor of a shared pointer, because it's fairly hard
             // to pass the information that the pointer indeed needs to be
@@ -2968,8 +2992,19 @@ std::shared_ptr<PathDiagnosticPiece> MallocChecker::MallocBugVisitor::VisitNode(
   assert(StackHint);
 
   // Generate the extra diagnostic.
-  PathDiagnosticLocation Pos(S, BRC.getSourceManager(),
-                             N->getLocationContext());
+  PathDiagnosticLocation Pos;
+  if (!S) {
+    assert(RS->getAllocationFamily() == AF_InternalBuffer);
+    auto PostImplCall = N->getLocation().getAs<PostImplicitCall>();
+    if (!PostImplCall)
+      return nullptr;
+    Pos = PathDiagnosticLocation(PostImplCall->getLocation(),
+                                 BRC.getSourceManager());
+  } else {
+    Pos = PathDiagnosticLocation(S, BRC.getSourceManager(),
+                                 N->getLocationContext());
+  }
+
   return std::make_shared<PathDiagnosticEventPiece>(Pos, Msg, true, StackHint);
 }
 

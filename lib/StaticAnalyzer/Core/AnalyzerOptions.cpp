@@ -321,6 +321,12 @@ bool AnalyzerOptions::shouldSerializeStats() {
                           /* Default = */ false);
 }
 
+bool AnalyzerOptions::shouldElideConstructors() {
+  return getBooleanOption(ElideConstructors,
+                          "elide-constructors",
+                          /* Default = */ true);
+}
+
 int AnalyzerOptions::getOptionAsInteger(StringRef Name, int DefaultVal,
                                         const CheckerBase *C,
                                         bool SearchInParents) {
@@ -380,6 +386,12 @@ unsigned AnalyzerOptions::getGraphTrimInterval() {
   if (!GraphTrimInterval.hasValue())
     GraphTrimInterval = getOptionAsInteger("graph-trim-interval", 1000);
   return GraphTrimInterval.getValue();
+}
+
+unsigned AnalyzerOptions::getMaxSymbolComplexity() {
+  if (!MaxSymbolComplexity.hasValue())
+    MaxSymbolComplexity = getOptionAsInteger("max-symbol-complexity", 10000);
+  return MaxSymbolComplexity.getValue();
 }
 
 unsigned AnalyzerOptions::getMaxTimesInlineLarge() {

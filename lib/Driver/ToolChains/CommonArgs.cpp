@@ -416,6 +416,12 @@ void tools::AddGoldPlugin(const ToolChain &ToolChain, const ArgList &Args,
       CmdArgs.push_back(Args.MakeArgString(Twine("-plugin-opt=O") + OOpt));
   }
 
+  if (Args.hasArg(options::OPT_gsplit_dwarf)) {
+    CmdArgs.push_back(
+        Args.MakeArgString(Twine("-plugin-opt=dwo_dir=") +
+            Output.getFilename() + "_dwo"));
+  }
+
   if (IsThinLTO)
     CmdArgs.push_back("-plugin-opt=thinlto");
 
@@ -558,8 +564,9 @@ void tools::linkSanitizerRuntimeDeps(const ToolChain &TC,
   // Force linking against the system libraries sanitizers depends on
   // (see PR15823 why this is necessary).
   CmdArgs.push_back("--no-as-needed");
-  // There's no libpthread or librt on RTEMS.
-  if (TC.getTriple().getOS() != llvm::Triple::RTEMS) {
+  // There's no libpthread or librt on RTEMS & Android.
+  if (TC.getTriple().getOS() != llvm::Triple::RTEMS &&
+      !TC.getTriple().isAndroid()) {
     CmdArgs.push_back("-lpthread");
     if (TC.getTriple().getOS() != llvm::Triple::OpenBSD)
       CmdArgs.push_back("-lrt");
