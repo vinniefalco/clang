@@ -394,6 +394,11 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
         /*TInfo=*/nullptr,
         /*isExplicit=*/false, /*isInline=*/true, /*isImplicitlyDeclared=*/false,
         /*IsConstexpr=*/false);
+    ParmVarDecl *FromParam =
+        ParmVarDecl::Create(Context, CopyConstructor, Loc, Loc,
+                            /*Id=*/nullptr, ArgTy,
+                            /*TInfo=*/nullptr, SC_None, nullptr);
+    CopyConstructor->setParams(FromParam);
     CopyConstructor->setAccess(AS_public);
     CopyConstructor->setDeletedAsWritten(true);
     RD->addDecl(CopyConstructor);
@@ -411,6 +416,12 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
         /*TInfo=*/nullptr, /*StorageClass=*/SC_None,
         /*isInline=*/true, /*IsConstexpr=*/false, /*isResumable=*/false,
         SourceLocation());
+
+    ParmVarDecl *FromParam =
+        ParmVarDecl::Create(Context, CopyAssignment, Loc, Loc,
+                            /*Id=*/nullptr, ArgTy,
+                            /*TInfo=*/nullptr, SC_None, nullptr);
+    CopyAssignment->setParams(FromParam);
     CopyAssignment->setAccess(AS_public);
     CopyAssignment->setDeletedAsWritten();
     RD->addDecl(CopyAssignment);
