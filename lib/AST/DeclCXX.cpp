@@ -102,8 +102,8 @@ CXXRecordDecl::DefinitionData::DefinitionData(CXXRecordDecl *D)
       ImplicitCopyConstructorCanHaveConstParamForNonVBase(true),
       ImplicitCopyAssignmentHasConstParam(true),
       HasDeclaredCopyConstructorWithConstParam(false),
-      HasDeclaredCopyAssignmentWithConstParam(false), IsResumable(false),
-      IsLambda(false), IsParsingBaseSpecifiers(false), HasODRHash(false),
+      HasDeclaredCopyAssignmentWithConstParam(false), IsLambda(false),
+      IsResumable(false), IsParsingBaseSpecifiers(false), HasODRHash(false),
       Definition(D) {}
 
 CXXBaseSpecifier *CXXRecordDecl::DefinitionData::getBasesSlowCase() const {

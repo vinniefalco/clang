@@ -299,18 +299,18 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
 
   RD->startDefinition();
 
-  auto *CArr =
-      Context.getConstantArrayType(Context.CharTy, llvm::APInt(32, 1024), 0, 0);
+  QualType CArrTy = Context.getConstantArrayType(
+      Context.CharTy, llvm::APInt(32, 1024), ArrayType::Normal, 0);
 
   struct {
     QualType Ty;
     const char *Name;
-  } Fields[] = {{QualType(CArr, 0), "data"}};
+  } Fields[] = {{CArrTy, "data"}};
 
   // Create fields
-  for (auto F : Fields) {
+  for (auto &F : Fields) {
     FieldDecl *Field = FieldDecl::Create(
-        *this, RD, SourceLocation(), SourceLocation(),
+        Context, RD, SourceLocation(), SourceLocation(),
         &PP.getIdentifierTable().get(F.Name), F.Ty, /*TInfo=*/nullptr,
         /*BitWidth=*/nullptr,
         /*Mutable=*/false, ICIS_NoInit);
@@ -318,36 +318,25 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     RD->addDecl(Field);
   }
 
+  ExprResult DecltypeRes;
+  {
+    EnterExpressionEvaluationContext Unevaluated(
+        *this, ExpressionEvaluationContext::Unevaluated, nullptr,
+        /*IsDecltype*/ true);
+    DecltypeRes = ActOnDecltypeExpression(Init);
+    if (DecltypeRes.isInvalid())
+      return true;
+  }
+  TypedefDecl *ResultTy = TypedefDecl::Create(
+      Context, CurContext, SourceLocation(), SourceLocation(),
+      &PP.getIdentifierTable().get("result_type"),
+      Context.getTrivialTypeSourceInfo(DecltypeRes.get()->getType()));
+  RD->addDecl(ResultTy);
+  RD->setImplicitCopyConstructorIsDeleted();
+
   RD->completeDefinition();
 
   VD->setType(QualType(RD->getTypeForDecl(), 0));
 
-#if 0
-  if (auto *CE = dyn_cast<CallExpr>(Init)) {
-    Decl *Callee = CE->getCalleeDecl();
-    assert(Callee && "No callee for function call?");
-    if (auto *FD = dyn_cast<FunctionDecl>(Callee)) {
-      if (!FD->isResumable()) {
-        Diag(Init->getExprLoc(),
-             diag::err_resumable_var_decl_init_not_resumable_expr)
-            << VD << Init->getSourceRange();
-        Diag(FD->getLocation(), diag::note_function_declared_here);
-        return true;
-      }
-    } else {
-      // FIXME(EricWF): Handle these cases.
-      llvm::errs() << "Unhandled Resumable var decl init case\n";
-      Callee->dumpColor();
-      assert(false);
-    }
-  } else {
-    // FIXME(EricWF): Handle these cases.
-    llvm::errs() << "Unhandled Resumable var decl init case\n";
-    Init->dumpColor();
-    Diag(Init->getExprLoc(), diag::err_resumable_var_decl_init_not_call_expr)
-        << VD << Init->getSourceRange();
-    return true;
-  }
-#endif
   return false;
 }
