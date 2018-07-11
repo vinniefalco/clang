@@ -4247,9 +4247,8 @@ static bool CheckTrivialDefaultConstructor(EvalInfo &Info,
   if (!CD->isTrivial() || !CD->isDefaultConstructor())
     return false;
 
-  // Tolerate default-initialization which has been preceeded by
-  // zero-initialization. invoking the trivial default constructor buys nothing
-  // but grief.
+  // Detect default-initialization of a static or thread duration object where
+  // zero-initialization has already been performed.
   bool IsForNonLocalDefaultInit = [&]() {
     if (!IsValueInitialization && Info.EvaluatingDecl &&
         Info.EvaluatingDecl.is<const ValueDecl *>()) {
@@ -4262,7 +4261,9 @@ static bool CheckTrivialDefaultConstructor(EvalInfo &Info,
     }
     return false;
   }();
-  // Value-initialization does not call a trivial default constructor, so such a
+
+  // Value-initialization and default-initialization where zero-initialization
+  // has already occurred does not call a trivial default constructor, so such a
   // call is a core constant expression whether or not the constructor is
   // constexpr.
   if (!CD->isConstexpr() &&
