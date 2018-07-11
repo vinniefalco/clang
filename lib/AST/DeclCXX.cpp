@@ -154,8 +154,20 @@ CXXRecordDecl::CreateLambda(const ASTContext &C, DeclContext *DC,
   return R;
 }
 
-CXXRecordDecl *
-CXXRecordDecl::CreateDeserialized(const ASTContext &C, unsigned ID) {
+CXXRecordDecl *CXXRecordDecl::CreateResumableClass(const ASTContext &C,
+                                                   DeclContext *DC,
+                                                   SourceLocation Loc) {
+  auto *R = new (C, DC)
+      CXXRecordDecl(CXXRecord, TTK_Class, C, DC, Loc, Loc, nullptr, nullptr);
+  R->startDefinition();
+  R->MayHaveOutOfDateDef = false;
+  R->setImplicit(true);
+  C.getTypeDeclType(R, /*PrevDecl=*/nullptr);
+  return R;
+}
+
+CXXRecordDecl *CXXRecordDecl::CreateDeserialized(const ASTContext &C,
+                                                 unsigned ID) {
   auto *R = new (C, ID) CXXRecordDecl(
       CXXRecord, TTK_Struct, C, nullptr, SourceLocation(), SourceLocation(),
       nullptr, nullptr);

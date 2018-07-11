@@ -292,12 +292,9 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     return true;
   }
 
-  CXXRecordDecl *RD = CXXRecordDecl::Create(
-      Context, TTK_Class, CurContext, VD->getLocStart(), VD->getLocation(),
-      &PP.getIdentifierTable().get("__promise"), /*PrevDecl*/ nullptr,
-      /*DelayTypeCreation*/ false);
-
-  RD->startDefinition();
+  CXXRecordDecl *RD = CXXRecordDecl::CreateResumableClass(Context, CurContext,
+                                                          VD->getLocStart());
+  assert(RD->isBeingDefined());
 
   QualType CArrTy = Context.getConstantArrayType(
       Context.CharTy, llvm::APInt(32, 1024), ArrayType::Normal, 0);
@@ -309,12 +306,13 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
 
   // Create fields
   for (auto &F : Fields) {
+    // FIXME(EricWF): Align this field to the maximum alignment.
     FieldDecl *Field = FieldDecl::Create(
         Context, RD, SourceLocation(), SourceLocation(),
         &PP.getIdentifierTable().get(F.Name), F.Ty, /*TInfo=*/nullptr,
         /*BitWidth=*/nullptr,
         /*Mutable=*/false, ICIS_NoInit);
-    Field->setAccess(AS_public);
+    Field->setAccess(AS_private);
     RD->addDecl(Field);
   }
 
@@ -328,11 +326,14 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
       return true;
   }
   TypedefDecl *ResultTy = TypedefDecl::Create(
-      Context, CurContext, SourceLocation(), SourceLocation(),
+      Context, RD, SourceLocation(), SourceLocation(),
       &PP.getIdentifierTable().get("result_type"),
       Context.getTrivialTypeSourceInfo(DecltypeRes.get()->getType()));
+  ResultTy->setAccess(AS_public);
   RD->addDecl(ResultTy);
-  RD->setImplicitCopyConstructorIsDeleted();
+
+  // TODO: Delete copy constructor
+  // RD->setImplicitCopyConstructorIsDeleted();
 
   RD->completeDefinition();
 

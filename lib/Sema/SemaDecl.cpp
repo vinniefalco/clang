@@ -10831,7 +10831,7 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
 
   // Perform the initialization.
   ParenListExpr *CXXDirectInit = dyn_cast<ParenListExpr>(Init);
-  if (!VDecl->isInvalidDecl()) {
+  if (!VDecl->isInvalidDecl() && !VDecl->isResumableSpecified()) {
     InitializedEntity Entity = InitializedEntity::InitializeVariable(VDecl);
     InitializationKind Kind = InitializationKind::CreateForInit(
         VDecl->getLocation(), DirectInit, Init);
@@ -10867,6 +10867,8 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
     }
 
     Init = Result.getAs<Expr>();
+  } else if (!VDecl->isInvalidDecl() && VDecl->isResumableSpecified()) {
+    // FIXME(EricWF): Implement this somehow.
   }
 
   // Check for self-references within variable initializers.

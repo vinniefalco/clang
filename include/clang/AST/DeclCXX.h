@@ -787,6 +787,10 @@ public:
                                      TypeSourceInfo *Info, SourceLocation Loc,
                                      bool DependentLambda, bool IsGeneric,
                                      LambdaCaptureDefault CaptureDefault);
+  static CXXRecordDecl *CreateResumableClass(const ASTContext &C,
+                                             DeclContext *DC,
+                                             SourceLocation Loc);
+
   static CXXRecordDecl *CreateDeserialized(const ASTContext &C, unsigned ID);
 
   bool isDynamicClass() const {
