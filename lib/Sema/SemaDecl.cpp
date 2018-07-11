@@ -6630,10 +6630,10 @@ NamedDecl *Sema::ActOnVariableDeclarator(
             << NewVD << ((int)Select);
         NewVD->setInvalidDecl();
       };
-      if (NewVD->getType().isConstQualified())
-        DoDiag(IRV_Const, NewVD->getTypeSpecStartLoc());
       if (D.getDeclSpec().isConstexprSpecified())
         DoDiag(IRV_Constexpr, D.getDeclSpec().getConstexprSpecLoc());
+      else if (NewVD->getType().isConstQualified())
+        DoDiag(IRV_Const, NewVD->getTypeSpecStartLoc());
       if (D.getDeclSpec().isExternInLinkageSpec())
         DoDiag(IRV_Extern, D.getDeclSpec().getStorageClassSpecLoc());
       // FIXME(EricWF): Probably allow static locals and data members?

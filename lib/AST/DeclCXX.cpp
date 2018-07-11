@@ -161,6 +161,13 @@ CXXRecordDecl *CXXRecordDecl::CreateResumableClass(const ASTContext &C,
       CXXRecordDecl(CXXRecord, TTK_Class, C, DC, Loc, Loc, nullptr, nullptr);
   R->startDefinition();
   R->MayHaveOutOfDateDef = false;
+  auto *data = R->DefinitionData;
+  data->IsResumable = true;
+  // Allow the copy constructor to be eagerly deleted.
+  data->NeedOverloadResolutionForCopyConstructor = true;
+  data->NeedOverloadResolutionForMoveConstructor = true;
+  data->NeedOverloadResolutionForMoveAssignment = true;
+
   R->setImplicit(true);
   C.getTypeDeclType(R, /*PrevDecl=*/nullptr);
   return R;

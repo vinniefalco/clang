@@ -7116,9 +7116,9 @@ bool Sema::ShouldDeleteSpecialMember(CXXMethodDecl *MD, CXXSpecialMember CSM,
     return true;
   }
 
-  if (RD->isResumable() &&
-      (CSM == CXXDefaultConstructor || CSM == CXXCopyConstructor ||
-       CSM == CXXCopyAssignment)) {
+  // FIXME(EricWF): Delete the default constructor as well.
+  if (RD->isResumable() && CSM != CXXDestructor &&
+      CSM != CXXDefaultConstructor) {
     if (Diagnose)
       Diag(RD->getLocation(), diag::note_resumable_decl);
     return true;

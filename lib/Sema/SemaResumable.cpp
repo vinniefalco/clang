@@ -396,58 +396,6 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     DefaultConstructor->setAccess(AS_public);
     RD->addDecl(DefaultConstructor);
   }
-#if 0
-  // Delete copy constructor
-  // FIXME(EricWF): Should we just do this implicitly?
-  {
-    DeclarationName Name = Context.DeclarationNames.getCXXConstructorName(
-        Context.getCanonicalType(RecordTy));
-    DeclarationNameInfo NameInfo(Name, Loc);
-
-    QualType ArgTy = Context.getLValueReferenceType(RecordTy.withConst());
-
-    CXXConstructorDecl *CopyConstructor = CXXConstructorDecl::Create(
-        Context, RD, Loc, NameInfo,
-        Context.getFunctionType(Context.VoidTy, ArgTy,
-                                FunctionProtoType::ExtProtoInfo{}),
-        /*TInfo=*/nullptr,
-        /*isExplicit=*/false, /*isInline=*/true, /*isImplicitlyDeclared=*/false,
-        /*IsConstexpr=*/false);
-    ParmVarDecl *FromParam =
-        ParmVarDecl::Create(Context, CopyConstructor, Loc, Loc,
-                            /*Id=*/nullptr, ArgTy,
-                            /*TInfo=*/nullptr, SC_None, nullptr);
-    CopyConstructor->setParams(FromParam);
-    CopyConstructor->setAccess(AS_public);
-    CopyConstructor->setDeletedAsWritten(true);
-    RD->addDecl(CopyConstructor);
-  }
-  // Delete the copy assignment operator
-  {
-    DeclarationName Name =
-        Context.DeclarationNames.getCXXOperatorName(OO_Equal);
-    DeclarationNameInfo NameInfo(Name, Loc);
-    QualType ArgTy = Context.getLValueReferenceType(RecordTy.withConst());
-    QualType RetTy = Context.getLValueReferenceType(RecordTy);
-    CXXMethodDecl *CopyAssignment = CXXMethodDecl::Create(
-        Context, RD, Loc, NameInfo,
-        Context.getFunctionType(RetTy, ArgTy,
-                                FunctionProtoType::ExtProtoInfo{}),
-        /*TInfo=*/nullptr, /*StorageClass=*/SC_None,
-        /*isInline=*/true, /*IsConstexpr=*/false, /*isResumable=*/false,
-        SourceLocation());
-
-    ParmVarDecl *FromParam =
-        ParmVarDecl::Create(Context, CopyAssignment, Loc, Loc,
-                            /*Id=*/nullptr, ArgTy,
-                            /*TInfo=*/nullptr, SC_None, nullptr);
-    CopyAssignment->setParams(FromParam);
-    CopyAssignment->setAccess(AS_public);
-    CopyAssignment->setDeletedAsWritten();
-    RD->addDecl(CopyAssignment);
-  }
-#endif
-  // RD->setImplicitCopyConstructorIsDeleted();
 
   SmallVector<Decl *, 4> Fields(RD->fields());
   ActOnFields(nullptr, Loc, RD, Fields, SourceLocation(), SourceLocation(),

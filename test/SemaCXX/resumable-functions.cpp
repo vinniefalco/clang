@@ -180,26 +180,26 @@ namespace TestResumableVarSpec {
 
 resumable int foo() { return 42; }
 
-constexpr resumable auto t1 = foo();    // expected-error {{constexpr variable 't1' cannot be declared resumable}}
-thread_local resumable auto t2 = foo(); // expected-error {{thread_local variable 't2' cannot be declared resumable}}
+constexpr resumable auto t1 = foo();    // expected-error {{resumable variable 't1' cannot be declared constexpr}}
+thread_local resumable auto t2 = foo(); // expected-error {{resumable variable 't2' cannot be declared thread_local}}
 
 static resumable auto t4 = foo(); // OK.
 
 void test_in_fn() {
-  // expected-error@+1 {{static variable 't5' cannot be declared resumable}}
+  // expected-error@+1 {{resumable variable 't5' cannot be declared static}}
   static resumable auto t5 = foo();
-  // expected-error@+1 {{thread_local variable 't6' cannot be declared resumable}}
+  // expected-error@+1 {{resumable variable 't6' cannot be declared thread_local}}
   thread_local resumable auto t6 = foo();
-  // expected-error@+2 {{static variable 't7' cannot be declared resumable}}
-  // expected-error@+1 {{thread_local variable 't7' cannot be declared resumable}}
+  // expected-error@+2 {{resumable variable 't7' cannot be declared static}}
+  // expected-error@+1 {{resumable variable 't7' cannot be declared thread_local}}
   static thread_local resumable auto t7 = foo();
 }
 
 struct TestClass {
   // FIXME(EricWF): Should we allow this?
-  // expected-error@+1 {{static variable 't8' cannot be declared resumable}}
+  // expected-error@+1 {{resumable variable 't8' cannot be declared static}}
   static resumable auto t8 = foo();
-  // expected-error@+2 {{static variable 't9' cannot be declared resumable}}
+  // expected-error@+2 {{resumable variable 't9' cannot be declared static}}
   // expected-error@+1 {{resumable variable declaration 't9' requires an initializer}}
   static resumable auto t9;
 };
@@ -424,8 +424,19 @@ void test_result() {
 }
 
 void test_deleted_copy() {
+  // expected-note@+1 4 {{resumable expression begins here}}
   resumable auto r = foo();
-  auto r2 = r;
+  using T = decltype(r);
+  // expected-error@+1 {{call to implicitly-deleted copy constructor of 'T'}}
+  T r2 = r;
+  // expected-error@+1 {{call to implicitly-deleted copy constructor of 'T'}}
+  T r3((T &&) r);
+
+  // expected-error-re@+1 {{object of type '(anonymous class at {{.*}}resumable-functions.cpp{{.*}})' cannot be assigned because its copy assignment operator is implicitly deleted}}
+  r = (T const &)r;
+
+  // expected-error-re@+1 {{object of type '(anonymous class at {{.*}}resumable-functions.cpp{{.*}})' cannot be assigned because its copy assignment operator is implicitly deleted}}
+  r = (T &&) r;
 }
 
 } // namespace test_class_members
