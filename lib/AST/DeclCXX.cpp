@@ -2126,9 +2126,7 @@ bool CXXMethodDecl::isMoveAssignmentOperator() const {
 
 bool CXXMethodDecl::isResumableObjectFunction() const {
   ASTContext &Context = getASTContext();
-  CXXRecordDecl *Class =
-      Context.getTypeDeclType(getParent())->getAsCXXRecordDecl();
-  return Class->isResumable();
+  return getParent()->isResumable();
 }
 
 void CXXMethodDecl::addOverriddenMethod(const CXXMethodDecl *MD) {

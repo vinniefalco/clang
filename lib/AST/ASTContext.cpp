@@ -9662,8 +9662,11 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
     return true;
 
   if (const auto *FD = dyn_cast<FunctionDecl>(D)) {
+    bool IsImplicitResumable =
+        isa<CXXMethodDecl>(FD) &&
+        cast<CXXMethodDecl>(FD)->isResumableObjectFunction();
     // Forward declarations aren't required.
-    if (!FD->doesThisDeclarationHaveABody())
+    if (!FD->doesThisDeclarationHaveABody() && !IsImplicitResumable)
       return FD->doesDeclarationForceExternallyVisibleDefinition();
 
     // Constructors and destructors are required.

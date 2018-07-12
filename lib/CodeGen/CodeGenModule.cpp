@@ -2075,8 +2075,11 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
 
   // Ignore declarations, they will be emitted on their first use.
   if (const auto *FD = dyn_cast<FunctionDecl>(Global)) {
+    bool IsImplicitResumable =
+        isa<CXXMethodDecl>(FD) &&
+        cast<CXXMethodDecl>(FD)->isResumableObjectFunction();
     // Forward declarations are emitted lazily on first use.
-    if (!FD->doesThisDeclarationHaveABody()) {
+    if (!FD->doesThisDeclarationHaveABody() && !IsImplicitResumable) {
       if (!FD->doesDeclarationForceExternallyVisibleDefinition())
         return;
 
@@ -2279,6 +2282,9 @@ bool CodeGenModule::shouldEmitFunction(GlobalDecl GD) {
   const auto *F = cast<FunctionDecl>(GD.getDecl());
   if (CodeGenOpts.OptimizationLevel == 0 && !F->hasAttr<AlwaysInlineAttr>())
     return false;
+
+  assert(!isa<CXXMethodDecl>(F) ||
+         !cast<CXXMethodDecl>(F)->isResumableObjectFunction());
 
   if (F->hasAttr<DLLImportAttr>()) {
     // Check whether it would be safe to inline this dllimport function.
@@ -2592,7 +2598,10 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
       for (const auto *FD = cast<FunctionDecl>(D)->getMostRecentDecl(); FD;
            FD = FD->getPreviousDecl()) {
         if (isa<CXXRecordDecl>(FD->getLexicalDeclContext())) {
-          if (FD->doesThisDeclarationHaveABody()) {
+          bool IsImplicitResumable =
+              cast<CXXMethodDecl>(FD) &&
+              cast<CXXMethodDecl>(FD)->isResumableObjectFunction();
+          if (FD->doesThisDeclarationHaveABody() || IsImplicitResumable) {
             addDeferredDeclToEmit(GD.getWithDecl(FD));
             break;
           }

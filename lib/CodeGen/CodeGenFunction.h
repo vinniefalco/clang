@@ -2741,6 +2741,7 @@ public:
   void EmitObjCAtSynchronizedStmt(const ObjCAtSynchronizedStmt &S);
   void EmitObjCAutoreleasePoolStmt(const ObjCAutoreleasePoolStmt &S);
 
+  void EmitImplicitResumableObjectFunctionBody(const CXXMethodDecl *MD);
   void EmitResumableVarDecl(const VarDecl &VD);
   void EmitResumableFunctionBody(FunctionArgList &Args, const Stmt *Body);
 

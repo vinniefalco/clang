@@ -48,21 +48,83 @@ struct EnterResumableExprScope {
 };
 } // namespace
 
+enum ResumableObjectFunctionKind { RFK_Result, RFK_Resume, RFK_Ready };
+
+enum ResumableFieldIdx { RFI_Data, RFI_Result, RFI_Ready };
+
+struct ResumableFields {
+  const FieldDecl *Data = nullptr;
+  const FieldDecl *Result = nullptr;
+  const FieldDecl *Ready = nullptr;
+};
+
+static ResumableFields GetResumableFields(const CXXRecordDecl *RD) {
+  ResumableFields Fields;
+  for (auto *F : RD->fields()) {
+    StringRef Name = F->getIdentifier()->getName();
+    if (Name == "__data_")
+      Fields.Data = F;
+    else if (Name == "__result_")
+      Fields.Result = F;
+    else if (Name == "__ready_")
+      Fields.Ready = F;
+    else
+      llvm_unreachable("unexpected field");
+  }
+  assert(Fields.Data && Fields.Result && Fields.Ready);
+  return Fields;
+}
+
+static ResumableObjectFunctionKind
+GetResumableFunctionKind(const CXXMethodDecl *MD) {
+  StringRef Name = MD->getIdentifier()->getName();
+  ResumableObjectFunctionKind RFK =
+      llvm::StringSwitch<ResumableObjectFunctionKind>(Name)
+          .Case("result", RFK_Result)
+          .Case("resume", RFK_Resume)
+          .Case("ready", RFK_Ready);
+  return RFK;
+}
+
+void CodeGenFunction::EmitImplicitResumableObjectFunctionBody(
+    const CXXMethodDecl *MD) {
+  assert(MD->isResumableObjectFunction());
+  const CXXRecordDecl *RD = MD->getParent();
+
+  ResumableFields Fields = GetResumableFields(RD);
+  switch (GetResumableFunctionKind(MD)) {
+  case RFK_Result: {
+    Address ResultAddr = Builder.CreateStructGEP(
+        LoadCXXThisAddress(), RFI_Result, CharUnits::Zero(), "__result_");
+    QualType EltType =
+        Fields.Result->getType()->castAsArrayTypeUnsafe()->getElementType();
+    Address Cast =
+        Builder.CreateStructGEP(ResultAddr, 0, CharUnits::Zero(), "arraydecay");
+    Cast = Builder.CreateElementBitCast(Cast, ConvertTypeForMem(EltType));
+    RValue RV = RValue::getAggregate(Cast);
+    EmitReturnOfRValue(RV, MD->getReturnType());
+    return;
+  }
+  case RFK_Ready: {
+    Address ResultAddr = Builder.CreateStructGEP(
+        LoadCXXThisAddress(), RFI_Ready, CharUnits::Zero(), "__ready_");
+    RValue RV = RValue::getAggregate(ResultAddr);
+    EmitReturnOfRValue(RV, MD->getReturnType());
+    return;
+  }
+  case RFK_Resume: {
+    assert(false);
+  }
+  }
+
+  llvm_unreachable("unhandled case");
+}
+
 void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   const ResumableExpr &E = *cast<ResumableExpr>(VD.getInit());
   EnterResumableExprScope Guard(*this, CGResumableData(&VD));
   CXXRecordDecl *RD = VD.getType()->getAsCXXRecordDecl();
-  const FieldDecl *DataF, *ResultF;
-  for (auto *F : RD->fields()) {
-    StringRef Name = F->getIdentifier()->getName();
-    if (Name == "__data_")
-      DataF = F;
-    else if (Name == "__result_")
-      ResultF = F;
-    else
-      llvm_unreachable("unexpected field");
-  }
-  assert(DataF && ResultF && "fields not set");
+  ResumableFields Fields = GetResumableFields(RD);
   if (VD.getStorageDuration() != SD_Automatic)
     return;
   EmitVarDecl(VD);
@@ -73,13 +135,13 @@ void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
     llvm::Constant *GV = CGM.GetAddrOfGlobalVar(&VD);
     Loc = Address(GV, getContext().getDeclAlign(&VD));
   }
-  LValue LV = MakeAddrLValue(Loc, VD.getType());
-  LValue ResultLV = EmitLValueForField(LV, ResultF);
+  Address DataAddr =
+      Builder.CreateStructGEP(Loc, RFI_Data, CharUnits::Zero(), "__data_");
   llvm::Type *ResultTy =
       CGM.getTypes().ConvertType(E.getSourceExpr()->getType());
-  Address Cast = Builder.CreateElementBitCast(ResultLV.getAddress(), ResultTy);
+  Address Cast = Builder.CreateElementBitCast(DataAddr, ResultTy);
   EmitAnyExprToMem(E.getSourceExpr(), Cast, Qualifiers(),
-                   /*IsInitializer*/ false);
+                   /*IsInitializer*/ true);
 }
 
 void CodeGenFunction::EmitResumableFunctionBody(

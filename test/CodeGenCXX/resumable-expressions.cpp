@@ -6,5 +6,6 @@ resumable int foo() {
 
 void bar() {
   resumable auto r = foo();
+  bool b = r.ready();
   int x = r.result();
 }

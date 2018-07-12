@@ -311,7 +311,10 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
     TypeInfo Info = Context.getTypeInfo(Init->getType());
     MakeField("__result_", Info.Width, Info.Align);
   }
-
+  {
+    TypeInfo Info = Context.getTypeInfo(Context.BoolTy);
+    MakeField("__ready_", Info.Width, Info.Align);
+  }
   // Build typedef	decltype(	expression )	result_type;
   QualType ResultTy;
   {
@@ -340,10 +343,12 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
         Context, RD, Loc,
         DeclarationNameInfo(&PP.getIdentifierTable().get(Name), Loc), MethodTy,
         Context.getTrivialTypeSourceInfo(MethodTy, Loc), SC_None,
-        /*IsInline*/ false, /*isConstexpr*/ false,
+        /*IsInline*/ true, /*isConstexpr*/ false,
         /*IsResumable*/ false, Loc);
     MD->setAccess(AS_public);
     MD->setImplicit(true);
+    MD->setWillHaveBody(true);
+
     RD->addDecl(MD);
   };
 
