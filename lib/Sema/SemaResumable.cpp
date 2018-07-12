@@ -277,7 +277,6 @@ public:
 } // namespace
 
 CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
-
   CXXRecordDecl *RD =
       CXXRecordDecl::CreateResumableClass(Context, CurContext, Loc);
   assert(RD->isBeingDefined() && RD->isImplicit());
@@ -288,17 +287,29 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
   };
 
   // Create buffer field.
-  {
+  auto MakeField = [&](const char *Name, unsigned Size, unsigned Align) {
     QualType CArrTy = Context.getConstantArrayType(
-        Context.CharTy, llvm::APInt(32, 1024), ArrayType::Normal, 0);
+        Context.CharTy, llvm::APInt(32, Size), ArrayType::Normal, 0);
     // FIXME(EricWF): Align this field to the maximum alignment.
     FieldDecl *Field = FieldDecl::Create(
         Context, RD, SourceLocation(), SourceLocation(),
-        &PP.getIdentifierTable().get("__data_"), CArrTy, /*TInfo=*/nullptr,
+        &PP.getIdentifierTable().get(Name), CArrTy, /*TInfo=*/nullptr,
         /*BitWidth=*/nullptr,
         /*Mutable=*/false, ICIS_NoInit);
     Field->setAccess(AS_private);
+
+    llvm::APInt Val(32, Align);
+    Expr *ValE = IntegerLiteral::Create(Context, Val, Context.UnsignedIntTy,
+                                        SourceLocation());
+    AlignedAttr *AA =
+        new (Context) AlignedAttr(SourceRange(), Context, true, ValE, 3);
+    Field->addAttr(AA);
     RD->addDecl(Field);
+  };
+  MakeField("__data_", 1024, 16);
+  if (!Init->getType()->isDependentType()) {
+    TypeInfo Info = getTypeInfo(Init->getType());
+    MakeField("__result_", Info.Width, Info.Align);
   }
 
   // Build typedef	decltype(	expression )	result_type;
