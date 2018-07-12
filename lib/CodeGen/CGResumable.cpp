@@ -98,7 +98,6 @@ void CodeGenFunction::EmitImplicitResumableObjectFunctionBody(
         LoadCXXThisAddress(), RFI_Result, CharUnits::Zero(), "__result_");
     llvm::Type *ResultTy = CGM.getTypes().ConvertType(MD->getReturnType());
     Address Cast = Builder.CreateElementBitCast(ResultAddr, ResultTy);
-
     RValue RV = RValue::getAggregate(Cast);
     EmitReturnOfRValue(RV, MD->getReturnType());
     return;
