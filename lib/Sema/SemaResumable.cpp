@@ -22,6 +22,7 @@
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaInternal.h"
+#include <cursesf.h>
 
 using namespace clang;
 using namespace sema;
@@ -420,10 +421,97 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
   return RD;
 }
 
+struct FieldInfo {
+  FieldDecl *Data = nullptr;
+  FieldDecl *Ready = nullptr;
+  FieldDecl *Result = nullptr;
+
+  FieldInfo(CXXRecordDecl *RD) {
+    for (auto *F : RD->fields()) {
+      StringRef Name = F->getIdentifierInfo()->getName();
+      if (Name == "__data_") {
+        Data = F;
+        continue;
+      }
+      if (Name == "__ready_") {
+        Ready = F;
+        continue;
+      }
+      if (Name == "__result_") {
+        Result = F;
+        continue;
+      }
+      llvm_unreachable("unhandled case");
+    }
+  }
+};
+
 bool Sema::DefineResultObjectFunctions(CXXRecordDecl *RD, SourceLocation Loc) {
   assert(RD->isCompleteDefinition() && RD->isResumable());
+  FieldInfo Fields(RD);
+
   {
-    // SynthesizedFunctionScope Scope(*this, )
+    CXXDestructorDecl *Dtor = RD->getDestructor();
+    SynthesizedFunctionScope Scope(*this, Dtor);
+    Scope.addContextNote(Loc);
+    MarkBaseAndMemberDestructorsReferenced(Dtor->getLocation(),
+                                           Dtor->getParent());
+    if (CheckDestructor(Dtor)) {
+      Dtor->setInvalidDecl();
+      return true;
+    }
+    SourceLocation Loc =
+        Dtor->getLocEnd().isValid() ? Dtor->getLocEnd() : Dtor->getLocation();
+
+    SmallVector<Stmt *, 8> Statements;
+    FieldDecl *ReadyMember = Fields.Ready;
+    Expr *This = ActOnCXXThis(Loc).getAs<Expr>();
+
+    TypeSourceInfo *TInfo = nullptr;
+    for (const Decl *D : RD->decls()) {
+      if (auto *Typedef = dyn_cast<TypedefDecl>(D)) {
+        TInfo = Typedef->getTypeSourceInfo();
+        break;
+      }
+    }
+    assert(TInfo);
+    QualType WithRef = Context.getLValueReferenceType(TInfo->getType());
+    TypeSourceInfo *LVTInfo = Context.getTrivialTypeSourceInfo(WithRef, Loc);
+
+    auto BuildMemberRef = [&](FieldDecl *F) {
+      const CXXScopeSpec SS;
+      DeclarationNameInfo NameInfo(F->getDeclName(), Loc);
+      DeclAccessPair FoundDecl = DeclAccessPair::make(F, AS_public);
+      return BuildFieldReferenceExpr(This, /*IsArrow*/ true, Loc, SS, Field,
+                                     FoundDecl, NameInfo)
+          .get();
+    };
+
+    Expr *Result = BuildMemberRef(Fields.Result);
+    Expr *Casted = BuildCXXNamedCast(Loc, tok::kw_reinterpret_cast, TInfo,
+                                     Result, SourceRange(), SourceRange());
+    const CXXScopeSpec SS;
+    PseudoDestructorTypeStorage DtorStorage(TInfo);
+    Expr *DestroyExpr = BuildPseudoDestructorExpr(
+        Casted, Loc, tok::period, SS, nullptr, SourceLocation(),
+        SourceLocation(), DtorStorage);
+
+    StmtResult IfBlock =
+        ActOnIfStmt(Loc, false, nullptr,
+                    ActOnCondition(nullptr, Loc, BuildMemberRef(Fields.Ready),
+                                   Sema::ConditionKind::Boolean),
+                    DestroyExpr, SourceLocation(), nullptr);
+    if (IfBlock.isInvalid()) {
+      RD->setInvalid();
+      return true;
+    }
+
+    Dtor->setBody(new (Context) CompoundStmt(Statements));
+    Dtor->markUsed(Context);
+
+    if (ASTMutationListener *L = getASTMutationListener()) {
+      L->CompletedImplicitDefinition(Destructor);
+    }
   }
 
   return false;
