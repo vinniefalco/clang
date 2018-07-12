@@ -1954,6 +1954,7 @@ public:
   bool CheckResumableVarDeclInit(VarDecl *VD, Expr *Init);
   CXXRecordDecl *BuildResumableObjectType(Expr *Init, SourceLocation Loc);
   ExprResult BuildResumableExpr(VarDecl *VD, Expr *Init);
+  bool DefineResultObjectFunctions(CXXRecordDecl *RD, SourceLocation Loc);
 
   void SetCurFunctionImplicitlyResumable(const BreakResumableStmt *S);
   void SetCurFunctionImplicitlyResumable(const FunctionDecl *D,

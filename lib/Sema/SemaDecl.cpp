@@ -10730,8 +10730,6 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
 
   // C++11 [decl.spec.auto]p6. Deduce the type which 'auto' stands in for.
   if (VDecl->getType()->isUndeducedType()) {
-    // FIXME(EricWF): Correctly deduce the resumable object type if we have a
-    // resumable expression.
     if (DeduceVariableDeclarationType(VDecl, DirectInit, Init))
       return;
   }

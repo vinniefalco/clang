@@ -1489,6 +1489,8 @@ void CodeGenFunction::EmitDestructorBody(FunctionArgList &Args) {
       EmitStmt(cast<CXXTryStmt>(Body)->getTryBlock());
     else if (Body)
       EmitStmt(Body);
+    else if (Dtor->isResumableObjectFunction())
+      EmitImplicitResumableObjectFunctionBody(Dtor);
     else {
       assert(Dtor->isImplicit() && "bodyless dtor not implicit");
       // nothing to do besides what's in the epilogue

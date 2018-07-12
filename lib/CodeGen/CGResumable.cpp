@@ -48,7 +48,12 @@ struct EnterResumableExprScope {
 };
 } // namespace
 
-enum ResumableObjectFunctionKind { RFK_Result, RFK_Resume, RFK_Ready };
+enum ResumableObjectFunctionKind {
+  RFK_Result,
+  RFK_Resume,
+  RFK_Ready,
+  RFK_Destructor
+};
 
 enum ResumableFieldIdx { RFI_Data, RFI_Result, RFI_Ready };
 
@@ -77,6 +82,8 @@ static ResumableFields GetResumableFields(const CXXRecordDecl *RD) {
 
 static ResumableObjectFunctionKind
 GetResumableFunctionKind(const CXXMethodDecl *MD) {
+  if (isa<CXXDestructorDecl>(MD))
+    return RFK_Destructor;
   StringRef Name = MD->getIdentifier()->getName();
   ResumableObjectFunctionKind RFK =
       llvm::StringSwitch<ResumableObjectFunctionKind>(Name)
@@ -96,20 +103,22 @@ void CodeGenFunction::EmitImplicitResumableObjectFunctionBody(
   case RFK_Result: {
     Address ResultAddr = Builder.CreateStructGEP(
         LoadCXXThisAddress(), RFI_Result, CharUnits::Zero(), "__result_");
-    QualType EltType =
-        Fields.Result->getType()->castAsArrayTypeUnsafe()->getElementType();
-    Address Cast =
-        Builder.CreateStructGEP(ResultAddr, 0, CharUnits::Zero(), "arraydecay");
-    Cast = Builder.CreateElementBitCast(Cast, ConvertTypeForMem(EltType));
+    llvm::Type *ResultTy = CGM.getTypes().ConvertType(MD->getReturnType());
+    Address Cast = Builder.CreateElementBitCast(ResultAddr, ResultTy);
+
     RValue RV = RValue::getAggregate(Cast);
     EmitReturnOfRValue(RV, MD->getReturnType());
     return;
   }
   case RFK_Ready: {
-    Address ResultAddr = Builder.CreateStructGEP(
-        LoadCXXThisAddress(), RFI_Ready, CharUnits::Zero(), "__ready_");
-    RValue RV = RValue::getAggregate(ResultAddr);
+    LValue ThisLV = MakeNaturalAlignAddrLValue(
+        LoadCXXThis(), getContext().getTypeDeclType(RD));
+    RValue RV = EmitRValueForField(ThisLV, Fields.Ready, SourceLocation());
     EmitReturnOfRValue(RV, MD->getReturnType());
+    return;
+  }
+  case RFK_Destructor: {
+    EmitBranchThroughCleanup(ReturnBlock);
     return;
   }
   case RFK_Resume: {
@@ -142,6 +151,12 @@ void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   Address Cast = Builder.CreateElementBitCast(DataAddr, ResultTy);
   EmitAnyExprToMem(E.getSourceExpr(), Cast, Qualifiers(),
                    /*IsInitializer*/ true);
+
+  LValue PromiseLV = MakeNaturalAlignAddrLValue(
+      Loc.getPointer(), getContext().getTypeDeclType(RD));
+  LValue ReadyLV = EmitLValueForField(PromiseLV, Fields.Ready);
+  RValue Src = RValue::get(Builder.getTrue());
+  EmitStoreThroughLValue(Src, ReadyLV, /*IsInit*/ false);
 }
 
 void CodeGenFunction::EmitResumableFunctionBody(

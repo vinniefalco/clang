@@ -307,13 +307,20 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
     RD->addDecl(Field);
   };
   MakeField("__data_", 1024, 16);
-  if (!Init->getType()->isDependentType()) {
-    TypeInfo Info = Context.getTypeInfo(Init->getType());
+  {
+    QualType Ty = Init->isTypeDependent() ? Context.IntTy : Init->getType();
+    TypeInfo Info = Context.getTypeInfo(Ty);
     MakeField("__result_", Info.Width, Info.Align);
   }
   {
-    TypeInfo Info = Context.getTypeInfo(Context.BoolTy);
-    MakeField("__ready_", Info.Width, Info.Align);
+    FieldDecl *Field =
+        FieldDecl::Create(Context, RD, SourceLocation(), SourceLocation(),
+                          &PP.getIdentifierTable().get("__ready_"),
+                          Context.BoolTy, /*TInfo=*/nullptr,
+                          /*BitWidth=*/nullptr,
+                          /*Mutable=*/false, ICIS_NoInit);
+    Field->setAccess(AS_private);
+    RD->addDecl(Field);
   }
   // Build typedef	decltype(	expression )	result_type;
   QualType ResultTy;
@@ -376,18 +383,50 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
     Proto.ExceptionSpec.NoexceptExpr = NoexceptRes.get();
     AddMethod("resume", Context.VoidTy, Proto);
   }
+  {
+    CanQualType ClassType =
+        Context.getCanonicalType(Context.getTypeDeclType(RD));
+    DeclarationName Name =
+        Context.DeclarationNames.getCXXDestructorName(ClassType);
+    DeclarationNameInfo NameInfo(Name, Loc);
+    CXXDestructorDecl *Destructor = CXXDestructorDecl::Create(
+        Context, RD, Loc, NameInfo, QualType(), nullptr, /*isInline=*/true,
+        /*isImplicitlyDeclared=*/false);
+    Destructor->setAccess(AS_public);
+    // Destructor->setImplicit(true);
+    Destructor->setWillHaveBody(true);
+
+    FunctionProtoType::ExtProtoInfo EPI;
+
+    // Build an exception specification pointing back at this member.
+    EPI.ExceptionSpec.Type = EST_Unevaluated;
+    EPI.ExceptionSpec.SourceDecl = Destructor;
+
+    // Set the calling convention to the default for C++ instance methods.
+    EPI.ExtInfo = EPI.ExtInfo.withCallingConv(
+        Context.getDefaultCallingConvention(/*IsVariadic=*/false,
+                                            /*IsCXXMethod=*/true));
+
+    Destructor->setType(Context.getFunctionType(Context.VoidTy, None, EPI));
+
+    RD->addDecl(Destructor);
+  }
 
   SmallVector<Decl *, 4> Fields(RD->fields());
   ActOnFields(nullptr, Loc, RD, Fields, SourceLocation(), SourceLocation(),
               nullptr);
   CheckCompletedCXXClass(RD);
 
-  if (!Init->isTypeDependent()) {
-    if (DefineResumableObjectFunctions(RD, Loc))
-      return Error();
+  return RD;
+}
+
+bool Sema::DefineResultObjectFunctions(CXXRecordDecl *RD, SourceLocation Loc) {
+  assert(RD->isCompleteDefinition() && RD->isResumable());
+  {
+    // SynthesizedFunctionScope Scope(*this, )
   }
 
-  return RD;
+  return false;
 }
 
 bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {

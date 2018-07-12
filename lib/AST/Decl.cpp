@@ -4314,7 +4314,7 @@ FunctionDecl *FunctionDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
 }
 
 bool FunctionDecl::isResumableObjectFunction() const {
-  if (auto *MD = dyn_cast < CXXMethodDecl(this))
+  if (auto *MD = dyn_cast<CXXMethodDecl>(this))
     return MD->isResumableObjectFunction();
   return false;
 }
