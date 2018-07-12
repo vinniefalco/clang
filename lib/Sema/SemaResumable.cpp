@@ -276,35 +276,17 @@ public:
 };
 } // namespace
 
-ExprResult Sema::BuildResumableVarDeclInit(VarDecl *VD, Expr *Init) {
-  assert(VD && Init && "cannot be null");
-  SourceLocation Loc = VD->getLocation();
+CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
 
-  CXXRecordDecl *RD = nullptr;
+  CXXRecordDecl *RD =
+      CXXRecordDecl::CreateResumableClass(Context, CurContext, Loc);
+  assert(RD->isBeingDefined() && RD->isImplicit());
+
   auto Error = [&]() {
-    VD->setInvalidDecl();
-    if (RD)
-      RD->setInvalidDecl();
-    return ExprError();
+    RD->setInvalidDecl();
+    return RD;
   };
 
-  Init = Init->IgnoreParens();
-  CheckResumableVarInit Checker{*this, VD, Init, Init->getExprLoc()};
-  Checker.TraverseStmt(Init);
-  if (Checker.CheckedInit && Checker.IsInvalid)
-    return Error();
-  else if (!Checker.CheckedInit) {
-
-    llvm::errs() << "Unhandled Resumable var decl init case\n";
-    Init->dumpColor();
-    Diag(Init->getExprLoc(), diag::err_resumable_var_decl_init_not_call_expr)
-        << VD << Init->getSourceRange();
-    return Error();
-  }
-
-  RD = CXXRecordDecl::CreateResumableClass(Context, CurContext,
-                                           VD->getLocStart());
-  assert(RD->isBeingDefined() && RD->isImplicit());
   QualType RecordTy = Context.getTypeDeclType(RD);
 
   // Create buffer field.
@@ -386,6 +368,44 @@ ExprResult Sema::BuildResumableVarDeclInit(VarDecl *VD, Expr *Init) {
               nullptr);
   CheckCompletedCXXClass(RD);
 
+  return RD;
+}
+
+bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
+  SourceLocation Loc = VD->getLocation();
+
+  Init = Init->IgnoreParens();
+  CheckResumableVarInit Checker{*this, VD, Init, Init->getExprLoc()};
+  Checker.TraverseStmt(Init);
+  if (Checker.CheckedInit && Checker.IsInvalid)
+    return true;
+  else if (!Checker.CheckedInit) {
+
+    llvm::errs() << "Unhandled Resumable var decl init case\n";
+    Init->dumpColor();
+    Diag(Init->getExprLoc(), diag::err_resumable_var_decl_init_not_call_expr)
+        << VD << Init->getSourceRange();
+    return true;
+  }
+
+  return false;
+}
+
+ExprResult Sema::BuildResumableExpr(VarDecl *VD, Expr *Init) {
+  assert(VD && Init && "cannot be null");
+  auto Error = [&]() {
+    VD->setInvalidDecl();
+    return ExprError();
+  };
+
+  if (CheckResumableVarDeclInit(VD, Init))
+    return Error();
+
+  CXXRecordDecl *RD = BuildResumableObjectType(Init, VD->getTypeSpecStartLoc());
+  if (RD->isInvalidDecl()) {
+    return Error();
+  }
+
   // Replace 'auto' with the new class type.
   QualType NewRecordType = Context.getQualifiedType(
       RD->getTypeForDecl(), VD->getType().getQualifiers());
@@ -394,4 +414,24 @@ ExprResult Sema::BuildResumableVarDeclInit(VarDecl *VD, Expr *Init) {
   // Build the new ResumableExpr wrapper around the initializer.
   ResumableExpr *NewInit = ResumableExpr::Create(Context, RD, Init, VD);
   return NewInit;
+}
+
+VarDecl *Sema::BuildResumableVarDeclCapture(SourceLocation Loc,
+                                            QualType InitCaptureType,
+                                            IdentifierInfo *ID,
+                                            unsigned InitStyle, Expr *Init) {
+  TypeSourceInfo *TSI = Context.getTrivialTypeSourceInfo(InitCaptureType, Loc);
+  // Create a dummy variable representing the init-capture. This is not actually
+  // used as a variable, and only exists as a way to name and refer to the
+  // init-capture.
+  // FIXME: Pass in separate source locations for '&' and identifier.
+  VarDecl *NewVD = VarDecl::Create(Context, CurContext, Loc, Loc, ID,
+                                   InitCaptureType, TSI, SC_Auto);
+  NewVD->setInitCapture(true);
+  NewVD->setReferenced(true);
+  // FIXME: Pass in a VarDecl::InitializationStyle.
+  NewVD->setInitStyle(static_cast<VarDecl::InitializationStyle>(InitStyle));
+  NewVD->markUsed(Context);
+  NewVD->setInit(Init);
+  return NewVD;
 }

@@ -1951,7 +1951,14 @@ public:
   void CheckCompletedResumableFunctionBody(FunctionDecl *FD, Stmt *Body,
                                            sema::FunctionScopeInfo *FnScope);
 
-  ExprResult BuildResumableVarDeclInit(VarDecl *VD, Expr *Init);
+  bool CheckResumableVarDeclInit(VarDecl *VD, Expr *Init);
+  CXXRecordDecl *BuildResumableObjectType(Expr *Init, SourceLocation Loc);
+  ExprResult BuildResumableExpr(VarDecl *VD, Expr *Init);
+
+  VarDecl *BuildResumableVarDeclCapture(SourceLocation Loc,
+                                        QualType InitCaptureType,
+                                        IdentifierInfo *ID, unsigned InitStyle,
+                                        Expr *Init);
 
   void SetCurFunctionImplicitlyResumable(const BreakResumableStmt *S);
   void SetCurFunctionImplicitlyResumable(const FunctionDecl *D,

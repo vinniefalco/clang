@@ -2277,6 +2277,10 @@ void StmtPrinter::VisitCXXTemporaryObjectExpr(CXXTemporaryObjectExpr *Node) {
     OS << ")";
 }
 
+void StmtPrinter::VisitResumableExpr(ResumableExpr *Node) {
+  VisitExpr(Node->getSourceExpr());
+}
+
 void StmtPrinter::VisitLambdaExpr(LambdaExpr *Node) {
   OS << '[';
   bool NeedComma = false;

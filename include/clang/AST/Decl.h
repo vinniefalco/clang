@@ -3755,6 +3755,9 @@ public:
   /// \endcode
   bool isInjectedClassName() const;
 
+  /// Determine whether this record is a class describing a resumable object.
+  bool isResumable() const;
+
   /// Determine whether this record is a class describing a lambda
   /// function object.
   bool isLambda() const;

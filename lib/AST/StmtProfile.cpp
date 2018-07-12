@@ -1624,6 +1624,11 @@ StmtProfiler::VisitCXXTemporaryObjectExpr(const CXXTemporaryObjectExpr *S) {
   VisitCXXConstructExpr(S);
 }
 
+void StmtProfiler::VisitResumableExpr(const ResumableExpr *E) {
+  VisitExpr(E);
+  VisitExpr(E->getSourceExpr());
+}
+
 void
 StmtProfiler::VisitLambdaExpr(const LambdaExpr *S) {
   VisitExpr(S);

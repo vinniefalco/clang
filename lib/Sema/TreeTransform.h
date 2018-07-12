@@ -10871,6 +10871,31 @@ TreeTransform<Derived>::TransformCXXTemporaryObjectExpr(
       /*ListInitialization=*/LParenLoc.isInvalid());
 }
 
+template <class Derived>
+ExprResult TreeTransform<Derived>::TransformResumableExpr(ResumableExpr *E) {
+  // FIXME(EricWF): Implement this.
+  ExprResult InitResult = getDerived().TransformExpr(E->getSourceExpr());
+  if (InitResult.isInvalid())
+    return ExprError();
+  Expr *Init = InitResult.get();
+
+  VarDecl *NewVD =
+      getDerived().TransformDecl(SourceLocation(), E->getResumableObject());
+  assert(NewVD);
+
+  if (getSema().CheckResumableVarDeclInit(NewVD, Init))
+    return ExprError();
+
+  CXXRecordDecl *RD = getSema().BuildResumableObjectType(
+      Init, E->getResumableObject()->getTypeSpecStartLoc());
+  if (RD->isInvalidDecl())
+    return ExprResult();
+
+  getDerived().transformedLocalDecl(E->getResumableClass(), RD);
+
+  return ResumableExpr::Create(getSema().Context, RD, Init, NewVD);
+}
+
 template<typename Derived>
 ExprResult
 TreeTransform<Derived>::TransformLambdaExpr(LambdaExpr *E) {

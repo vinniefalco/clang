@@ -661,6 +661,8 @@ class CXXRecordDecl : public RecordDecl {
     }
   };
 
+  struct ResumableDefinitionData {};
+
   struct DefinitionData *dataPtr() const {
     // Complete the redecl chain (if necessary).
     getMostRecentDecl();

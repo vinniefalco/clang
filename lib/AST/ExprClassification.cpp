@@ -377,6 +377,7 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::CXXTemporaryObjectExprClass:
   case Expr::LambdaExprClass:
   case Expr::CXXStdInitializerListExprClass:
+  case Expr::ResumableExprClass: // FIXME(EricWF): is this right?
     return Cl::CL_ClassTemporary;
 
   case Expr::VAArgExprClass:
