@@ -48,12 +48,7 @@ struct EnterResumableExprScope {
 };
 } // namespace
 
-enum ResumableObjectFunctionKind {
-  RFK_Result,
-  RFK_Resume,
-  RFK_Ready,
-  RFK_Destructor
-};
+enum ResumableObjectFunctionKind { RFK_Result, RFK_Resume, RFK_Ready };
 
 enum ResumableFieldIdx { RFI_Data, RFI_Result, RFI_Ready };
 
@@ -82,8 +77,6 @@ static ResumableFields GetResumableFields(const CXXRecordDecl *RD) {
 
 static ResumableObjectFunctionKind
 GetResumableFunctionKind(const CXXMethodDecl *MD) {
-  if (isa<CXXDestructorDecl>(MD))
-    return RFK_Destructor;
   StringRef Name = MD->getIdentifier()->getName();
   ResumableObjectFunctionKind RFK =
       llvm::StringSwitch<ResumableObjectFunctionKind>(Name)
@@ -117,25 +110,12 @@ void CodeGenFunction::EmitImplicitResumableObjectFunctionBody(
     EmitReturnOfRValue(RV, MD->getReturnType());
     return;
   }
-  case RFK_Destructor: {
-    EmitBranchThroughCleanup(ReturnBlock);
-    return;
-  }
   case RFK_Resume: {
     assert(false);
   }
   }
 
   llvm_unreachable("unhandled case");
-}
-
-static const TypedefDecl *GetResultTypedef(const CXXRecordDecl *RD) {
-  assert(RD->isResumable());
-  for (auto *D : RD->decls()) {
-    if (auto *TD = dyn_cast<TypedefDecl>(D))
-      return TD;
-  }
-  return nullptr;
 }
 
 void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
@@ -148,8 +128,7 @@ void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   EnterResumableExprScope Guard(*this, CGResumableData(&VD));
   CXXRecordDecl *RD = VD.getType()->getAsCXXRecordDecl();
   ResumableFields Fields = GetResumableFields(RD);
-  if (VD.getStorageDuration() != SD_Automatic)
-    return;
+
   EmitVarDecl(VD);
   Address Loc(nullptr, CharUnits::Zero());
   if (VD.hasLocalStorage())

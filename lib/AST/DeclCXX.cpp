@@ -2128,8 +2128,6 @@ bool CXXMethodDecl::isResumableObjectFunction() const {
   ASTContext &Context = getASTContext();
   if (!getParent()->isResumable() || !isImplicit())
     return false;
-  if (const auto *Dtor = dyn_cast<CXXDestructorDecl>(this))
-    return !Dtor->isImplicit();
   if (!getIdentifier() || getIdentifier()->getName().empty())
     return false;
   return llvm::StringSwitch<bool>(getIdentifier()->getName())
