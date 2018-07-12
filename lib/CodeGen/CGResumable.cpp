@@ -77,7 +77,6 @@ void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   LValue ResultLV = EmitLValueForField(LV, ResultF);
   EmitAnyExprToMem(E.getSourceExpr(), ResultLV.getAddress(), Qualifiers(),
                    /*IsInitializer*/ false);
-  RValue Result = EmitAnyExprToTemp(E.getSourceExpr());
 }
 
 void CodeGenFunction::EmitResumableFunctionBody(
