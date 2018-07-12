@@ -2371,6 +2371,8 @@ DEF_TRAVERSE_STMT(CXXTemporaryObjectExpr, {
   TRY_TO(TraverseTypeLoc(S->getTypeSourceInfo()->getTypeLoc()));
 })
 
+DEF_TRAVERSE_STMT(ResumableExpr, {})
+
 // Walk only the visible parts of lambda expressions.
 DEF_TRAVERSE_STMT(LambdaExpr, {
   for (unsigned I = 0, N = S->capture_size(); I != N; ++I) {

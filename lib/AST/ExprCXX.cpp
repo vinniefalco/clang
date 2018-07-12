@@ -1029,16 +1029,16 @@ ResumableExpr::ResumableExpr(QualType T, Expr *Source, VarDecl *ResumableObj)
     : Expr(ResumableExprClass, T, VK_RValue, OK_Ordinary, T->isDependentType(),
            T->isDependentType(), T->isDependentType(),
            Source->containsUnexpandedParameterPack()),
-      SourceExpr(Source), ResumableObject(ResumableObj) {}
+      ResumableObject(ResumableObj), SourceExpr(Source) {}
 
 ResumableExpr *ResumableExpr::Create(const ASTContext &C, CXXRecordDecl *Class,
-                                     Expr *SourceExpr, VarDecl ResumableObj) {
+                                     Expr *SourceExpr, VarDecl *ResumableObj) {
   QualType T = C.getTypeDeclType(Class);
   return new (C) ResumableExpr(T, SourceExpr, ResumableObj);
 }
 
 ResumableExpr *ResumableExpr::CreateDeserialized(const ASTContext &C) {
-  return new (C) ResumableExpr(Empty);
+  return new (C) ResumableExpr(EmptyShell{});
 }
 
 CXXRecordDecl *ResumableExpr::getResumableClass() const {

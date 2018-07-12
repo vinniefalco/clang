@@ -380,30 +380,11 @@ ExprResult Sema::BuildResumableVarDeclInit(VarDecl *VD, Expr *Init) {
     Proto.ExceptionSpec.NoexceptExpr = NoexceptRes.get();
     AddMethod("resume", Context.VoidTy, Proto);
   }
-#if 0
-  // FIXME(EricWF): Create dummy default constructor
-  {
-    DeclarationName Name = Context.DeclarationNames.getCXXConstructorName(
-        Context.getCanonicalType(RecordTy));
-    DeclarationNameInfo NameInfo(Name, Loc);
-    CXXConstructorDecl *DefaultConstructor = CXXConstructorDecl::Create(
-        Context, RD, Loc, NameInfo,
-        Context.getFunctionType(Context.VoidTy, None,
-                                FunctionProtoType::ExtProtoInfo{}),
-        /*TInfo=*/nullptr,
-        /*isExplicit=*/false, /*isInline=*/false, /*isImplicitlyDeclared=*/true,
-        /*IsConstexpr=*/false);
-    DefaultConstructor->setAccess(AS_public);
-    RD->addDecl(DefaultConstructor);
-  }
-#endif
 
   SmallVector<Decl *, 4> Fields(RD->fields());
   ActOnFields(nullptr, Loc, RD, Fields, SourceLocation(), SourceLocation(),
               nullptr);
   CheckCompletedCXXClass(RD);
-
-  // RD->completeDefinition();
 
   // Replace 'auto' with the new class type.
   QualType NewRecordType = Context.getQualifiedType(
