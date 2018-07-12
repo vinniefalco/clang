@@ -129,6 +129,10 @@ void CodeGenFunction::EmitDecl(const Decl &D) {
     const VarDecl &VD = cast<VarDecl>(D);
     assert(VD.isLocalVarDecl() &&
            "Should not see file-scope variables inside a function!");
+    if (VD.isResumableSpecified()) {
+      EmitResumableVarDecl(VD);
+      return;
+    }
     EmitVarDecl(VD);
     if (auto *DD = dyn_cast<DecompositionDecl>(&VD))
       for (auto *B : DD->bindings())

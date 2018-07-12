@@ -51,7 +51,10 @@ struct EnterResumableExprScope {
 void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   const ResumableExpr &E = *cast<ResumableExpr>(VD.getInit());
   EnterResumableExprScope Guard(*this, CGResumableData(&VD));
+  if (VD.getStorageDuration() != SD_Automatic)
+    return;
   EmitVarDecl(VD);
+  RValue Result = EmitAnyExprToTemp(E.getSourceExpr());
 }
 
 void CodeGenFunction::EmitResumableFunctionBody(
@@ -63,8 +66,8 @@ void CodeGenFunction::EmitBreakResumableStmt(BreakResumableStmt const &S) {
   ErrorUnsupported(&S, "break resumable statement");
 }
 
-void CodeGenFunction::EmitResumableLValue(const ResumableExpr *E) {
-  EmitLValue(E->getSourceExpr());
+LValue CodeGenFunction::EmitResumableLValue(const ResumableExpr *E) {
+  return EmitLValue(E->getSourceExpr());
 }
 
 void CodeGenFunction::EmitResumableExpr(const ResumableExpr *E,

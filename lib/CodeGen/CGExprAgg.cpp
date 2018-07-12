@@ -187,7 +187,11 @@ public:
 
     CGF.EmitPseudoObjectRValue(E, EnsureSlot(E->getType()));
   }
-
+  void VisitResumableExpr(ResumableExpr *E) {
+    QualType T = E->getType();
+    AggValueSlot Slot = EnsureSlot(T);
+    EmitNullInitializationToLValue(CGF.MakeAddrLValue(Slot.getAddress(), T));
+  }
   void VisitVAArgExpr(VAArgExpr *E);
 
   void EmitInitializationToLValue(Expr *E, LValue Address);
