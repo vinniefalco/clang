@@ -308,7 +308,7 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
   };
   MakeField("__data_", 1024, 16);
   if (!Init->getType()->isDependentType()) {
-    TypeInfo Info = getTypeInfo(Init->getType());
+    TypeInfo Info = Context.getTypeInfo(Init->getType());
     MakeField("__result_", Info.Width, Info.Align);
   }
 
