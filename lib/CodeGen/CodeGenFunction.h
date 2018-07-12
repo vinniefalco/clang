@@ -96,6 +96,7 @@ class RegionCodeGenTy;
 class TargetCodeGenInfo;
 struct OMPTaskDataTy;
 struct CGCoroData;
+struct CGResumableData;
 
 /// The kind of evaluation to perform on values of a particular
 /// type.  Basically, is the code in CGExprScalar, CGExprComplex, or
@@ -228,6 +229,20 @@ public:
 
   bool isCoroutine() const {
     return CurCoro.Data != nullptr;
+  }
+
+  struct CGResumableInfo {
+    std::unique_ptr<CGResumableData> Data;
+    CGResumableInfo();
+    CGResumableInfo(const CGResumableData &);
+    ~CGResumableInfo();
+  };
+  CGResumableInfo CurResumableExpr;
+
+  bool isInResumableExpr() const { return CurResumableExpr.Data != nullptr; }
+
+  CGResumableData *getCurResumableData() const {
+    return CurResumableExpr.Data.get();
   }
 
   /// CurGD - The GlobalDecl for the current function being compiled.
@@ -2725,6 +2740,9 @@ public:
   void EmitObjCAtThrowStmt(const ObjCAtThrowStmt &S);
   void EmitObjCAtSynchronizedStmt(const ObjCAtSynchronizedStmt &S);
   void EmitObjCAutoreleasePoolStmt(const ObjCAutoreleasePoolStmt &S);
+
+  void EmitResumableVarDecl(const VarDecl &VD);
+  void EmitResumableFunctionBody(FunctionArgList &Args, const Stmt *Body);
 
   void EmitCoroutineBody(const CoroutineBodyStmt &S);
   void EmitCoreturnStmt(const CoreturnStmt &S);

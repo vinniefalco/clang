@@ -287,8 +287,6 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
     return RD;
   };
 
-  QualType RecordTy = Context.getTypeDeclType(RD);
-
   // Create buffer field.
   {
     QualType CArrTy = Context.getConstantArrayType(
@@ -372,8 +370,6 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
 }
 
 bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
-  SourceLocation Loc = VD->getLocation();
-
   Init = Init->IgnoreParens();
   CheckResumableVarInit Checker{*this, VD, Init, Init->getExprLoc()};
   Checker.TraverseStmt(Init);

@@ -1083,6 +1083,11 @@ CanThrowResult Sema::canThrow(const Expr *E) {
     return canCalleeThrow(*this, E,
                           cast<CXXInheritedCtorInitExpr>(E)->getConstructor());
 
+  case Expr::ResumableExprClass: {
+    const ResumableExpr *R = cast<ResumableExpr>(E);
+    return canThrow(R->getSourceExpr());
+  }
+
   case Expr::LambdaExprClass: {
     const LambdaExpr *Lambda = cast<LambdaExpr>(E);
     CanThrowResult CT = CT_Cannot;
