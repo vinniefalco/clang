@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ASTLambda.h"
+#include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/RecursiveASTVisitor.h"
@@ -428,7 +429,7 @@ struct FieldInfo {
 
   FieldInfo(CXXRecordDecl *RD) {
     for (auto *F : RD->fields()) {
-      StringRef Name = F->getIdentifierInfo()->getName();
+      StringRef Name = F->getIdentifier()->getName();
       if (Name == "__data_") {
         Data = F;
         continue;
@@ -482,19 +483,21 @@ bool Sema::DefineResultObjectFunctions(CXXRecordDecl *RD, SourceLocation Loc) {
       const CXXScopeSpec SS;
       DeclarationNameInfo NameInfo(F->getDeclName(), Loc);
       DeclAccessPair FoundDecl = DeclAccessPair::make(F, AS_public);
-      return BuildFieldReferenceExpr(This, /*IsArrow*/ true, Loc, SS, Field,
+      return BuildFieldReferenceExpr(This, /*IsArrow*/ true, Loc, SS, F,
                                      FoundDecl, NameInfo)
           .get();
     };
 
     Expr *Result = BuildMemberRef(Fields.Result);
     Expr *Casted = BuildCXXNamedCast(Loc, tok::kw_reinterpret_cast, TInfo,
-                                     Result, SourceRange(), SourceRange());
+                                     Result, SourceRange(), SourceRange())
+                       .get();
     const CXXScopeSpec SS;
     PseudoDestructorTypeStorage DtorStorage(TInfo);
-    Expr *DestroyExpr = BuildPseudoDestructorExpr(
-        Casted, Loc, tok::period, SS, nullptr, SourceLocation(),
-        SourceLocation(), DtorStorage);
+    Expr *DestroyExpr = BuildPseudoDestructorExpr(Casted, Loc, tok::period, SS,
+                                                  nullptr, SourceLocation(),
+                                                  SourceLocation(), DtorStorage)
+                            .get();
 
     StmtResult IfBlock =
         ActOnIfStmt(Loc, false, nullptr,
@@ -502,15 +505,22 @@ bool Sema::DefineResultObjectFunctions(CXXRecordDecl *RD, SourceLocation Loc) {
                                    Sema::ConditionKind::Boolean),
                     DestroyExpr, SourceLocation(), nullptr);
     if (IfBlock.isInvalid()) {
-      RD->setInvalid();
+      RD->setInvalidDecl();
       return true;
     }
-
-    Dtor->setBody(new (Context) CompoundStmt(Statements));
+    Statements.push_back(IfBlock.get());
+    StmtResult Body;
+    {
+      CompoundScopeRAII CompoundScope(*this);
+      Body = ActOnCompoundStmt(Loc, Loc, Statements,
+                               /*isStmtExpr=*/false);
+      assert(!Body.isInvalid() && "Compound statement creation cannot fail");
+    }
+    Dtor->setBody(Body);
     Dtor->markUsed(Context);
 
     if (ASTMutationListener *L = getASTMutationListener()) {
-      L->CompletedImplicitDefinition(Destructor);
+      L->CompletedImplicitDefinition(Dtor);
     }
   }
 
