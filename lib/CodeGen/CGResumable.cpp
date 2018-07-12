@@ -75,7 +75,10 @@ void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   }
   LValue LV = MakeAddrLValue(Loc, VD.getType());
   LValue ResultLV = EmitLValueForField(LV, ResultF);
-  EmitAnyExprToMem(E.getSourceExpr(), ResultLV.getAddress(), Qualifiers(),
+  llvm::Type *ResultTy =
+      CGM.getTypes().ConvertType(E.getSourceExpr()->getType());
+  Address Cast = Builder.CreateElementBitCast(ResultLV.getAddress(), ResultTy);
+  EmitAnyExprToMem(E.getSourceExpr(), Cast, Qualifiers(),
                    /*IsInitializer*/ false);
 }
 
