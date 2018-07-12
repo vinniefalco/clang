@@ -10879,8 +10879,8 @@ ExprResult TreeTransform<Derived>::TransformResumableExpr(ResumableExpr *E) {
     return ExprError();
   Expr *Init = InitResult.get();
 
-  VarDecl *NewVD =
-      getDerived().TransformDecl(SourceLocation(), E->getResumableObject());
+  VarDecl *NewVD = cast_or_null<VarDecl>(
+      getDerived().TransformDecl(SourceLocation(), E->getResumableObject()));
   assert(NewVD);
 
   if (getSema().CheckResumableVarDeclInit(NewVD, Init))
