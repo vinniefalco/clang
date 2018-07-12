@@ -2126,7 +2126,13 @@ bool CXXMethodDecl::isMoveAssignmentOperator() const {
 
 bool CXXMethodDecl::isResumableObjectFunction() const {
   ASTContext &Context = getASTContext();
-  return getParent()->isResumable();
+  if (!getParent()->isResumable() || !isImplicit())
+    return false;
+  if (!getIdentifier() || getIdentifier()->getName().empty())
+    return false;
+  return llvm::StringSwitch<bool>(getIdentifier()->getName())
+      .Cases("ready", "result", "resume", true)
+      .Default(false);
 }
 
 void CXXMethodDecl::addOverriddenMethod(const CXXMethodDecl *MD) {

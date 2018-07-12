@@ -382,6 +382,11 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
               nullptr);
   CheckCompletedCXXClass(RD);
 
+  if (!Init->isTypeDependent()) {
+    if (DefineResumableObjectFunctions(RD, Loc))
+      return Error();
+  }
+
   return RD;
 }
 
@@ -425,24 +430,4 @@ ExprResult Sema::BuildResumableExpr(VarDecl *VD, Expr *Init) {
   // Build the new ResumableExpr wrapper around the initializer.
   ResumableExpr *NewInit = ResumableExpr::Create(Context, RD, Init);
   return NewInit;
-}
-
-VarDecl *Sema::BuildResumableVarDeclCapture(SourceLocation Loc,
-                                            QualType InitCaptureType,
-                                            IdentifierInfo *ID,
-                                            unsigned InitStyle, Expr *Init) {
-  TypeSourceInfo *TSI = Context.getTrivialTypeSourceInfo(InitCaptureType, Loc);
-  // Create a dummy variable representing the init-capture. This is not actually
-  // used as a variable, and only exists as a way to name and refer to the
-  // init-capture.
-  // FIXME: Pass in separate source locations for '&' and identifier.
-  VarDecl *NewVD = VarDecl::Create(Context, CurContext, Loc, Loc, ID,
-                                   InitCaptureType, TSI, SC_Auto);
-  NewVD->setInitCapture(true);
-  NewVD->setReferenced(true);
-  // FIXME: Pass in a VarDecl::InitializationStyle.
-  NewVD->setInitStyle(static_cast<VarDecl::InitializationStyle>(InitStyle));
-  NewVD->markUsed(Context);
-  NewVD->setInit(Init);
-  return NewVD;
 }

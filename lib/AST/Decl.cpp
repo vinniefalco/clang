@@ -4313,6 +4313,12 @@ FunctionDecl *FunctionDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
                                   SC_None, false, false, false);
 }
 
+bool FunctionDecl::isResumableObjectFunction() const {
+  if (auto *MD = dyn_cast < CXXMethodDecl(this))
+    return MD->isResumableObjectFunction();
+  return false;
+}
+
 BlockDecl *BlockDecl::Create(ASTContext &C, DeclContext *DC, SourceLocation L) {
   return new (C, DC) BlockDecl(DC, L);
 }

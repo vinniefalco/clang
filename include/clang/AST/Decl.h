@@ -2229,6 +2229,8 @@ public:
     getCanonicalDecl()->IsMultiVersion = V;
   }
 
+  bool isResumableObjectFunction() const;
+
   void setPreviousDeclaration(FunctionDecl * PrevDecl);
 
   FunctionDecl *getCanonicalDecl() override;
