@@ -51,7 +51,7 @@ struct EnterResumableExprScope {
 void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   const ResumableExpr &E = *cast<ResumableExpr>(VD.getInit());
   EnterResumableExprScope Guard(*this, CGResumableData(&VD));
-  CXXRecordDecl *RD = VD->getType()->getAsCXXRecordDecl();
+  CXXRecordDecl *RD = VD.getType()->getAsCXXRecordDecl();
   const FieldDecl *DataF, *ResultF;
   for (auto *F : RD->fields()) {
     StringRef Name = F->getIdentifierInfo()->getName();
@@ -73,7 +73,7 @@ void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
     llvm::Constant *GV = CGM.GetAddrOfGlobalVar(&VD);
     Loc = Address(GV, getContext().getDeclAlign(&VD));
   }
-  LValue LV = MakeAddrLValue(Loc, VD->getType());
+  LValue LV = MakeAddrLValue(Loc, VD.getType());
   LValue ResultLV = EmitLValueForField(LV, ResultF);
   EmitAnyExprToMem(E.getSourceExpr(), ResultLV.getAddress(), Qualifiers(),
                    /*IsInitializer*/ false);
