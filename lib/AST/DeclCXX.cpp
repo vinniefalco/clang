@@ -2124,6 +2124,13 @@ bool CXXMethodDecl::isMoveAssignmentOperator() const {
   return Context.hasSameUnqualifiedType(ClassType, ParamType);
 }
 
+bool CXXMethodDecl::isResumableObjectFunction() const {
+  ASTContext &Context = getASTContext();
+  CXXRecordDecl *Class =
+      Context.getTypeDeclType(getParent())->getAsCXXRecordDecl();
+  return Class->isResumable();
+}
+
 void CXXMethodDecl::addOverriddenMethod(const CXXMethodDecl *MD) {
   assert(MD->isCanonicalDecl() && "Method is not canonical!");
   assert(!MD->getParent()->isDependentContext() &&

@@ -3422,6 +3422,7 @@ public:
   LValue EmitCXXConstructLValue(const CXXConstructExpr *E);
   LValue EmitCXXBindTemporaryLValue(const CXXBindTemporaryExpr *E);
   LValue EmitLambdaLValue(const LambdaExpr *E);
+  LValue EmitResumableLValue(const ResumableExpr *E);
   LValue EmitCXXTypeidLValue(const CXXTypeidExpr *E);
   LValue EmitCXXUuidofLValue(const CXXUuidofExpr *E);
 
@@ -3816,6 +3817,7 @@ public:
   void EmitCXXThrowExpr(const CXXThrowExpr *E, bool KeepInsertionPoint = true);
 
   void EmitLambdaExpr(const LambdaExpr *E, AggValueSlot Dest);
+  void EmitResumableExpr(const ResumableExpr *E, AggValueSlot Dest);
 
   RValue EmitAtomicExpr(AtomicExpr *E);
 

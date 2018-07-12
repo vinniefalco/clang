@@ -2134,6 +2134,9 @@ public:
   /// Determine whether this is a move assignment operator.
   bool isMoveAssignmentOperator() const;
 
+  /// Determine whether this is a generated member of a resumable object.
+  bool isResumableObjectFunction() const;
+
   CXXMethodDecl *getCanonicalDecl() override {
     return cast<CXXMethodDecl>(FunctionDecl::getCanonicalDecl());
   }

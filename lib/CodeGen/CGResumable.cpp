@@ -27,6 +27,7 @@ struct clang::CodeGen::CGResumableData {
   CGResumableData(const VarDecl *VD) : ResumableObject(VD) {}
 
   const VarDecl *ResumableObject;
+  const Expr *CurResumableExpr = nullptr;
 };
 
 CodeGenFunction::CGResumableInfo::CGResumableInfo(const CGResumableData &D)
@@ -50,6 +51,7 @@ struct EnterResumableExprScope {
 void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   const ResumableExpr &E = *cast<ResumableExpr>(VD.getInit());
   EnterResumableExprScope Guard(*this, CGResumableData(&VD));
+  EmitVarDecl(VD);
 }
 
 void CodeGenFunction::EmitResumableFunctionBody(
@@ -59,4 +61,13 @@ void CodeGenFunction::EmitResumableFunctionBody(
 
 void CodeGenFunction::EmitBreakResumableStmt(BreakResumableStmt const &S) {
   ErrorUnsupported(&S, "break resumable statement");
+}
+
+void CodeGenFunction::EmitResumableLValue(const ResumableExpr *E) {
+  EmitLValue(E->getSourceExpr());
+}
+
+void CodeGenFunction::EmitResumableExpr(const ResumableExpr *E,
+                                        AggValueSlot Dest) {
+  EmitAnyExpr(E->getSourceExpr(), Dest);
 }
