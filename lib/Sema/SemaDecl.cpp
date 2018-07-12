@@ -10719,6 +10719,7 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
   }
 
   if (VDecl->isResumableSpecified()) {
+    assert(!isa<ResumableExpr>(Init));
     ExprResult NewInit = BuildResumableExpr(VDecl, Init);
     if (NewInit.isInvalid()) {
       RealDecl->setInvalidDecl();

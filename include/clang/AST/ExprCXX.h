@@ -1802,11 +1802,11 @@ public:
 };
 
 class ResumableExpr final : public Expr {
-  VarDecl *ResumableObject = nullptr;
+
   Stmt *SourceExpr = nullptr;
 
   /// Construct a Resumable expression.
-  ResumableExpr(QualType T, Expr *SourceExpr, VarDecl *ResumableObject);
+  ResumableExpr(QualType T, Expr *SourceExpr);
 
   /// Construct an empty Resumable expression.
   ResumableExpr(EmptyShell Empty) : Expr(ResumableExprClass, Empty) {}
@@ -1817,7 +1817,7 @@ public:
 
   /// Construct a new Resumable expression.
   static ResumableExpr *Create(const ASTContext &C, CXXRecordDecl *Class,
-                               Expr *SourceExpr, VarDecl *ResumableObj);
+                               Expr *SourceExpr);
 
   /// Construct a new Resumable expression that will be deserialized from
   /// an external source.
@@ -1825,7 +1825,6 @@ public:
 
   Expr *getSourceExpr() const { return cast_or_null<Expr>(SourceExpr); }
 
-  VarDecl *getResumableObject() const { return ResumableObject; }
 
   /// Retrieve the class that corresponds to the resumable object.
   ///

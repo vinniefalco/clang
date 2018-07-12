@@ -393,13 +393,12 @@ bool Sema::CheckResumableVarDeclInit(VarDecl *VD, Expr *Init) {
 
 ExprResult Sema::BuildResumableExpr(VarDecl *VD, Expr *Init) {
   assert(VD && Init && "cannot be null");
+  assert(!isa<ResumableExpr>(Init));
+
   auto Error = [&]() {
     VD->setInvalidDecl();
     return ExprError();
   };
-
-  if (CheckResumableVarDeclInit(VD, Init))
-    return Error();
 
   CXXRecordDecl *RD = BuildResumableObjectType(Init, VD->getTypeSpecStartLoc());
   if (RD->isInvalidDecl()) {
@@ -407,12 +406,12 @@ ExprResult Sema::BuildResumableExpr(VarDecl *VD, Expr *Init) {
   }
 
   // Replace 'auto' with the new class type.
-  QualType NewRecordType = Context.getQualifiedType(
-      RD->getTypeForDecl(), VD->getType().getQualifiers());
-  VD->setType(NewRecordType);
+  // QualType NewRecordType = Context.getQualifiedType(
+  //     RD->getTypeForDecl(), VD->getType().getQualifiers());
+  // VD->setType(NewRecordType);
 
   // Build the new ResumableExpr wrapper around the initializer.
-  ResumableExpr *NewInit = ResumableExpr::Create(Context, RD, Init, VD);
+  ResumableExpr *NewInit = ResumableExpr::Create(Context, RD, Init);
   return NewInit;
 }
 

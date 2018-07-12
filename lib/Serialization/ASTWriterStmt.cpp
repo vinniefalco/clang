@@ -1292,6 +1292,11 @@ void ASTStmtWriter::VisitCXXTemporaryObjectExpr(CXXTemporaryObjectExpr *E) {
   Code = serialization::EXPR_CXX_TEMPORARY_OBJECT;
 }
 
+void ASTStmtWriter::VisitResumableExpr(ResumableExpr *E) {
+  VisitExpr(E);
+  Record.AddStmt(E->SourceExpr);
+}
+
 void ASTStmtWriter::VisitLambdaExpr(LambdaExpr *E) {
   VisitExpr(E);
   Record.push_back(E->NumCaptures);

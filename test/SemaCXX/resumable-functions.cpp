@@ -423,6 +423,13 @@ void test_result() {
   const int &t2 = r3.result();
 }
 
+void test_deleted_default_ctor() {
+  resumable auto r = foo(); // expected-note {{resumable expression begins here}}
+  using T = decltype(r);
+  // expected-error@+1 {{call to implicitly-deleted default constructor of 'T'}}
+  T t;
+}
+
 void test_deleted_copy() {
   // expected-note@+1 4 {{resumable expression begins here}}
   resumable auto r = foo();
@@ -440,3 +447,16 @@ void test_deleted_copy() {
 }
 
 } // namespace test_class_members
+
+namespace test_template {
+
+template <class T>
+resumable T foo() { return T{}; }
+
+template <class T>
+void t1() {
+  resumable auto r = foo<T>();
+}
+template void t1<int>();
+
+} // namespace test_template

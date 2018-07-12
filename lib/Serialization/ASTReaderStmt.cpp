@@ -1330,6 +1330,11 @@ void ASTStmtReader::VisitCXXTemporaryObjectExpr(CXXTemporaryObjectExpr *E) {
   E->Type = GetTypeSourceInfo();
 }
 
+void ASTStmtReader::VisitResumableExpr(ResumableExpr *E) {
+  VisitExpr(E);
+  E->SourceExpr = Record.readSubExpr();
+}
+
 void ASTStmtReader::VisitLambdaExpr(LambdaExpr *E) {
   VisitExpr(E);
   unsigned NumCaptures = Record.readInt();

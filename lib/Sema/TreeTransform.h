@@ -10879,21 +10879,17 @@ ExprResult TreeTransform<Derived>::TransformResumableExpr(ResumableExpr *E) {
     return ExprError();
   Expr *Init = InitResult.get();
 
-  VarDecl *NewVD = cast_or_null<VarDecl>(
-      getDerived().TransformDecl(SourceLocation(), E->getResumableObject()));
-  assert(NewVD);
-
-  if (getSema().CheckResumableVarDeclInit(NewVD, Init))
-    return ExprError();
-
+  return Init;
+#if 0
   CXXRecordDecl *RD = getSema().BuildResumableObjectType(
-      Init, E->getResumableObject()->getTypeSpecStartLoc());
+      Init);
   if (RD->isInvalidDecl())
     return ExprResult();
 
   getDerived().transformedLocalDecl(E->getResumableClass(), RD);
 
-  return ResumableExpr::Create(getSema().Context, RD, Init, NewVD);
+  return ResumableExpr::Create(getSema().Context, RD, Init);
+#endif
 }
 
 template<typename Derived>
