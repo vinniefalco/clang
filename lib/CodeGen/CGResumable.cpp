@@ -129,8 +129,22 @@ void CodeGenFunction::EmitImplicitResumableObjectFunctionBody(
   llvm_unreachable("unhandled case");
 }
 
+static const TypedefDecl *GetResultTypedef(const CXXRecordDecl *RD) {
+  assert(RD->isResumable());
+  for (auto *D : RD->decls()) {
+    if (auto *TD = dyn_cast<TypedefDecl>(D))
+      return TD;
+  }
+  return nullptr;
+}
+
 void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
-  const ResumableExpr &E = *cast<ResumableExpr>(VD.getInit());
+  const ResumableExpr *RE = dyn_cast<ResumableExpr>(VD.getInit());
+  if (!RE && isa<ExprWithCleanups>(VD.getInit()))
+    RE =
+        cast<ResumableExpr>(cast<ExprWithCleanups>(VD.getInit())->getSubExpr());
+  assert(RE);
+  const ResumableExpr &E = *RE;
   EnterResumableExprScope Guard(*this, CGResumableData(&VD));
   CXXRecordDecl *RD = VD.getType()->getAsCXXRecordDecl();
   ResumableFields Fields = GetResumableFields(RD);
@@ -146,6 +160,7 @@ void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   }
   Address DataAddr =
       Builder.CreateStructGEP(Loc, RFI_Data, CharUnits::Zero(), "__data_");
+
   llvm::Type *ResultTy =
       CGM.getTypes().ConvertType(E.getSourceExpr()->getType());
   Address Cast = Builder.CreateElementBitCast(DataAddr, ResultTy);

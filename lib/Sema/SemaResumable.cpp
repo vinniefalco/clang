@@ -11,9 +11,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/DeclCXX.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/StmtCXX.h"
@@ -22,6 +24,7 @@
 #include "clang/Sema/Overload.h"
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/Sema.h"
+
 #include "clang/Sema/SemaInternal.h"
 #include <cursesf.h>
 
@@ -278,6 +281,33 @@ public:
 };
 } // namespace
 
+static bool HasTrivialDtor(Sema &Self, SourceLocation KeyLoc, QualType T) {
+  ASTContext &C = Self.Context;
+  assert(!T->isDependentType());
+  // C++14 [meta.unary.prop]:
+  //   For reference types, is_destructible<T>::value is true.
+  if (T->isReferenceType())
+    return true;
+
+  // Objective-C++ ARC: autorelease types don't require destruction.
+  if (T->isObjCLifetimeType() &&
+      T.getObjCLifetime() == Qualifiers::OCL_Autoreleasing)
+    return true;
+
+  // C++14 [meta.unary.prop]:
+  //   For incomplete types and function types, is_destructible<T>::value is
+  //   false.
+  if (T->isIncompleteType() || T->isFunctionType())
+    return false;
+
+  // A type that requires destruction (via a non-trivial destructor or ARC
+  // lifetime semantics) is not trivially-destructible.
+  if (T.isDestructedType())
+    return false;
+
+  return true;
+}
+
 CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
   CXXRecordDecl *RD =
       CXXRecordDecl::CreateResumableClass(Context, CurContext, Loc);
@@ -385,7 +415,11 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
     Proto.ExceptionSpec.NoexceptExpr = NoexceptRes.get();
     AddMethod("resume", Context.VoidTy, Proto);
   }
-  {
+
+  bool DeclareDtor = !ResultTy->isDependentType() &&
+                     !HasTrivialDtor(*this, SourceLocation(), ResultTy);
+
+  if (DeclareDtor) {
     CanQualType ClassType =
         Context.getCanonicalType(Context.getTypeDeclType(RD));
     DeclarationName Name =
@@ -419,6 +453,9 @@ CXXRecordDecl *Sema::BuildResumableObjectType(Expr *Init, SourceLocation Loc) {
               nullptr);
   CheckCompletedCXXClass(RD);
 
+  if (!Init->getType()->isDependentType())
+    DefineResultObjectFunctions(RD, Loc);
+
   return RD;
 }
 
@@ -451,7 +488,7 @@ bool Sema::DefineResultObjectFunctions(CXXRecordDecl *RD, SourceLocation Loc) {
   assert(RD->isCompleteDefinition() && RD->isResumable());
   FieldInfo Fields(RD);
 
-  {
+  if (RD->hasUserDeclaredDestructor()) {
     CXXDestructorDecl *Dtor = RD->getDestructor();
     SynthesizedFunctionScope Scope(*this, Dtor);
     Scope.addContextNote(Loc);
@@ -489,21 +526,44 @@ bool Sema::DefineResultObjectFunctions(CXXRecordDecl *RD, SourceLocation Loc) {
     };
 
     Expr *Result = BuildMemberRef(Fields.Result);
-    Expr *Casted = BuildCXXNamedCast(Loc, tok::kw_reinterpret_cast, TInfo,
+    Expr *Casted = BuildCXXNamedCast(Loc, tok::kw_reinterpret_cast, LVTInfo,
                                      Result, SourceRange(), SourceRange())
                        .get();
-    const CXXScopeSpec SS;
-    PseudoDestructorTypeStorage DtorStorage(TInfo);
-    Expr *DestroyExpr = BuildPseudoDestructorExpr(Casted, Loc, tok::period, SS,
-                                                  nullptr, SourceLocation(),
-                                                  SourceLocation(), DtorStorage)
-                            .get();
+    assert(Casted);
 
+    assert(TInfo->getType().isDestructedType());
+
+    CXXDestructorDecl *ResultDtor =
+        TInfo->getType()->getAsCXXRecordDecl()->getDestructor();
+    DeclarationNameInfo DtorNameInfo(ResultDtor->getDeclName(), Loc);
+    MemberExpr *ME = new (Context)
+        MemberExpr(Casted, false, SourceLocation(), ResultDtor, DtorNameInfo,
+                   Context.BoundMemberTy, VK_LValue, OK_Ordinary);
+    ExprResult DestroyExprRes = BuildCallToMemberFunction(
+        nullptr, ME, SourceLocation(), None, SourceLocation());
+    if (DestroyExprRes.isInvalid()) {
+      RD->setInvalidDecl();
+      return true;
+    }
+    // CXXScopeSpec SS;
+    // SS.Extend(Context, SourceLocation(), TInfo->getTypeLoc(),
+    // SourceLocation()); ExprResult DtorRef = BuildMemberReferenceExpr(Casted,
+    // LVTInfo->getType(), SourceLocation(), /*IsArrow*/false,
+    // SS, SourceLocation(), )
+    // PseudoDestructorTypeStorage DtorStorage(LVTInfo);
+    // ExprResult DestroyExprRes = BuildPseudoDestructorExpr(Casted, Loc,
+    // tok::period, SS,
+    //                                             TInfo, SourceLocation(),
+    //                                            SourceLocation(),
+    //                                            DtorStorage);
+    assert(!DestroyExprRes.isInvalid());
+
+    DestroyExprRes.get()->dumpColor();
     StmtResult IfBlock =
         ActOnIfStmt(Loc, false, nullptr,
                     ActOnCondition(nullptr, Loc, BuildMemberRef(Fields.Ready),
                                    Sema::ConditionKind::Boolean),
-                    DestroyExpr, SourceLocation(), nullptr);
+                    DestroyExprRes.get(), SourceLocation(), nullptr);
     if (IfBlock.isInvalid()) {
       RD->setInvalidDecl();
       return true;
@@ -516,7 +576,7 @@ bool Sema::DefineResultObjectFunctions(CXXRecordDecl *RD, SourceLocation Loc) {
                                /*isStmtExpr=*/false);
       assert(!Body.isInvalid() && "Compound statement creation cannot fail");
     }
-    Dtor->setBody(Body);
+    Dtor->setBody(Body.get());
     Dtor->markUsed(Context);
 
     if (ASTMutationListener *L = getASTMutationListener()) {

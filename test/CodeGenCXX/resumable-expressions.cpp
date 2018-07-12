@@ -9,3 +9,15 @@ void bar() {
   bool b = r.ready();
   int x = r.result();
 }
+
+struct NonTrivial {
+  NonTrivial();
+  NonTrivial(NonTrivial const &);
+  ~NonTrivial();
+};
+resumable NonTrivial test_dtor() {
+  return NonTrivial{};
+}
+void test() {
+  resumable auto r = test_dtor();
+}
