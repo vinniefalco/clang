@@ -3089,9 +3089,6 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
       break;
     return true;
 
-  case ResumableExprClass:
-    return true;
-
   case MSPropertyRefExprClass:
   case MSPropertySubscriptExprClass:
   case CompoundAssignOperatorClass:
@@ -3103,6 +3100,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case CoawaitExprClass:
   case DependentCoawaitExprClass:
   case CoyieldExprClass:
+  case ResumableExprClass:
     // These always have a side-effect.
     return true;
 
