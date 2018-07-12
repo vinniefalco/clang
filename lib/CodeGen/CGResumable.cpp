@@ -54,7 +54,7 @@ void CodeGenFunction::EmitResumableVarDecl(VarDecl const &VD) {
   CXXRecordDecl *RD = VD.getType()->getAsCXXRecordDecl();
   const FieldDecl *DataF, *ResultF;
   for (auto *F : RD->fields()) {
-    StringRef Name = F->getIdentifierInfo()->getName();
+    StringRef Name = F->getIdentifier()->getName();
     if (Name == "__data_")
       DataF = F;
     else if (Name == "__result_")
