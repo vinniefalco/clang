@@ -2031,7 +2031,7 @@ public:
 
   /// Returns whether this specific declaration of the function has a body.
   bool doesThisDeclarationHaveABody() const {
-    return Body || IsLateTemplateParsed;
+    return Body || IsLateTemplateParsed || isResumableObjectFunction();
   }
 
   void setBody(Stmt *B);
